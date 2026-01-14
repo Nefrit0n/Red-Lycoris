@@ -16,8 +16,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-asoc}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change_me}
     ports:
-      - "5672:5672" # AMQP
-      - "15672:15672" # Web UI (Management)
+      - "5672:5672"
+      - "15672:15672"
 
   minio:
     image: minio/minio:latest
@@ -26,10 +26,52 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-asoc}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_me}
     ports:
-      - "9000:9000" # S3 API
-      - "9001:9001" # Console UI
+      - "9000:9000"
+      - "9001:9001"
     volumes:
       - miniodata:/data
+
+  api:
+    build:
+      context: ../api
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-asoc}
+      POSTGRES_USER: ${POSTGRES_USER:-asoc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-raw-reports}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-asoc}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-change_me}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://asoc:change_me@rabbitmq:5672//}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - rabbitmq
+    command: python manage.py runserver 0.0.0.0:8000
+
+  worker:
+    build:
+      context: ../api
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-asoc}
+      POSTGRES_USER: ${POSTGRES_USER:-asoc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-raw-reports}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-asoc}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-change_me}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://asoc:change_me@rabbitmq:5672//}
+    depends_on:
+      - db
+      - rabbitmq
+    command: celery -A asoc_api worker -l info
 
 volumes:
   pgdata:
