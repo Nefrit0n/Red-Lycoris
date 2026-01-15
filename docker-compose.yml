@@ -5,7 +5,7 @@ services:
     image: python:3.12-slim
     working_dir: /app
     command: >-
-      sh -c "pip install --no-cache-dir django djangorestframework drf-spectacular celery redis psycopg2-binary
+      sh -c "pip install --no-cache-dir -r requirements.txt
       && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
@@ -15,7 +15,11 @@ services:
       DJANGO_SECRET_KEY: "change-me"
       DJANGO_DEBUG: "true"
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
-      DATABASE_URL: "postgres://db:5432/lotus/lotus_warden"
+      POSTGRES_DB: "lotus_warden"
+      POSTGRES_USER: "lotus"
+      POSTGRES_PASSWORD: "lotus"
+      POSTGRES_HOST: "db"
+      POSTGRES_PORT: "5432"
       CELERY_BROKER_URL: "amqp://lotus:lotus@rabbitmq:5672//"
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
     depends_on:
