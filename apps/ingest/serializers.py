@@ -34,3 +34,8 @@ class IngestPayloadSerializer(serializers.Serializer):
 class IngestResponseSerializer(serializers.Serializer):
     status = serializers.CharField()
     task_id = serializers.CharField()
+
+
+class IngestStatusSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    fingerprint = serializers.CharField(required=False)
