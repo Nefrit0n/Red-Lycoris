@@ -1,23 +1,27 @@
 package storage
 
 import (
-    "database/sql"
-    "errors"
-    "strings"
+	"database/sql"
+	"errors"
+	"log"
+	"os"
+	"strings"
 
-    "github.com/golang-migrate/migrate/v4"
-    "github.com/golang-migrate/migrate/v4/database/postgres"
-    _ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+func RunMigrations(db *sql.DB) error {
+	path := os.Getenv("MIGRATIONS_PATH")
+	log.Printf("RUN MIGRATIONS: MIGRATIONS_PATH=%q", path)
 
-func RunMigrations(db *sql.DB, migrationsPath string) error {
-	if migrationsPath == "" {
-		return errors.New("migrations path is empty")
+	if path == "" {
+		return errors.New("MIGRATIONS_PATH is required")
 	}
 
-	if !strings.HasPrefix(migrationsPath, "file://") {
-		migrationsPath = "file://" + migrationsPath
+	if !strings.HasPrefix(path, "file://") {
+		path = "file://" + path
 	}
 
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
@@ -25,16 +29,12 @@ func RunMigrations(db *sql.DB, migrationsPath string) error {
 		return err
 	}
 
-	migrator, err := migrate.NewWithDatabaseInstance(
-		migrationsPath,
-		"postgres",
-		driver,
-	)
+	m, err := migrate.NewWithDatabaseInstance(path, "postgres", driver)
 	if err != nil {
 		return err
 	}
 
-	if err := migrator.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return err
 	}
 

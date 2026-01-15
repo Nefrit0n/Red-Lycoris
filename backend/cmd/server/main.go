@@ -18,7 +18,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := storage.RunMigrations(db, "file://migrations"); err != nil {
+	if err := storage.RunMigrations(db); err != nil {
 		log.Fatalf("database migration failed: %v", err)
 	}
 
