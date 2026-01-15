@@ -63,15 +63,20 @@ func CreateScanResult(ctx context.Context, db *sql.DB, scanResult *models.ScanRe
 	if len(scanResult.RawReport) > 0 {
 		rawReport = scanResult.RawReport
 	}
+	var engagementID interface{}
+	if scanResult.EngagementID != nil {
+		engagementID = *scanResult.EngagementID
+	}
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO scan_results (id, engagement_id, scanner, raw_report, created_at)
-		 VALUES ($1, $2, $3, $4, $5)`,
+		`INSERT INTO scan_results (id, engagement_id, scanner, raw_report, processed_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		scanResult.ID,
-		scanResult.EngagementID,
+		engagementID,
 		scanResult.Scanner,
 		rawReport,
+		scanResult.ProcessedAt,
 		scanResult.CreatedAt,
 	)
 	return err
@@ -87,22 +92,36 @@ func CreateFinding(ctx context.Context, db *sql.DB, finding *models.Finding) err
 	if finding.Description != nil {
 		description = sql.NullString{String: *finding.Description, Valid: true}
 	}
-	var status sql.NullString
-	if finding.Status != nil {
-		status = sql.NullString{String: *finding.Status, Valid: true}
+	var duplicateID interface{}
+	if finding.DuplicateID != nil {
+		duplicateID = *finding.DuplicateID
 	}
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO findings (id, scan_result_id, title, description, severity, status, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		`INSERT INTO findings (id, scan_result_id, fingerprint, title, description, severity, status, duplicate_id, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		finding.ID,
 		finding.ScanResultID,
+		finding.Fingerprint,
 		finding.Title,
 		description,
 		finding.Severity,
-		status,
+		finding.Status,
+		duplicateID,
 		finding.CreatedAt,
 	)
 	return err
+}
+
+func FindFindingIDByFingerprint(ctx context.Context, db *sql.DB, fingerprint string) (*models.Finding, error) {
+	row := db.QueryRowContext(ctx, `SELECT id FROM findings WHERE fingerprint = $1 LIMIT 1`, fingerprint)
+	var id models.Finding
+	if err := row.Scan(&id.ID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &id, nil
 }
