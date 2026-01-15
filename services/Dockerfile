@@ -2,19 +2,24 @@ FROM golang:1.22-alpine AS builder
 
 WORKDIR /src
 
-COPY services/go.mod ./
+# 1️⃣ Сначала только go.mod и go.sum
+COPY services/go.mod services/go.sum ./
 RUN go mod download
 
-COPY services/ ./
+# 2️⃣ Потом весь код
+COPY services/ .
 
 ARG SERVICE
-RUN CGO_ENABLED=0 go build -o /bin/service ./cmd/${SERVICE}
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -o /bin/service ./cmd/${SERVICE}
 
+# ---- runtime ----
 FROM alpine:3.19
-RUN adduser -D -g '' appuser
-USER appuser
 
-COPY --from=builder /bin/service /usr/local/bin/service
+RUN adduser -D app
+USER app
+
+COPY --from=builder /bin/service /service
 
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/service"]
+ENTRYPOINT ["/service"]
