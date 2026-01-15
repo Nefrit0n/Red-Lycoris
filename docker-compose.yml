@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  api:
+    image: python:3.11-slim
+    working_dir: /app
+    command: >-
+      sh -c "pip install --no-cache-dir django djangorestframework drf-spectacular celery redis psycopg2-binary
+      && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: "change-me"
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DATABASE_URL: "postgres://lotus:lotus@db:5432/lotus_warden"
+      CELERY_BROKER_URL: "amqp://lotus:lotus@rabbitmq:5672//"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    networks:
+      - lotus_warden_net
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lotus_warden
+      POSTGRES_USER: lotus
+      POSTGRES_PASSWORD: lotus
+    ports:
+      - "5432:5432"
+    volumes:
+      - lotus_warden_db:/var/lib/postgresql/data
+    networks:
+      - lotus_warden_net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - lotus_warden_net
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: lotus
+      RABBITMQ_DEFAULT_PASS: lotus
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - lotus_warden_net
+
+volumes:
+  lotus_warden_db:
+
+networks:
+  lotus_warden_net:
+    driver: bridge
