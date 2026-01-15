@@ -3,37 +3,56 @@
 from __future__ import annotations
 
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework.response import Response
-from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView
 
 from apps.findings.models import Finding
 from apps.findings.serializers import FindingSerializer
 
 
-class FindingListAPIView(APIView):
+def _split_param(raw_value: str | None) -> list[str]:
+    if not raw_value:
+        return []
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
+class FindingListAPIView(ListAPIView):
+    serializer_class = FindingSerializer
+
     @extend_schema(
         parameters=[
             OpenApiParameter(
                 name="severity",
-                description="Filter by severity.",
+                description="Filter by severity (comma-separated).",
                 required=False,
                 type=str,
             ),
             OpenApiParameter(
                 name="tool",
-                description="Filter by tool name.",
+                description="Filter by tool name (comma-separated).",
                 required=False,
                 type=str,
             ),
             OpenApiParameter(
                 name="asset",
-                description="Filter by asset identifier.",
+                description="Filter by asset identifier (comma-separated).",
                 required=False,
                 type=str,
             ),
             OpenApiParameter(
                 name="status",
-                description="Filter by status.",
+                description="Filter by status (comma-separated).",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="cve",
+                description="Filter by CVE identifier (comma-separated).",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="cwe",
+                description="Filter by CWE identifier (comma-separated).",
                 required=False,
                 type=str,
             ),
@@ -41,24 +60,30 @@ class FindingListAPIView(APIView):
         responses={200: FindingSerializer(many=True)},
         summary="List findings with optional filters.",
     )
-    def get(self, request):
+    def get_queryset(self):
         queryset = Finding.objects.select_related(
             "asset",
             "tool",
             "scan",
             "fingerprint",
         ).order_by("-created_at")
-        severity = request.query_params.get("severity")
-        if severity:
-            queryset = queryset.filter(severity=severity.strip().lower())
-        tool = request.query_params.get("tool")
-        if tool:
-            queryset = queryset.filter(tool__name=tool.strip())
-        asset = request.query_params.get("asset")
-        if asset:
-            queryset = queryset.filter(asset__identifier=asset.strip())
-        status = request.query_params.get("status")
-        if status:
-            queryset = queryset.filter(status=status.strip().lower())
-        serializer = FindingSerializer(queryset, many=True)
-        return Response(serializer.data)
+        params = self.request.query_params
+        severities = [value.lower() for value in _split_param(params.get("severity"))]
+        if severities:
+            queryset = queryset.filter(severity__in=severities)
+        tools = _split_param(params.get("tool"))
+        if tools:
+            queryset = queryset.filter(tool__name__in=tools)
+        assets = _split_param(params.get("asset"))
+        if assets:
+            queryset = queryset.filter(asset__identifier__in=assets)
+        statuses = [value.lower() for value in _split_param(params.get("status"))]
+        if statuses:
+            queryset = queryset.filter(status__in=statuses)
+        cves = [value.upper() for value in _split_param(params.get("cve"))]
+        if cves:
+            queryset = queryset.filter(cve__in=cves)
+        cwes = [value.upper() for value in _split_param(params.get("cwe"))]
+        if cwes:
+            queryset = queryset.filter(cwe__in=cwes)
+        return queryset
