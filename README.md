@@ -182,6 +182,21 @@
 
 ---
 
+## 🐳 Локальная разработка (Docker Compose)
+
+1. Убедитесь, что Docker и Docker Compose установлены.
+2. Запустите окружение командой:
+
+```bash
+./scripts/dev-up.sh
+```
+
+Файл конфигурации `.env` содержит параметры подключения для приложения, PostgreSQL,
+RabbitMQ и Redis (можно менять под локальные нужды).  
+Для остановки используйте `docker-compose down`.
+
+---
+
 ## 📚 Источники
 
 - DefectDojo Documentation  
