@@ -57,6 +57,17 @@ jobs:
           DB_SSLMODE: disable
         run: go test ./...
 
+      - name: Run migrations
+        working-directory: backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: lotus_warden
+          DB_SSLMODE: disable
+        run: go run ./cmd/migrate
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: |

@@ -1,40 +1,75 @@
 # Lotus Warden
 
-Каркас проекта с React + TypeScript (MUI), Go Fiber API, PostgreSQL и Redis.
+Каркас проекта с React + TypeScript (MUI), Go Fiber API, Python + Celery для фоновых задач, PostgreSQL и Redis.
 
 ## Быстрый старт
 
+1. Скопируйте переменные окружения:
+
 ```bash
-make dev
+cp .env.example .env
 ```
 
-Либо напрямую:
+2. Поднимите все сервисы:
 
 ```bash
 docker compose up --build
 ```
 
-Frontend будет доступен на `http://localhost:5173`, backend на `http://localhost:8080`.
+Доступные сервисы:
 
-## Конфигурация
+- Frontend (Vite dev): `http://localhost:5173`
+- NGINX (статический фронтенд + прокси API): `http://localhost:8081`
+- Go API: `http://localhost:8080`
+- Python API (через NGINX): `http://localhost:8081/api/health`
 
-Переменные окружения находятся в `.env` и `config/.env`. Для локальной разработки значения по умолчанию уже заданы.
+## Фоновые задачи Celery
 
-Основные переменные:
+Отправка задачи через API (NGINX проксирует в Gunicorn):
 
-- `APP_PORT` — порт backend.
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE` — параметры PostgreSQL.
-- `REDIS_URL` — адрес Redis.
-- `VITE_API_URL` — URL backend для фронтенда.
+```bash
+curl -X POST http://localhost:8081/api/tasks/scan \
+  -H 'Content-Type: application/json' \
+  -d '{"scan_id":"demo-scan","source":"curl"}'
+```
+
+Проверка статуса задачи:
+
+```bash
+curl http://localhost:8081/api/tasks/<task_id>
+```
+
+Пример запуска задачи напрямую из контейнера:
+
+```bash
+docker compose exec python-api python trigger_task.py
+```
+
+Логи выполнения задач доступны в контейнере `celery-worker`.
+
+## Миграции PostgreSQL
+
+Миграции лежат в `backend/migrations` и применяются автоматически при старте Go API.
+
+Для ручного прогона миграций:
+
+```bash
+cd backend
+go run ./cmd/migrate
+```
 
 ## API
+
+Go API:
 
 - `GET /health` — проверка здоровья.
 - `GET /api/ping` — ответ `Hello World`.
 
-## Миграции
+Python API (Gunicorn + FastAPI):
 
-Миграции лежат в `backend/migrations` и применяются при старте backend.
+- `GET /api/health` — проверка здоровья.
+- `POST /api/tasks/scan` — постановка задачи в очередь.
+- `GET /api/tasks/{task_id}` — статус выполнения задачи.
 
 ## Тестирование
 
@@ -60,5 +95,6 @@ GitHub Actions выполняет:
 
 - linting для Go и TypeScript,
 - unit-тесты для frontend и backend,
+- прогон миграций отдельным этапом,
 - сборку Docker-образов,
 - шаг деплоя в тестовое окружение (заглушка).
