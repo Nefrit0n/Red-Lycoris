@@ -100,7 +100,7 @@
 | БД | PostgreSQL | Партиции, индексы, транзакционность |
 | Очередь | RabbitMQ + Celery | Надёжная асинхронность |
 | Кэш | Redis | Кэш, locks, rate limiting |
-| Frontend | React или Django + HTMX | Гибкость UI |
+| Frontend | React| Гибкость UI |
 | Контейнеризация | Docker / Helm | Простота деплоя |
 
 ---
