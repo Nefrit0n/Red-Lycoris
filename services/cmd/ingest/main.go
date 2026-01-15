@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
 
 	"lotus-warden/services/internal/config"
 	"lotus-warden/services/internal/events"
@@ -41,23 +43,42 @@ func main() {
 	}
 
 	app := fiber.New()
+
 	app.Post("/v1/ingest", func(c *fiber.Ctx) error {
 		var payload ingestPayload
 		if err := c.BodyParser(&payload); err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
+
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 		}
-		ack, err := js.Publish(events.SubjectScansUploaded, payloadBytes)
+
+		traceID := uuid.NewString()
+
+		ack, err := js.Publish(
+			events.SubjectScansUploaded,
+			payloadBytes,
+			nats.MsgId(traceID),
+		)
 		if err != nil {
 			return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
 		}
+
+		log.Printf(
+			"event published subject=%s stream=%s seq=%d duplicate=%v trace_id=%s",
+			events.SubjectScansUploaded,
+			ack.Stream,
+			ack.Sequence,
+			ack.Duplicate,
+			traceID,
+		)
+
 		return c.JSON(ingestResponse{
 			Status:   "queued",
 			Subject:  events.SubjectScansUploaded,
-			TraceID:  ack.MsgId,
+			TraceID:  traceID,
 			Received: time.Now().UTC().Format(time.RFC3339),
 		})
 	})
