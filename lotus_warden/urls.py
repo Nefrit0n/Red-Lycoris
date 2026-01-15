@@ -13,9 +13,14 @@ def healthcheck(_request):
     return HttpResponse("ok")
 
 
+def hello_world(_request):
+    return HttpResponse("Hello World")
+
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("health/", healthcheck),
+    path("hello/", hello_world),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/schema/swagger-ui/",
