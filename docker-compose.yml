@@ -2,37 +2,121 @@ version: "3.9"
 
 services:
   api:
-    image: python:3.12-slim
-    working_dir: /app
-    command: >-
-      sh -c "pip install --no-cache-dir -r requirements.txt
-      && python manage.py migrate --noinput
-      && python manage.py runserver 0.0.0.0:8000"
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE: api
     env_file:
       - .env
-    volumes:
-      - .:/app
-    ports:
-      - "8000:8000"
     environment:
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-      DJANGO_DEBUG: ${DJANGO_DEBUG}
-      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      HTTP_ADDR: ":8080"
+      POSTGRES_DSN: ${POSTGRES_DSN}
+      NATS_URL: ${NATS_URL}
+    ports:
+      - "8080:8080"
     depends_on:
-      - db
-      - redis
-      - rabbitmq
+      - postgres
+      - nats
     networks:
-      - lotus_warden_net
+      - asoc_net
 
-  db:
+  ingest:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE: ingest
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8081"
+      NATS_URL: ${NATS_URL}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - nats
+    networks:
+      - asoc_net
+
+  normalize:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE: normalize
+    env_file:
+      - .env
+    environment:
+      NATS_URL: ${NATS_URL}
+    depends_on:
+      - nats
+    networks:
+      - asoc_net
+
+  dedup:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE: dedup
+    env_file:
+      - .env
+    environment:
+      NATS_URL: ${NATS_URL}
+    depends_on:
+      - nats
+    networks:
+      - asoc_net
+
+  enrich:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE: enrich
+    env_file:
+      - .env
+    environment:
+      NATS_URL: ${NATS_URL}
+    depends_on:
+      - nats
+    networks:
+      - asoc_net
+
+  search_indexer:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE: search_indexer
+    env_file:
+      - .env
+    environment:
+      NATS_URL: ${NATS_URL}
+    depends_on:
+      - nats
+      - opensearch
+    networks:
+      - asoc_net
+
+  analytics_exporter:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE: analytics_exporter
+    env_file:
+      - .env
+    environment:
+      NATS_URL: ${NATS_URL}
+    depends_on:
+      - nats
+      - clickhouse
+    networks:
+      - asoc_net
+
+  postgres:
     image: postgres:16-alpine
     env_file:
       - .env
@@ -43,33 +127,108 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - lotus_warden_db:/var/lib/postgresql/data
+      - asoc_db:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     networks:
-      - lotus_warden_net
+      - asoc_net
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    networks:
+      - asoc_net
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     networks:
-      - lotus_warden_net
+      - asoc_net
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    networks:
+      - asoc_net
+
+  opensearch:
+    image: opensearchproject/opensearch:2.12.0
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    networks:
+      - asoc_net
+
+  minio:
+    image: minio/minio:RELEASE.2024-03-30T09-41-56Z
+    command: server /data --console-address ":9001"
     env_file:
       - .env
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - asoc_minio:/data
     networks:
-      - lotus_warden_net
+      - asoc_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      VITE_API_URL: ${VITE_API_URL}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    networks:
+      - asoc_net
+
+  ml:
+    image: python:3.12-slim
+    profiles: ["ml"]
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt
+      && python -m uvicorn app.main:app --host 0.0.0.0 --port 8090"
+    volumes:
+      - ./ml:/app
+    working_dir: /app
+    env_file:
+      - .env
+    ports:
+      - "8090:8090"
+    depends_on:
+      - qdrant
+    networks:
+      - asoc_net
+
+  qdrant:
+    image: qdrant/qdrant:v1.8.3
+    profiles: ["ml"]
+    ports:
+      - "6333:6333"
+    networks:
+      - asoc_net
 
 volumes:
-  lotus_warden_db:
+  asoc_db:
+  asoc_minio:
 
 networks:
-  lotus_warden_net:
+  asoc_net:
     driver: bridge
