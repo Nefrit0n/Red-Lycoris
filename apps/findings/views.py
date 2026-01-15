@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -10,6 +11,36 @@ from apps.findings.serializers import FindingSerializer
 
 
 class FindingListAPIView(APIView):
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="severity",
+                description="Filter by severity.",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="tool",
+                description="Filter by tool name.",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="asset",
+                description="Filter by asset identifier.",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="status",
+                description="Filter by status.",
+                required=False,
+                type=str,
+            ),
+        ],
+        responses={200: FindingSerializer(many=True)},
+        summary="List findings with optional filters.",
+    )
     def get(self, request):
         queryset = Finding.objects.select_related(
             "asset",
