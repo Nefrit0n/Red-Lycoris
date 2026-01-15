@@ -7,21 +7,23 @@ services:
     command: >-
       sh -c "pip install --no-cache-dir -r requirements.txt
       && python manage.py runserver 0.0.0.0:8000"
+    env_file:
+      - .env
     volumes:
       - .:/app
     ports:
       - "8000:8000"
     environment:
-      DJANGO_SECRET_KEY: "change-me"
-      DJANGO_DEBUG: "true"
-      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
-      POSTGRES_DB: "lotus_warden"
-      POSTGRES_USER: "lotus"
-      POSTGRES_PASSWORD: "lotus"
-      POSTGRES_HOST: "db"
-      POSTGRES_PORT: "5432"
-      CELERY_BROKER_URL: "amqp://lotus:lotus@rabbitmq:5672//"
-      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
     depends_on:
       - db
       - redis
@@ -31,10 +33,12 @@ services:
 
   db:
     image: postgres:16-alpine
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: lotus_warden
-      POSTGRES_USER: lotus
-      POSTGRES_PASSWORD: lotus
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -51,9 +55,11 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
+    env_file:
+      - .env
     environment:
-      RABBITMQ_DEFAULT_USER: lotus
-      RABBITMQ_DEFAULT_PASS: lotus
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     ports:
       - "5672:5672"
       - "15672:15672"
