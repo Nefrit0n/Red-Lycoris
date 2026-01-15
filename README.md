@@ -5,6 +5,41 @@
 
 ---
 
+## ⚡ High-load all-in-one stack (React + Go + JetStream)
+
+Этот репозиторий содержит каркас целевой архитектуры под высоконагруженный all-in-one стек:
+
+- **Frontend:** React + TypeScript (SPA)
+- **Backend API:** Go + Fiber
+- **Очередь:** NATS JetStream
+- **OLTP:** PostgreSQL 16+
+- **OLAP:** ClickHouse
+- **Search:** OpenSearch
+- **Cache:** Redis
+- **Object Storage:** MinIO
+- **Опционально:** FastAPI + Qdrant (ML)
+
+### Быстрый старт
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+### Структура каталогов
+
+```
+.
+├── db/                  # схемы PostgreSQL
+├── docs/                # архитектура, OpenAPI, примеры запросов
+├── frontend/            # React + TypeScript SPA
+├── services/            # Go микросервисы (Control/Data plane)
+└── docker-compose.yml   # all-in-one стек
+```
+
+Подробности архитектуры описаны в `docs/architecture.md`, OpenAPI — в `docs/openapi.yaml`,
+примеры запросов — в `docs/examples.md`.
+
 ## 📌 Описание
 
 Этот репозиторий описывает архитектуру и дизайн **масштабируемой ASOC / vulnerability management платформы**, вдохновлённой DefectDojo, но спроектированной с учётом:
