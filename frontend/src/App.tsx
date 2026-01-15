@@ -1,18 +1,16 @@
-import { CssBaseline, Container, Typography } from "@mui/material";
+import { CssBaseline } from "@mui/material";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import FindingsList from "./pages/FindingsList";
 
 const App = () => {
   return (
-    <>
+    <BrowserRouter>
       <CssBaseline />
-      <Container maxWidth="md" sx={{ py: 8 }}>
-        <Typography variant="h3" component="h1" gutterBottom>
-          Hello World
-        </Typography>
-        <Typography color="text.secondary">
-          Lotus Warden frontend is ready.
-        </Typography>
-      </Container>
-    </>
+      <Routes>
+        <Route path="/findings" element={<FindingsList />} />
+        <Route path="/" element={<Navigate to="/findings" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 };
 
