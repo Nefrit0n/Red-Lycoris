@@ -35,6 +35,7 @@ services:
     build:
       context: ../api
     environment:
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
       POSTGRES_DB: ${POSTGRES_DB:-asoc}
       POSTGRES_USER: ${POSTGRES_USER:-asoc}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
@@ -57,6 +58,7 @@ services:
     build:
       context: ../api
     environment:
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
       POSTGRES_DB: ${POSTGRES_DB:-asoc}
       POSTGRES_USER: ${POSTGRES_USER:-asoc}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
