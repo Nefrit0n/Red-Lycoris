@@ -39,3 +39,4 @@ class IngestResponseSerializer(serializers.Serializer):
 class IngestStatusSerializer(serializers.Serializer):
     status = serializers.CharField()
     fingerprint = serializers.CharField(required=False)
+    error = serializers.CharField(required=False)
