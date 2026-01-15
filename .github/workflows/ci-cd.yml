@@ -82,8 +82,11 @@ jobs:
       - lint
       - test
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Set image name
+        run: |
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -102,8 +105,9 @@ jobs:
           context: .
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: |
-            ghcr.io/${{ github.repository }}/lotus-warden:latest
-            ghcr.io/${{ github.repository }}/lotus-warden:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}/lotus-warden:latest
+            ${{ env.IMAGE_NAME }}/lotus-warden:${{ github.sha }}
+
 
   deploy:
     runs-on: ubuntu-latest
