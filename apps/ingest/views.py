@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from celery.result import AsyncResult
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
@@ -41,7 +40,7 @@ class IngestStatusAPIView(APIView):
         summary="Retrieve ingest task status.",
     )
     def get(self, request, task_id: str):
-        async_result = AsyncResult(task_id)
+        async_result = ingest_finding_task.AsyncResult(task_id)
         payload: dict[str, str] = {"status": async_result.status}
         if async_result.successful():
             result = async_result.result
