@@ -1,0 +1,88 @@
+openapi: 3.0.3
+info:
+  title: ASOC Control Plane API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/products:
+    get:
+      summary: List products
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+  /v1/ingest:
+    post:
+      summary: Upload scan report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestPayload'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        service:
+          type: string
+        status:
+          type: string
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    IngestPayload:
+      type: object
+      required:
+        - tenant_id
+        - product
+        - tool
+        - report
+      properties:
+        tenant_id:
+          type: string
+        product:
+          type: string
+        tool:
+          type: string
+        report:
+          type: string
+    IngestResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        subject:
+          type: string
+        trace_id:
+          type: string
+        received_at:
+          type: string
