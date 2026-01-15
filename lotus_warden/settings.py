@@ -1,4 +1,5 @@
 """Django settings for lotus_warden project."""
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -91,3 +92,13 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.AllowAny",
     ],
 }
+
+CELERY_BROKER_URL = os.getenv(
+    "CELERY_BROKER_URL",
+    "amqp://guest:guest@localhost:5672//",
+)
+CELERY_RESULT_BACKEND = os.getenv(
+    "CELERY_RESULT_BACKEND",
+    "redis://localhost:6379/0",
+)
+CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
