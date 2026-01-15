@@ -38,7 +38,7 @@ const PaginationControl = ({
         }
         rowsPerPageOptions={[10, 20, 50, 100]}
         labelRowsPerPage="Строк на странице"
-        labelDisplayedRows={({ from, to, count }) =>
+        labelDisplayedRows={({ _from, to, count }) =>
           `Показано ${to} из ${count}`
         }
         getItemAriaLabel={(type) => {
