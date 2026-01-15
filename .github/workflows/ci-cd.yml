@@ -108,13 +108,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
-      secrets.TEST_SSH_HOST != '' &&
-      secrets.TEST_SSH_USER != '' &&
-      secrets.TEST_SSH_KEY != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: test
+
     steps:
       - name: Deploy to test environment
         uses: appleboy/ssh-action@v1.0.3
