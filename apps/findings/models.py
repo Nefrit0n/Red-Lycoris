@@ -73,6 +73,9 @@ class Finding(models.Model):
             models.Index(fields=["cve"], name="find_cve_idx"),
             models.Index(fields=["cwe"], name="find_cwe_idx"),
         ]
+        constraints = [
+            models.UniqueConstraint(fields=["fingerprint"], name="find_fingerprint_uniq"),
+        ]
 
     def __str__(self) -> str:
         return self.title
