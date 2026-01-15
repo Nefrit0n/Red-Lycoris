@@ -28,8 +28,9 @@ func ExampleCRUD(ctx context.Context, db *sql.DB) error {
 	}
 
 	report := json.RawMessage(`{"summary":"scan completed"}`)
+	engagementID := engagement.ID
 	scanResult := &models.ScanResult{
-		EngagementID: engagement.ID,
+		EngagementID: &engagementID,
 		Scanner:      "sast",
 		RawReport:    report,
 	}
@@ -38,13 +39,13 @@ func ExampleCRUD(ctx context.Context, db *sql.DB) error {
 	}
 
 	findingDescription := "SQL injection detected in login endpoint"
-	findingStatus := "open"
 	finding := &models.Finding{
 		ScanResultID: scanResult.ID,
+		Fingerprint:  "example-fingerprint",
 		Title:        "SQL injection",
 		Description:  &findingDescription,
 		Severity:     "high",
-		Status:       &findingStatus,
+		Status:       "new",
 	}
 	if err := CreateFinding(ctx, db, finding); err != nil {
 		return err

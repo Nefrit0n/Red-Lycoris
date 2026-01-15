@@ -8,13 +8,15 @@ import (
 )
 
 type Finding struct {
-	ID           uuid.UUID `db:"id"`
-	ScanResultID uuid.UUID `db:"scan_result_id"`
-	Title        string    `db:"title"`
-	Description  *string   `db:"description"`
-	Severity     string    `db:"severity"`
-	Status       *string   `db:"status"`
-	CreatedAt    time.Time `db:"created_at"`
+	ID           uuid.UUID  `db:"id"`
+	ScanResultID uuid.UUID  `db:"scan_result_id"`
+	Fingerprint  string     `db:"fingerprint"`
+	Title        string     `db:"title"`
+	Description  *string    `db:"description"`
+	Severity     string     `db:"severity"`
+	Status       string     `db:"status"`
+	DuplicateID  *uuid.UUID `db:"duplicate_id"`
+	CreatedAt    time.Time  `db:"created_at"`
 }
 
 func (f *Finding) Validate() error {
@@ -27,11 +29,20 @@ func (f *Finding) Validate() error {
 	if err := validateMaxLen(f.Title, 200, "title"); err != nil {
 		return err
 	}
+	if err := validateRequired(f.Fingerprint, "fingerprint"); err != nil {
+		return err
+	}
 	switch f.Severity {
 	case "low", "medium", "high", "critical":
-		return nil
+		// ok
 	default:
 		return fmt.Errorf("severity must be one of low, medium, high, critical")
+	}
+	switch f.Status {
+	case "new", "duplicate":
+		return nil
+	default:
+		return fmt.Errorf("status must be one of new, duplicate")
 	}
 }
 

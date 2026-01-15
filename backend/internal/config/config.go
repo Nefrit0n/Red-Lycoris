@@ -11,6 +11,7 @@ type Config struct {
 	DBName   string
 	DBSSL    string
 	RedisURL string
+	JWTSecret string
 }
 
 func Load() Config {
@@ -23,6 +24,7 @@ func Load() Config {
 		DBName:   getEnv("DB_NAME", "lotus_warden"),
 		DBSSL:    getEnv("DB_SSLMODE", "disable"),
 		RedisURL: getEnv("REDIS_URL", "redis://localhost:6379"),
+		JWTSecret: getEnv("JWT_SECRET", "change-me"),
 	}
 }
 
