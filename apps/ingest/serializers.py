@@ -29,3 +29,8 @@ class IngestPayloadSerializer(serializers.Serializer):
             "port": attrs.get("port"),
         }
         return normalized
+
+
+class IngestResponseSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    task_id = serializers.CharField()
