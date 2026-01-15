@@ -22,6 +22,6 @@ func main() {
 		log.Fatalf("database migration failed: %v", err)
 	}
 
-	app := server.NewApp()
+	app := server.NewApp(cfg, db)
 	log.Fatal(app.Listen(fmt.Sprintf(":%s", cfg.AppPort)))
 }

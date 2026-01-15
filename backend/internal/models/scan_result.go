@@ -10,16 +10,14 @@ import (
 
 type ScanResult struct {
 	ID           uuid.UUID       `db:"id"`
-	EngagementID uuid.UUID       `db:"engagement_id"`
+	EngagementID *uuid.UUID      `db:"engagement_id"`
 	Scanner      string          `db:"scanner"`
 	RawReport    json.RawMessage `db:"raw_report"`
+	ProcessedAt  time.Time       `db:"processed_at"`
 	CreatedAt    time.Time       `db:"created_at"`
 }
 
 func (s *ScanResult) Validate() error {
-	if s.EngagementID == uuid.Nil {
-		return fmt.Errorf("engagement_id is required")
-	}
 	if err := validateRequired(s.Scanner, "scanner"); err != nil {
 		return err
 	}
@@ -32,6 +30,9 @@ func (s *ScanResult) Validate() error {
 func (s *ScanResult) PrepareForInsert() {
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
+	}
+	if s.ProcessedAt.IsZero() {
+		s.ProcessedAt = time.Now().UTC()
 	}
 	if s.CreatedAt.IsZero() {
 		s.CreatedAt = time.Now().UTC()
