@@ -11,6 +11,7 @@ Deployment assets live in this directory.
 - `config/uwsgi.ini`: uWSGI defaults
   - **Processes:** 2
   - **Threads:** 4
+  - Install with `pip install -r requirements-uwsgi.txt` (requires a C compiler)
 
 ## NGINX
 
