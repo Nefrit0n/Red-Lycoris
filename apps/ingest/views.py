@@ -46,4 +46,6 @@ class IngestStatusAPIView(APIView):
             result = async_result.result
             if isinstance(result, dict) and result.get("fingerprint"):
                 payload["fingerprint"] = str(result["fingerprint"])
+        elif async_result.failed():
+            payload["error"] = str(async_result.result)
         return Response(payload)
