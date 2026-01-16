@@ -27,6 +27,25 @@ func GetUserByEmail(ctx context.Context, db *sql.DB, email string) (*models.User
 	return &user, nil
 }
 
+func GetUserByLogin(ctx context.Context, db *sql.DB, email string, username string) (*models.User, error) {
+	row := db.QueryRowContext(
+		ctx,
+		`SELECT id, username, email, hashed_password, password_changed, created_at
+		 FROM users WHERE email = $1 OR username = $2`,
+		email,
+		username,
+	)
+
+	var user models.User
+	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.HashedPassword, &user.PasswordChanged, &user.CreatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
 func GetUserByID(ctx context.Context, db *sql.DB, userID uuid.UUID) (*models.User, error) {
 	row := db.QueryRowContext(
 		ctx,
