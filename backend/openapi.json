@@ -1,0 +1,150 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Lotus Warden API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/scans/upload": {
+      "post": {
+        "summary": "Upload scanner report",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanUploadRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanUploadMultipartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "415": {
+            "description": "Unsupported report format"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ScanUploadRequest": {
+        "type": "object",
+        "required": [
+          "scanner_type",
+          "report"
+        ],
+        "properties": {
+          "scanner_type": {
+            "type": "string",
+            "enum": [
+              "trivy",
+              "zap",
+              "semgrep"
+            ]
+          },
+          "report": {
+            "type": "object",
+            "description": "JSON report payload"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "product_version": {
+            "type": "string"
+          },
+          "product_identifier": {
+            "type": "string"
+          }
+        }
+      },
+      "ScanUploadMultipartRequest": {
+        "type": "object",
+        "required": [
+          "scanner_type",
+          "report"
+        ],
+        "properties": {
+          "scanner_type": {
+            "type": "string"
+          },
+          "report": {
+            "type": "string",
+            "format": "binary"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "product_version": {
+            "type": "string"
+          },
+          "product_identifier": {
+            "type": "string"
+          }
+        }
+      },
+      "ScanUploadResponse": {
+        "type": "object",
+        "properties": {
+          "scanId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdFindings": {
+            "type": "integer"
+          },
+          "duplicates": {
+            "type": "integer"
+          },
+          "productCreated": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

@@ -12,6 +12,8 @@ type Product struct {
 	Name        string    `db:"name"`
 	Slug        string    `db:"slug"`
 	Description *string   `db:"description"`
+	Identifier  *string   `db:"identifier"`
+	Version     *string   `db:"version"`
 	CreatedAt   time.Time `db:"created_at"`
 	UpdatedAt   time.Time `db:"updated_at"`
 }
@@ -34,6 +36,16 @@ func (p *Product) Validate() error {
 	}
 	if p.Description != nil {
 		if err := validateMaxLen(*p.Description, 2000, "description"); err != nil {
+			return err
+		}
+	}
+	if p.Identifier != nil {
+		if err := validateMaxLen(*p.Identifier, 200, "identifier"); err != nil {
+			return err
+		}
+	}
+	if p.Version != nil {
+		if err := validateMaxLen(*p.Version, 100, "version"); err != nil {
 			return err
 		}
 	}

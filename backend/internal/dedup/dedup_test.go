@@ -11,6 +11,7 @@ func TestComputeFingerprintSameFinding(t *testing.T) {
 		Title:    "SQL Injection",
 		Severity: "high",
 		Location: "/login",
+		RuleID:   "SQLI-1",
 	}
 	first := ComputeFingerprint("sast", finding)
 	second := ComputeFingerprint("sast", finding)
@@ -24,11 +25,13 @@ func TestComputeFingerprintDifferentFinding(t *testing.T) {
 		Title:    "SQL Injection",
 		Severity: "high",
 		Location: "/login",
+		RuleID:   "SQLI-1",
 	}
 	other := parser.Finding{
 		Title:    "XSS",
 		Severity: "medium",
 		Location: "/search",
+		RuleID:   "XSS-1",
 	}
 	first := ComputeFingerprint("sast", finding)
 	second := ComputeFingerprint("sast", other)
@@ -42,11 +45,13 @@ func TestComputeFingerprintPartialMatch(t *testing.T) {
 		Title:    "SQL Injection",
 		Severity: "high",
 		Location: "/login",
+		RuleID:   "SQLI-1",
 	}
 	partial := parser.Finding{
 		Title:    "SQL Injection",
 		Severity: "high",
 		Location: "/profile",
+		RuleID:   "SQLI-1",
 	}
 	first := ComputeFingerprint("sast", base)
 	second := ComputeFingerprint("sast", partial)
