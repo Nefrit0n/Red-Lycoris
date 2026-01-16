@@ -52,6 +52,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB) {
 	findingsHandler := handlers.NewFindingsHandler(db)
 	secured.Get("/findings", findingsHandler.List)
 	secured.Get("/findings/:id", findingsHandler.Get)
+	secured.Get("/findings/:id/neighbors", findingsHandler.Neighbors)
 	secured.Get("/findings/:id/duplicates", findingsHandler.GetDuplicates)
 	secured.Post("/findings", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.Create)
 	secured.Put("/findings/:id", findingsHandler.Update)

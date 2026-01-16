@@ -48,6 +48,7 @@ type BulkUndoItem = {
 const FindingsList = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const listStateKey = "lotus_warden_findings_list_state";
   // ⚠️ Никогда не undefined
   const [data, setData] = useState<Finding[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -216,6 +217,23 @@ const FindingsList = () => {
     }
   }, [location.pathname, location.search, navigate, pageSize]);
 
+  useEffect(() => {
+    const raw = sessionStorage.getItem(listStateKey);
+    if (!raw) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as { path?: string; scrollY?: number };
+      if (parsed.path === `${location.pathname}${location.search}` && typeof parsed.scrollY === "number") {
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: parsed.scrollY ?? 0, behavior: "auto" });
+        });
+      }
+    } catch (err) {
+      sessionStorage.removeItem(listStateKey);
+    }
+  }, [listStateKey, location.pathname, location.search]);
+
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true);
@@ -370,6 +388,14 @@ const FindingsList = () => {
     fetchData();
   };
 
+  const handleNavigateToDetail = () => {
+    const listPath = `${location.pathname}${location.search}`;
+    sessionStorage.setItem(
+      listStateKey,
+      JSON.stringify({ path: listPath, scrollY: window.scrollY })
+    );
+  };
+
   const handleBulkApply = async (
     action: "set_status" | "assign" | "dismiss",
     payload: Record<string, unknown>
@@ -518,6 +544,8 @@ const FindingsList = () => {
           batchMode={selectionCount > 0}
           highlightQuery={debouncedSearch}
           rowCount={pageSize}
+          returnTo={`${location.pathname}${location.search}`}
+          onNavigateToDetail={handleNavigateToDetail}
         />
 
         {showSelectAllPrompt && (

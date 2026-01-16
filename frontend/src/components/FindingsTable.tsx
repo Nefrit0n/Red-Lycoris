@@ -61,6 +61,8 @@ interface FindingsTableProps {
   batchMode: boolean;
   highlightQuery: string;
   rowCount: number;
+  returnTo: string;
+  onNavigateToDetail: () => void;
 }
 
 const FindingsTable = ({
@@ -78,6 +80,8 @@ const FindingsTable = ({
   batchMode,
   highlightQuery,
   rowCount,
+  returnTo,
+  onNavigateToDetail,
 }: FindingsTableProps) => {
   // 🛡️ ВТОРИЧНАЯ ЗАЩИТА
   const safeData = Array.isArray(data) ? data : [];
@@ -329,7 +333,12 @@ const FindingsTable = ({
                     ) : (
                       <MuiLink
                         component={Link}
-                        to={`/findings/${f.id}`}
+                        to={
+                          returnTo
+                            ? `/findings/${f.id}?returnTo=${encodeURIComponent(returnTo)}`
+                            : `/findings/${f.id}`
+                        }
+                        onClick={onNavigateToDetail}
                         underline="hover"
                       >
                         {renderHighlightedTitle(f.title)}
