@@ -17,9 +17,14 @@ type BulkAction = "set_status" | "assign" | "dismiss";
 interface BulkActionsBarProps {
   selectedCount: number;
   onApply: (action: BulkAction, payload: Record<string, unknown>) => void;
+  onClearSelection: () => void;
 }
 
-const BulkActionsBar = ({ selectedCount, onApply }: BulkActionsBarProps) => {
+const BulkActionsBar = ({
+  selectedCount,
+  onApply,
+  onClearSelection,
+}: BulkActionsBarProps) => {
   const [action, setAction] = useState<BulkAction>("set_status");
   const [status, setStatus] = useState<FindingStatus>("under_review");
   const [assigneeId, setAssigneeId] = useState("");
@@ -114,6 +119,13 @@ const BulkActionsBar = ({ selectedCount, onApply }: BulkActionsBarProps) => {
           disabled={selectedCount === 0}
         >
           Применить
+        </Button>
+        <Button
+          variant="text"
+          color="inherit"
+          onClick={onClearSelection}
+        >
+          Очистить выбор
         </Button>
       </Stack>
     </Box>

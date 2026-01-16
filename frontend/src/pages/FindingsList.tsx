@@ -1,27 +1,53 @@
 import {
   Alert,
   Box,
-  CircularProgress,
+  Button,
   Container,
   Paper,
+  Snackbar,
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { bulkUpdateFindings, fetchFindings } from "../api/findings";
 import { getCurrentUser } from "../api/auth";
 import BulkActionsBar from "../components/BulkActionsBar";
 import FiltersPanel from "../components/FiltersPanel";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
+import useDebouncedValue from "../hooks/useDebouncedValue";
 import {
   Finding,
   FindingSeverity,
   FindingStatus,
 } from "../types/findings";
 
+const severityOptions: FindingSeverity[] = [
+  "low",
+  "medium",
+  "high",
+  "critical",
+];
+
+const statusOptions: FindingStatus[] = [
+  "new",
+  "under_review",
+  "confirmed",
+  "false_positive",
+  "out_of_scope",
+  "risk_accepted",
+  "mitigated",
+  "duplicate",
+];
+
+type BulkUndoItem = {
+  id: string;
+  status: FindingStatus;
+};
+
 const FindingsList = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   // ⚠️ Никогда не undefined
   const [data, setData] = useState<Finding[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -33,7 +59,8 @@ const FindingsList = () => {
   const [pageSize, setPageSize] = useState(20);
 
   const [productId, setProductId] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const debouncedSearch = useDebouncedValue(searchInput, 400);
   const [importJobId, setImportJobId] = useState("");
   const [filterSeverity, setFilterSeverity] =
     useState<FindingSeverity | "">("");
@@ -46,25 +73,126 @@ const FindingsList = () => {
     useState<"asc" | "desc">("desc");
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [bulkUndoItems, setBulkUndoItems] = useState<BulkUndoItem[]>([]);
+  const [bulkToast, setBulkToast] = useState<string | null>(null);
+  const [undoToastOpen, setUndoToastOpen] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const queryProduct = params.get("product");
     const queryProductId = params.get("productId");
-    const importJobId = params.get("import_job_id");
-    if (importJobId) {
-      setSearch("");
-      setProductId("");
-      setImportJobId(importJobId);
-      setPage(0);
-      return;
+    const queryImportJobId = params.get("import_job_id");
+    const querySeverity = params.get("severity");
+    const queryStatus = params.get("status");
+    const querySearch = params.get("q") ?? "";
+    const queryPage = Number(params.get("page") ?? "1");
+    const queryLimit = Number(params.get("limit") ?? "20");
+    const querySortField = params.get("sortField");
+    const querySortOrder = params.get("sortOrder");
+
+    const nextPage = Number.isFinite(queryPage) && queryPage > 0 ? queryPage - 1 : 0;
+    const nextPageSize =
+      Number.isFinite(queryLimit) && queryLimit > 0 ? queryLimit : 20;
+
+    setPage((prev) => (prev !== nextPage ? nextPage : prev));
+    setPageSize((prev) => (prev !== nextPageSize ? nextPageSize : prev));
+
+    const nextProduct = queryProduct || queryProductId || "";
+    setProductId((prev) => (prev !== nextProduct ? nextProduct : prev));
+
+    const nextSeverity = severityOptions.includes(querySeverity as FindingSeverity)
+      ? (querySeverity as FindingSeverity)
+      : "";
+    setFilterSeverity((prev) => (prev !== nextSeverity ? nextSeverity : prev));
+
+    const nextStatus = statusOptions.includes(queryStatus as FindingStatus)
+      ? (queryStatus as FindingStatus)
+      : "";
+    setFilterStatus((prev) => (prev !== nextStatus ? nextStatus : prev));
+
+    setSearchInput((prev) => (prev !== querySearch ? querySearch : prev));
+
+    setImportJobId((prev) =>
+      prev !== (queryImportJobId || "") ? queryImportJobId || "" : prev
+    );
+
+    const nextSortField = (querySortField as keyof Finding) || "createdAt";
+    const allowedSortFields: Array<keyof Finding> = [
+      "title",
+      "productName",
+      "severity",
+      "status",
+      "createdAt",
+      "updatedAt",
+    ];
+    const safeSortField = allowedSortFields.includes(nextSortField)
+      ? nextSortField
+      : "createdAt";
+    setSortField((prev) => (prev !== safeSortField ? safeSortField : prev));
+
+    const safeSortOrder = querySortOrder === "asc" ? "asc" : "desc";
+    setSortOrder((prev) => (prev !== safeSortOrder ? safeSortOrder : prev));
+  }, [location.search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set("page", (page + 1).toString());
+    params.set("limit", pageSize.toString());
+    if (productId) {
+      params.set("product", productId);
     }
-    setImportJobId("");
-    if (queryProductId) {
-      setProductId(queryProductId);
-      setPage(0);
-      return;
+    if (filterSeverity) {
+      params.set("severity", filterSeverity);
+    }
+    if (filterStatus) {
+      params.set("status", filterStatus);
+    }
+    if (searchInput) {
+      params.set("q", searchInput);
+    }
+    if (importJobId) {
+      params.set("import_job_id", importJobId);
+    }
+    if (sortField) {
+      params.set("sortField", sortField);
+    }
+    if (sortOrder) {
+      params.set("sortOrder", sortOrder);
     }
 
+    const nextSearch = params.toString();
+    const currentSearch = location.search.replace(/^\?/, "");
+    if (nextSearch !== currentSearch) {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: nextSearch ? `?${nextSearch}` : "",
+        },
+        { replace: false }
+      );
+    }
+  }, [
+    page,
+    pageSize,
+    productId,
+    filterSeverity,
+    filterStatus,
+    searchInput,
+    importJobId,
+    sortField,
+    sortOrder,
+    location.pathname,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const queryProduct = params.get("product") || params.get("productId");
+    const queryImportJobId = params.get("import_job_id");
+    if (queryProduct || queryImportJobId) {
+      return;
+    }
     const raw = localStorage.getItem("lotus_warden_last_upload");
     if (!raw) {
       return;
@@ -72,13 +200,21 @@ const FindingsList = () => {
     try {
       const parsed = JSON.parse(raw) as { productId?: string | null };
       if (parsed.productId) {
-        setProductId(parsed.productId);
-        setPage(0);
+        params.set("product", parsed.productId);
+        params.set("page", "1");
+        params.set("limit", pageSize.toString());
+        navigate(
+          {
+            pathname: location.pathname,
+            search: `?${params.toString()}`,
+          },
+          { replace: true }
+        );
       }
     } finally {
       localStorage.removeItem("lotus_warden_last_upload");
     }
-  }, [location.search]);
+  }, [location.pathname, location.search, navigate, pageSize]);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
@@ -90,10 +226,10 @@ const FindingsList = () => {
           {
             limit: pageSize,
             offset: page * pageSize,
-            filterProductId: productId,
+            filterProduct: productId,
             filterSeverity,
             filterStatus,
-            search,
+            search: debouncedSearch,
             importJobId,
             sortField,
             sortOrder,
@@ -112,7 +248,9 @@ const FindingsList = () => {
           );
         }
 
-        setSelectedIds([]);
+        if (!selectAllMatching) {
+          setSelectedIds([]);
+        }
       } catch (err) {
         if (
           !(err instanceof DOMException && err.name === "AbortError")
@@ -129,12 +267,13 @@ const FindingsList = () => {
       page,
       pageSize,
       productId,
-      search,
+      debouncedSearch,
       importJobId,
       filterSeverity,
       filterStatus,
       sortField,
       sortOrder,
+      selectAllMatching,
     ]
   );
 
@@ -144,13 +283,36 @@ const FindingsList = () => {
     return () => controller.abort();
   }, [fetchData]);
 
+  useEffect(() => {
+    setSelectedIds([]);
+    setSelectAllMatching(false);
+  }, [
+    productId,
+    filterSeverity,
+    filterStatus,
+    searchInput,
+    importJobId,
+    sortField,
+    sortOrder,
+  ]);
+
+  useEffect(() => {
+    if (selectAllMatching) {
+      setSelectedIds(data.map((item) => item.id));
+    }
+  }, [data, selectAllMatching]);
+
   const handleResetFilters = () => {
     setProductId("");
-    setSearch("");
+    setSearchInput("");
     setImportJobId("");
     setFilterSeverity("");
     setFilterStatus("");
     setPage(0);
+    setSortField("createdAt");
+    setSortOrder("desc");
+    setSelectedIds([]);
+    setSelectAllMatching(false);
   };
 
   const handleSortChange = (field: keyof Finding) => {
@@ -160,15 +322,23 @@ const FindingsList = () => {
       setSortField(field);
       setSortOrder("asc");
     }
+    setPage(0);
   };
 
   const handleToggleAll = (checked: boolean) => {
-    setSelectedIds(
-      checked ? data.map((item) => item.id) : []
-    );
+    if (!checked) {
+      setSelectedIds([]);
+      setSelectAllMatching(false);
+      return;
+    }
+    setSelectAllMatching(false);
+    setSelectedIds(data.map((item) => item.id));
   };
 
   const handleToggleOne = (id: string) => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+    }
     setSelectedIds((prev) =>
       prev.includes(id)
         ? prev.filter((item) => item !== id)
@@ -180,6 +350,26 @@ const FindingsList = () => {
   const canBulk =
     user?.roles?.includes("admin") || user?.roles?.includes("analyst");
 
+  const selectionCount = selectAllMatching ? total : selectedIds.length;
+  const showSelectAllPrompt =
+    !selectAllMatching &&
+    selectedIds.length > 0 &&
+    selectedIds.length === data.length &&
+    total > data.length;
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+    setSelectAllMatching(false);
+  };
+
+  const handleSelectAllResults = () => {
+    setSelectAllMatching(true);
+  };
+
+  const handleRetry = () => {
+    fetchData();
+  };
+
   const handleBulkApply = async (
     action: "set_status" | "assign" | "dismiss",
     payload: Record<string, unknown>
@@ -187,17 +377,80 @@ const FindingsList = () => {
     setLoading(true);
     setError(null);
     try {
-      await bulkUpdateFindings({
-        ids: selectedIds,
+      const response = await bulkUpdateFindings({
+        ids: selectAllMatching ? [] : selectedIds,
+        select_all: selectAllMatching,
+        filters: selectAllMatching
+          ? {
+              product: productId || undefined,
+              severity: filterSeverity || undefined,
+              status: filterStatus || undefined,
+              q: debouncedSearch || undefined,
+              import_job_id: importJobId || undefined,
+            }
+          : undefined,
         action,
         payload,
       });
+      const undoItems =
+        response?.prevStatuses?.filter(
+          (item): item is BulkUndoItem =>
+            Boolean(item?.id) && Boolean(item?.status)
+        ) ?? [];
+      setBulkUndoItems(undoItems);
+      setBulkToast(
+        `Обновлено находок: ${response?.affectedCount ?? 0}`
+      );
+      setUndoToastOpen(true);
+      setSelectedIds([]);
+      setSelectAllMatching(false);
       await fetchData();
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("Не удалось выполнить массовую операцию");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (bulkUndoItems.length === 0) {
+      setUndoToastOpen(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const grouped = bulkUndoItems.reduce<Record<FindingStatus, string[]>>(
+        (acc, item) => {
+          const status = item.status;
+          if (!acc[status]) {
+            acc[status] = [];
+          }
+          acc[status].push(item.id);
+          return acc;
+        },
+        {} as Record<FindingStatus, string[]>
+      );
+      for (const [status, ids] of Object.entries(grouped)) {
+        await bulkUpdateFindings({
+          ids,
+          action: "set_status",
+          payload: { status },
+        });
+      }
+      setBulkToast("Изменения отменены");
+      setUndoToastOpen(true);
+      setBulkUndoItems([]);
+      await fetchData();
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Не удалось отменить изменения");
       }
     } finally {
       setLoading(false);
@@ -212,7 +465,7 @@ const FindingsList = () => {
 
       <FiltersPanel
         productId={productId}
-        search={search}
+        search={searchInput}
         filterSeverity={filterSeverity}
         filterStatus={filterStatus}
         onProductIdChange={(v) => {
@@ -220,7 +473,7 @@ const FindingsList = () => {
           setPage(0);
         }}
         onSearchChange={(v) => {
-          setSearch(v);
+          setSearchInput(v);
           setPage(0);
         }}
         onSeverityChange={(v) => {
@@ -234,17 +487,12 @@ const FindingsList = () => {
         onReset={handleResetFilters}
       />
 
-      {canBulk && (
+      {canBulk && selectionCount > 0 && (
         <BulkActionsBar
-          selectedCount={selectedIds.length}
+          selectedCount={selectionCount}
           onApply={handleBulkApply}
+          onClearSelection={handleClearSelection}
         />
-      )}
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
       )}
 
       <Paper
@@ -255,20 +503,59 @@ const FindingsList = () => {
           borderColor: "divider",
         }}
       >
-        {loading ? (
-          <Box display="flex" justifyContent="center" py={8}>
-            <CircularProgress />
+        <FindingsTable
+          data={data}
+          selectedIds={selectedIds}
+          sortField={sortField}
+          sortOrder={sortOrder}
+          onToggleAll={handleToggleAll}
+          onToggleOne={handleToggleOne}
+          onSortChange={handleSortChange}
+          loading={loading}
+          errorMessage={error}
+          onRetry={handleRetry}
+          onResetFilters={handleResetFilters}
+          batchMode={selectionCount > 0}
+          highlightQuery={debouncedSearch}
+          rowCount={pageSize}
+        />
+
+        {showSelectAllPrompt && (
+          <Box px={3} pb={3}>
+            <Alert
+              severity="info"
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={handleSelectAllResults}
+                >
+                  Выбрать все {total} результатов
+                </Button>
+              }
+            >
+              Выбрано {selectedIds.length} на странице.
+            </Alert>
           </Box>
-        ) : (
-          <FindingsTable
-            data={data}
-            selectedIds={selectedIds}
-            sortField={sortField}
-            sortOrder={sortOrder}
-            onToggleAll={handleToggleAll}
-            onToggleOne={handleToggleOne}
-            onSortChange={handleSortChange}
-          />
+        )}
+
+        {selectAllMatching && (
+          <Box px={3} pb={3}>
+            <Alert
+              severity="info"
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={handleClearSelection}
+                >
+                  Снять выбор
+                </Button>
+              }
+            >
+              Выбраны все {total} результатов по фильтрам.
+            </Alert>
+          </Box>
         )}
       </Paper>
 
@@ -276,12 +563,41 @@ const FindingsList = () => {
         page={page}
         pageSize={pageSize}
         total={total}
-        onPageChange={setPage}
+        onPageChange={(nextPage) => {
+          setPage(nextPage);
+          if (!selectAllMatching) {
+            setSelectedIds([]);
+          }
+        }}
         onPageSizeChange={(v) => {
           setPageSize(v);
           setPage(0);
+          if (!selectAllMatching) {
+            setSelectedIds([]);
+          }
         }}
       />
+
+      <Snackbar
+        open={undoToastOpen}
+        autoHideDuration={8000}
+        onClose={() => setUndoToastOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          severity="success"
+          onClose={() => setUndoToastOpen(false)}
+          action={
+            bulkUndoItems.length > 0 ? (
+              <Button color="inherit" size="small" onClick={handleUndo}>
+                Undo
+              </Button>
+            ) : null
+          }
+        >
+          {bulkToast ?? ""}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };
