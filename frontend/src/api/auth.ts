@@ -109,3 +109,9 @@ export const getCurrentUser = (): UserProfile | null => {
     return null;
   }
 };
+
+export const isAdminUser = (user: UserProfile | null): boolean =>
+  Boolean(
+    user?.roles?.includes("admin") ||
+      user?.roles?.includes("superuser")
+  );

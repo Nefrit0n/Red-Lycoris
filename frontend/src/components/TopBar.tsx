@@ -7,7 +7,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { logout } from "../api/auth";
+import { getCurrentUser, isAdminUser, logout } from "../api/auth";
 
 interface TopBarProps {
   onLoggedOut?: () => void;
@@ -15,6 +15,8 @@ interface TopBarProps {
 
 const TopBar = ({ onLoggedOut }: TopBarProps) => {
   const navigate = useNavigate();
+  const user = getCurrentUser();
+  const canSeeAdmin = isAdminUser(user);
 
   const handleLogout = async () => {
     await logout();
@@ -35,11 +37,16 @@ const TopBar = ({ onLoggedOut }: TopBarProps) => {
             Управление находками уязвимостей
           </Typography>
         </Box>
-        <Stack direction="row" spacing={2}>
+        <Stack direction="row" spacing={2} alignItems="center">
           <Button variant="text" onClick={() => navigate("/findings")}>Findings</Button>
           <Button variant="text" onClick={() => navigate("/products")}>Products</Button>
           <Button variant="text" onClick={() => navigate("/imports")}>Imports</Button>
           <Button variant="text" onClick={() => navigate("/scans/upload")}>Upload Scan</Button>
+          {canSeeAdmin && (
+            <Button variant="text" onClick={() => navigate("/admin")}>
+              Admin
+            </Button>
+          )}
           <Button variant="outlined" onClick={handleLogout} aria-label="Выйти из системы">
             Выйти
           </Button>
