@@ -82,8 +82,16 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WithArgs(sqlmock.AnyArg(), "Billing API", "billing-api-1-0-0", sqlmock.AnyArg(), "billing-api", "1.0.0", sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
+	mock.ExpectExec("INSERT INTO import_jobs").
+		WithArgs(sqlmock.AnyArg(), "trivy", "Billing API", "1.0.0", "billing-api", "queued", 0, 0, 0, sqlmock.AnyArg(), nil, sqlmock.AnyArg(), nil, nil, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec("UPDATE import_jobs").
+		WithArgs("running", sqlmock.AnyArg(), nil, nil, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	mock.ExpectExec("INSERT INTO scan_results").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery("SELECT id FROM findings WHERE fingerprint = \\$1 LIMIT 1").
@@ -91,7 +99,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	mock.ExpectExec("INSERT INTO findings").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintOne, "SQL Injection", sqlmock.AnyArg(), "high", "new", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintOne, "SQL Injection", sqlmock.AnyArg(), "high", "new", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery("SELECT id FROM findings WHERE fingerprint = \\$1 LIMIT 1").
@@ -99,7 +107,15 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(duplicateID))
 
 	mock.ExpectExec("INSERT INTO findings").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintTwo, "XSS", sqlmock.AnyArg(), "medium", "duplicate", duplicateID, sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintTwo, "XSS", sqlmock.AnyArg(), "medium", "duplicate", duplicateID, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec("UPDATE import_jobs").
+		WithArgs(2, 2, 1, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec("UPDATE import_jobs").
+		WithArgs("succeeded", nil, sqlmock.AnyArg(), nil, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{

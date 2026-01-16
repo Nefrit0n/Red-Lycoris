@@ -2,12 +2,16 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"lotus-warden/backend/internal/dedup"
 	"lotus-warden/backend/internal/models"
@@ -24,6 +28,7 @@ const scanUploadScope = "scan:upload"
 type ScanUploadRequest struct {
 	ScannerType       string `json:"scanner_type" validate:"required,oneof=trivy zap semgrep"`
 	Report            json.RawMessage
+	ReportBytes       []byte
 	EngagementID      *uuid.UUID `json:"engagement_id,omitempty"`
 	ProductName       string     `json:"product_name,omitempty"`
 	ProductVersion    string     `json:"product_version,omitempty"`
@@ -31,11 +36,13 @@ type ScanUploadRequest struct {
 }
 
 type ScanUploadResponse struct {
+	ImportJobID     uuid.UUID  `json:"importJobId"`
 	ScanID          uuid.UUID  `json:"scanId"`
 	ProductID       *uuid.UUID `json:"productId,omitempty"`
 	CreatedFindings int        `json:"createdFindings"`
 	Duplicates      int        `json:"duplicates"`
 	ProductCreated  bool       `json:"productCreated"`
+	Status          string     `json:"status"`
 }
 
 type ScanUploadHandler struct {
@@ -59,76 +66,50 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	findings, err := parser.ParseReport(req.ScannerType, req.Report)
+	checksum := computeChecksum(req.ReportBytes)
+	existing, err := storage.GetImportJobByChecksum(c.Context(), h.db, checksum)
 	if err != nil {
-		status := http.StatusBadRequest
-		if err == parser.ErrUnsupportedFormat {
-			status = http.StatusUnsupportedMediaType
-		}
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check import job"})
+	}
+	if existing != nil && existing.Status == models.ImportJobSucceeded {
+		return c.Status(http.StatusOK).JSON(ScanUploadResponse{
+			ImportJobID:     existing.ID,
+			ScanID:          uuid.Nil,
+			CreatedFindings: existing.FindingsNew,
+			Duplicates:      existing.DuplicatesTotal,
+			ProductCreated:  false,
+			Status:          existing.Status,
+		})
+	}
+
+	productName := strings.TrimSpace(req.ProductName)
+	productVersion := strings.TrimSpace(req.ProductVersion)
+	productIdentifier := strings.TrimSpace(req.ProductIdentifier)
+
+	job := &models.ImportJob{
+		Scanner:   req.ScannerType,
+		Status:    models.ImportJobQueued,
+		Checksum:  checksum,
+		CreatedBy: userIDFromContext(c),
+	}
+	if productName != "" {
+		job.ProductName = &productName
+	}
+	if productVersion != "" {
+		job.ProductVersion = &productVersion
+	}
+	if productIdentifier != "" {
+		job.ProductIdentifier = &productIdentifier
+	}
+	if err := storage.CreateImportJob(c.Context(), h.db, job); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create import job"})
+	}
+
+	resp, status, err := h.processImportJob(c.Context(), req, job, userIDFromContext(c))
+	if err != nil {
 		return c.Status(status).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	ctx := c.Context()
-	product, productCreated, err := h.resolveProduct(ctx, req)
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to resolve product"})
-	}
-	var productID *uuid.UUID
-	if product != nil {
-		productID = &product.ID
-	}
-
-	scan := &models.ScanResult{
-		EngagementID: req.EngagementID,
-		ProductID:    productID,
-		UploaderID:   userIDFromContext(c),
-		Scanner:      req.ScannerType,
-		RawReport:    req.Report,
-	}
-	if err := storage.CreateScanResult(ctx, h.db, scan); err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to store scan result"})
-	}
-
-	duplicates := 0
-	createdFindings := 0
-	for _, finding := range findings {
-		fingerprint := dedup.ComputeFingerprint(req.ScannerType, finding)
-		existing, err := storage.FindFindingIDByFingerprint(ctx, h.db, fingerprint)
-		if err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to deduplicate finding"})
-		}
-
-		status := "new"
-		var duplicateID *uuid.UUID
-		if existing != nil {
-			status = "duplicate"
-			duplicates++
-			duplicateID = &existing.ID
-		}
-
-		model := &models.Finding{
-			ScanResultID: &scan.ID,
-			ProductID:    productID,
-			Fingerprint:  fingerprint,
-			Title:        finding.Title,
-			Description:  finding.Description,
-			Severity:     finding.Severity,
-			Status:       status,
-			DuplicateID:  duplicateID,
-		}
-		if err := storage.CreateFinding(ctx, h.db, model); err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to store finding"})
-		}
-		createdFindings++
-	}
-
-	resp := ScanUploadResponse{
-		ScanID:          scan.ID,
-		ProductID:       productID,
-		CreatedFindings: createdFindings,
-		Duplicates:      duplicates,
-		ProductCreated:  productCreated,
-	}
 	return c.Status(http.StatusOK).JSON(resp)
 }
 
@@ -169,6 +150,7 @@ func (h *ScanUploadHandler) parseRequest(c *fiber.Ctx) (ScanUploadRequest, error
 	return ScanUploadRequest{
 		ScannerType:       strings.ToLower(strings.TrimSpace(payload.ScannerType)),
 		Report:            raw,
+		ReportBytes:       []byte(raw),
 		EngagementID:      payload.EngagementID,
 		ProductName:       strings.TrimSpace(payload.ProductName),
 		ProductVersion:    strings.TrimSpace(payload.ProductVersion),
@@ -214,6 +196,7 @@ func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadReque
 	return ScanUploadRequest{
 		ScannerType:       scannerType,
 		Report:            json.RawMessage(reportData),
+		ReportBytes:       reportData,
 		ProductName:       strings.TrimSpace(c.FormValue("product_name")),
 		ProductVersion:    strings.TrimSpace(c.FormValue("product_version")),
 		ProductIdentifier: strings.TrimSpace(c.FormValue("product_identifier")),
@@ -355,4 +338,107 @@ func userIDFromContext(c *fiber.Ctx) *uuid.UUID {
 		return nil
 	}
 	return &parsed
+}
+
+func computeChecksum(value []byte) string {
+	sum := sha256.Sum256(value)
+	return hex.EncodeToString(sum[:])
+}
+
+func (h *ScanUploadHandler) processImportJob(ctx context.Context, req ScanUploadRequest, job *models.ImportJob, uploaderID *uuid.UUID) (ScanUploadResponse, int, error) {
+	startedAt := time.Now().UTC()
+	if err := storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobRunning, &startedAt, nil, nil); err != nil {
+		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to start import job")
+	}
+
+	findings, err := parser.ParseReport(req.ScannerType, req.Report)
+	if err != nil {
+		finishedAt := time.Now().UTC()
+		errMsg := err.Error()
+		_ = storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		if errors.Is(err, parser.ErrUnsupportedFormat) {
+			return ScanUploadResponse{}, http.StatusUnsupportedMediaType, err
+		}
+		return ScanUploadResponse{}, http.StatusBadRequest, err
+	}
+
+	product, productCreated, err := h.resolveProduct(ctx, req)
+	if err != nil {
+		finishedAt := time.Now().UTC()
+		errMsg := "failed to resolve product"
+		_ = storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to resolve product")
+	}
+	var productID *uuid.UUID
+	if product != nil {
+		productID = &product.ID
+	}
+
+	scan := &models.ScanResult{
+		EngagementID: req.EngagementID,
+		ProductID:    productID,
+		UploaderID:   uploaderID,
+		ImportJobID:  &job.ID,
+		Scanner:      req.ScannerType,
+		RawReport:    req.Report,
+	}
+	if err := storage.CreateScanResult(ctx, h.db, scan); err != nil {
+		finishedAt := time.Now().UTC()
+		errMsg := "failed to store scan result"
+		_ = storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to store scan result")
+	}
+
+	duplicates := 0
+	createdFindings := 0
+	for _, finding := range findings {
+		fingerprint := dedup.ComputeFingerprint(req.ScannerType, finding)
+		existing, err := storage.FindFindingIDByFingerprint(ctx, h.db, fingerprint)
+		if err != nil {
+			return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to deduplicate finding")
+		}
+
+		status := models.StatusNew
+		var duplicateID *uuid.UUID
+		if existing != nil {
+			status = models.StatusDuplicate
+			duplicates++
+			duplicateID = &existing.ID
+		}
+
+		model := &models.Finding{
+			ScanResultID: &scan.ID,
+			ProductID:    productID,
+			Fingerprint:  fingerprint,
+			Title:        finding.Title,
+			Description:  finding.Description,
+			Severity:     finding.Severity,
+			Status:       status,
+			DuplicateID:  duplicateID,
+			ImportJobID:  &job.ID,
+		}
+		if err := storage.CreateFinding(ctx, h.db, model); err != nil {
+			return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to store finding")
+		}
+		createdFindings++
+	}
+
+	if err := storage.UpdateImportJobStats(ctx, h.db, job.ID, len(findings), createdFindings, duplicates); err != nil {
+		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to update import job stats")
+	}
+
+	finishedAt := time.Now().UTC()
+	if err := storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobSucceeded, nil, &finishedAt, nil); err != nil {
+		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to finalize import job")
+	}
+
+	return ScanUploadResponse{
+		ImportJobID:     job.ID,
+		ScanID:          scan.ID,
+		ProductID:       productID,
+		CreatedFindings: createdFindings,
+		Duplicates:      duplicates,
+		ProductCreated:  productCreated,
+		Status:          models.ImportJobSucceeded,
+	}, http.StatusOK, nil
 }

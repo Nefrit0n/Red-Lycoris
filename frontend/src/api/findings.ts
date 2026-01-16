@@ -16,8 +16,8 @@ export const fetchFindings = async (
   signal?: AbortSignal
 ): Promise<ApiResponse> => {
   const searchParams = new URLSearchParams({
-    page: params.page.toString(),
-    pageSize: params.pageSize.toString(),
+    limit: params.limit.toString(),
+    offset: params.offset.toString(),
   });
 
   if (params.filterProductId) {
@@ -28,6 +28,12 @@ export const fetchFindings = async (
   }
   if (params.filterStatus) {
     searchParams.set("status", params.filterStatus);
+  }
+  if (params.search) {
+    searchParams.set("q", params.search);
+  }
+  if (params.importJobId) {
+    searchParams.set("import_job_id", params.importJobId);
   }
   if (params.sortField) {
     searchParams.set("sortField", params.sortField);
@@ -79,7 +85,7 @@ export const updateFindingStatus = async (
   status: FindingStatus
 ): Promise<FindingDetail> => {
   const response = await fetch(`/api/v1/findings/${id}`, {
-    method: "PUT",
+    method: "PATCH",
     headers: getJsonHeaders(),
     body: JSON.stringify({ status }),
   });
@@ -89,4 +95,39 @@ export const updateFindingStatus = async (
   }
 
   return parseApiResponse<FindingDetail>(response);
+};
+
+export const addFindingComment = async (
+  id: string,
+  body: string
+): Promise<void> => {
+  const response = await fetch(`/api/v1/findings/${id}/comments`, {
+    method: "POST",
+    headers: getJsonHeaders(),
+    body: JSON.stringify({ body }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Не удалось добавить комментарий");
+  }
+
+  await parseApiResponse(response);
+};
+
+export const bulkUpdateFindings = async (payload: {
+  ids: string[];
+  action: "set_status" | "assign" | "dismiss";
+  payload: Record<string, unknown>;
+}): Promise<void> => {
+  const response = await fetch("/api/v1/findings/bulk", {
+    method: "POST",
+    headers: getJsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error("Не удалось выполнить массовое действие");
+  }
+
+  await parseApiResponse(response);
 };
