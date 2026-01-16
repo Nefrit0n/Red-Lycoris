@@ -28,11 +28,12 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB) {
 	})
 
 	api := app.Group("/api/v1")
-	authHandler := handlers.NewAuthHandler(db, cfg.JWTSecret)
+	authHandler := handlers.NewAuthHandler(db, cfg.JWTSecret, cfg.RootEmail, cfg.RootPassword)
 	api.Post("/auth/login", authHandler.Login)
 	api.Post("/auth/logout", authHandler.Logout)
 
 	secured := api.Group("", middleware.RequireJWT(cfg.JWTSecret))
+	secured.Post("/auth/change_password", authHandler.ChangePassword)
 
 	scanHandler := handlers.NewScanUploadHandler(db)
 	secured.Post("/scans/upload", middleware.AuthorizeRole("analyst", "admin"), scanHandler.Handle)

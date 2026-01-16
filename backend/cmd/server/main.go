@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -20,6 +21,10 @@ func main() {
 
 	if err := storage.RunMigrations(db); err != nil {
 		log.Fatalf("database migration failed: %v", err)
+	}
+
+	if err := storage.EnsureRootUserExists(context.Background(), db, cfg.RootEmail, cfg.RootPassword); err != nil {
+		log.Fatalf("root user initialization failed: %v", err)
 	}
 
 	app := server.NewApp(cfg, db)
