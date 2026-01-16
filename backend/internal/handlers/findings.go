@@ -262,12 +262,26 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to create finding"})
 	}
 
+	_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+		ActorID:    userIDFromContext(c),
+		ActorType:  "user",
+		Action:     "finding.created",
+		TargetType: "finding",
+		TargetID:   stringPointer(finding.ID.String()),
+		Scope:      "product",
+		ScopeID:    finding.ProductID,
+	}, map[string]interface{}{
+		"title":    finding.Title,
+		"severity": finding.Severity,
+		"status":   finding.Status,
+		"meta":     auditMetadataFromContext(c),
+	})
+
 	return c.Status(http.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"data":    mapFindingModel(*finding),
 	})
 }
-
 
 // UpdateFinding godoc
 // @Summary Update finding
@@ -376,6 +390,22 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 		}
 	}
 
+	if auditPayload := buildFindingAuditChanges(current, req, false); auditPayload != nil {
+		scopeID := updated.ProductID
+		_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+			ActorID:    userIDFromContext(c),
+			ActorType:  "user",
+			Action:     "finding.updated",
+			TargetType: "finding",
+			TargetID:   stringPointer(updated.ID.String()),
+			Scope:      "product",
+			ScopeID:    scopeID,
+		}, map[string]interface{}{
+			"changes": auditPayload,
+			"meta":    auditMetadataFromContext(c),
+		})
+	}
+
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapFindingModel(*updated)})
 }
 
@@ -406,6 +436,18 @@ func (h *FindingsHandler) Delete(c *fiber.Ctx) error {
 	_ = createFindingEvent(c, h.db, id, "deleted", fiber.Map{
 		"deleted_at": deleted.DeletedAt.Format(timeFormatRFC3339()),
 	})
+	_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+		ActorID:    userIDFromContext(c),
+		ActorType:  "user",
+		Action:     "finding.deleted",
+		TargetType: "finding",
+		TargetID:   stringPointer(deleted.ID.String()),
+		Scope:      "product",
+		ScopeID:    deleted.ProductID,
+	}, map[string]interface{}{
+		"deleted_at": deleted.DeletedAt.Format(timeFormatRFC3339()),
+		"meta":       auditMetadataFromContext(c),
+	})
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapFindingModel(*deleted)})
 }
@@ -435,6 +477,22 @@ func (h *FindingsHandler) AddComment(c *fiber.Ctx) error {
 	}
 	_ = createFindingEvent(c, h.db, id, "comment_added", fiber.Map{
 		"comment_id": comment.ID.String(),
+	})
+	scopeID := (*uuid.UUID)(nil)
+	if finding, err := storage.GetFindingByID(c.Context(), h.db, id); err == nil && finding != nil && finding.ProductID.Valid {
+		scopeID = &finding.ProductID.UUID
+	}
+	_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+		ActorID:    authorID,
+		ActorType:  "user",
+		Action:     "finding.comment.created",
+		TargetType: "finding",
+		TargetID:   stringPointer(id.String()),
+		Scope:      "product",
+		ScopeID:    scopeID,
+	}, map[string]interface{}{
+		"comment_id": comment.ID.String(),
+		"meta":       auditMetadataFromContext(c),
 	})
 
 	return c.Status(http.StatusCreated).JSON(fiber.Map{"success": true})
@@ -486,6 +544,24 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 					"to":   statusValue,
 					"bulk": true,
 				})
+				_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+					ActorID:    userIDFromContext(c),
+					ActorType:  "user",
+					Action:     "finding.updated",
+					TargetType: "finding",
+					TargetID:   stringPointer(snapshot.ID.String()),
+					Scope:      "product",
+					ScopeID:    nullableUUID(snapshot.ProductID),
+				}, map[string]interface{}{
+					"changes": map[string]interface{}{
+						"status": map[string]interface{}{
+							"from": snapshot.Status,
+							"to":   statusValue,
+						},
+					},
+					"bulk": true,
+					"meta": auditMetadataFromContext(c),
+				})
 			}
 		}
 	case "assign":
@@ -515,6 +591,24 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 					"to":   nextAssignee,
 					"bulk": true,
 				})
+				_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+					ActorID:    userIDFromContext(c),
+					ActorType:  "user",
+					Action:     "finding.updated",
+					TargetType: "finding",
+					TargetID:   stringPointer(snapshot.ID.String()),
+					Scope:      "product",
+					ScopeID:    nullableUUID(snapshot.ProductID),
+				}, map[string]interface{}{
+					"changes": map[string]interface{}{
+						"assignee_id": map[string]interface{}{
+							"from": prevAssignee,
+							"to":   nextAssignee,
+						},
+					},
+					"bulk": true,
+					"meta": auditMetadataFromContext(c),
+				})
 			}
 		}
 	case "dismiss":
@@ -535,6 +629,24 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 					"from": snapshot.Status,
 					"to":   statusValue,
 					"bulk": true,
+				})
+				_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+					ActorID:    userIDFromContext(c),
+					ActorType:  "user",
+					Action:     "finding.updated",
+					TargetType: "finding",
+					TargetID:   stringPointer(snapshot.ID.String()),
+					Scope:      "product",
+					ScopeID:    nullableUUID(snapshot.ProductID),
+				}, map[string]interface{}{
+					"changes": map[string]interface{}{
+						"status": map[string]interface{}{
+							"from": snapshot.Status,
+							"to":   statusValue,
+						},
+					},
+					"bulk": true,
+					"meta": auditMetadataFromContext(c),
 				})
 			}
 		}
@@ -615,6 +727,18 @@ func (h *FindingsHandler) MakeMaster(c *fiber.Ctx) error {
 	_ = createFindingEvent(c, h.db, id, "duplicate_promoted", fiber.Map{
 		"previous_master": oldMasterID.String(),
 	})
+	_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+		ActorID:    userIDFromContext(c),
+		ActorType:  "user",
+		Action:     "finding.duplicate.promoted",
+		TargetType: "finding",
+		TargetID:   stringPointer(id.String()),
+		Scope:      "product",
+		ScopeID:    nil,
+	}, map[string]interface{}{
+		"previous_master": oldMasterID.String(),
+		"meta":            auditMetadataFromContext(c),
+	})
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
 }
@@ -641,6 +765,17 @@ func (h *FindingsHandler) UnlinkDuplicate(c *fiber.Ctx) error {
 	}
 
 	_ = createFindingEvent(c, h.db, id, "duplicate_unlinked", fiber.Map{})
+	_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+		ActorID:    userIDFromContext(c),
+		ActorType:  "user",
+		Action:     "finding.duplicate.unlinked",
+		TargetType: "finding",
+		TargetID:   stringPointer(id.String()),
+		Scope:      "product",
+		ScopeID:    nil,
+	}, map[string]interface{}{
+		"meta": auditMetadataFromContext(c),
+	})
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
 }
@@ -898,6 +1033,65 @@ func createFindingEvent(c *fiber.Ctx, db *sql.DB, findingID uuid.UUID, eventType
 		Payload:   jsonPayload,
 	}
 	return storage.CreateFindingEvent(c.Context(), db, event)
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
+
+func nullableUUID(value uuid.NullUUID) *uuid.UUID {
+	if !value.Valid {
+		return nil
+	}
+	return &value.UUID
+}
+
+func buildFindingAuditChanges(current *storage.FindingDetail, req UpdateFindingRequest, isBulk bool) map[string]interface{} {
+	changes := map[string]interface{}{}
+
+	if req.Title != nil && current.Title != *req.Title {
+		changes["title"] = map[string]interface{}{"from": current.Title, "to": *req.Title}
+	}
+	if req.Description != nil {
+		currentDescription := ""
+		if current.Description.Valid {
+			currentDescription = current.Description.String
+		}
+		if currentDescription != *req.Description {
+			changes["description"] = map[string]interface{}{"from": currentDescription, "to": *req.Description}
+		}
+	}
+	if req.Severity != nil && current.Severity != *req.Severity {
+		changes["severity"] = map[string]interface{}{"from": current.Severity, "to": *req.Severity}
+	}
+	if req.Status != nil && current.Status != *req.Status {
+		changes["status"] = map[string]interface{}{"from": current.Status, "to": *req.Status}
+	}
+	if req.ProductID != nil {
+		currentProductID := ""
+		if current.ProductID.Valid {
+			currentProductID = current.ProductID.UUID.String()
+		}
+		if currentProductID != *req.ProductID {
+			changes["product_id"] = map[string]interface{}{"from": currentProductID, "to": *req.ProductID}
+		}
+	}
+	if req.AssigneeID != nil {
+		currentAssignee := ""
+		if current.AssigneeID.Valid {
+			currentAssignee = current.AssigneeID.UUID.String()
+		}
+		if currentAssignee != *req.AssigneeID {
+			changes["assignee_id"] = map[string]interface{}{"from": currentAssignee, "to": *req.AssigneeID}
+		}
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+	if isBulk {
+		changes["bulk"] = true
+	}
+	return changes
 }
 
 func timeFormatRFC3339() string {
