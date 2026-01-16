@@ -6,6 +6,9 @@ import FindingsList from "./pages/FindingsList";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import LoginPage from "./pages/LoginPage";
 import ScanUploadPage from "./pages/ScanUploadPage";
+import ImportJobsList from "./pages/ImportJobsList";
+import ImportJobDetail from "./pages/ImportJobDetail";
+import ProductsList from "./pages/ProductsList";
 
 const App = () => {
   return (
@@ -20,6 +23,9 @@ const App = () => {
           <Route path="/findings" element={<FindingsList />} />
           <Route path="/findings/:id" element={<FindingDetailPage />} />
           <Route path="/scans/upload" element={<ScanUploadPage />} />
+          <Route path="/imports" element={<ImportJobsList />} />
+          <Route path="/imports/:id" element={<ImportJobDetail />} />
+          <Route path="/products" element={<ProductsList />} />
         </Route>
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
