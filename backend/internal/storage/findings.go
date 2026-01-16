@@ -88,21 +88,7 @@ func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []
 func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]FindingListItem, int, error) {
 	whereClause, args := buildFindingWhereClause(filters, 0)
 
-	sortField := "f.created_at"
-	switch filters.SortField {
-	case "title":
-		sortField = "f.title"
-	case "productName":
-		sortField = "p.name"
-	case "severity":
-		sortField = "f.severity"
-	case "status":
-		sortField = "f.status"
-	case "created_at", "createdAt":
-		sortField = "f.created_at"
-	case "updated_at", "updatedAt":
-		sortField = "f.updated_at"
-	}
+	sortField := resolveFindingSortField(filters.SortField)
 
 	sortOrder := "DESC"
 	if strings.EqualFold(filters.SortOrder, "asc") {
@@ -162,6 +148,64 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 	return items, total, nil
 }
 
+type FindingNeighbors struct {
+	PrevID   *uuid.UUID
+	NextID   *uuid.UUID
+	Position int
+	Total    int
+}
+
+func GetFindingNeighbors(ctx context.Context, db *sql.DB, id uuid.UUID, filters FindingFilters) (*FindingNeighbors, error) {
+	whereClause, args := buildFindingWhereClause(filters, 0)
+	sortField := resolveFindingSortField(filters.SortField)
+	sortOrder := "DESC"
+	if strings.EqualFold(filters.SortOrder, "asc") {
+		sortOrder = "ASC"
+	}
+
+	orderClause := fmt.Sprintf("%s %s, f.id %s", sortField, sortOrder, sortOrder)
+	args = append(args, id)
+	query := fmt.Sprintf(`
+		WITH ranked AS (
+			SELECT f.id,
+				row_number() OVER (ORDER BY %s) AS position,
+				count(*) OVER () AS total,
+				lag(f.id) OVER (ORDER BY %s) AS prev_id,
+				lead(f.id) OVER (ORDER BY %s) AS next_id
+			FROM findings f
+			LEFT JOIN products p ON p.id = f.product_id
+			%s
+		)
+		SELECT prev_id, next_id, position, total
+		FROM ranked
+		WHERE id = $%d`,
+		orderClause,
+		orderClause,
+		orderClause,
+		whereClause,
+		len(args),
+	)
+
+	var prevID uuid.NullUUID
+	var nextID uuid.NullUUID
+	var position int
+	var total int
+	err := db.QueryRowContext(ctx, query, args...).Scan(&prevID, &nextID, &position, &total)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &FindingNeighbors{
+		PrevID:   nullableUUID(prevID),
+		NextID:   nullableUUID(nextID),
+		Position: position,
+		Total:    total,
+	}, nil
+}
+
 func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDetail, error) {
 	row := db.QueryRowContext(
 		ctx,
@@ -194,6 +238,33 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		return nil, err
 	}
 	return &detail, nil
+}
+
+func resolveFindingSortField(sortField string) string {
+	switch sortField {
+	case "title":
+		return "f.title"
+	case "productName":
+		return "p.name"
+	case "severity":
+		return "f.severity"
+	case "status":
+		return "f.status"
+	case "created_at", "createdAt":
+		return "f.created_at"
+	case "updated_at", "updatedAt":
+		return "f.updated_at"
+	default:
+		return "f.created_at"
+	}
+}
+
+func nullableUUID(value uuid.NullUUID) *uuid.UUID {
+	if value.Valid {
+		clone := value.UUID
+		return &clone
+	}
+	return nil
 }
 
 type UpdateFindingParams struct {

@@ -4,19 +4,39 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   Container,
   Grid,
+  IconButton,
+  Link as MuiLink,
   MenuItem,
   Paper,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { addFindingComment, fetchFindingDetail, updateFindingStatus } from "../api/findings";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import LinkIcon from "@mui/icons-material/Link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  addFindingComment,
+  fetchFindingDetail,
+  fetchFindingNeighbors,
+  updateFindingStatus,
+} from "../api/findings";
 import { getCurrentUser } from "../api/auth";
-import { FindingComment, FindingDetail, FindingEvent, FindingSeverity, FindingStatus } from "../types/findings";
+import {
+  FindingComment,
+  FindingDetail,
+  FindingEvent,
+  FindingNeighbors,
+  FindingSeverity,
+  FindingStatus,
+} from "../types/findings";
 
 const severityStyles: Record<FindingSeverity, { label: string; color: string }> = {
   low: { label: "Low", color: "#2e7d32" },
@@ -36,20 +56,153 @@ const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warn
   duplicate: "default",
 };
 
+const statusLabels: Record<FindingStatus, string> = {
+  new: "New",
+  under_review: "Under review",
+  confirmed: "Confirmed",
+  false_positive: "False positive",
+  out_of_scope: "Out of scope",
+  risk_accepted: "Risk accepted",
+  mitigated: "Mitigated",
+  duplicate: "Duplicate",
+};
+
 const FindingDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [data, setData] = useState<FindingDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<FindingStatus | "">("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [statusState, setStatusState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [comment, setComment] = useState("");
-  const [commentLoading, setCommentLoading] = useState(false);
+  const [commentState, setCommentState] = useState<"idle" | "saving" | "error">("idle");
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [neighbors, setNeighbors] = useState<FindingNeighbors | null>(null);
+  const [neighborsLoading, setNeighborsLoading] = useState(false);
+  const [neighborsError, setNeighborsError] = useState<string | null>(null);
+  const [eventFilter, setEventFilter] = useState<"all" | "status" | "comment" | "dedup" | "other">("all");
+  const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
 
   const user = getCurrentUser();
   const canEdit =
     user?.roles?.includes("admin") || user?.roles?.includes("analyst");
+
+  const returnTo = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const raw = params.get("returnTo");
+    if (!raw) {
+      return null;
+    }
+    try {
+      return decodeURIComponent(raw);
+    } catch (err) {
+      return raw;
+    }
+  }, [location.search]);
+
+  const returnToUrl = useMemo(() => {
+    if (!returnTo) {
+      return null;
+    }
+    try {
+      return new URL(returnTo, window.location.origin);
+    } catch (err) {
+      return null;
+    }
+  }, [returnTo]);
+
+  const returnToParam = returnToUrl ? encodeURIComponent(`${returnToUrl.pathname}${returnToUrl.search}`) : "";
+  const returnToQuery = returnToUrl?.search.replace(/^\?/, "") ?? "";
+
+  const handleCopyValue = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch (err) {
+      // ignore clipboard errors for now
+    }
+  };
+
+  const getEventCategory = (event: FindingEvent) => {
+    if (event.eventType.startsWith("status")) {
+      return "status";
+    }
+    if (event.eventType.startsWith("comment")) {
+      return "comment";
+    }
+    if (event.eventType.startsWith("duplicate")) {
+      return "dedup";
+    }
+    return "other";
+  };
+
+  const formatEventSummary = (event: FindingEvent) => {
+    switch (event.eventType) {
+      case "status_changed": {
+        const fromValue = typeof event.payload.from === "string" ? event.payload.from : "";
+        const toValue = typeof event.payload.to === "string" ? event.payload.to : "";
+        const fromLabel = (statusLabels[fromValue as FindingStatus] ?? fromValue) || "—";
+        const toLabel = (statusLabels[toValue as FindingStatus] ?? toValue) || "—";
+        return `Статус: ${fromLabel} → ${toLabel}`;
+      }
+      case "comment_added":
+        return "Комментарий добавлен";
+      case "assignee_changed": {
+        const fromValue = typeof event.payload.from === "string" ? event.payload.from : "";
+        const toValue = typeof event.payload.to === "string" ? event.payload.to : "";
+        return `Assignee: ${fromValue || "—"} → ${toValue || "—"}`;
+      }
+      case "duplicate_promoted":
+        return "Дубликат: назначен master";
+      case "duplicate_unlinked":
+        return "Дубликат: отвязан от master";
+      case "deleted":
+        return "Находка удалена";
+      default:
+        return event.eventType;
+    }
+  };
+
+  const filteredEvents = data.events.filter((event) => {
+    if (eventFilter === "all") {
+      return true;
+    }
+    return getEventCategory(event) === eventFilter;
+  });
+
+  const toggleEventPayload = (eventId: string) => {
+    setExpandedEventIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+      }
+      return next;
+    });
+  };
+
+  const handleBackToResults = () => {
+    if (!returnToUrl) {
+      return;
+    }
+    navigate(`${returnToUrl.pathname}${returnToUrl.search}`);
+  };
+
+  const handleNavigateNeighbor = (neighborId: string) => {
+    if (!neighborId) {
+      return;
+    }
+    const query = returnToParam ? `?returnTo=${returnToParam}` : "";
+    navigate(`/findings/${neighborId}${query}`);
+  };
+
+  const buildFindingLink = (findingId: string) => {
+    const query = returnToParam ? `?returnTo=${returnToParam}` : "";
+    return `/findings/${findingId}${query}`;
+  };
 
   const fetchDetail = useCallback(async (signal?: AbortSignal) => {
     if (!id) return;
@@ -75,42 +228,69 @@ const FindingDetailPage = () => {
     return () => controller.abort();
   }, [fetchDetail]);
 
+  useEffect(() => {
+    if (!id || !returnToUrl) {
+      setNeighbors(null);
+      return;
+    }
+    const loadNeighbors = async () => {
+      setNeighborsLoading(true);
+      setNeighborsError(null);
+      try {
+        const response = await fetchFindingNeighbors(id, returnToQuery);
+        setNeighbors(response);
+      } catch (neighborsLoadError) {
+        if (!(neighborsLoadError instanceof DOMException && neighborsLoadError.name === "AbortError")) {
+          setNeighborsError("Не удалось загрузить соседние находки");
+        }
+      } finally {
+        setNeighborsLoading(false);
+      }
+    };
+    loadNeighbors();
+  }, [id, returnToQuery, returnToUrl]);
+
+  useEffect(() => {
+    if (statusState === "saved") {
+      const timer = window.setTimeout(() => {
+        setStatusState("idle");
+      }, 2000);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [statusState]);
+
   const handleStatusUpdate = async () => {
     if (!id || !status) return;
-    setActionLoading(true);
-    setMessage(null);
+    setStatusState("saving");
+    setStatusError(null);
 
     try {
       const updated = await updateFindingStatus(id, status);
       setData(updated);
-      setMessage("Статус успешно обновлен");
+      setStatusState("saved");
     } catch (updateError) {
-      if (updateError instanceof Error) {
-        setMessage(updateError.message);
-      } else {
-        setMessage("Не удалось обновить статус");
-      }
-    } finally {
-      setActionLoading(false);
+      const errorMessage = updateError instanceof Error && updateError.message
+        ? `Не удалось сохранить: ${updateError.message}`
+        : "Не удалось сохранить";
+      setStatusError(errorMessage);
+      setStatusState("error");
     }
   };
 
   const handleAddComment = async () => {
     if (!id || !comment.trim()) return;
-    setCommentLoading(true);
-    setMessage(null);
+    setCommentState("saving");
+    setCommentError(null);
     try {
       await addFindingComment(id, comment.trim());
       setComment("");
       await fetchDetail();
+      setCommentState("idle");
     } catch (commentError) {
-      if (commentError instanceof Error) {
-        setMessage(commentError.message);
-      } else {
-        setMessage("Не удалось добавить комментарий");
-      }
-    } finally {
-      setCommentLoading(false);
+      const errorMessage = commentError instanceof Error ? commentError.message : "Не удалось добавить комментарий";
+      setCommentError(errorMessage);
+      setCommentState("error");
     }
   };
 
@@ -130,8 +310,46 @@ const FindingDetailPage = () => {
     );
   }
 
+  const statusChanged = status !== "" && status !== data.status;
+
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+      {returnToUrl && (
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          alignItems={{ xs: "flex-start", md: "center" }}
+          justifyContent="space-between"
+          spacing={2}
+          sx={{ mb: 3 }}
+        >
+          <Button variant="text" onClick={handleBackToResults}>
+            ← К результатам
+          </Button>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={neighborsLoading || !neighbors?.prevId}
+              onClick={() => neighbors?.prevId && handleNavigateNeighbor(neighbors.prevId)}
+            >
+              Предыдущая
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={neighborsLoading || !neighbors?.nextId}
+              onClick={() => neighbors?.nextId && handleNavigateNeighbor(neighbors.nextId)}
+            >
+              Следующая
+            </Button>
+            {neighbors && !neighborsError && (
+              <Typography variant="body2" color="text.secondary">
+                {neighbors.position} из {neighbors.total}
+              </Typography>
+            )}
+          </Stack>
+        </Stack>
+      )}
       <Typography variant="h4" component="h1" gutterBottom>
         {data.title}
       </Typography>
@@ -193,21 +411,49 @@ const FindingDetailPage = () => {
                 </Box>
               ))}
             </Stack>
+            {commentError && (
+              <Alert
+                severity="error"
+                sx={{ mt: 2 }}
+                action={
+                  <Button color="inherit" size="small" onClick={handleAddComment}>
+                    Retry
+                  </Button>
+                }
+              >
+                {commentError}
+              </Alert>
+            )}
             <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mt: 3 }}>
               <TextField
                 label="Добавить комментарий"
                 value={comment}
-                onChange={(event) => setComment(event.target.value)}
+                onChange={(event) => {
+                  setComment(event.target.value);
+                  if (commentError) {
+                    setCommentError(null);
+                  }
+                  if (commentState === "error") {
+                    setCommentState("idle");
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                    event.preventDefault();
+                    handleAddComment();
+                  }
+                }}
                 multiline
                 minRows={2}
                 fullWidth
+                helperText="Ctrl+Enter / Cmd+Enter — отправить"
               />
               <Button
                 variant="contained"
                 onClick={handleAddComment}
-                disabled={commentLoading || !comment.trim()}
+                disabled={commentState === "saving" || !comment.trim()}
               >
-                {commentLoading ? "Отправка..." : "Добавить"}
+                {commentState === "saving" ? "Добавляем..." : "Добавить"}
               </Button>
             </Stack>
           </Paper>
@@ -216,18 +462,55 @@ const FindingDetailPage = () => {
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               История изменений
             </Typography>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={eventFilter}
+              onChange={(_, value) => value && setEventFilter(value)}
+              sx={{ mt: 1, flexWrap: "wrap" }}
+            >
+              <ToggleButton value="all">Все</ToggleButton>
+              <ToggleButton value="status">Статус</ToggleButton>
+              <ToggleButton value="comment">Комментарии</ToggleButton>
+              <ToggleButton value="dedup">Дубликаты</ToggleButton>
+              <ToggleButton value="other">Другое</ToggleButton>
+            </ToggleButtonGroup>
             <Stack spacing={1} sx={{ mt: 2 }}>
-              {data.events.length === 0 && (
+              {filteredEvents.length === 0 && (
                 <Typography color="text.secondary">История пуста.</Typography>
               )}
-              {data.events.map((event: FindingEvent) => (
+              {filteredEvents.map((event: FindingEvent) => (
                 <Box key={event.id} sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-                  <Typography variant="subtitle2">
-                    {event.eventType} · {event.actor || "system"} · {new Date(event.createdAt).toLocaleString("ru-RU")}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    {JSON.stringify(event.payload)}
-                  </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1}>
+                    <Typography variant="subtitle2">{formatEventSummary(event)}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {event.actor || "system"} · {new Date(event.createdAt).toLocaleString("ru-RU")}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Тип: {event.eventType}
+                    </Typography>
+                    <Button size="small" onClick={() => toggleEventPayload(event.id)}>
+                      {expandedEventIds.has(event.id) ? "Скрыть raw payload" : "Показать raw payload"}
+                    </Button>
+                  </Stack>
+                  <Collapse in={expandedEventIds.has(event.id)} timeout="auto" unmountOnExit>
+                    <Box
+                      component="pre"
+                      sx={{
+                        mt: 1,
+                        mb: 0,
+                        p: 2,
+                        borderRadius: 1,
+                        backgroundColor: "action.hover",
+                        overflowX: "auto",
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      {JSON.stringify(event.payload, null, 2)}
+                    </Box>
+                  </Collapse>
                 </Box>
               ))}
             </Stack>
@@ -238,21 +521,37 @@ const FindingDetailPage = () => {
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                 Дубликаты
               </Typography>
-              <Typography variant="body2">
-                Master: {data.duplicates.master.title} ({data.duplicates.master.id})
-              </Typography>
-              {data.duplicates.duplicates.length === 0 ? (
-                <Typography color="text.secondary" sx={{ mt: 1 }}>
-                  Дубликатов нет.
-                </Typography>
-              ) : (
-                <Stack spacing={1} sx={{ mt: 2 }}>
-                  {data.duplicates.duplicates.map((dup) => (
-                    <Typography key={dup.id} variant="body2">
-                      {dup.title} · {dup.id}
-                    </Typography>
-                  ))}
+              {data.duplicates.master.id !== data.id ? (
+                <Stack spacing={1}>
+                  <Typography variant="body2">
+                    Master:{" "}
+                    <MuiLink component={Link} to={buildFindingLink(data.duplicates.master.id)}>
+                      {data.duplicates.master.title}
+                    </MuiLink>
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Сиблинги: {data.duplicates.duplicates.length}
+                  </Typography>
                 </Stack>
+              ) : (
+                <>
+                  {data.duplicates.duplicates.length === 0 ? (
+                    <Typography color="text.secondary" sx={{ mt: 1 }}>
+                      Дубликатов нет.
+                    </Typography>
+                  ) : (
+                    <Stack spacing={1} sx={{ mt: 2 }}>
+                      {data.duplicates.duplicates.map((dup) => (
+                        <Typography key={dup.id} variant="body2">
+                          <MuiLink component={Link} to={buildFindingLink(dup.id)}>
+                            {dup.title}
+                          </MuiLink>{" "}
+                          · {dup.id}
+                        </Typography>
+                      ))}
+                    </Stack>
+                  )}
+                </>
               )}
             </Paper>
           )}
@@ -269,7 +568,11 @@ const FindingDetailPage = () => {
                 fullWidth
                 label="Статус"
                 value={status}
-                onChange={(event) => setStatus(event.target.value as FindingStatus)}
+                onChange={(event) => {
+                  setStatus(event.target.value as FindingStatus);
+                  setStatusState("idle");
+                  setStatusError(null);
+                }}
                 SelectProps={{ native: false }}
                 margin="dense"
               >
@@ -287,13 +590,26 @@ const FindingDetailPage = () => {
                 fullWidth
                 sx={{ mt: 2 }}
                 onClick={handleStatusUpdate}
-                disabled={actionLoading}
+                disabled={statusState === "saving" || !statusChanged}
               >
-                {actionLoading ? "Сохранение..." : "Сохранить"}
+                {statusState === "saving" ? "Saving..." : "Сохранить"}
               </Button>
-              {message && (
-                <Alert severity={message.includes("успешно") ? "success" : "error"} sx={{ mt: 2 }}>
-                  {message}
+              {statusState === "saved" && (
+                <Alert severity="success" sx={{ mt: 2 }}>
+                  Saved
+                </Alert>
+              )}
+              {statusState === "error" && statusError && (
+                <Alert
+                  severity="error"
+                  sx={{ mt: 2 }}
+                  action={
+                    <Button color="inherit" size="small" onClick={handleStatusUpdate}>
+                      Retry
+                    </Button>
+                  }
+                >
+                  {statusError}
                 </Alert>
               )}
             </Paper>
@@ -303,27 +619,58 @@ const FindingDetailPage = () => {
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Метаданные
             </Typography>
-            <Typography variant="body2">
-              Создано: {new Date(data.createdAt).toLocaleString("ru-RU")}
-            </Typography>
-            <Typography variant="body2">
-              Обновлено: {new Date(data.updatedAt).toLocaleString("ru-RU")}
-            </Typography>
-            {data.productId && (
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Product ID: {data.productId}
+            <Stack spacing={1}>
+              <Typography variant="body2">
+                Создано: {new Date(data.createdAt).toLocaleString("ru-RU")}
               </Typography>
-            )}
-            {data.importJobId && (
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Import Job ID: {data.importJobId}
+              <Typography variant="body2">
+                Обновлено: {new Date(data.updatedAt).toLocaleString("ru-RU")}
               </Typography>
-            )}
-            {data.assigneeId && (
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Assignee ID: {data.assigneeId}
-              </Typography>
-            )}
+              <Box display="flex" alignItems="center" gap={1}>
+                <Typography variant="body2">Finding ID: {data.id}</Typography>
+                <Tooltip title="Скопировать ID">
+                  <IconButton size="small" onClick={() => handleCopyValue(data.id)}>
+                    <ContentCopyIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              {data.fingerprint && (
+                <Box display="flex" alignItems="center" gap={1}>
+                  <Typography variant="body2">Fingerprint: {data.fingerprint}</Typography>
+                  <Tooltip title="Скопировать fingerprint">
+                    <IconButton size="small" onClick={() => handleCopyValue(data.fingerprint ?? "")}>
+                      <ContentCopyIcon fontSize="inherit" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              )}
+              {data.productId && (
+                <Typography variant="body2">
+                  Product ID:{" "}
+                  <MuiLink component={Link} to={`/products/${data.productId}`}>
+                    {data.productId}
+                  </MuiLink>
+                </Typography>
+              )}
+              {data.importJobId && (
+                <Typography variant="body2">
+                  Import Job ID:{" "}
+                  <MuiLink component={Link} to={`/imports/${data.importJobId}`}>
+                    {data.importJobId}
+                  </MuiLink>
+                </Typography>
+              )}
+              {data.assigneeId && (
+                <Typography variant="body2">Assignee ID: {data.assigneeId}</Typography>
+              )}
+              <Button
+                size="small"
+                startIcon={<LinkIcon fontSize="small" />}
+                onClick={() => handleCopyValue(window.location.href)}
+              >
+                Copy permalink
+              </Button>
+            </Stack>
           </Paper>
         </Grid>
       </Grid>

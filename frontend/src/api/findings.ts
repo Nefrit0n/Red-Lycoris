@@ -3,6 +3,7 @@ import {
   BulkUpdateResponse,
   FetchFindingsParams,
   FindingDetail,
+  FindingNeighbors,
   FindingStatus,
 } from "../types/findings";
 import {
@@ -115,6 +116,23 @@ export const addFindingComment = async (
   }
 
   await parseApiResponse(response);
+};
+
+export const fetchFindingNeighbors = async (
+  id: string,
+  queryParams: string
+): Promise<FindingNeighbors> => {
+  const query = queryParams ? `?${queryParams}` : "";
+  const response = await fetch(`/api/v1/findings/${id}/neighbors${query}`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error("Не удалось загрузить соседние находки");
+  }
+
+  return parseApiResponse<FindingNeighbors>(response);
 };
 
 export const bulkUpdateFindings = async (payload: {
