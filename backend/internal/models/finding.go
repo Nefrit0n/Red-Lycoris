@@ -7,6 +7,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	SeverityLow      = "low"
+	SeverityMedium   = "medium"
+	SeverityHigh     = "high"
+	SeverityCritical = "critical"
+)
+
+const (
+	StatusNew       = "new"
+	StatusDuplicate = "duplicate"
+	StatusResolved  = "resolved"
+	StatusIgnored   = "ignored"
+)
+
 type Finding struct {
 	ID           uuid.UUID  `db:"id"`
 	ScanResultID *uuid.UUID `db:"scan_result_id"`
@@ -26,23 +40,27 @@ func (f *Finding) Validate() error {
 	if f.ScanResultID == nil && f.ProductID == nil {
 		return fmt.Errorf("scan_result_id or product_id is required")
 	}
+
 	if err := validateRequired(f.Title, "title"); err != nil {
 		return err
 	}
 	if err := validateMaxLen(f.Title, 200, "title"); err != nil {
 		return err
 	}
+
 	if f.Fingerprint == "" && f.ScanResultID != nil {
 		return fmt.Errorf("fingerprint is required")
 	}
+
 	switch f.Severity {
-	case "low", "medium", "high", "critical":
+	case SeverityLow, SeverityMedium, SeverityHigh, SeverityCritical:
 		// ok
 	default:
 		return fmt.Errorf("severity must be one of low, medium, high, critical")
 	}
+
 	switch f.Status {
-	case "new", "duplicate", "resolved", "ignored":
+	case StatusNew, StatusDuplicate, StatusResolved, StatusIgnored:
 		return nil
 	default:
 		return fmt.Errorf("status must be one of new, duplicate, resolved, ignored")

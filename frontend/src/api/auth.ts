@@ -35,16 +35,22 @@ export const login = async (
     throw new Error(`Ошибка входа (${response.status})`);
   }
 
-  const result = await parseApiResponse<{ data: LoginResponse }>(response);
+  // parseApiResponse уже разворачивает { success, data }
+  const result = await parseApiResponse<LoginResponse>(response);
 
-  setToken(result.data.token);
+  // Явная проверка контракта (fail-fast)
+  if (!result.token) {
+    throw new Error("Ответ сервера не содержит токен авторизации");
+  }
+
+  setToken(result.token);
 
   localStorage.setItem(
     NEEDS_PWD_CHANGE_KEY,
-    String(result.data.needsPasswordChange)
+    String(result.needsPasswordChange)
   );
 
-  return result.data;
+  return result;
 };
 
 /**

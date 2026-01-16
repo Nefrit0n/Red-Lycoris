@@ -18,8 +18,10 @@ import {
 } from "../types/findings";
 
 const FindingsList = () => {
+  // ⚠️ Никогда не undefined
   const [data, setData] = useState<Finding[]>([]);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState<number>(0);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,50 +29,71 @@ const FindingsList = () => {
   const [pageSize, setPageSize] = useState(20);
 
   const [productId, setProductId] = useState("");
-  const [filterSeverity, setFilterSeverity] = useState<FindingSeverity | "">("");
-  const [filterStatus, setFilterStatus] = useState<FindingStatus | "">("");
+  const [filterSeverity, setFilterSeverity] =
+    useState<FindingSeverity | "">("");
+  const [filterStatus, setFilterStatus] =
+    useState<FindingStatus | "">("");
 
-  const [sortField, setSortField] = useState<keyof Finding | "">("createdAt");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc" | "">("desc");
+  const [sortField, setSortField] =
+    useState<keyof Finding>("createdAt");
+  const [sortOrder, setSortOrder] =
+    useState<"asc" | "desc">("desc");
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const fetchData = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError(null);
+  const fetchData = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      setError(null);
 
-    try {
-      const response = await fetchFindings(
-        {
-          page: page + 1,
-          pageSize,
-          filterProductId: productId,
-          filterSeverity,
-          filterStatus,
-          sortField,
-          sortOrder,
-        },
-        signal
-      );
-      setData(response.data);
-      setTotal(response.total);
-      setSelectedIds([]);
-    } catch (fetchError) {
-      if (!(fetchError instanceof DOMException && fetchError.name === "AbortError")) {
-        setError("Не удалось загрузить данные. Попробуйте позже.");
+      try {
+        const response = await fetchFindings(
+          {
+            page: page + 1,
+            pageSize,
+            filterProductId: productId,
+            filterSeverity,
+            filterStatus,
+            sortField,
+            sortOrder,
+          },
+          signal
+        );
+
+        // 🛡️ НОРМАЛИЗАЦИЯ
+        if (!response || !Array.isArray(response.data)) {
+          setData([]);
+          setTotal(0);
+        } else {
+          setData(response.data);
+          setTotal(
+            typeof response.total === "number" ? response.total : 0
+          );
+        }
+
+        setSelectedIds([]);
+      } catch (err) {
+        if (
+          !(err instanceof DOMException && err.name === "AbortError")
+        ) {
+          setError("Не удалось загрузить данные. Попробуйте позже.");
+          setData([]);
+          setTotal(0);
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    page,
-    pageSize,
-    productId,
-    filterSeverity,
-    filterStatus,
-    sortField,
-    sortOrder,
-  ]);
+    },
+    [
+      page,
+      pageSize,
+      productId,
+      filterSeverity,
+      filterStatus,
+      sortField,
+      sortOrder,
+    ]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -95,72 +118,73 @@ const FindingsList = () => {
   };
 
   const handleToggleAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(data.map((item) => item.id));
-    } else {
-      setSelectedIds([]);
-    }
+    setSelectedIds(
+      checked ? data.map((item) => item.id) : []
+    );
   };
 
   const handleToggleOne = (id: string) => {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      prev.includes(id)
+        ? prev.filter((item) => item !== id)
+        : [...prev, id]
     );
   };
-
-  const tableContent = loading ? (
-    <Box display="flex" justifyContent="center" py={8}>
-      <CircularProgress aria-label="Загрузка" />
-    </Box>
-  ) : (
-    <FindingsTable
-      data={data}
-      selectedIds={selectedIds}
-      sortField={sortField}
-      sortOrder={sortOrder}
-      onToggleAll={handleToggleAll}
-      onToggleOne={handleToggleOne}
-      onSortChange={handleSortChange}
-    />
-  );
 
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
         Список находок
       </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        Управляйте результатами сканирования уязвимостей, сортируйте и фильтруйте
-        данные по продукту, критичности и статусу.
-      </Typography>
 
       <FiltersPanel
         productId={productId}
         filterSeverity={filterSeverity}
         filterStatus={filterStatus}
-        onProductIdChange={(value) => {
-          setProductId(value);
+        onProductIdChange={(v) => {
+          setProductId(v);
           setPage(0);
         }}
-        onSeverityChange={(value) => {
-          setFilterSeverity(value);
+        onSeverityChange={(v) => {
+          setFilterSeverity(v);
           setPage(0);
         }}
-        onStatusChange={(value) => {
-          setFilterStatus(value);
+        onStatusChange={(v) => {
+          setFilterStatus(v);
           setPage(0);
         }}
         onReset={handleResetFilters}
       />
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} aria-label="Ошибка загрузки">
+        <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
 
-      <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-        {tableContent}
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 2,
+          border: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        {loading ? (
+          <Box display="flex" justifyContent="center" py={8}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <FindingsTable
+            data={data}
+            selectedIds={selectedIds}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onToggleAll={handleToggleAll}
+            onToggleOne={handleToggleOne}
+            onSortChange={handleSortChange}
+          />
+        )}
       </Paper>
 
       <PaginationControl
@@ -168,8 +192,8 @@ const FindingsList = () => {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
-        onPageSizeChange={(value) => {
-          setPageSize(value);
+        onPageSizeChange={(v) => {
+          setPageSize(v);
           setPage(0);
         }}
       />

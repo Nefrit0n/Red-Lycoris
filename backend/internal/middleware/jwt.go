@@ -19,7 +19,9 @@ func RequireJWT(secret string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		auth := c.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing token"})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "missing token",
+			})
 		}
 
 		tokenStr := strings.TrimPrefix(auth, "Bearer ")
@@ -31,16 +33,23 @@ func RequireJWT(secret string) fiber.Handler {
 			return []byte(secret), nil
 		})
 		if err != nil || !token.Valid {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token"})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "invalid token",
+			})
 		}
 
 		claims, ok := token.Claims.(*JWTClaims)
 		if !ok || claims.UserID == "" {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "invalid claims"})
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "invalid claims",
+			})
 		}
 
-		// 🔐 FORCE PASSWORD ROTATION
-		if !claims.PwdChanged && c.Path() != "/api/v1/auth/change-password" {
+		path := c.Path()
+
+		if !claims.PwdChanged &&
+			!strings.HasPrefix(path, "/api/v1/auth/change-password") &&
+			!strings.HasPrefix(path, "/api/v1/auth/logout") {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error": "PASSWORD_CHANGE_REQUIRED",
 			})
@@ -48,6 +57,7 @@ func RequireJWT(secret string) fiber.Handler {
 
 		c.Locals("user_id", claims.UserID)
 		c.Locals("roles", claims.Roles)
+
 		return c.Next()
 	}
 }
