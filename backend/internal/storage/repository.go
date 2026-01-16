@@ -96,13 +96,22 @@ func CreateFinding(ctx context.Context, db *sql.DB, finding *models.Finding) err
 	if finding.DuplicateID != nil {
 		duplicateID = *finding.DuplicateID
 	}
+	var productID interface{}
+	if finding.ProductID != nil {
+		productID = *finding.ProductID
+	}
+	var scanResultID interface{}
+	if finding.ScanResultID != nil {
+		scanResultID = *finding.ScanResultID
+	}
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO findings (id, scan_result_id, fingerprint, title, description, severity, status, duplicate_id, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		finding.ID,
-		finding.ScanResultID,
+		scanResultID,
+		productID,
 		finding.Fingerprint,
 		finding.Title,
 		description,
@@ -110,6 +119,7 @@ func CreateFinding(ctx context.Context, db *sql.DB, finding *models.Finding) err
 		finding.Status,
 		duplicateID,
 		finding.CreatedAt,
+		finding.UpdatedAt,
 	)
 	return err
 }

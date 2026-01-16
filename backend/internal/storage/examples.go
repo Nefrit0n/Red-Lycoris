@@ -40,7 +40,7 @@ func ExampleCRUD(ctx context.Context, db *sql.DB) error {
 
 	findingDescription := "SQL injection detected in login endpoint"
 	finding := &models.Finding{
-		ScanResultID: scanResult.ID,
+		ScanResultID: &scanResult.ID,
 		Fingerprint:  "example-fingerprint",
 		Title:        "SQL injection",
 		Description:  &findingDescription,
