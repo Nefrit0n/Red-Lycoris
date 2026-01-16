@@ -153,7 +153,7 @@ const FindingsTable = ({
                   </TableCell>
                   <TableCell>{finding.id}</TableCell>
                   <TableCell>{finding.title}</TableCell>
-                  <TableCell>{finding.productName}</TableCell>
+                  <TableCell>{finding.productName || "—"}</TableCell>
                   <TableCell>{severityLabels[finding.severity]}</TableCell>
                   <TableCell>
                     <Chip

@@ -114,7 +114,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		}
 
 		model := &models.Finding{
-			ScanResultID: scan.ID,
+			ScanResultID: &scan.ID,
 			Fingerprint:  fingerprint,
 			Title:        finding.Title,
 			Description:  finding.Description,
