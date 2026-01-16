@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -90,13 +91,67 @@ type CreateCommentRequest struct {
 }
 
 type BulkActionRequest struct {
-	IDs     []string               `json:"ids" validate:"required,min=1"`
-	Action  string                 `json:"action" validate:"required"`
-	Payload map[string]interface{} `json:"payload"`
+	IDs       []string               `json:"ids"`
+	SelectAll bool                   `json:"select_all"`
+	Filters   *BulkActionFilters     `json:"filters,omitempty"`
+	Action    string                 `json:"action" validate:"required"`
+	Payload   map[string]interface{} `json:"payload"`
+}
+
+type BulkActionFilters struct {
+	ProductID   *string `json:"productId,omitempty" validate:"omitempty,uuid4"`
+	Product     *string `json:"product,omitempty" validate:"omitempty,max=200"`
+	Severity    string  `json:"severity,omitempty"`
+	Status      string  `json:"status,omitempty"`
+	Query       string  `json:"q,omitempty"`
+	ImportJobID *string `json:"import_job_id,omitempty" validate:"omitempty,uuid4"`
+}
+
+type BulkActionResponse struct {
+	AffectedCount int64            `json:"affectedCount"`
+	SampleIDs     []string         `json:"sampleIds,omitempty"`
+	PrevStatuses  []BulkPrevStatus `json:"prevStatuses,omitempty"`
+}
+
+type BulkPrevStatus struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
 }
 
 func NewFindingsHandler(db *sql.DB) *FindingsHandler {
 	return &FindingsHandler{db: db, validator: validator.New()}
+}
+
+func resolveProductFilter(ctx context.Context, db *sql.DB, productIDParam string, productParam string) (*uuid.UUID, error) {
+	if productIDParam != "" {
+		parsed, err := uuid.Parse(productIDParam)
+		if err != nil {
+			return nil, fmt.Errorf("invalid product id")
+		}
+		return &parsed, nil
+	}
+
+	if productParam == "" {
+		return nil, nil
+	}
+
+	if parsed, err := uuid.Parse(productParam); err == nil {
+		return &parsed, nil
+	}
+
+	if product, err := storage.FindProductByIdentifier(ctx, db, productParam); err != nil {
+		return nil, err
+	} else if product != nil {
+		return &product.ID, nil
+	}
+
+	if product, err := storage.FindProductBySlug(ctx, db, productParam); err != nil {
+		return nil, err
+	} else if product != nil {
+		return &product.ID, nil
+	}
+
+	return nil, fmt.Errorf("product not found")
 }
 
 // ListFindings godoc
@@ -128,13 +183,14 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		offset = (page - 1) * pageSize
 	}
 
-	var productID *uuid.UUID
-	if productParam := strings.TrimSpace(c.Query("productId")); productParam != "" {
-		parsed, err := uuid.Parse(productParam)
-		if err != nil {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid productId"})
-		}
-		productID = &parsed
+	productID, err := resolveProductFilter(
+		c.Context(),
+		h.db,
+		strings.TrimSpace(c.Query("productId")),
+		strings.TrimSpace(c.Query("product")),
+	)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 	}
 	var importJobID *uuid.UUID
 	if importJobParam := strings.TrimSpace(c.Query("import_job_id")); importJobParam != "" {
@@ -506,6 +562,11 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 	if err := h.validator.Struct(req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 	}
+	if req.Filters != nil {
+		if err := h.validator.Struct(req.Filters); err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+		}
+	}
 
 	isAdmin := middleware.HasRole(c, "admin")
 	isAnalyst := middleware.HasRole(c, "analyst")
@@ -513,20 +574,81 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "insufficient role"})
 	}
 
+	if !req.SelectAll && len(req.IDs) == 0 {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "ids or select_all required"})
+	}
+
+	const maxUndoSnapshots = 500
+	const sampleSnapshotLimit = 25
+
 	ids := []uuid.UUID{}
-	for _, raw := range req.IDs {
-		parsed, err := uuid.Parse(raw)
-		if err != nil {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid id in ids"})
+	if len(req.IDs) > 0 {
+		for _, raw := range req.IDs {
+			parsed, err := uuid.Parse(raw)
+			if err != nil {
+				return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid id in ids"})
+			}
+			ids = append(ids, parsed)
 		}
-		ids = append(ids, parsed)
 	}
 
-	snapshots, err := storage.ListFindingsByIDs(c.Context(), h.db, ids)
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
+	var snapshots []storage.FindingSnapshot
+	var filters storage.FindingFilters
+	var totalMatches int
+
+	if req.SelectAll {
+		filterInput := req.Filters
+		var productIDParam string
+		var productParam string
+		if filterInput != nil {
+			if filterInput.ProductID != nil {
+				productIDParam = strings.TrimSpace(*filterInput.ProductID)
+			}
+			if filterInput.Product != nil {
+				productParam = strings.TrimSpace(*filterInput.Product)
+			}
+			filters.Severity = strings.TrimSpace(filterInput.Severity)
+			filters.Status = strings.TrimSpace(filterInput.Status)
+			filters.Query = strings.TrimSpace(filterInput.Query)
+		}
+		var err error
+		filters.ProductID, err = resolveProductFilter(c.Context(), h.db, productIDParam, productParam)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+		}
+		if filterInput != nil && filterInput.ImportJobID != nil && strings.TrimSpace(*filterInput.ImportJobID) != "" {
+			parsed, err := uuid.Parse(strings.TrimSpace(*filterInput.ImportJobID))
+			if err != nil {
+				return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid import_job_id"})
+			}
+			filters.ImportJobID = &parsed
+		}
+
+		count, err := storage.CountFindingsByFilters(c.Context(), h.db, filters)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to count findings"})
+		}
+		totalMatches = count
+		if totalMatches > 0 {
+			limit := sampleSnapshotLimit
+			if totalMatches <= maxUndoSnapshots {
+				limit = totalMatches
+			}
+			snapshots, err = storage.ListFindingsByFilters(c.Context(), h.db, filters, limit)
+			if err != nil {
+				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
+			}
+		}
+	} else {
+		var err error
+		snapshots, err = storage.ListFindingsByIDs(c.Context(), h.db, ids)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
+		}
+		totalMatches = len(snapshots)
 	}
 
+	var affectedCount int64
 	switch req.Action {
 	case "set_status":
 		statusValue, _ := req.Payload["status"].(string)
@@ -534,7 +656,13 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 		if err := validateFindingStatus(statusValue); err != nil {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid status"})
 		}
-		if _, err := storage.BulkUpdateFindingStatus(c.Context(), h.db, ids, statusValue); err != nil {
+		var err error
+		if req.SelectAll {
+			affectedCount, err = storage.BulkUpdateFindingStatusByFilters(c.Context(), h.db, filters, statusValue)
+		} else {
+			affectedCount, err = storage.BulkUpdateFindingStatus(c.Context(), h.db, ids, statusValue)
+		}
+		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update findings"})
 		}
 		for _, snapshot := range snapshots {
@@ -573,7 +701,13 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 			}
 			assigneeID = &parsed
 		}
-		if _, err := storage.BulkUpdateFindingAssignee(c.Context(), h.db, ids, assigneeID); err != nil {
+		var err error
+		if req.SelectAll {
+			affectedCount, err = storage.BulkUpdateFindingAssigneeByFilters(c.Context(), h.db, filters, assigneeID)
+		} else {
+			affectedCount, err = storage.BulkUpdateFindingAssignee(c.Context(), h.db, ids, assigneeID)
+		}
+		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update assignee"})
 		}
 		for _, snapshot := range snapshots {
@@ -620,7 +754,13 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 		if statusValue != models.StatusFalsePositive && statusValue != models.StatusOutOfScope {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dismiss status"})
 		}
-		if _, err := storage.BulkUpdateFindingStatus(c.Context(), h.db, ids, statusValue); err != nil {
+		var err error
+		if req.SelectAll {
+			affectedCount, err = storage.BulkUpdateFindingStatusByFilters(c.Context(), h.db, filters, statusValue)
+		} else {
+			affectedCount, err = storage.BulkUpdateFindingStatus(c.Context(), h.db, ids, statusValue)
+		}
+		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update findings"})
 		}
 		for _, snapshot := range snapshots {
@@ -654,7 +794,26 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "unsupported action"})
 	}
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
+	response := BulkActionResponse{
+		AffectedCount: affectedCount,
+	}
+	if len(snapshots) > 0 {
+		for _, snapshot := range snapshots {
+			response.SampleIDs = append(response.SampleIDs, snapshot.ID.String())
+		}
+	}
+	if req.Action == "set_status" || req.Action == "dismiss" {
+		if !req.SelectAll || totalMatches <= maxUndoSnapshots {
+			for _, snapshot := range snapshots {
+				response.PrevStatuses = append(response.PrevStatuses, BulkPrevStatus{
+					ID:     snapshot.ID.String(),
+					Status: snapshot.Status,
+				})
+			}
+		}
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response})
 }
 
 func (h *FindingsHandler) GetDuplicates(c *fiber.Ctx) error {
