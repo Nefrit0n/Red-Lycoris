@@ -64,6 +64,16 @@ Go API:
 
 - `GET /health` — проверка здоровья.
 - `GET /api/ping` — ответ `Hello World`.
+- `POST /api/v1/auth/login` — логин.
+- `POST /api/v1/auth/change-password` — смена пароля.
+- `POST /api/v1/scans/upload` — загрузка отчёта сканера.
+- `GET /api/v1/findings` — список findings с фильтрами/поиском.
+- `GET /api/v1/findings/{id}` — детали finding с комментариями/историей.
+- `POST /api/v1/findings/{id}/comments` — добавить комментарий.
+- `POST /api/v1/findings/bulk` — массовые действия.
+- `GET /api/v1/import-jobs` — список импортов.
+- `GET /api/v1/import-jobs/{id}` — детали импорта.
+- `GET /api/v1/products` — список продуктов.
 
 Python API (Gunicorn + FastAPI):
 
@@ -88,6 +98,16 @@ npm install
 npm run lint
 npm run test
 ```
+
+## Быстрый флоу root → смена пароля → импорт → триаж
+
+1. Поднимите сервисы и зайдите в UI: `http://localhost:5173` (dev) или `http://localhost:8081` (NGINX).
+2. Выполните вход пользователем `root` с паролем `root`.
+3. Система потребует смену пароля — задайте новый и повторите вход.
+4. Перейдите в **Upload Scan** и загрузите отчёт сканера.
+5. Откройте **Imports** → выберите job → перейдите к findings импорта.
+6. В списке findings отметьте записи и используйте bulk-действия (смена статуса/назначение).
+7. В карточке finding добавьте комментарий, проверьте историю изменений и дубликаты.
 
 ## CI/CD
 

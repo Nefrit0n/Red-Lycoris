@@ -9,11 +9,13 @@ export interface UploadScanRequest {
 }
 
 export interface UploadScanResponse {
+  importJobId: string;
   scanId: string;
   productId?: string;
   createdFindings: number;
   duplicates: number;
   productCreated: boolean;
+  status: string;
 }
 
 export const uploadScan = async (
