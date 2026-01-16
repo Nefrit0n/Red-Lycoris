@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 	"time"
 
 	"lotus-warden/backend/internal/models"
@@ -16,7 +17,7 @@ import (
 )
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Login    string `json:"login" validate:"required"`
 	Password string `json:"password" validate:"required"`
 }
 
@@ -77,7 +78,13 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 	}
 
-	user, err := storage.GetUserByEmail(c.Context(), h.db, req.Email)
+	identifier := strings.TrimSpace(req.Login)
+	loginUsername := identifier
+	if domainSeparatorIndex := strings.LastIndexAny(identifier, `\/`); domainSeparatorIndex != -1 && domainSeparatorIndex+1 < len(identifier) {
+		loginUsername = identifier[domainSeparatorIndex+1:]
+	}
+
+	user, err := storage.GetUserByLogin(c.Context(), h.db, identifier, loginUsername)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch user"})
 	}
