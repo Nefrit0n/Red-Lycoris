@@ -8,8 +8,18 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      "/api": {
+      "/api/v1": {
         target: "http://backend:8080",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/api/tasks": {
+        target: "http://python-api:8000",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/api/health": {
+        target: "http://python-api:8000",
         changeOrigin: true,
         secure: false,
       },
