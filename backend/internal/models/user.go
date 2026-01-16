@@ -7,11 +7,12 @@ import (
 )
 
 type User struct {
-	ID             uuid.UUID `db:"id"`
-	Username       string    `db:"username"`
-	Email          string    `db:"email"`
-	HashedPassword string    `db:"hashed_password"`
-	CreatedAt      time.Time `db:"created_at"`
+	ID              uuid.UUID `db:"id"`
+	Username        string    `db:"username"`
+	Email           string    `db:"email"`
+	HashedPassword  string    `db:"hashed_password"`
+	PasswordChanged bool      `db:"password_changed"`
+	CreatedAt       time.Time `db:"created_at"`
 }
 
 func (u *User) Validate() error {
