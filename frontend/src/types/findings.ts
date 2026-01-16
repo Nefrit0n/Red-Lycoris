@@ -30,6 +30,7 @@ export interface ApiResponse {
 export interface FetchFindingsParams {
   limit: number;
   offset: number;
+  filterProduct?: string;
   filterProductId?: string;
   filterSeverity?: FindingSeverity | "";
   filterStatus?: FindingStatus | "";
@@ -37,6 +38,15 @@ export interface FetchFindingsParams {
   importJobId?: string;
   sortField?: keyof Finding | "";
   sortOrder?: "asc" | "desc" | "";
+}
+
+export interface BulkUpdateResponse {
+  affectedCount: number;
+  sampleIds?: string[];
+  prevStatuses?: Array<{
+    id: string;
+    status: FindingStatus;
+  }>;
 }
 
 export interface FindingDetail {
