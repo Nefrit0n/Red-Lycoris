@@ -105,7 +105,21 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create import job"})
 	}
 
-	resp, status, err := h.processImportJob(c.Context(), req, job, userIDFromContext(c))
+	auditMeta := auditMetadataFromContext(c)
+	_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+		ActorID:    userIDFromContext(c),
+		ActorType:  "user",
+		Action:     "import_job.created",
+		TargetType: "import_job",
+		TargetID:   stringPointer(job.ID.String()),
+		Scope:      "global",
+	}, map[string]interface{}{
+		"scanner": job.Scanner,
+		"status":  job.Status,
+		"meta":    auditMeta,
+	})
+
+	resp, status, err := h.processImportJob(c.Context(), req, job, userIDFromContext(c), auditMeta)
 	if err != nil {
 		return c.Status(status).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -345,17 +359,41 @@ func computeChecksum(value []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (h *ScanUploadHandler) processImportJob(ctx context.Context, req ScanUploadRequest, job *models.ImportJob, uploaderID *uuid.UUID) (ScanUploadResponse, int, error) {
+func (h *ScanUploadHandler) processImportJob(ctx context.Context, req ScanUploadRequest, job *models.ImportJob, uploaderID *uuid.UUID, auditMeta map[string]interface{}) (ScanUploadResponse, int, error) {
 	startedAt := time.Now().UTC()
 	if err := storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobRunning, &startedAt, nil, nil); err != nil {
 		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to start import job")
 	}
+	_ = createAuditLog(ctx, h.db, &models.AuditLog{
+		ActorID:    uploaderID,
+		ActorType:  "user",
+		Action:     "import_job.started",
+		TargetType: "import_job",
+		TargetID:   stringPointer(job.ID.String()),
+		Scope:      "global",
+	}, map[string]interface{}{
+		"status": models.ImportJobRunning,
+		"meta":   auditMeta,
+	})
 
 	findings, err := parser.ParseReport(req.ScannerType, req.Report)
 	if err != nil {
 		finishedAt := time.Now().UTC()
 		errMsg := err.Error()
 		_ = storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		_ = createAuditLog(ctx, h.db, &models.AuditLog{
+			ActorID:    uploaderID,
+			ActorType:  "user",
+			Action:     "import_job.failed",
+			TargetType: "import_job",
+			TargetID:   stringPointer(job.ID.String()),
+			Scope:      "global",
+		}, map[string]interface{}{
+			"status":  models.ImportJobFailed,
+			"error":   errMsg,
+			"meta":    auditMeta,
+			"scanner": req.ScannerType,
+		})
 		if errors.Is(err, parser.ErrUnsupportedFormat) {
 			return ScanUploadResponse{}, http.StatusUnsupportedMediaType, err
 		}
@@ -367,6 +405,18 @@ func (h *ScanUploadHandler) processImportJob(ctx context.Context, req ScanUpload
 		finishedAt := time.Now().UTC()
 		errMsg := "failed to resolve product"
 		_ = storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		_ = createAuditLog(ctx, h.db, &models.AuditLog{
+			ActorID:    uploaderID,
+			ActorType:  "user",
+			Action:     "import_job.failed",
+			TargetType: "import_job",
+			TargetID:   stringPointer(job.ID.String()),
+			Scope:      "global",
+		}, map[string]interface{}{
+			"status": models.ImportJobFailed,
+			"error":  errMsg,
+			"meta":   auditMeta,
+		})
 		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to resolve product")
 	}
 	var productID *uuid.UUID
@@ -386,6 +436,19 @@ func (h *ScanUploadHandler) processImportJob(ctx context.Context, req ScanUpload
 		finishedAt := time.Now().UTC()
 		errMsg := "failed to store scan result"
 		_ = storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		_ = createAuditLog(ctx, h.db, &models.AuditLog{
+			ActorID:    uploaderID,
+			ActorType:  "user",
+			Action:     "import_job.failed",
+			TargetType: "import_job",
+			TargetID:   stringPointer(job.ID.String()),
+			Scope:      "global",
+			ScopeID:    productID,
+		}, map[string]interface{}{
+			"status": models.ImportJobFailed,
+			"error":  errMsg,
+			"meta":   auditMeta,
+		})
 		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to store scan result")
 	}
 
@@ -420,6 +483,20 @@ func (h *ScanUploadHandler) processImportJob(ctx context.Context, req ScanUpload
 		if err := storage.CreateFinding(ctx, h.db, model); err != nil {
 			return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to store finding")
 		}
+		_ = createAuditLog(ctx, h.db, &models.AuditLog{
+			ActorID:    uploaderID,
+			ActorType:  "user",
+			Action:     "finding.created",
+			TargetType: "finding",
+			TargetID:   stringPointer(model.ID.String()),
+			Scope:      "product",
+			ScopeID:    productID,
+		}, map[string]interface{}{
+			"status":        model.Status,
+			"severity":      model.Severity,
+			"import_job_id": job.ID.String(),
+			"meta":          auditMeta,
+		})
 		createdFindings++
 	}
 
@@ -431,6 +508,25 @@ func (h *ScanUploadHandler) processImportJob(ctx context.Context, req ScanUpload
 	if err := storage.UpdateImportJobStatus(ctx, h.db, job.ID, models.ImportJobSucceeded, nil, &finishedAt, nil); err != nil {
 		return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to finalize import job")
 	}
+	scope := "global"
+	if productID != nil {
+		scope = "product"
+	}
+	_ = createAuditLog(ctx, h.db, &models.AuditLog{
+		ActorID:    uploaderID,
+		ActorType:  "user",
+		Action:     "import_job.succeeded",
+		TargetType: "import_job",
+		TargetID:   stringPointer(job.ID.String()),
+		Scope:      scope,
+		ScopeID:    productID,
+	}, map[string]interface{}{
+		"status":         models.ImportJobSucceeded,
+		"findings_total": len(findings),
+		"findings_new":   createdFindings,
+		"duplicates":     duplicates,
+		"meta":           auditMeta,
+	})
 
 	return ScanUploadResponse{
 		ImportJobID:     job.ID,
