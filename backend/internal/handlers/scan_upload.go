@@ -68,7 +68,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		return c.Status(status).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	ctx := context.Background()
+	ctx := c.Context()
 	product, productCreated, err := h.resolveProduct(ctx, req)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to resolve product"})
@@ -205,6 +205,10 @@ func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadReque
 
 	if len(reportData) == 0 {
 		return ScanUploadRequest{}, fmt.Errorf("report is required")
+	}
+
+	if !json.Valid(reportData) {
+		return ScanUploadRequest{}, fmt.Errorf("report must be valid json")
 	}
 
 	return ScanUploadRequest{

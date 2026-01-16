@@ -68,6 +68,7 @@ services:
     ports:
       - "${NGINX_PORT:-8081}:80"
     depends_on:
+      - backend
       - python-api
 
   postgres:
