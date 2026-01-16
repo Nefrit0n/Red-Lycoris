@@ -1,5 +1,6 @@
 export type FindingSeverity = "low" | "medium" | "high" | "critical";
 export type FindingStatus = "new" | "duplicate" | "resolved" | "ignored";
+export type FindingDetailStatus = "open" | "closed" | "false_positive";
 
 export interface Finding {
   id: string;
@@ -23,4 +24,27 @@ export interface FetchFindingsParams {
   filterStatus?: FindingStatus | "";
   sortField?: keyof Finding | "";
   sortOrder?: "asc" | "desc" | "";
+}
+
+export interface HistoryItem {
+  timestamp: string;
+  field: string;
+  oldValue: string;
+  newValue: string;
+  changedBy: string;
+}
+
+export interface FindingDetail {
+  id: string;
+  title: string;
+  description: string;
+  path: string;
+  stepsToReproduce: string;
+  recommendation: string;
+  severity: FindingSeverity;
+  status: FindingDetailStatus;
+  createdAt: string;
+  updatedAt: string;
+  responsible: { id: string; name: string } | null;
+  history: HistoryItem[];
 }
