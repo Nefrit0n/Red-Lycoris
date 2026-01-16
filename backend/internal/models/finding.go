@@ -15,10 +15,14 @@ const (
 )
 
 const (
-	StatusNew       = "new"
-	StatusDuplicate = "duplicate"
-	StatusResolved  = "resolved"
-	StatusIgnored   = "ignored"
+	StatusNew           = "new"
+	StatusUnderReview   = "under_review"
+	StatusConfirmed     = "confirmed"
+	StatusFalsePositive = "false_positive"
+	StatusOutOfScope    = "out_of_scope"
+	StatusRiskAccepted  = "risk_accepted"
+	StatusMitigated     = "mitigated"
+	StatusDuplicate     = "duplicate"
 )
 
 type Finding struct {
@@ -31,6 +35,8 @@ type Finding struct {
 	Severity     string     `db:"severity"`
 	Status       string     `db:"status"`
 	DuplicateID  *uuid.UUID `db:"duplicate_id"`
+	AssigneeID   *uuid.UUID `db:"assignee_id"`
+	ImportJobID  *uuid.UUID `db:"import_job_id"`
 	CreatedAt    time.Time  `db:"created_at"`
 	UpdatedAt    time.Time  `db:"updated_at"`
 	DeletedAt    *time.Time `db:"deleted_at"`
@@ -60,10 +66,17 @@ func (f *Finding) Validate() error {
 	}
 
 	switch f.Status {
-	case StatusNew, StatusDuplicate, StatusResolved, StatusIgnored:
+	case StatusNew,
+		StatusUnderReview,
+		StatusConfirmed,
+		StatusFalsePositive,
+		StatusOutOfScope,
+		StatusRiskAccepted,
+		StatusMitigated,
+		StatusDuplicate:
 		return nil
 	default:
-		return fmt.Errorf("status must be one of new, duplicate, resolved, ignored")
+		return fmt.Errorf("status must be one of new, under_review, confirmed, false_positive, out_of_scope, risk_accepted, mitigated, duplicate")
 	}
 }
 

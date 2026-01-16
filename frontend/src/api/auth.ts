@@ -12,6 +12,7 @@ import {
 } from "./http";
 
 const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
+const USER_PROFILE_KEY = "lotus_warden_user_profile";
 
 /**
  * Login
@@ -47,8 +48,9 @@ export const login = async (
 
   localStorage.setItem(
     NEEDS_PWD_CHANGE_KEY,
-    String(result.needsPasswordChange)
+    String(result.mustChangePassword)
   );
+  localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(result.user));
 
   return result;
 };
@@ -75,7 +77,10 @@ export const changePassword = async (
     throw new Error(`Ошибка смены пароля (${response.status})`);
   }
 
-  await parseApiResponse(response);
+  const result = await parseApiResponse<{ token?: string }>(response);
+  if (result?.token) {
+    setToken(result.token);
+  }
   localStorage.removeItem(NEEDS_PWD_CHANGE_KEY);
 };
 
@@ -90,4 +95,17 @@ export const logout = async (): Promise<void> => {
 
   clearToken();
   localStorage.removeItem(NEEDS_PWD_CHANGE_KEY);
+  localStorage.removeItem(USER_PROFILE_KEY);
+};
+
+export const getCurrentUser = (): UserProfile | null => {
+  const raw = localStorage.getItem(USER_PROFILE_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as UserProfile;
+  } catch {
+    return null;
+  }
 };

@@ -37,6 +37,8 @@ const TopBar = ({ onLoggedOut }: TopBarProps) => {
         </Box>
         <Stack direction="row" spacing={2}>
           <Button variant="text" onClick={() => navigate("/findings")}>Findings</Button>
+          <Button variant="text" onClick={() => navigate("/products")}>Products</Button>
+          <Button variant="text" onClick={() => navigate("/imports")}>Imports</Button>
           <Button variant="text" onClick={() => navigate("/scans/upload")}>Upload Scan</Button>
           <Button variant="outlined" onClick={handleLogout} aria-label="Выйти из системы">
             Выйти

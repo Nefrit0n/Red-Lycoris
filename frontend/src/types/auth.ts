@@ -13,7 +13,7 @@ export interface UserProfile {
 export interface LoginResponse {
   token: string;
   user: UserProfile;
-  needsPasswordChange: boolean;
+  mustChangePassword: boolean;
 }
 
 export interface ChangePasswordRequest {

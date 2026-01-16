@@ -102,6 +102,12 @@ const ScanUploadPage = () => {
     });
   };
 
+  const handleViewImport = () => {
+    if (success?.importJobId) {
+      navigate(`/imports/${success.importJobId}`);
+    }
+  };
+
   return (
     <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }}>
       <Stack spacing={3}>
@@ -182,13 +188,22 @@ const ScanUploadPage = () => {
                 <Alert
                   severity="success"
                   action={
-                    <Button
-                      color="inherit"
-                      size="small"
-                      onClick={handleViewFindings}
-                    >
-                      Перейти к находкам
-                    </Button>
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={handleViewFindings}
+                      >
+                        Перейти к находкам
+                      </Button>
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={handleViewImport}
+                      >
+                        Импорт
+                      </Button>
+                    </Stack>
                   }
                 >
                   Загружено: создано находок {success.createdFindings}, дубликатов{" "}
