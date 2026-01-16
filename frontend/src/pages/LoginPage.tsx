@@ -14,33 +14,26 @@ import { login } from "../api/auth";
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [loginValue, setLoginValue] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState(false);
-
-  const isEmailValid = (value: string) =>
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  const [loginError, setLoginError] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
-    setEmailError(false);
+    setLoginError(false);
 
-    if (!email || !password) {
-      setError("Заполните email и пароль");
-      return;
-    }
-    if (!isEmailValid(email)) {
-      setEmailError(true);
-      setError("Введите корректный email");
+    if (!loginValue || !password) {
+      setLoginError(!loginValue);
+      setError("Заполните логин и пароль");
       return;
     }
 
     setLoading(true);
     try {
-      const result = await login({ email, password });
+      const result = await login({ login: loginValue, password });
       if (result.needsPasswordChange) {
         navigate("/change_password", { replace: true });
       } else {
@@ -75,16 +68,16 @@ const LoginPage = () => {
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <TextField
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            label="Логин, email или домен"
+            type="text"
+            value={loginValue}
+            onChange={(event) => setLoginValue(event.target.value)}
             margin="normal"
             fullWidth
             required
-            autoComplete="email"
-            error={emailError}
-            helperText={emailError ? "Некорректный формат email" : " "}
+            autoComplete="username"
+            error={loginError}
+            helperText={loginError ? "Введите логин" : " "}
           />
           <TextField
             label="Пароль"

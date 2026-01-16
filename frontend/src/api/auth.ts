@@ -12,7 +12,7 @@ export const login = async (payload: LoginRequest): Promise<LoginResponse> => {
   });
 
   if (!response.ok) {
-    throw new Error("Неверный email или пароль");
+    throw new Error("Неверный логин или пароль");
   }
 
   const result = await parseApiResponse<{ data: LoginResponse }>(response);
