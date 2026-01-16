@@ -38,7 +38,7 @@ const LoginPage = () => {
     try {
       const result = await login({ login: loginValue, password });
       if (result.needsPasswordChange) {
-        navigate("/change_password", { replace: true });
+        navigate("/change-password", { replace: true });
       } else {
         navigate("/dashboard", { replace: true });
       }

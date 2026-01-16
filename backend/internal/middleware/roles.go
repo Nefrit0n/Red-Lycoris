@@ -4,22 +4,21 @@ import "github.com/gofiber/fiber/v2"
 
 func AuthorizeRole(allowedRoles ...string) fiber.Handler {
 	allowed := map[string]struct{}{}
-	for _, role := range allowedRoles {
-		allowed[role] = struct{}{}
+	for _, r := range allowedRoles {
+		allowed[r] = struct{}{}
 	}
 
 	return func(c *fiber.Ctx) error {
-		rolesValue := c.Locals("roles")
-		roles, ok := rolesValue.([]string)
+		roles, ok := c.Locals("roles").([]string)
 		if !ok {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing roles"})
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "missing roles"})
 		}
-		for _, role := range roles {
-			if _, exists := allowed[role]; exists {
+		for _, r := range roles {
+			if _, ok := allowed[r]; ok {
 				return c.Next()
 			}
 		}
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "error": "insufficient role"})
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "insufficient role"})
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"lotus-warden/backend/internal/middleware"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/storage"
 
@@ -41,34 +42,22 @@ type LoginResponse struct {
 }
 
 type AuthHandler struct {
-	db           *sql.DB
-	validator    *validator.Validate
-	jwtSecret    string
-	rootEmail    string
-	rootPassword string
+	db        *sql.DB
+	validator *validator.Validate
+	jwtSecret string
+	rootEmail string
 }
 
-func NewAuthHandler(db *sql.DB, jwtSecret string, rootEmail string, rootPassword string) *AuthHandler {
+func NewAuthHandler(db *sql.DB, jwtSecret string, rootEmail string) *AuthHandler {
 	return &AuthHandler{
-		db:           db,
-		validator:    validator.New(),
-		jwtSecret:    jwtSecret,
-		rootEmail:    rootEmail,
-		rootPassword: rootPassword,
+		db:        db,
+		validator: validator.New(),
+		jwtSecret: jwtSecret,
+		rootEmail: rootEmail,
 	}
 }
 
-// Login godoc
-// @Summary Login user
-// @Description Authenticate user and return JWT token
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param payload body LoginRequest true "Login request"
-// @Success 200 {object} LoginResponse
-// @Failure 400 {object} fiber.Map
-// @Failure 401 {object} fiber.Map
-// @Router /api/v1/auth/login [post]
+// POST /api/v1/auth/login
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req LoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -80,15 +69,16 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	identifier := strings.TrimSpace(req.Login)
 	loginUsername := identifier
-	if domainSeparatorIndex := strings.LastIndexAny(identifier, `\/`); domainSeparatorIndex != -1 && domainSeparatorIndex+1 < len(identifier) {
-		loginUsername = identifier[domainSeparatorIndex+1:]
+
+	if idx := strings.LastIndexAny(identifier, `\/`); idx != -1 && idx+1 < len(identifier) {
+		loginUsername = identifier[idx+1:]
+	}
+	if at := strings.LastIndex(loginUsername, "@"); at > 0 {
+		loginUsername = loginUsername[:at]
 	}
 
 	user, err := storage.GetUserByLogin(c.Context(), h.db, identifier, loginUsername)
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch user"})
-	}
-	if user == nil {
+	if err != nil || user == nil {
 		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "invalid credentials"})
 	}
 
@@ -97,51 +87,36 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}
 
 	roles, err := storage.GetUserRoles(c.Context(), h.db, user.ID)
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch roles"})
-	}
-	if len(roles) == 0 {
+	if err != nil || len(roles) == 0 {
 		roles = []string{"user"}
 	}
 
-	needsPasswordChange := false
-	if user.Email == h.rootEmail && !user.PasswordChanged {
-		if err := bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(h.rootPassword)); err == nil {
-			needsPasswordChange = true
-		}
+	needsPasswordChange := user.Email == h.rootEmail && !user.PasswordChanged
+
+	claims := middleware.JWTClaims{
+		UserID:     user.ID.String(),
+		Roles:      roles,
+		PwdChanged: user.PasswordChanged,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+		},
 	}
 
-	claims := jwt.MapClaims{
-		"user_id": user.ID.String(),
-		"roles":   roles,
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
-	}
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := jwtToken.SignedString([]byte(h.jwtSecret))
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(h.jwtSecret))
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to generate token"})
 	}
 
 	resp := LoginResponse{
-		Token:               tokenString,
-		User:                buildUserProfile(user, roles),
+		Token: tokenString,
+		User: buildUserProfile(user, roles),
 		NeedsPasswordChange: needsPasswordChange,
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})
 }
 
-// ChangePassword godoc
-// @Summary Change user password
-// @Description Change password for authenticated user
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param payload body ChangePasswordRequest true "Change password request"
-// @Success 200 {object} fiber.Map
-// @Failure 400 {object} fiber.Map
-// @Failure 401 {object} fiber.Map
-// @Router /api/v1/auth/change_password [post]
 func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	var req ChangePasswordRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -154,8 +129,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "passwords do not match"})
 	}
 
-	userIDRaw := c.Locals("user_id")
-	userIDStr, ok := userIDRaw.(string)
+	userIDStr, ok := c.Locals("user_id").(string)
 	if !ok || userIDStr == "" {
 		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "missing user context"})
 	}
@@ -166,19 +140,14 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	}
 
 	user, err := storage.GetUserByID(c.Context(), h.db, userID)
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch user"})
-	}
-	if user == nil {
-		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "user not found"})
+	if err != nil || user == nil {
+		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "user not found"})
 	}
 
-	if req.CurrentPassword == "" {
-		if user.Email != h.rootEmail || user.PasswordChanged {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "current password required"})
+	if user.PasswordChanged {
+		if err := bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(req.CurrentPassword)); err != nil {
+			return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "invalid credentials"})
 		}
-	} else if err := bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(req.CurrentPassword)); err != nil {
-		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "invalid credentials"})
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
@@ -193,13 +162,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
 }
 
-// Logout godoc
-// @Summary Logout user
-// @Description Logout user (frontend clears token)
-// @Tags auth
-// @Produce json
-// @Success 200 {object} fiber.Map
-// @Router /api/v1/auth/logout [post]
+// POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
 }
