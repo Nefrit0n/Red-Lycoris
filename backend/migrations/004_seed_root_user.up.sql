@@ -3,7 +3,7 @@ VALUES ('admin')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO users (username, email, hashed_password)
-VALUES ('root', 'root@localhost', '$2a$10$5TJfITBcwFhSMFyvNFT9teh5bM8FB3Dl.UpWAn3GSGoDrP/n8AKcG')
+VALUES ('root', 'root', '$2a$10$5TJfITBcwFhSMFyvNFT9teh5bM8FB3Dl.UpWAn3GSGoDrP/n8AKcG')
 ON CONFLICT DO NOTHING;
 
 WITH admin_role AS (
