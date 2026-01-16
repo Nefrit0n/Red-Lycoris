@@ -235,9 +235,7 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 	if err := h.validator.Struct(req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 	}
-	if req.Payload == nil {
-		req.Payload = map[string]interface{}{}
-	}
+
 	if err := validateFindingSeverity(req.Severity); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 	}
@@ -259,13 +257,17 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 		Status:      status,
 		Fingerprint: uuid.NewString(),
 	}
+
 	if err := storage.CreateFinding(c.Context(), h.db, finding); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to create finding"})
 	}
 
-	response := mapFindingModel(*finding)
-	return c.Status(http.StatusCreated).JSON(fiber.Map{"success": true, "data": response})
+	return c.Status(http.StatusCreated).JSON(fiber.Map{
+		"success": true,
+		"data":    mapFindingModel(*finding),
+	})
 }
+
 
 // UpdateFinding godoc
 // @Summary Update finding
