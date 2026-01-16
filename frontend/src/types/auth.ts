@@ -13,4 +13,11 @@ export interface UserProfile {
 export interface LoginResponse {
   token: string;
   user: UserProfile;
+  needsPasswordChange: boolean;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword?: string;
+  newPassword: string;
+  newPasswordConfirm: string;
 }

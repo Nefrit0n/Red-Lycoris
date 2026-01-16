@@ -40,8 +40,12 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      await login({ email, password });
-      navigate("/dashboard", { replace: true });
+      const result = await login({ email, password });
+      if (result.needsPasswordChange) {
+        navigate("/change_password", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     } catch (loginError) {
       if (loginError instanceof Error) {
         setError(loginError.message);
