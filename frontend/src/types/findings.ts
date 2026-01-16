@@ -89,3 +89,10 @@ export interface FindingDuplicateGroup {
   master: Finding;
   duplicates: Finding[];
 }
+
+export interface FindingNeighbors {
+  prevId?: string | null;
+  nextId?: string | null;
+  position: number;
+  total: number;
+}
