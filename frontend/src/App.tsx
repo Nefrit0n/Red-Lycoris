@@ -12,12 +12,14 @@ const App = () => {
       <CssBaseline />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+
         <Route element={<ProtectedLayout />}>
-          <Route path="/change_password" element={<ChangePasswordPage />} />
+          <Route path="/change-password" element={<ChangePasswordPage />} />
           <Route path="/dashboard" element={<FindingsList />} />
           <Route path="/findings" element={<FindingsList />} />
           <Route path="/findings/:id" element={<FindingDetailPage />} />
         </Route>
+
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
