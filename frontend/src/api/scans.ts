@@ -22,6 +22,7 @@ export const uploadScan = async (
   const formData = new FormData();
   formData.append("report", payload.file);
   formData.append("scanner_type", payload.scannerType);
+
   if (payload.productName) {
     formData.append("product_name", payload.productName);
   }
@@ -34,14 +35,13 @@ export const uploadScan = async (
 
   const response = await fetch("/api/v1/scans/upload", {
     method: "POST",
-    headers: {
-      ...getAuthHeaders(),
-    },
+    headers: getAuthHeaders(), // ❗ ONLY AUTH
     body: formData,
   });
 
   if (!response.ok) {
-    throw new Error("Не удалось загрузить отчёт");
+    const text = await response.text();
+    throw new Error(`Upload failed (${response.status}): ${text}`);
   }
 
   return parseApiResponse<UploadScanResponse>(response);
