@@ -28,24 +28,62 @@ func TestScanUploadEndpoint(t *testing.T) {
 	app := server.NewApp(cfg, db)
 
 	findings := []parser.Finding{
-		{Title: "SQL Injection", Severity: "high", Location: "/login"},
-		{Title: "XSS", Severity: "medium", Location: "/search"},
+		{Title: "SQL Injection", Severity: "high", Location: "app", RuleID: "CVE-2024-0001"},
+		{Title: "XSS", Severity: "medium", Location: "app", RuleID: "CVE-2024-0002"},
 	}
-	report := map[string]any{"findings": findings}
+	report := map[string]any{
+		"ArtifactName": "billing-api",
+		"Results": []any{
+			map[string]any{
+				"Target": "app",
+				"Vulnerabilities": []any{
+					map[string]any{
+						"VulnerabilityID": "CVE-2024-0001",
+						"Title":           "SQL Injection",
+						"Description":     "SQLi found",
+						"Severity":        "HIGH",
+						"PkgName":         "lib-sql",
+					},
+					map[string]any{
+						"VulnerabilityID": "CVE-2024-0002",
+						"Title":           "XSS",
+						"Description":     "XSS found",
+						"Severity":        "MEDIUM",
+						"PkgName":         "lib-web",
+					},
+				},
+			},
+		},
+	}
 	body, err := json.Marshal(map[string]any{
-		"scanner_type": "sast",
-		"report":       report,
+		"scanner_type":       "trivy",
+		"report":             report,
+		"product_name":       "Billing API",
+		"product_version":    "1.0.0",
+		"product_identifier": "billing-api",
 	})
 	if err != nil {
 		t.Fatalf("marshal request failed: %v", err)
 	}
 
-	fingerprintOne := dedup.ComputeFingerprint("sast", findings[0])
-	fingerprintTwo := dedup.ComputeFingerprint("sast", findings[1])
+	fingerprintOne := dedup.ComputeFingerprint("trivy", findings[0])
+	fingerprintTwo := dedup.ComputeFingerprint("trivy", findings[1])
 	duplicateID := uuid.New()
 
+	mock.ExpectQuery("SELECT id, name, slug, description, identifier, version, created_at, updated_at FROM products WHERE identifier = \\$1 LIMIT 1").
+		WithArgs("billing-api").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "description", "identifier", "version", "created_at", "updated_at"}))
+
+	mock.ExpectQuery("SELECT id, name, slug, description, identifier, version, created_at, updated_at FROM products WHERE slug = \\$1 LIMIT 1").
+		WithArgs("billing-api-1-0-0").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "description", "identifier", "version", "created_at", "updated_at"}))
+
+	mock.ExpectExec("INSERT INTO products").
+		WithArgs(sqlmock.AnyArg(), "Billing API", "billing-api-1-0-0", sqlmock.AnyArg(), "billing-api", "1.0.0", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	mock.ExpectExec("INSERT INTO scan_results").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "sast", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery("SELECT id FROM findings WHERE fingerprint = \\$1 LIMIT 1").
@@ -53,7 +91,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	mock.ExpectExec("INSERT INTO findings").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintOne, "SQL Injection", sqlmock.AnyArg(), "high", "new", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintOne, "SQL Injection", sqlmock.AnyArg(), "high", "new", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery("SELECT id FROM findings WHERE fingerprint = \\$1 LIMIT 1").
@@ -61,12 +99,11 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(duplicateID))
 
 	mock.ExpectExec("INSERT INTO findings").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintTwo, "XSS", sqlmock.AnyArg(), "medium", "duplicate", duplicateID, sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintTwo, "XSS", sqlmock.AnyArg(), "medium", "duplicate", duplicateID, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
-		UserID: "user-123",
-		Scope:  "scan:upload",
+		UserID: uuid.New().String(),
 	})
 	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
 	if err != nil {
@@ -85,14 +122,14 @@ func TestScanUploadEndpoint(t *testing.T) {
 	}
 
 	var response struct {
-		FindingsProcessed int `json:"findings_processed"`
-		Duplicates        int `json:"duplicates"`
+		CreatedFindings int `json:"createdFindings"`
+		Duplicates      int `json:"duplicates"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
-	if response.FindingsProcessed != 2 {
-		t.Fatalf("expected 2 findings processed, got %d", response.FindingsProcessed)
+	if response.CreatedFindings != 2 {
+		t.Fatalf("expected 2 findings processed, got %d", response.CreatedFindings)
 	}
 	if response.Duplicates != 1 {
 		t.Fatalf("expected 1 duplicate, got %d", response.Duplicates)

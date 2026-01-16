@@ -10,6 +10,8 @@ import (
 type ScanResult struct {
 	ID           uuid.UUID       `db:"id"`
 	EngagementID *uuid.UUID      `db:"engagement_id"`
+	ProductID    *uuid.UUID      `db:"product_id"`
+	UploaderID   *uuid.UUID      `db:"uploader_id"`
 	Scanner      string          `db:"scanner"`
 	RawReport    json.RawMessage `db:"raw_report"`
 	ProcessedAt  time.Time       `db:"processed_at"`
