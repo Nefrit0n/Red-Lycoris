@@ -13,9 +13,11 @@ import { FindingSeverity, FindingStatus } from "../types/findings";
 
 interface FiltersPanelProps {
   productId: string;
+  search: string;
   filterSeverity: FindingSeverity | "";
   filterStatus: FindingStatus | "";
   onProductIdChange: (value: string) => void;
+  onSearchChange: (value: string) => void;
   onSeverityChange: (value: FindingSeverity | "") => void;
   onStatusChange: (value: FindingStatus | "") => void;
   onReset: () => void;
@@ -23,9 +25,11 @@ interface FiltersPanelProps {
 
 const FiltersPanel = ({
   productId,
+  search,
   filterSeverity,
   filterStatus,
   onProductIdChange,
+  onSearchChange,
   onSeverityChange,
   onStatusChange,
   onReset,
@@ -66,6 +70,16 @@ const FiltersPanel = ({
           sx={{ minWidth: 220 }}
         />
 
+        <TextField
+          label="Поиск"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          size="small"
+          placeholder="Заголовок или fingerprint"
+          inputProps={{ "aria-label": "Поиск по находкам" }}
+          sx={{ minWidth: 240 }}
+        />
+
         <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel id="filter-severity-label">Критичность</InputLabel>
           <Select
@@ -98,9 +112,13 @@ const FiltersPanel = ({
               <em>Все статусы</em>
             </MenuItem>
             <MenuItem value="new">New</MenuItem>
+            <MenuItem value="under_review">Under review</MenuItem>
+            <MenuItem value="confirmed">Confirmed</MenuItem>
+            <MenuItem value="false_positive">False positive</MenuItem>
+            <MenuItem value="out_of_scope">Out of scope</MenuItem>
+            <MenuItem value="risk_accepted">Risk accepted</MenuItem>
+            <MenuItem value="mitigated">Mitigated</MenuItem>
             <MenuItem value="duplicate">Duplicate</MenuItem>
-            <MenuItem value="resolved">Resolved</MenuItem>
-            <MenuItem value="ignored">Ignored</MenuItem>
           </Select>
         </FormControl>
 

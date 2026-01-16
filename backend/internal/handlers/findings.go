@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -26,13 +27,45 @@ type FindingResponse struct {
 	ID          string  `json:"id"`
 	Title       string  `json:"title"`
 	Description *string `json:"description,omitempty"`
+	Fingerprint *string `json:"fingerprint,omitempty"`
 	Severity    string  `json:"severity"`
 	Status      string  `json:"status"`
 	ProductID   *string `json:"productId,omitempty"`
 	ProductName *string `json:"productName,omitempty"`
+	AssigneeID  *string `json:"assigneeId,omitempty"`
+	ImportJobID *string `json:"importJobId,omitempty"`
 	CreatedAt   string  `json:"createdAt"`
 	UpdatedAt   string  `json:"updatedAt"`
 	DeletedAt   *string `json:"deletedAt,omitempty"`
+}
+
+type FindingCommentResponse struct {
+	ID        string  `json:"id"`
+	AuthorID  *string `json:"authorId,omitempty"`
+	Author    *string `json:"author,omitempty"`
+	Body      string  `json:"body"`
+	CreatedAt string  `json:"createdAt"`
+}
+
+type FindingEventResponse struct {
+	ID        string                 `json:"id"`
+	ActorID   *string                `json:"actorId,omitempty"`
+	Actor     *string                `json:"actor,omitempty"`
+	EventType string                 `json:"eventType"`
+	Payload   map[string]interface{} `json:"payload"`
+	CreatedAt string                 `json:"createdAt"`
+}
+
+type FindingDetailResponse struct {
+	FindingResponse
+	Comments   []FindingCommentResponse `json:"comments"`
+	Events     []FindingEventResponse   `json:"events"`
+	Duplicates *DuplicateGroupResponse  `json:"duplicates,omitempty"`
+}
+
+type DuplicateGroupResponse struct {
+	Master     FindingResponse   `json:"master"`
+	Duplicates []FindingResponse `json:"duplicates"`
 }
 
 type CreateFindingRequest struct {
@@ -49,6 +82,17 @@ type UpdateFindingRequest struct {
 	Severity    *string `json:"severity,omitempty"`
 	Status      *string `json:"status,omitempty"`
 	ProductID   *string `json:"productId,omitempty" validate:"omitempty,uuid4"`
+	AssigneeID  *string `json:"assigneeId,omitempty" validate:"omitempty,uuid4"`
+}
+
+type CreateCommentRequest struct {
+	Body string `json:"body" validate:"required,max=2000"`
+}
+
+type BulkActionRequest struct {
+	IDs     []string               `json:"ids" validate:"required,min=1"`
+	Action  string                 `json:"action" validate:"required"`
+	Payload map[string]interface{} `json:"payload"`
 }
 
 func NewFindingsHandler(db *sql.DB) *FindingsHandler {
@@ -72,10 +116,16 @@ func NewFindingsHandler(db *sql.DB) *FindingsHandler {
 // @Failure 401 {object} fiber.Map
 // @Router /api/v1/findings [get]
 func (h *FindingsHandler) List(c *fiber.Ctx) error {
-	page := parseIntWithDefault(c.Query("page"), 1)
-	pageSize := parseIntWithDefault(c.Query("pageSize"), 20)
-	if page < 1 || pageSize < 1 || pageSize > 200 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid pagination"})
+	limit := parseIntWithDefault(c.Query("limit"), 20)
+	offset := parseIntWithDefault(c.Query("offset"), 0)
+	if limit < 1 || limit > 200 || offset < 0 {
+		page := parseIntWithDefault(c.Query("page"), 1)
+		pageSize := parseIntWithDefault(c.Query("pageSize"), 20)
+		if page < 1 || pageSize < 1 || pageSize > 200 {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid pagination"})
+		}
+		limit = pageSize
+		offset = (page - 1) * pageSize
 	}
 
 	var productID *uuid.UUID
@@ -86,15 +136,25 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		}
 		productID = &parsed
 	}
+	var importJobID *uuid.UUID
+	if importJobParam := strings.TrimSpace(c.Query("import_job_id")); importJobParam != "" {
+		parsed, err := uuid.Parse(importJobParam)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid import_job_id"})
+		}
+		importJobID = &parsed
+	}
 
 	filters := storage.FindingFilters{
-		Severity:  strings.TrimSpace(c.Query("severity")),
-		Status:    strings.TrimSpace(c.Query("status")),
-		ProductID: productID,
-		SortField: strings.TrimSpace(c.Query("sortField")),
-		SortOrder: strings.TrimSpace(c.Query("sortOrder")),
-		Limit:     pageSize,
-		Offset:    (page - 1) * pageSize,
+		Severity:    strings.TrimSpace(c.Query("severity")),
+		Status:      strings.TrimSpace(c.Query("status")),
+		ProductID:   productID,
+		ImportJobID: importJobID,
+		Query:       strings.TrimSpace(c.Query("q")),
+		SortField:   strings.TrimSpace(c.Query("sortField")),
+		SortOrder:   strings.TrimSpace(c.Query("sortOrder")),
+		Limit:       limit,
+		Offset:      offset,
 	}
 
 	items, total, err := storage.ListFindings(c.Context(), h.db, filters)
@@ -133,7 +193,27 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapFindingDetail(*finding)})
+	comments, err := storage.ListFindingComments(c.Context(), h.db, id)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch comments"})
+	}
+	events, err := storage.ListFindingEvents(c.Context(), h.db, id)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch events"})
+	}
+	duplicates, err := storage.GetFindingDuplicateGroup(c.Context(), h.db, id)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch duplicates"})
+	}
+
+	resp := FindingDetailResponse{
+		FindingResponse: mapFindingDetail(*finding),
+		Comments:        mapFindingComments(comments),
+		Events:          mapFindingEvents(events),
+		Duplicates:      mapDuplicateGroup(duplicates),
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})
 }
 
 // CreateFinding godoc
@@ -154,6 +234,9 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 	}
 	if err := h.validator.Struct(req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+	if req.Payload == nil {
+		req.Payload = map[string]interface{}{}
 	}
 	if err := validateFindingSeverity(req.Severity); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
@@ -218,7 +301,7 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 	}
 
 	if !isAdmin {
-		if req.Title != nil || req.Severity != nil || req.ProductID != nil {
+		if req.Title != nil || req.Severity != nil || req.ProductID != nil || req.AssigneeID != nil {
 			return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "analyst can only update status or description"})
 		}
 	}
@@ -239,6 +322,19 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 		parsed := uuid.MustParse(*req.ProductID)
 		productID = &parsed
 	}
+	var assigneeID *uuid.UUID
+	if req.AssigneeID != nil {
+		parsed := uuid.MustParse(*req.AssigneeID)
+		assigneeID = &parsed
+	}
+
+	current, err := storage.GetFindingByID(c.Context(), h.db, id)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch finding"})
+	}
+	if current == nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
+	}
 
 	updated, err := storage.UpdateFinding(c.Context(), h.db, id, storage.UpdateFindingParams{
 		Title:       req.Title,
@@ -246,12 +342,36 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 		Severity:    req.Severity,
 		Status:      req.Status,
 		ProductID:   productID,
+		AssigneeID:  assigneeID,
 	})
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update finding"})
 	}
 	if updated == nil {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
+	}
+
+	if req.Status != nil && *req.Status != current.Status {
+		_ = createFindingEvent(c, h.db, id, "status_changed", fiber.Map{
+			"from": current.Status,
+			"to":   *req.Status,
+		})
+	}
+	if req.AssigneeID != nil {
+		prevAssignee := ""
+		if current.AssigneeID.Valid {
+			prevAssignee = current.AssigneeID.UUID.String()
+		}
+		nextAssignee := ""
+		if assigneeID != nil {
+			nextAssignee = assigneeID.String()
+		}
+		if prevAssignee != nextAssignee {
+			_ = createFindingEvent(c, h.db, id, "assignee_changed", fiber.Map{
+				"from": prevAssignee,
+				"to":   nextAssignee,
+			})
+		}
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapFindingModel(*updated)})
@@ -281,7 +401,246 @@ func (h *FindingsHandler) Delete(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
 
+	_ = createFindingEvent(c, h.db, id, "deleted", fiber.Map{
+		"deleted_at": deleted.DeletedAt.Format(timeFormatRFC3339()),
+	})
+
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapFindingModel(*deleted)})
+}
+
+func (h *FindingsHandler) AddComment(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid finding id"})
+	}
+
+	var req CreateCommentRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid request body"})
+	}
+	if err := h.validator.Struct(req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+
+	authorID := userIDFromContext(c)
+	comment := &models.FindingComment{
+		FindingID: id,
+		AuthorID:  authorID,
+		Body:      strings.TrimSpace(req.Body),
+	}
+	if err := storage.CreateFindingComment(c.Context(), h.db, comment); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to create comment"})
+	}
+	_ = createFindingEvent(c, h.db, id, "comment_added", fiber.Map{
+		"comment_id": comment.ID.String(),
+	})
+
+	return c.Status(http.StatusCreated).JSON(fiber.Map{"success": true})
+}
+
+func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
+	var req BulkActionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid request body"})
+	}
+	if err := h.validator.Struct(req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+
+	isAdmin := middleware.HasRole(c, "admin")
+	isAnalyst := middleware.HasRole(c, "analyst")
+	if !isAdmin && !isAnalyst {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "insufficient role"})
+	}
+
+	ids := []uuid.UUID{}
+	for _, raw := range req.IDs {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid id in ids"})
+		}
+		ids = append(ids, parsed)
+	}
+
+	snapshots, err := storage.ListFindingsByIDs(c.Context(), h.db, ids)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
+	}
+
+	switch req.Action {
+	case "set_status":
+		statusValue, _ := req.Payload["status"].(string)
+		statusValue = strings.TrimSpace(statusValue)
+		if err := validateFindingStatus(statusValue); err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid status"})
+		}
+		if _, err := storage.BulkUpdateFindingStatus(c.Context(), h.db, ids, statusValue); err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update findings"})
+		}
+		for _, snapshot := range snapshots {
+			if snapshot.Status != statusValue {
+				_ = createFindingEvent(c, h.db, snapshot.ID, "status_changed", fiber.Map{
+					"from": snapshot.Status,
+					"to":   statusValue,
+					"bulk": true,
+				})
+			}
+		}
+	case "assign":
+		var assigneeID *uuid.UUID
+		if value, ok := req.Payload["userId"].(string); ok && strings.TrimSpace(value) != "" {
+			parsed, err := uuid.Parse(value)
+			if err != nil {
+				return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid userId"})
+			}
+			assigneeID = &parsed
+		}
+		if _, err := storage.BulkUpdateFindingAssignee(c.Context(), h.db, ids, assigneeID); err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update assignee"})
+		}
+		for _, snapshot := range snapshots {
+			prevAssignee := ""
+			if snapshot.AssigneeID.Valid {
+				prevAssignee = snapshot.AssigneeID.UUID.String()
+			}
+			nextAssignee := ""
+			if assigneeID != nil {
+				nextAssignee = assigneeID.String()
+			}
+			if prevAssignee != nextAssignee {
+				_ = createFindingEvent(c, h.db, snapshot.ID, "assignee_changed", fiber.Map{
+					"from": prevAssignee,
+					"to":   nextAssignee,
+					"bulk": true,
+				})
+			}
+		}
+	case "dismiss":
+		statusValue, _ := req.Payload["status"].(string)
+		statusValue = strings.TrimSpace(statusValue)
+		if statusValue == "" {
+			statusValue = models.StatusFalsePositive
+		}
+		if statusValue != models.StatusFalsePositive && statusValue != models.StatusOutOfScope {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dismiss status"})
+		}
+		if _, err := storage.BulkUpdateFindingStatus(c.Context(), h.db, ids, statusValue); err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update findings"})
+		}
+		for _, snapshot := range snapshots {
+			if snapshot.Status != statusValue {
+				_ = createFindingEvent(c, h.db, snapshot.ID, "status_changed", fiber.Map{
+					"from": snapshot.Status,
+					"to":   statusValue,
+					"bulk": true,
+				})
+			}
+		}
+	default:
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "unsupported action"})
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
+}
+
+func (h *FindingsHandler) GetDuplicates(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid finding id"})
+	}
+
+	group, err := storage.GetFindingDuplicateGroup(c.Context(), h.db, id)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch duplicates"})
+	}
+	if group == nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapDuplicateGroup(group)})
+}
+
+func (h *FindingsHandler) MakeMaster(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid finding id"})
+	}
+
+	isAdmin := middleware.HasRole(c, "admin")
+	isAnalyst := middleware.HasRole(c, "analyst")
+	if !isAdmin && !isAnalyst {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "insufficient role"})
+	}
+
+	tx, err := h.db.BeginTx(c.Context(), nil)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to start transaction"})
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var duplicateID uuid.NullUUID
+	row := tx.QueryRowContext(c.Context(), `SELECT duplicate_id FROM findings WHERE id = $1 AND deleted_at IS NULL`, id)
+	if scanErr := row.Scan(&duplicateID); scanErr != nil {
+		if scanErr == sql.ErrNoRows {
+			return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
+		}
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch finding"})
+	}
+
+	if !duplicateID.Valid {
+		return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "message": "already master"})
+	}
+
+	oldMasterID := duplicateID.UUID
+	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = NULL, status = $1 WHERE id = $2`, models.StatusUnderReview, id); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to promote master"})
+	}
+	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = $1, status = $2 WHERE duplicate_id = $3 AND id <> $1`, id, models.StatusDuplicate, oldMasterID); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to reassign duplicates"})
+	}
+	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = $1, status = $2 WHERE id = $3`, id, models.StatusDuplicate, oldMasterID); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to reassign master"})
+	}
+
+	if err = tx.Commit(); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to save master"})
+	}
+
+	_ = createFindingEvent(c, h.db, id, "duplicate_promoted", fiber.Map{
+		"previous_master": oldMasterID.String(),
+	})
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
+}
+
+func (h *FindingsHandler) UnlinkDuplicate(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid finding id"})
+	}
+
+	isAdmin := middleware.HasRole(c, "admin")
+	isAnalyst := middleware.HasRole(c, "analyst")
+	if !isAdmin && !isAnalyst {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "insufficient role"})
+	}
+
+	result, err := h.db.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = NULL, status = $1 WHERE id = $2 AND deleted_at IS NULL`, models.StatusUnderReview, id)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to unlink duplicate"})
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
+	}
+
+	_ = createFindingEvent(c, h.db, id, "duplicate_unlinked", fiber.Map{})
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
 }
 
 func mapFindingListItem(item storage.FindingListItem) FindingResponse {
@@ -295,6 +654,16 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 		value := item.ProductName.String
 		productName = &value
 	}
+	var assigneeID *string
+	if item.AssigneeID.Valid {
+		value := item.AssigneeID.UUID.String()
+		assigneeID = &value
+	}
+	var importJobID *string
+	if item.ImportJobID.Valid {
+		value := item.ImportJobID.UUID.String()
+		importJobID = &value
+	}
 	return FindingResponse{
 		ID:          item.ID.String(),
 		Title:       item.Title,
@@ -302,6 +671,8 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 		Status:      item.Status,
 		ProductID:   productID,
 		ProductName: productName,
+		AssigneeID:  assigneeID,
+		ImportJobID: importJobID,
 		CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339()),
 		UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339()),
 	}
@@ -323,6 +694,16 @@ func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 		value := item.DeletedAt.Time.Format(timeFormatRFC3339())
 		deletedAt = &value
 	}
+	var assigneeID *string
+	if item.AssigneeID.Valid {
+		value := item.AssigneeID.UUID.String()
+		assigneeID = &value
+	}
+	var importJobID *string
+	if item.ImportJobID.Valid {
+		value := item.ImportJobID.UUID.String()
+		importJobID = &value
+	}
 	var description *string
 	if item.Description.Valid {
 		value := item.Description.String
@@ -332,10 +713,13 @@ func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 		ID:          item.ID.String(),
 		Title:       item.Title,
 		Description: description,
+		Fingerprint: &item.Fingerprint,
 		Severity:    item.Severity,
 		Status:      item.Status,
 		ProductID:   productID,
 		ProductName: productName,
+		AssigneeID:  assigneeID,
+		ImportJobID: importJobID,
 		CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339()),
 		UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339()),
 		DeletedAt:   deletedAt,
@@ -348,6 +732,16 @@ func mapFindingModel(item models.Finding) FindingResponse {
 		value := item.ProductID.String()
 		productID = &value
 	}
+	var assigneeID *string
+	if item.AssigneeID != nil {
+		value := item.AssigneeID.String()
+		assigneeID = &value
+	}
+	var importJobID *string
+	if item.ImportJobID != nil {
+		value := item.ImportJobID.String()
+		importJobID = &value
+	}
 	var deletedAt *string
 	if item.DeletedAt != nil {
 		value := item.DeletedAt.Format(timeFormatRFC3339())
@@ -357,9 +751,12 @@ func mapFindingModel(item models.Finding) FindingResponse {
 		ID:          item.ID.String(),
 		Title:       item.Title,
 		Description: item.Description,
+		Fingerprint: &item.Fingerprint,
 		Severity:    item.Severity,
 		Status:      item.Status,
 		ProductID:   productID,
+		AssigneeID:  assigneeID,
+		ImportJobID: importJobID,
 		CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339()),
 		UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339()),
 		DeletedAt:   deletedAt,
@@ -388,11 +785,117 @@ func validateFindingSeverity(severity string) error {
 
 func validateFindingStatus(status string) error {
 	switch status {
-	case "new", "duplicate", "resolved", "ignored":
+	case "new",
+		"under_review",
+		"confirmed",
+		"false_positive",
+		"out_of_scope",
+		"risk_accepted",
+		"mitigated",
+		"duplicate":
 		return nil
 	default:
 		return fmt.Errorf("invalid status")
 	}
+}
+
+func mapFindingComments(items []storage.FindingCommentItem) []FindingCommentResponse {
+	comments := make([]FindingCommentResponse, 0, len(items))
+	for _, item := range items {
+		var authorID *string
+		if item.AuthorID.Valid {
+			value := item.AuthorID.UUID.String()
+			authorID = &value
+		}
+		var author *string
+		if item.AuthorUsername.Valid {
+			value := item.AuthorUsername.String
+			author = &value
+		}
+		comments = append(comments, FindingCommentResponse{
+			ID:        item.ID.String(),
+			AuthorID:  authorID,
+			Author:    author,
+			Body:      item.Body,
+			CreatedAt: item.CreatedAt.Format(timeFormatRFC3339()),
+		})
+	}
+	return comments
+}
+
+func mapFindingCommentItem(item storage.FindingCommentItem) FindingCommentResponse {
+	var authorID *string
+	if item.AuthorID.Valid {
+		value := item.AuthorID.UUID.String()
+		authorID = &value
+	}
+	var author *string
+	if item.AuthorUsername.Valid {
+		value := item.AuthorUsername.String
+		author = &value
+	}
+	return FindingCommentResponse{
+		ID:        item.ID.String(),
+		AuthorID:  authorID,
+		Author:    author,
+		Body:      item.Body,
+		CreatedAt: item.CreatedAt.Format(timeFormatRFC3339()),
+	}
+}
+
+func mapFindingEvents(items []storage.FindingEventItem) []FindingEventResponse {
+	events := make([]FindingEventResponse, 0, len(items))
+	for _, item := range items {
+		var actorID *string
+		if item.ActorID.Valid {
+			value := item.ActorID.UUID.String()
+			actorID = &value
+		}
+		var actor *string
+		if item.ActorUsername.Valid {
+			value := item.ActorUsername.String
+			actor = &value
+		}
+		payload := map[string]interface{}{}
+		if len(item.Payload) > 0 {
+			_ = json.Unmarshal(item.Payload, &payload)
+		}
+		events = append(events, FindingEventResponse{
+			ID:        item.ID.String(),
+			ActorID:   actorID,
+			Actor:     actor,
+			EventType: item.EventType,
+			Payload:   payload,
+			CreatedAt: item.CreatedAt.Format(timeFormatRFC3339()),
+		})
+	}
+	return events
+}
+
+func mapDuplicateGroup(group *storage.DuplicateGroup) *DuplicateGroupResponse {
+	if group == nil {
+		return nil
+	}
+	duplicates := make([]FindingResponse, 0, len(group.Duplicates))
+	for _, item := range group.Duplicates {
+		duplicates = append(duplicates, mapFindingDetail(item))
+	}
+	return &DuplicateGroupResponse{
+		Master:     mapFindingDetail(group.Master),
+		Duplicates: duplicates,
+	}
+}
+
+func createFindingEvent(c *fiber.Ctx, db *sql.DB, findingID uuid.UUID, eventType string, payload fiber.Map) error {
+	actorID := userIDFromContext(c)
+	jsonPayload, _ := json.Marshal(payload)
+	event := &models.FindingEvent{
+		FindingID: findingID,
+		ActorID:   actorID,
+		EventType: eventType,
+		Payload:   jsonPayload,
+	}
+	return storage.CreateFindingEvent(c.Context(), db, event)
 }
 
 func timeFormatRFC3339() string {
