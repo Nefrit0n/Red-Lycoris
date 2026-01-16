@@ -551,7 +551,7 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 					TargetType: "finding",
 					TargetID:   stringPointer(snapshot.ID.String()),
 					Scope:      "product",
-					ScopeID:    nullableUUID(snapshot.ProductID),
+					ScopeID:    nil,
 				}, map[string]interface{}{
 					"changes": map[string]interface{}{
 						"status": map[string]interface{}{
@@ -598,7 +598,7 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 					TargetType: "finding",
 					TargetID:   stringPointer(snapshot.ID.String()),
 					Scope:      "product",
-					ScopeID:    nullableUUID(snapshot.ProductID),
+					ScopeID:    nil,
 				}, map[string]interface{}{
 					"changes": map[string]interface{}{
 						"assignee_id": map[string]interface{}{
@@ -637,7 +637,7 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 					TargetType: "finding",
 					TargetID:   stringPointer(snapshot.ID.String()),
 					Scope:      "product",
-					ScopeID:    nullableUUID(snapshot.ProductID),
+					ScopeID:    nil,
 				}, map[string]interface{}{
 					"changes": map[string]interface{}{
 						"status": map[string]interface{}{
