@@ -7,6 +7,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { fetchFindings } from "../api/findings";
 import FiltersPanel from "../components/FiltersPanel";
 import FindingsTable from "../components/FindingsTable";
@@ -18,6 +19,7 @@ import {
 } from "../types/findings";
 
 const FindingsList = () => {
+  const location = useLocation();
   // ⚠️ Никогда не undefined
   const [data, setData] = useState<Finding[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -40,6 +42,30 @@ const FindingsList = () => {
     useState<"asc" | "desc">("desc");
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const queryProductId = params.get("productId");
+    if (queryProductId) {
+      setProductId(queryProductId);
+      setPage(0);
+      return;
+    }
+
+    const raw = localStorage.getItem("lotus_warden_last_upload");
+    if (!raw) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as { productId?: string | null };
+      if (parsed.productId) {
+        setProductId(parsed.productId);
+        setPage(0);
+      }
+    } finally {
+      localStorage.removeItem("lotus_warden_last_upload");
+    }
+  }, [location.search]);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {

@@ -15,6 +15,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { uploadScan, UploadScanResponse } from "../api/scans";
 
 interface UploadHistoryItem extends UploadScanResponse {
@@ -24,8 +25,10 @@ interface UploadHistoryItem extends UploadScanResponse {
 }
 
 const HISTORY_KEY = "lotus_warden_upload_history";
+const LAST_UPLOAD_KEY = "lotus_warden_last_upload";
 
 const ScanUploadPage = () => {
+  const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [scannerType, setScannerType] = useState<string>("");
   const [productName, setProductName] = useState<string>("");
@@ -76,11 +79,27 @@ const ScanUploadPage = () => {
       const updated = [entry, ...history].slice(0, 10);
       setHistory(updated);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      localStorage.setItem(
+        LAST_UPLOAD_KEY,
+        JSON.stringify({ productId: result.productId ?? null })
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewFindings = () => {
+    const params = new URLSearchParams();
+    if (success?.productId) {
+      params.set("productId", success.productId);
+    }
+    const search = params.toString();
+    navigate({
+      pathname: "/findings",
+      search: search ? `?${search}` : "",
+    });
   };
 
   return (
@@ -160,7 +179,18 @@ const ScanUploadPage = () => {
 
               {error && <Alert severity="error">{error}</Alert>}
               {success && (
-                <Alert severity="success">
+                <Alert
+                  severity="success"
+                  action={
+                    <Button
+                      color="inherit"
+                      size="small"
+                      onClick={handleViewFindings}
+                    >
+                      Перейти к находкам
+                    </Button>
+                  }
+                >
                   Загружено: создано находок {success.createdFindings}, дубликатов{" "}
                   {success.duplicates}.
                 </Alert>
