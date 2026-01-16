@@ -2,6 +2,7 @@ import {
   AppBar,
   Box,
   Button,
+  Stack,
   Toolbar,
   Typography,
 } from "@mui/material";
@@ -34,9 +35,13 @@ const TopBar = ({ onLoggedOut }: TopBarProps) => {
             Управление находками уязвимостей
           </Typography>
         </Box>
-        <Button variant="outlined" onClick={handleLogout} aria-label="Выйти из системы">
-          Выйти
-        </Button>
+        <Stack direction="row" spacing={2}>
+          <Button variant="text" onClick={() => navigate("/findings")}>Findings</Button>
+          <Button variant="text" onClick={() => navigate("/scans/upload")}>Upload Scan</Button>
+          <Button variant="outlined" onClick={handleLogout} aria-label="Выйти из системы">
+            Выйти
+          </Button>
+        </Stack>
       </Toolbar>
     </AppBar>
   );

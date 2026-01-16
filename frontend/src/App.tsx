@@ -5,6 +5,7 @@ import FindingDetailPage from "./pages/FindingDetail";
 import FindingsList from "./pages/FindingsList";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import LoginPage from "./pages/LoginPage";
+import ScanUploadPage from "./pages/ScanUploadPage";
 
 const App = () => {
   return (
@@ -18,6 +19,7 @@ const App = () => {
           <Route path="/dashboard" element={<FindingsList />} />
           <Route path="/findings" element={<FindingsList />} />
           <Route path="/findings/:id" element={<FindingDetailPage />} />
+          <Route path="/scans/upload" element={<ScanUploadPage />} />
         </Route>
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
