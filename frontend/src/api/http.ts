@@ -1,5 +1,6 @@
 const TOKEN_KEY = "lotus_warden_token";
 
+
 export const getToken = (): string | null => {
   return localStorage.getItem(TOKEN_KEY);
 };
@@ -12,33 +13,46 @@ export const clearToken = (): void => {
   localStorage.removeItem(TOKEN_KEY);
 };
 
-export const getAuthHeaders = (): Record<string, string> => {
+export const getAuthHeaders = (): HeadersInit => {
   const token = getToken();
-  if (!token) {
-    return {};
-  }
-  return {
-    Authorization: `Bearer ${token}`,
-  };
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-export const parseApiResponse = async <T>(response: Response): Promise<T> => {
-  let payload: any;
+/**
+ * JSON requests only
+ */
+export const getJsonHeaders = (): HeadersInit => ({
+  ...getAuthHeaders(),
+  "Content-Type": "application/json",
+});
 
-  try {
-    payload = await response.json();
-  } catch {
-    // backend вернул не-JSON (nginx, proxy, 502, etc.)
-    throw new Error(`Invalid server response (${response.status})`);
+
+export const parseApiResponse = async <T>(response: Response): Promise<T> => {
+  const status = response.status;
+  const contentType = response.headers.get("content-type") || "";
+
+  // 204 No Content
+  if (status === 204) {
+    return {} as T;
   }
 
+  // Non-JSON response → show raw text
+  if (!contentType.includes("application/json")) {
+    const text = await response.text();
+    throw new Error(
+      `Unexpected response (${status}): ${text.slice(0, 300)}`
+    );
+  }
+
+  const payload = await response.json();
+
+  // Legacy wrapper support
   if (payload && typeof payload === "object" && "success" in payload) {
     if (!payload.success) {
       throw new Error(payload.error || "Ошибка запроса");
     }
-    return payload as T;
+    return (payload.data ?? payload) as T;
   }
 
-  // Если backend вернул "чистый" JSON без success
   return payload as T;
 };

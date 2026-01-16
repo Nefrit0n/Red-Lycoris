@@ -4,15 +4,20 @@ import {
   FindingDetail,
   FindingStatus,
 } from "../types/findings";
-import { getAuthHeaders, parseApiResponse } from "./http";
+import {
+  getAuthHeaders,
+  getJsonHeaders,
+  parseApiResponse,
+} from "./http";
 
 export const fetchFindings = async (
   params: FetchFindingsParams,
   signal?: AbortSignal
 ): Promise<ApiResponse> => {
-  const searchParams = new URLSearchParams();
-  searchParams.set("page", params.page.toString());
-  searchParams.set("pageSize", params.pageSize.toString());
+  const searchParams = new URLSearchParams({
+    page: params.page.toString(),
+    pageSize: params.pageSize.toString(),
+  });
 
   if (params.filterProductId) {
     searchParams.set("productId", params.filterProductId);
@@ -30,19 +35,21 @@ export const fetchFindings = async (
     searchParams.set("sortOrder", params.sortOrder);
   }
 
-  const response = await fetch(`/api/v1/findings?${searchParams.toString()}`, {
+  const response = await fetch(`/api/v1/findings?${searchParams}`, {
     method: "GET",
     signal,
-    headers: {
-      ...getAuthHeaders(),
-    },
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
     throw new Error("Не удалось загрузить список находок");
   }
 
-  const payload = await parseApiResponse<{ data: ApiResponse["data"]; total: number }>(response);
+  const payload = await parseApiResponse<{
+    data: ApiResponse["data"];
+    total: number;
+  }>(response);
+
   return { data: payload.data, total: payload.total };
 };
 
@@ -53,9 +60,7 @@ export const fetchFindingDetail = async (
   const response = await fetch(`/api/v1/findings/${id}`, {
     method: "GET",
     signal,
-    headers: {
-      ...getAuthHeaders(),
-    },
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
@@ -72,10 +77,7 @@ export const updateFindingStatus = async (
 ): Promise<FindingDetail> => {
   const response = await fetch(`/api/v1/findings/${id}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...getAuthHeaders(),
-    },
+    headers: getJsonHeaders(),
     body: JSON.stringify({ status }),
   });
 
