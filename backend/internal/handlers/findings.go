@@ -69,6 +69,13 @@ type DuplicateGroupResponse struct {
 	Duplicates []FindingResponse `json:"duplicates"`
 }
 
+type FindingNeighborsResponse struct {
+	PrevID   *string `json:"prevId,omitempty"`
+	NextID   *string `json:"nextId,omitempty"`
+	Position int     `json:"position"`
+	Total    int     `json:"total"`
+}
+
 type CreateFindingRequest struct {
 	Title       string  `json:"title" validate:"required,max=200"`
 	Description *string `json:"description,omitempty" validate:"omitempty,max=2000"`
@@ -267,6 +274,81 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		Comments:        mapFindingComments(comments),
 		Events:          mapFindingEvents(events),
 		Duplicates:      mapDuplicateGroup(duplicates),
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})
+}
+
+// GetFindingNeighbors godoc
+// @Summary Get finding neighbors
+// @Description Get previous/next finding IDs within the same filtered list
+// @Tags findings
+// @Produce json
+// @Param id path string true "Finding ID"
+// @Param severity query string false "Severity"
+// @Param status query string false "Status"
+// @Param productId query string false "Product ID"
+// @Param product query string false "Product identifier"
+// @Param sortField query string false "Sort field"
+// @Param sortOrder query string false "Sort order"
+// @Success 200 {object} fiber.Map
+// @Failure 400 {object} fiber.Map
+// @Failure 404 {object} fiber.Map
+// @Router /api/v1/findings/{id}/neighbors [get]
+func (h *FindingsHandler) Neighbors(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid finding id"})
+	}
+
+	productID, err := resolveProductFilter(
+		c.Context(),
+		h.db,
+		strings.TrimSpace(c.Query("productId")),
+		strings.TrimSpace(c.Query("product")),
+	)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+
+	var importJobID *uuid.UUID
+	if importJobParam := strings.TrimSpace(c.Query("import_job_id")); importJobParam != "" {
+		parsed, err := uuid.Parse(importJobParam)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid import_job_id"})
+		}
+		importJobID = &parsed
+	}
+
+	filters := storage.FindingFilters{
+		Severity:    strings.TrimSpace(c.Query("severity")),
+		Status:      strings.TrimSpace(c.Query("status")),
+		ProductID:   productID,
+		ImportJobID: importJobID,
+		Query:       strings.TrimSpace(c.Query("q")),
+		SortField:   strings.TrimSpace(c.Query("sortField")),
+		SortOrder:   strings.TrimSpace(c.Query("sortOrder")),
+	}
+
+	neighbors, err := storage.GetFindingNeighbors(c.Context(), h.db, id, filters)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch neighbors"})
+	}
+	if neighbors == nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
+	}
+
+	resp := FindingNeighborsResponse{
+		Position: neighbors.Position,
+		Total:    neighbors.Total,
+	}
+	if neighbors.PrevID != nil {
+		value := neighbors.PrevID.String()
+		resp.PrevID = &value
+	}
+	if neighbors.NextID != nil {
+		value := neighbors.NextID.String()
+		resp.NextID = &value
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})
