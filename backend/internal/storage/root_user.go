@@ -12,6 +12,7 @@ import (
 const defaultRootEmail = "root@localhost"
 const defaultRootPassword = "root"
 const adminRoleName = "admin"
+const rootUsername = "root"
 
 func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, rootPassword string) error {
 	resolvedEmail := strings.TrimSpace(rootEmail)
@@ -39,14 +40,29 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 
 	var userID uuid.UUID
 	var hasUser bool
-	row := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE email = $1`, resolvedEmail)
-	if scanErr := row.Scan(&userID); scanErr != nil {
+	var existingEmail string
+	var existingHashedPassword string
+	var passwordChanged bool
+	row := tx.QueryRowContext(ctx, `SELECT id, email, hashed_password, password_changed FROM users WHERE email = $1`, resolvedEmail)
+	if scanErr := row.Scan(&userID, &existingEmail, &existingHashedPassword, &passwordChanged); scanErr != nil {
 		if scanErr != sql.ErrNoRows {
 			return scanErr
 		}
 	} else {
 		hasUser = true
 	}
+
+	if !hasUser {
+		usernameRow := tx.QueryRowContext(ctx, `SELECT id, email, hashed_password, password_changed FROM users WHERE username = $1`, "root")
+		if scanErr := usernameRow.Scan(&userID, &existingEmail, &existingHashedPassword, &passwordChanged); scanErr != nil {
+			if scanErr != sql.ErrNoRows {
+				return scanErr
+			}
+		} else {
+			hasUser = true
+		}
+	}
+
 
 	if !hasUser {
 		hashed, hashErr := bcrypt.GenerateFromPassword([]byte(resolvedPassword), bcrypt.DefaultCost)
@@ -65,6 +81,24 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 		)
 		if scanErr := insertRow.Scan(&userID); scanErr != nil {
 			return scanErr
+		}
+	} else {
+		if existingEmail != "" && existingEmail != resolvedEmail {
+			if _, err = tx.ExecContext(ctx, `UPDATE users SET email = $1 WHERE id = $2`, resolvedEmail, userID); err != nil {
+				return err
+			}
+		}
+
+		if !passwordChanged && existingHashedPassword != "" {
+			if err = bcrypt.CompareHashAndPassword([]byte(existingHashedPassword), []byte(resolvedPassword)); err != nil {
+				hashed, hashErr := bcrypt.GenerateFromPassword([]byte(resolvedPassword), bcrypt.DefaultCost)
+				if hashErr != nil {
+					return hashErr
+				}
+				if _, err = tx.ExecContext(ctx, `UPDATE users SET hashed_password = $1, password_changed = FALSE WHERE id = $2`, string(hashed), userID); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
