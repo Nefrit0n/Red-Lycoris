@@ -70,4 +70,8 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB) {
 	secured.Get("/products", productsHandler.List)
 	secured.Get("/products/:id", productsHandler.Get)
 	secured.Post("/products", middleware.AuthorizeRole("admin", "analyst"), productsHandler.Create)
+
+	admin := secured.Group("/admin", middleware.AuthorizeRole("admin"))
+	auditLogHandler := handlers.NewAuditLogHandler(db)
+	admin.Get("/audit-log", auditLogHandler.List)
 }
