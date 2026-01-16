@@ -23,7 +23,10 @@ const severityLabels: Record<FindingSeverity, string> = {
   critical: "Critical",
 };
 
-const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warning"> = {
+const statusColors: Record<
+  FindingStatus,
+  "default" | "info" | "success" | "warning"
+> = {
   new: "info",
   duplicate: "default",
   resolved: "success",
@@ -33,8 +36,8 @@ const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warn
 interface FindingsTableProps {
   data: Finding[];
   selectedIds: string[];
-  sortField: keyof Finding | "";
-  sortOrder: "asc" | "desc" | "";
+  sortField: keyof Finding;
+  sortOrder: "asc" | "desc";
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (id: string) => void;
   onSortChange: (field: keyof Finding) => void;
@@ -49,27 +52,39 @@ const FindingsTable = ({
   onToggleOne,
   onSortChange,
 }: FindingsTableProps) => {
-  const allSelected = data.length > 0 && selectedIds.length === data.length;
-  const someSelected = selectedIds.length > 0 && !allSelected;
+  // 🛡️ ВТОРИЧНАЯ ЗАЩИТА
+  const safeData = Array.isArray(data) ? data : [];
+
+  const allSelected =
+    safeData.length > 0 &&
+    selectedIds.length === safeData.length;
+
+  const someSelected =
+    selectedIds.length > 0 && !allSelected;
 
   return (
-    <TableContainer aria-label="Таблица находок">
-      <Table size="medium" stickyHeader aria-label="Список находок">
+    <TableContainer>
+      <Table stickyHeader>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox">
               <Checkbox
                 checked={allSelected}
                 indeterminate={someSelected}
-                onChange={(event) => onToggleAll(event.target.checked)}
-                inputProps={{ "aria-label": "Выбрать все находки" }}
+                onChange={(e) =>
+                  onToggleAll(e.target.checked)
+                }
               />
             </TableCell>
             <TableCell>ID</TableCell>
             <TableCell>
               <TableSortLabel
                 active={sortField === "title"}
-                direction={sortField === "title" ? sortOrder || "asc" : "asc"}
+                direction={
+                  sortField === "title"
+                    ? sortOrder
+                    : "asc"
+                }
                 onClick={() => onSortChange("title")}
               >
                 Название
@@ -79,9 +94,13 @@ const FindingsTable = ({
               <TableSortLabel
                 active={sortField === "productName"}
                 direction={
-                  sortField === "productName" ? sortOrder || "asc" : "asc"
+                  sortField === "productName"
+                    ? sortOrder
+                    : "asc"
                 }
-                onClick={() => onSortChange("productName")}
+                onClick={() =>
+                  onSortChange("productName")
+                }
               >
                 Приложение
               </TableSortLabel>
@@ -89,17 +108,29 @@ const FindingsTable = ({
             <TableCell>
               <TableSortLabel
                 active={sortField === "severity"}
-                direction={sortField === "severity" ? sortOrder || "asc" : "asc"}
-                onClick={() => onSortChange("severity")}
+                direction={
+                  sortField === "severity"
+                    ? sortOrder
+                    : "asc"
+                }
+                onClick={() =>
+                  onSortChange("severity")
+                }
               >
-                Уровень критичности
+                Критичность
               </TableSortLabel>
             </TableCell>
             <TableCell>
               <TableSortLabel
                 active={sortField === "status"}
-                direction={sortField === "status" ? sortOrder || "asc" : "asc"}
-                onClick={() => onSortChange("status")}
+                direction={
+                  sortField === "status"
+                    ? sortOrder
+                    : "asc"
+                }
+                onClick={() =>
+                  onSortChange("status")
+                }
               >
                 Статус
               </TableSortLabel>
@@ -108,69 +139,67 @@ const FindingsTable = ({
               <TableSortLabel
                 active={sortField === "createdAt"}
                 direction={
-                  sortField === "createdAt" ? sortOrder || "asc" : "asc"
+                  sortField === "createdAt"
+                    ? sortOrder
+                    : "asc"
                 }
-                onClick={() => onSortChange("createdAt")}
+                onClick={() =>
+                  onSortChange("createdAt")
+                }
               >
-                Дата обнаружения
+                Дата
               </TableSortLabel>
             </TableCell>
           </TableRow>
         </TableHead>
+
         <TableBody>
-          {data.length === 0 ? (
+          {safeData.length === 0 ? (
             <TableRow>
               <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
-                <Typography variant="body1" color="text.secondary">
+                <Typography color="text.secondary">
                   Ничего не найдено
                 </Typography>
               </TableCell>
             </TableRow>
           ) : (
-            data.map((finding) => {
-              const isSelected = selectedIds.includes(finding.id);
+            safeData.map((f) => {
+              const isSelected =
+                selectedIds.includes(f.id);
 
               return (
                 <TableRow
-                  key={finding.id}
+                  key={f.id}
                   hover
                   selected={isSelected}
-                  sx={{
-                    transition: "background-color 0.2s ease",
-                    "&:hover": {
-                      backgroundColor: "action.hover",
-                    },
-                  }}
                 >
                   <TableCell padding="checkbox">
                     <Checkbox
                       checked={isSelected}
-                      onChange={() => onToggleOne(finding.id)}
-                      inputProps={{
-                        "aria-label": `Выбрать находку ${finding.id}`,
-                      }}
+                      onChange={() =>
+                        onToggleOne(f.id)
+                      }
                     />
                   </TableCell>
-                  <TableCell>{finding.id}</TableCell>
-                  <TableCell>{finding.title}</TableCell>
-                  <TableCell>{finding.productName || "—"}</TableCell>
-                  <TableCell>{severityLabels[finding.severity]}</TableCell>
+                  <TableCell>{f.id}</TableCell>
+                  <TableCell>{f.title}</TableCell>
+                  <TableCell>
+                    {f.productName || "—"}
+                  </TableCell>
+                  <TableCell>
+                    {severityLabels[f.severity]}
+                  </TableCell>
                   <TableCell>
                     <Chip
-                      label={finding.status}
-                      color={statusColors[finding.status]}
+                      label={f.status}
+                      color={statusColors[f.status]}
                       size="small"
-                      sx={{ textTransform: "capitalize" }}
                     />
                   </TableCell>
                   <TableCell>
-                    {new Date(finding.createdAt).toLocaleString("ru-RU", {
-                      year: "numeric",
-                      month: "short",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {new Date(f.createdAt).toLocaleString(
+                      "ru-RU"
+                    )}
                   </TableCell>
                 </TableRow>
               );
