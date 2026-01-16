@@ -19,14 +19,17 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loginError, setLoginError] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setLoginError(false);
+    setPasswordError(false);
 
     if (!loginValue || !password) {
       setLoginError(!loginValue);
+      setPasswordError(!password);
       setError("Заполните логин и пароль");
       return;
     }
@@ -45,6 +48,8 @@ const LoginPage = () => {
       } else {
         setError("Не удалось выполнить вход");
       }
+      setLoginError(true);
+      setPasswordError(true);
     } finally {
       setLoading(false);
     }
@@ -71,7 +76,15 @@ const LoginPage = () => {
             label="Логин, email или домен"
             type="text"
             value={loginValue}
-            onChange={(event) => setLoginValue(event.target.value)}
+            onChange={(event) => {
+              setLoginValue(event.target.value);
+              if (loginError) {
+                setLoginError(false);
+              }
+              if (error) {
+                setError(null);
+              }
+            }}
             margin="normal"
             fullWidth
             required
@@ -83,11 +96,21 @@ const LoginPage = () => {
             label="Пароль"
             type="password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              if (passwordError) {
+                setPasswordError(false);
+              }
+              if (error) {
+                setError(null);
+              }
+            }}
             margin="normal"
             fullWidth
             required
             autoComplete="current-password"
+            error={passwordError}
+            helperText={passwordError ? "Введите пароль" : " "}
           />
 
           <Button
