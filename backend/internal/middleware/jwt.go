@@ -9,9 +9,9 @@ import (
 )
 
 type JWTClaims struct {
-	UserID     string   `json:"user_id"`
-	Roles      []string `json:"roles"`
-	PwdChanged bool     `json:"pwd_changed"`
+	UserID              string   `json:"user_id"`
+	Roles               []string `json:"roles"`
+	MustChangePassword  bool     `json:"must_change_password"`
 	jwt.RegisteredClaims
 }
 
@@ -47,7 +47,7 @@ func RequireJWT(secret string) fiber.Handler {
 
 		path := c.Path()
 
-		if !claims.PwdChanged &&
+		if claims.MustChangePassword &&
 			!strings.HasPrefix(path, "/api/v1/auth/change-password") &&
 			!strings.HasPrefix(path, "/api/v1/auth/logout") {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{

@@ -19,6 +19,8 @@ type FindingListItem struct {
 	Status      string
 	ProductID   uuid.NullUUID
 	ProductName sql.NullString
+	AssigneeID  uuid.NullUUID
+	ImportJobID uuid.NullUUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -27,23 +29,28 @@ type FindingDetail struct {
 	ID          uuid.UUID
 	Title       string
 	Description sql.NullString
+	Fingerprint string
 	Severity    string
 	Status      string
 	ProductID   uuid.NullUUID
 	ProductName sql.NullString
+	AssigneeID  uuid.NullUUID
+	ImportJobID uuid.NullUUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   sql.NullTime
 }
 
 type FindingFilters struct {
-	Severity  string
-	Status    string
-	ProductID *uuid.UUID
-	SortField string
-	SortOrder string
-	Limit     int
-	Offset    int
+	Severity    string
+	Status      string
+	ProductID   *uuid.UUID
+	ImportJobID *uuid.UUID
+	Query       string
+	SortField   string
+	SortOrder   string
+	Limit       int
+	Offset      int
 }
 
 func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]FindingListItem, int, error) {
@@ -62,6 +69,14 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		args = append(args, *filters.ProductID)
 		whereClause += fmt.Sprintf(" AND f.product_id = $%d", len(args))
 	}
+	if filters.ImportJobID != nil {
+		args = append(args, *filters.ImportJobID)
+		whereClause += fmt.Sprintf(" AND f.import_job_id = $%d", len(args))
+	}
+	if filters.Query != "" {
+		args = append(args, "%"+filters.Query+"%")
+		whereClause += fmt.Sprintf(" AND (f.title ILIKE $%d OR f.fingerprint ILIKE $%d OR p.identifier ILIKE $%d)", len(args), len(args), len(args))
+	}
 
 	sortField := "f.created_at"
 	switch filters.SortField {
@@ -73,7 +88,9 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		sortField = "f.severity"
 	case "status":
 		sortField = "f.status"
-	case "updated_at":
+	case "created_at", "createdAt":
+		sortField = "f.created_at"
+	case "updated_at", "updatedAt":
 		sortField = "f.updated_at"
 	}
 
@@ -82,7 +99,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		sortOrder = "ASC"
 	}
 
-	countQuery := "SELECT COUNT(*) FROM findings f " + whereClause
+	countQuery := "SELECT COUNT(*) FROM findings f LEFT JOIN products p ON p.id = f.product_id " + whereClause
 	var total int
 	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -90,7 +107,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 
 	args = append(args, filters.Limit, filters.Offset)
 	listQuery := fmt.Sprintf(`
-		SELECT f.id, f.title, f.severity, f.status, f.product_id, p.name, f.created_at, f.updated_at
+		SELECT f.id, f.title, f.severity, f.status, f.product_id, p.name, f.assignee_id, f.import_job_id, f.created_at, f.updated_at
 		FROM findings f
 		LEFT JOIN products p ON p.id = f.product_id
 		%s
@@ -119,6 +136,8 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.Status,
 			&item.ProductID,
 			&item.ProductName,
+			&item.AssigneeID,
+			&item.ImportJobID,
 			&item.CreatedAt,
 			&item.UpdatedAt,
 		); err != nil {
@@ -136,7 +155,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDetail, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT f.id, f.title, f.description, f.severity, f.status, f.product_id, p.name, f.created_at, f.updated_at, f.deleted_at
+		`SELECT f.id, f.title, f.description, f.fingerprint, f.severity, f.status, f.product_id, p.name, f.assignee_id, f.import_job_id, f.created_at, f.updated_at, f.deleted_at
 		 FROM findings f
 		 LEFT JOIN products p ON p.id = f.product_id
 		 WHERE f.id = $1 AND f.deleted_at IS NULL`,
@@ -148,10 +167,13 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		&detail.ID,
 		&detail.Title,
 		&detail.Description,
+		&detail.Fingerprint,
 		&detail.Severity,
 		&detail.Status,
 		&detail.ProductID,
 		&detail.ProductName,
+		&detail.AssigneeID,
+		&detail.ImportJobID,
 		&detail.CreatedAt,
 		&detail.UpdatedAt,
 		&detail.DeletedAt,
@@ -170,6 +192,7 @@ type UpdateFindingParams struct {
 	Severity    *string
 	Status      *string
 	ProductID   *uuid.UUID
+	AssigneeID  *uuid.UUID
 }
 
 func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateFindingParams) (*models.Finding, error) {
@@ -196,6 +219,10 @@ func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateF
 		args = append(args, *params.ProductID)
 		setClauses = append(setClauses, fmt.Sprintf("product_id = $%d", len(args)))
 	}
+	if params.AssigneeID != nil {
+		args = append(args, *params.AssigneeID)
+		setClauses = append(setClauses, fmt.Sprintf("assignee_id = $%d", len(args)))
+	}
 
 	if len(setClauses) == 0 {
 		return nil, fmt.Errorf("no fields to update")
@@ -210,7 +237,7 @@ func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateF
 		UPDATE findings
 		SET %s
 		WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, created_at, updated_at, deleted_at`,
+		RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, created_at, updated_at, deleted_at`,
 		strings.Join(setClauses, ", "),
 		len(args),
 	)
@@ -234,7 +261,7 @@ func SoftDeleteFinding(ctx context.Context, db *sql.DB, id uuid.UUID) (*models.F
 		`UPDATE findings
 		 SET deleted_at = $1, updated_at = $1
 		 WHERE id = $2 AND deleted_at IS NULL
-		 RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, created_at, updated_at, deleted_at`,
+		 RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, created_at, updated_at, deleted_at`,
 		now,
 		id,
 	)
@@ -255,6 +282,8 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 	var scanResultID uuid.NullUUID
 	var productID uuid.NullUUID
 	var duplicateID uuid.NullUUID
+	var assigneeID uuid.NullUUID
+	var importJobID uuid.NullUUID
 	var description sql.NullString
 	var deletedAt sql.NullTime
 
@@ -268,6 +297,8 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 		&finding.Severity,
 		&finding.Status,
 		&duplicateID,
+		&assigneeID,
+		&importJobID,
 		&finding.CreatedAt,
 		&finding.UpdatedAt,
 		&deletedAt,
@@ -290,6 +321,14 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 	if duplicateID.Valid {
 		value := duplicateID.UUID
 		finding.DuplicateID = &value
+	}
+	if assigneeID.Valid {
+		value := assigneeID.UUID
+		finding.AssigneeID = &value
+	}
+	if importJobID.Valid {
+		value := importJobID.UUID
+		finding.ImportJobID = &value
 	}
 	if deletedAt.Valid {
 		value := deletedAt.Time

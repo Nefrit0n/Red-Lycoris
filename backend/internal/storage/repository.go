@@ -134,15 +134,20 @@ func CreateScanResult(ctx context.Context, db *sql.DB, scanResult *models.ScanRe
 	if scanResult.UploaderID != nil {
 		uploaderID = *scanResult.UploaderID
 	}
+	var importJobID interface{}
+	if scanResult.ImportJobID != nil {
+		importJobID = *scanResult.ImportJobID
+	}
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO scan_results (id, engagement_id, product_id, uploader_id, scanner, raw_report, processed_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO scan_results (id, engagement_id, product_id, uploader_id, import_job_id, scanner, raw_report, processed_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		scanResult.ID,
 		engagementID,
 		productID,
 		uploaderID,
+		importJobID,
 		scanResult.Scanner,
 		rawReport,
 		scanResult.ProcessedAt,
@@ -173,11 +178,19 @@ func CreateFinding(ctx context.Context, db *sql.DB, finding *models.Finding) err
 	if finding.ScanResultID != nil {
 		scanResultID = *finding.ScanResultID
 	}
+	var assigneeID interface{}
+	if finding.AssigneeID != nil {
+		assigneeID = *finding.AssigneeID
+	}
+	var importJobID interface{}
+	if finding.ImportJobID != nil {
+		importJobID = *finding.ImportJobID
+	}
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		finding.ID,
 		scanResultID,
 		productID,
@@ -187,6 +200,8 @@ func CreateFinding(ctx context.Context, db *sql.DB, finding *models.Finding) err
 		finding.Severity,
 		finding.Status,
 		duplicateID,
+		assigneeID,
+		importJobID,
 		finding.CreatedAt,
 		finding.UpdatedAt,
 	)

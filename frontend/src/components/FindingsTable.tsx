@@ -1,6 +1,7 @@
 import {
   Checkbox,
   Chip,
+  Link as MuiLink,
   Table,
   TableBody,
   TableCell,
@@ -10,6 +11,7 @@ import {
   TableSortLabel,
   Typography,
 } from "@mui/material";
+import { Link } from "react-router-dom";
 import {
   Finding,
   FindingSeverity,
@@ -28,9 +30,13 @@ const statusColors: Record<
   "default" | "info" | "success" | "warning"
 > = {
   new: "info",
+  under_review: "warning",
+  confirmed: "success",
+  false_positive: "default",
+  out_of_scope: "default",
+  risk_accepted: "warning",
+  mitigated: "success",
   duplicate: "default",
-  resolved: "success",
-  ignored: "warning",
 };
 
 interface FindingsTableProps {
@@ -182,7 +188,11 @@ const FindingsTable = ({
                     />
                   </TableCell>
                   <TableCell>{f.id}</TableCell>
-                  <TableCell>{f.title}</TableCell>
+                  <TableCell>
+                    <MuiLink component={Link} to={`/findings/${f.id}`} underline="hover">
+                      {f.title}
+                    </MuiLink>
+                  </TableCell>
                   <TableCell>
                     {f.productName || "—"}
                   </TableCell>

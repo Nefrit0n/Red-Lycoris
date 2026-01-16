@@ -36,9 +36,9 @@ type UserProfile struct {
 }
 
 type LoginResponse struct {
-	Token               string      `json:"token"`
-	User                UserProfile `json:"user"`
-	NeedsPasswordChange bool        `json:"needsPasswordChange"`
+	Token              string      `json:"token"`
+	User               UserProfile `json:"user"`
+	MustChangePassword bool        `json:"mustChangePassword"`
 }
 
 type AuthHandler struct {
@@ -91,12 +91,12 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		roles = []string{"user"}
 	}
 
-	needsPasswordChange := user.Email == h.rootEmail && !user.PasswordChanged
+	needsPasswordChange := user.MustChangePassword
 
 	claims := middleware.JWTClaims{
-		UserID:     user.ID.String(),
-		Roles:      roles,
-		PwdChanged: user.PasswordChanged,
+		UserID:             user.ID.String(),
+		Roles:              roles,
+		MustChangePassword: needsPasswordChange,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 		},
@@ -109,9 +109,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}
 
 	resp := LoginResponse{
-		Token: tokenString,
-		User: buildUserProfile(user, roles),
-		NeedsPasswordChange: needsPasswordChange,
+		Token:              tokenString,
+		User:               buildUserProfile(user, roles),
+		MustChangePassword: needsPasswordChange,
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})
@@ -155,11 +155,31 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to hash password"})
 	}
 
-	if err := storage.UpdateUserPassword(c.Context(), h.db, userID, string(hashed), true); err != nil {
+	if err := storage.UpdateUserPassword(c.Context(), h.db, userID, string(hashed), true, false); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update password"})
 	}
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
+	roles, err := storage.GetUserRoles(c.Context(), h.db, userID)
+	if err != nil || len(roles) == 0 {
+		roles = []string{"user"}
+	}
+
+	claims := middleware.JWTClaims{
+		UserID:             user.ID.String(),
+		Roles:              roles,
+		MustChangePassword: false,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(h.jwtSecret))
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to generate token"})
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": fiber.Map{"token": tokenString}})
 }
 
 // POST /api/v1/auth/logout

@@ -43,8 +43,9 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 	var existingEmail string
 	var existingHashedPassword string
 	var passwordChanged bool
-	row := tx.QueryRowContext(ctx, `SELECT id, email, hashed_password, password_changed FROM users WHERE email = $1`, resolvedEmail)
-	if scanErr := row.Scan(&userID, &existingEmail, &existingHashedPassword, &passwordChanged); scanErr != nil {
+	var mustChangePassword bool
+	row := tx.QueryRowContext(ctx, `SELECT id, email, hashed_password, password_changed, must_change_password FROM users WHERE email = $1`, resolvedEmail)
+	if scanErr := row.Scan(&userID, &existingEmail, &existingHashedPassword, &passwordChanged, &mustChangePassword); scanErr != nil {
 		if scanErr != sql.ErrNoRows {
 			return scanErr
 		}
@@ -53,8 +54,8 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 	}
 
 	if !hasUser {
-		usernameRow := tx.QueryRowContext(ctx, `SELECT id, email, hashed_password, password_changed FROM users WHERE username = $1`, "root")
-		if scanErr := usernameRow.Scan(&userID, &existingEmail, &existingHashedPassword, &passwordChanged); scanErr != nil {
+		usernameRow := tx.QueryRowContext(ctx, `SELECT id, email, hashed_password, password_changed, must_change_password FROM users WHERE username = $1`, "root")
+		if scanErr := usernameRow.Scan(&userID, &existingEmail, &existingHashedPassword, &passwordChanged, &mustChangePassword); scanErr != nil {
 			if scanErr != sql.ErrNoRows {
 				return scanErr
 			}
@@ -62,7 +63,6 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 			hasUser = true
 		}
 	}
-
 
 	if !hasUser {
 		hashed, hashErr := bcrypt.GenerateFromPassword([]byte(resolvedPassword), bcrypt.DefaultCost)
@@ -72,8 +72,8 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 
 		insertRow := tx.QueryRowContext(
 			ctx,
-			`INSERT INTO users (username, email, hashed_password, password_changed)
-			 VALUES ($1, $2, $3, FALSE)
+			`INSERT INTO users (username, email, hashed_password, password_changed, must_change_password)
+			 VALUES ($1, $2, $3, FALSE, TRUE)
 			 RETURNING id`,
 			"root",
 			resolvedEmail,
@@ -95,9 +95,15 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 				if hashErr != nil {
 					return hashErr
 				}
-				if _, err = tx.ExecContext(ctx, `UPDATE users SET hashed_password = $1, password_changed = FALSE WHERE id = $2`, string(hashed), userID); err != nil {
+				if _, err = tx.ExecContext(ctx, `UPDATE users SET hashed_password = $1, password_changed = FALSE, must_change_password = TRUE WHERE id = $2`, string(hashed), userID); err != nil {
 					return err
 				}
+			}
+		}
+
+		if !passwordChanged && !mustChangePassword {
+			if _, err = tx.ExecContext(ctx, `UPDATE users SET must_change_password = TRUE WHERE id = $1`, userID); err != nil {
+				return err
 			}
 		}
 	}

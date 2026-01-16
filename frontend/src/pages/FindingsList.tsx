@@ -8,7 +8,9 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { fetchFindings } from "../api/findings";
+import { bulkUpdateFindings, fetchFindings } from "../api/findings";
+import { getCurrentUser } from "../api/auth";
+import BulkActionsBar from "../components/BulkActionsBar";
 import FiltersPanel from "../components/FiltersPanel";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
@@ -31,6 +33,8 @@ const FindingsList = () => {
   const [pageSize, setPageSize] = useState(20);
 
   const [productId, setProductId] = useState("");
+  const [search, setSearch] = useState("");
+  const [importJobId, setImportJobId] = useState("");
   const [filterSeverity, setFilterSeverity] =
     useState<FindingSeverity | "">("");
   const [filterStatus, setFilterStatus] =
@@ -46,6 +50,15 @@ const FindingsList = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const queryProductId = params.get("productId");
+    const importJobId = params.get("import_job_id");
+    if (importJobId) {
+      setSearch("");
+      setProductId("");
+      setImportJobId(importJobId);
+      setPage(0);
+      return;
+    }
+    setImportJobId("");
     if (queryProductId) {
       setProductId(queryProductId);
       setPage(0);
@@ -75,11 +88,13 @@ const FindingsList = () => {
       try {
         const response = await fetchFindings(
           {
-            page: page + 1,
-            pageSize,
+            limit: pageSize,
+            offset: page * pageSize,
             filterProductId: productId,
             filterSeverity,
             filterStatus,
+            search,
+            importJobId,
             sortField,
             sortOrder,
           },
@@ -114,6 +129,8 @@ const FindingsList = () => {
       page,
       pageSize,
       productId,
+      search,
+      importJobId,
       filterSeverity,
       filterStatus,
       sortField,
@@ -129,6 +146,8 @@ const FindingsList = () => {
 
   const handleResetFilters = () => {
     setProductId("");
+    setSearch("");
+    setImportJobId("");
     setFilterSeverity("");
     setFilterStatus("");
     setPage(0);
@@ -157,6 +176,34 @@ const FindingsList = () => {
     );
   };
 
+  const user = getCurrentUser();
+  const canBulk =
+    user?.roles?.includes("admin") || user?.roles?.includes("analyst");
+
+  const handleBulkApply = async (
+    action: "set_status" | "assign" | "dismiss",
+    payload: Record<string, unknown>
+  ) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await bulkUpdateFindings({
+        ids: selectedIds,
+        action,
+        payload,
+      });
+      await fetchData();
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Не удалось выполнить массовую операцию");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
@@ -165,10 +212,15 @@ const FindingsList = () => {
 
       <FiltersPanel
         productId={productId}
+        search={search}
         filterSeverity={filterSeverity}
         filterStatus={filterStatus}
         onProductIdChange={(v) => {
           setProductId(v);
+          setPage(0);
+        }}
+        onSearchChange={(v) => {
+          setSearch(v);
           setPage(0);
         }}
         onSeverityChange={(v) => {
@@ -181,6 +233,13 @@ const FindingsList = () => {
         }}
         onReset={handleResetFilters}
       />
+
+      {canBulk && (
+        <BulkActionsBar
+          selectedCount={selectedIds.length}
+          onApply={handleBulkApply}
+        />
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
