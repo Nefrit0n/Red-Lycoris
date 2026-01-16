@@ -2,6 +2,8 @@ import {
   Checkbox,
   Chip,
   Link as MuiLink,
+  IconButton,
+  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -10,7 +12,12 @@ import {
   TableRow,
   TableSortLabel,
   Typography,
+  Tooltip,
+  Box,
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   Finding,
@@ -47,6 +54,13 @@ interface FindingsTableProps {
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (id: string) => void;
   onSortChange: (field: keyof Finding) => void;
+  loading: boolean;
+  errorMessage: string | null;
+  onRetry: () => void;
+  onResetFilters: () => void;
+  batchMode: boolean;
+  highlightQuery: string;
+  rowCount: number;
 }
 
 const FindingsTable = ({
@@ -57,6 +71,13 @@ const FindingsTable = ({
   onToggleAll,
   onToggleOne,
   onSortChange,
+  loading,
+  errorMessage,
+  onRetry,
+  onResetFilters,
+  batchMode,
+  highlightQuery,
+  rowCount,
 }: FindingsTableProps) => {
   // 🛡️ ВТОРИЧНАЯ ЗАЩИТА
   const safeData = Array.isArray(data) ? data : [];
@@ -67,6 +88,43 @@ const FindingsTable = ({
 
   const someSelected =
     selectedIds.length > 0 && !allSelected;
+
+  const renderHighlightedTitle = (title: string) => {
+    const query = highlightQuery.trim();
+    if (!query) {
+      return title;
+    }
+    const lowerTitle = title.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const parts: ReactNode[] = [];
+    let startIndex = 0;
+    let matchIndex = lowerTitle.indexOf(lowerQuery);
+    while (matchIndex !== -1) {
+      if (matchIndex > startIndex) {
+        parts.push(title.slice(startIndex, matchIndex));
+      }
+      parts.push(
+        <Box
+          key={`${title}-${matchIndex}`}
+          component="span"
+          sx={{
+            backgroundColor: "rgba(255, 193, 7, 0.25)",
+            fontWeight: 600,
+            px: 0.5,
+            borderRadius: 0.5,
+          }}
+        >
+          {title.slice(matchIndex, matchIndex + lowerQuery.length)}
+        </Box>
+      );
+      startIndex = matchIndex + lowerQuery.length;
+      matchIndex = lowerTitle.indexOf(lowerQuery, startIndex);
+    }
+    if (startIndex < title.length) {
+      parts.push(title.slice(startIndex));
+    }
+    return parts;
+  };
 
   return (
     <TableContainer>
@@ -80,6 +138,7 @@ const FindingsTable = ({
                 onChange={(e) =>
                   onToggleAll(e.target.checked)
                 }
+                disabled={loading || Boolean(errorMessage)}
               />
             </TableCell>
             <TableCell>ID</TableCell>
@@ -160,18 +219,75 @@ const FindingsTable = ({
         </TableHead>
 
         <TableBody>
-          {safeData.length === 0 ? (
+          {loading &&
+            Array.from({ length: Math.max(rowCount, 5) }).map((_, index) => (
+              <TableRow key={`skeleton-${index}`}>
+                <TableCell padding="checkbox">
+                  <Skeleton variant="rectangular" width={20} height={20} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={120} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width="80%" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={160} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={80} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={120} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={140} />
+                </TableCell>
+              </TableRow>
+            ))}
+          {!loading && errorMessage && (
             <TableRow>
               <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
-                <Typography color="text.secondary">
-                  Ничего не найдено
+                <Typography color="text.secondary" gutterBottom>
+                  {errorMessage}
+                </Typography>
+                <IconButton
+                  color="primary"
+                  aria-label="Повторить"
+                  onClick={onRetry}
+                >
+                  <RefreshIcon />
+                </IconButton>
+              </TableCell>
+            </TableRow>
+          )}
+          {!loading && !errorMessage && safeData.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                <Typography color="text.secondary" gutterBottom>
+                  Ничего не найдено по фильтрам
+                </Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Попробуйте изменить условия поиска.
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="primary"
+                  sx={{ cursor: "pointer" }}
+                  onClick={onResetFilters}
+                >
+                  Сбросить фильтры
                 </Typography>
               </TableCell>
             </TableRow>
-          ) : (
+          )}
+          {!loading &&
+            !errorMessage &&
+            safeData.length > 0 &&
             safeData.map((f) => {
               const isSelected =
                 selectedIds.includes(f.id);
+              const shortId = f.id.slice(0, 8);
 
               return (
                 <TableRow
@@ -187,11 +303,38 @@ const FindingsTable = ({
                       }
                     />
                   </TableCell>
-                  <TableCell>{f.id}</TableCell>
                   <TableCell>
-                    <MuiLink component={Link} to={`/findings/${f.id}`} underline="hover">
-                      {f.title}
-                    </MuiLink>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                        {shortId}
+                      </Typography>
+                      <Tooltip title="Скопировать полный ID">
+                        <IconButton
+                          size="small"
+                          onClick={() =>
+                            navigator.clipboard.writeText(f.id)
+                          }
+                          aria-label="Скопировать полный ID"
+                        >
+                          <ContentCopyIcon fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    {batchMode ? (
+                      <Typography color="text.primary">
+                        {renderHighlightedTitle(f.title)}
+                      </Typography>
+                    ) : (
+                      <MuiLink
+                        component={Link}
+                        to={`/findings/${f.id}`}
+                        underline="hover"
+                      >
+                        {renderHighlightedTitle(f.title)}
+                      </MuiLink>
+                    )}
                   </TableCell>
                   <TableCell>
                     {f.productName || "—"}
@@ -213,8 +356,7 @@ const FindingsTable = ({
                   </TableCell>
                 </TableRow>
               );
-            })
-          )}
+            })}
         </TableBody>
       </Table>
     </TableContainer>

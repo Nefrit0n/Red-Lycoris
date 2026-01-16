@@ -1,6 +1,9 @@
 import {
+  Autocomplete,
   Box,
   Button,
+  Chip,
+  CircularProgress,
   FormControl,
   InputLabel,
   MenuItem,
@@ -8,8 +11,12 @@ import {
   SelectChangeEvent,
   Stack,
   TextField,
+  Typography,
 } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
+import { fetchProducts } from "../api/products";
 import { FindingSeverity, FindingStatus } from "../types/findings";
+import { Product } from "../types/products";
 
 interface FiltersPanelProps {
   productId: string;
@@ -34,6 +41,56 @@ const FiltersPanel = ({
   onStatusChange,
   onReset,
 }: FiltersPanelProps) => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productInput, setProductInput] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadProducts = async () => {
+      setProductsLoading(true);
+      try {
+        const response = await fetchProducts(200, 0, controller.signal);
+        setProducts(response.data);
+      } catch {
+        setProducts([]);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    loadProducts();
+    return () => controller.abort();
+  }, []);
+
+  const selectedProduct = useMemo(() => {
+    if (!productId) {
+      return null;
+    }
+    return (
+      products.find((item) => item.id === productId) ||
+      products.find((item) => item.identifier === productId) ||
+      null
+    );
+  }, [productId, products]);
+
+  const productLabel = useMemo(() => {
+    if (!selectedProduct) {
+      return productId;
+    }
+    const identifierSuffix = selectedProduct.identifier
+      ? ` · ${selectedProduct.identifier}`
+      : "";
+    return `${selectedProduct.name}${identifierSuffix}`;
+  }, [productId, selectedProduct]);
+
+  useEffect(() => {
+    if (!productId) {
+      setProductInput("");
+      return;
+    }
+    setProductInput(productLabel);
+  }, [productId, productLabel]);
+
   const handleSeverityChange = (event: SelectChangeEvent) => {
     onSeverityChange(event.target.value as FindingSeverity | "");
   };
@@ -41,6 +98,36 @@ const FiltersPanel = ({
   const handleStatusChange = (event: SelectChangeEvent) => {
     onStatusChange(event.target.value as FindingStatus | "");
   };
+
+  const severityLabel =
+    filterSeverity === ""
+      ? ""
+      : {
+          low: "Low",
+          medium: "Medium",
+          high: "High",
+          critical: "Critical",
+        }[filterSeverity];
+
+  const statusLabel =
+    filterStatus === ""
+      ? ""
+      : {
+          new: "New",
+          under_review: "Under review",
+          confirmed: "Confirmed",
+          false_positive: "False positive",
+          out_of_scope: "Out of scope",
+          risk_accepted: "Risk accepted",
+          mitigated: "Mitigated",
+          duplicate: "Duplicate",
+        }[filterStatus];
+
+  const hasActiveFilters =
+    Boolean(productId) ||
+    Boolean(search) ||
+    filterSeverity !== "" ||
+    filterStatus !== "";
 
   return (
     <Box
@@ -60,14 +147,71 @@ const FiltersPanel = ({
         spacing={2}
         alignItems={{ xs: "stretch", md: "center" }}
       >
-        <TextField
-          label="Product ID"
-          value={productId}
-          onChange={(event) => onProductIdChange(event.target.value)}
-          size="small"
-          placeholder="UUID продукта"
-          inputProps={{ "aria-label": "Фильтр по продукту" }}
-          sx={{ minWidth: 220 }}
+        <Autocomplete
+          options={products}
+          value={selectedProduct}
+          inputValue={productInput}
+          onInputChange={(_, value, reason) => {
+            setProductInput(value);
+            if (reason === "clear") {
+              onProductIdChange("");
+            }
+          }}
+          onChange={(_, value) => {
+            if (typeof value === "string") {
+              onProductIdChange(value.trim());
+              return;
+            }
+            if (value) {
+              onProductIdChange(value.identifier || value.id);
+              return;
+            }
+            onProductIdChange("");
+          }}
+          getOptionLabel={(option) => {
+            if (typeof option === "string") {
+              return option;
+            }
+            return `${option.name}${option.identifier ? ` · ${option.identifier}` : ""}`;
+          }}
+          filterOptions={(options, state) => {
+            const input = state.inputValue.toLowerCase();
+            return options.filter((option) => {
+              const identifier = option.identifier?.toLowerCase() ?? "";
+              return (
+                option.name.toLowerCase().includes(input) ||
+                identifier.includes(input) ||
+                option.id.toLowerCase().includes(input)
+              );
+            });
+          }}
+          freeSolo
+          loading={productsLoading}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Продукт"
+              placeholder="Название или ID продукта"
+              size="small"
+              inputProps={{
+                ...params.inputProps,
+                "aria-label": "Фильтр по продукту",
+              }}
+              helperText="Можно вставить ID вручную"
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {productsLoading ? (
+                      <CircularProgress color="inherit" size={18} />
+                    ) : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+              sx={{ minWidth: 260 }}
+            />
+          )}
         />
 
         <TextField
@@ -75,9 +219,9 @@ const FiltersPanel = ({
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           size="small"
-          placeholder="Заголовок или fingerprint"
+          placeholder="title / fingerprint / CVE / rule id"
           inputProps={{ "aria-label": "Поиск по находкам" }}
-          sx={{ minWidth: 240 }}
+          sx={{ minWidth: 260 }}
         />
 
         <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -131,6 +275,46 @@ const FiltersPanel = ({
           Сбросить
         </Button>
       </Stack>
+
+      {hasActiveFilters && (
+        <Stack
+          direction="row"
+          spacing={1}
+          flexWrap="wrap"
+          useFlexGap
+          sx={{ mt: 2 }}
+        >
+          {productId && (
+            <Chip
+              label={`Product: ${productLabel}`}
+              onDelete={() => onProductIdChange("")}
+            />
+          )}
+          {filterSeverity !== "" && severityLabel && (
+            <Chip
+              label={`Severity: ${severityLabel}`}
+              onDelete={() => onSeverityChange("")}
+            />
+          )}
+          {filterStatus !== "" && statusLabel && (
+            <Chip
+              label={`Status: ${statusLabel}`}
+              onDelete={() => onStatusChange("")}
+            />
+          )}
+          {search && (
+            <Chip
+              label={`q: ${search}`}
+              onDelete={() => onSearchChange("")}
+            />
+          )}
+        </Stack>
+      )}
+      {!hasActiveFilters && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          Выберите фильтры, чтобы сузить список находок.
+        </Typography>
+      )}
     </Box>
   );
 };

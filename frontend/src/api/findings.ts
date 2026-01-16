@@ -1,5 +1,6 @@
 import {
   ApiResponse,
+  BulkUpdateResponse,
   FetchFindingsParams,
   FindingDetail,
   FindingStatus,
@@ -20,7 +21,9 @@ export const fetchFindings = async (
     offset: params.offset.toString(),
   });
 
-  if (params.filterProductId) {
+  if (params.filterProduct) {
+    searchParams.set("product", params.filterProduct);
+  } else if (params.filterProductId) {
     searchParams.set("productId", params.filterProductId);
   }
   if (params.filterSeverity) {
@@ -116,9 +119,17 @@ export const addFindingComment = async (
 
 export const bulkUpdateFindings = async (payload: {
   ids: string[];
+  select_all?: boolean;
+  filters?: {
+    product?: string;
+    severity?: string;
+    status?: string;
+    q?: string;
+    import_job_id?: string;
+  };
   action: "set_status" | "assign" | "dismiss";
   payload: Record<string, unknown>;
-}): Promise<void> => {
+}): Promise<BulkUpdateResponse> => {
   const response = await fetch("/api/v1/findings/bulk", {
     method: "POST",
     headers: getJsonHeaders(),
@@ -129,5 +140,5 @@ export const bulkUpdateFindings = async (payload: {
     throw new Error("Не удалось выполнить массовое действие");
   }
 
-  await parseApiResponse(response);
+  return parseApiResponse<BulkUpdateResponse>(response);
 };

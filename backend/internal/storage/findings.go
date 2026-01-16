@@ -53,30 +53,40 @@ type FindingFilters struct {
 	Offset      int
 }
 
-func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]FindingListItem, int, error) {
+func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []interface{}) {
 	whereClause := "WHERE f.deleted_at IS NULL"
 	args := []interface{}{}
 
 	if filters.Severity != "" {
 		args = append(args, filters.Severity)
-		whereClause += fmt.Sprintf(" AND f.severity = $%d", len(args))
+		whereClause += fmt.Sprintf(" AND f.severity = $%d", startIndex+len(args))
 	}
 	if filters.Status != "" {
 		args = append(args, filters.Status)
-		whereClause += fmt.Sprintf(" AND f.status = $%d", len(args))
+		whereClause += fmt.Sprintf(" AND f.status = $%d", startIndex+len(args))
 	}
 	if filters.ProductID != nil {
 		args = append(args, *filters.ProductID)
-		whereClause += fmt.Sprintf(" AND f.product_id = $%d", len(args))
+		whereClause += fmt.Sprintf(" AND f.product_id = $%d", startIndex+len(args))
 	}
 	if filters.ImportJobID != nil {
 		args = append(args, *filters.ImportJobID)
-		whereClause += fmt.Sprintf(" AND f.import_job_id = $%d", len(args))
+		whereClause += fmt.Sprintf(" AND f.import_job_id = $%d", startIndex+len(args))
 	}
 	if filters.Query != "" {
 		args = append(args, "%"+filters.Query+"%")
-		whereClause += fmt.Sprintf(" AND (f.title ILIKE $%d OR f.fingerprint ILIKE $%d OR p.identifier ILIKE $%d)", len(args), len(args), len(args))
+		whereClause += fmt.Sprintf(
+			" AND (f.title ILIKE $%d OR f.fingerprint ILIKE $%d OR p.identifier ILIKE $%d)",
+			startIndex+len(args),
+			startIndex+len(args),
+			startIndex+len(args),
+		)
 	}
+	return whereClause, args
+}
+
+func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]FindingListItem, int, error) {
+	whereClause, args := buildFindingWhereClause(filters, 0)
 
 	sortField := "f.created_at"
 	switch filters.SortField {
