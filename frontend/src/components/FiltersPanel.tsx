@@ -7,34 +7,29 @@ import {
   Select,
   SelectChangeEvent,
   Stack,
+  TextField,
 } from "@mui/material";
 import { FindingSeverity, FindingStatus } from "../types/findings";
 
 interface FiltersPanelProps {
-  appOptions: string[];
-  filterApp: string;
+  productId: string;
   filterSeverity: FindingSeverity | "";
   filterStatus: FindingStatus | "";
-  onAppChange: (value: string) => void;
+  onProductIdChange: (value: string) => void;
   onSeverityChange: (value: FindingSeverity | "") => void;
   onStatusChange: (value: FindingStatus | "") => void;
   onReset: () => void;
 }
 
 const FiltersPanel = ({
-  appOptions,
-  filterApp,
+  productId,
   filterSeverity,
   filterStatus,
-  onAppChange,
+  onProductIdChange,
   onSeverityChange,
   onStatusChange,
   onReset,
 }: FiltersPanelProps) => {
-  const handleAppChange = (event: SelectChangeEvent) => {
-    onAppChange(event.target.value);
-  };
-
   const handleSeverityChange = (event: SelectChangeEvent) => {
     onSeverityChange(event.target.value as FindingSeverity | "");
   };
@@ -61,25 +56,15 @@ const FiltersPanel = ({
         spacing={2}
         alignItems={{ xs: "stretch", md: "center" }}
       >
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel id="filter-app-label">Приложение</InputLabel>
-          <Select
-            labelId="filter-app-label"
-            label="Приложение"
-            value={filterApp}
-            onChange={handleAppChange}
-            inputProps={{ "aria-label": "Фильтр по приложению" }}
-          >
-            <MenuItem value="">
-              <em>Все приложения</em>
-            </MenuItem>
-            {appOptions.map((option) => (
-              <MenuItem key={option} value={option}>
-                {option}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <TextField
+          label="Product ID"
+          value={productId}
+          onChange={(event) => onProductIdChange(event.target.value)}
+          size="small"
+          placeholder="UUID продукта"
+          inputProps={{ "aria-label": "Фильтр по продукту" }}
+          sx={{ minWidth: 220 }}
+        />
 
         <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel id="filter-severity-label">Критичность</InputLabel>
