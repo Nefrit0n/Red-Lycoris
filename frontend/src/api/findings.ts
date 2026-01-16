@@ -2,8 +2,9 @@ import {
   ApiResponse,
   FetchFindingsParams,
   FindingDetail,
-  FindingDetailStatus,
+  FindingStatus,
 } from "../types/findings";
+import { getAuthHeaders, parseApiResponse } from "./http";
 
 export const fetchFindings = async (
   params: FetchFindingsParams,
@@ -13,14 +14,14 @@ export const fetchFindings = async (
   searchParams.set("page", params.page.toString());
   searchParams.set("pageSize", params.pageSize.toString());
 
-  if (params.filterApp) {
-    searchParams.set("filter_app", params.filterApp);
+  if (params.filterProductId) {
+    searchParams.set("productId", params.filterProductId);
   }
   if (params.filterSeverity) {
-    searchParams.set("filter_severity", params.filterSeverity);
+    searchParams.set("severity", params.filterSeverity);
   }
   if (params.filterStatus) {
-    searchParams.set("filter_status", params.filterStatus);
+    searchParams.set("status", params.filterStatus);
   }
   if (params.sortField) {
     searchParams.set("sortField", params.sortField);
@@ -32,13 +33,17 @@ export const fetchFindings = async (
   const response = await fetch(`/api/v1/findings?${searchParams.toString()}`, {
     method: "GET",
     signal,
+    headers: {
+      ...getAuthHeaders(),
+    },
   });
 
   if (!response.ok) {
     throw new Error("Не удалось загрузить список находок");
   }
 
-  return response.json();
+  const payload = await parseApiResponse<{ data: ApiResponse["data"]; total: number }>(response);
+  return { data: payload.data, total: payload.total };
 };
 
 export const fetchFindingDetail = async (
@@ -48,23 +53,28 @@ export const fetchFindingDetail = async (
   const response = await fetch(`/api/v1/findings/${id}`, {
     method: "GET",
     signal,
+    headers: {
+      ...getAuthHeaders(),
+    },
   });
 
   if (!response.ok) {
     throw new Error("Не удалось загрузить детали уязвимости");
   }
 
-  return response.json();
+  const payload = await parseApiResponse<{ data: FindingDetail }>(response);
+  return payload.data;
 };
 
 export const updateFindingStatus = async (
   id: string,
-  status: FindingDetailStatus
-): Promise<void> => {
-  const response = await fetch(`/api/v1/findings/${id}/status`, {
+  status: FindingStatus
+): Promise<FindingDetail> => {
+  const response = await fetch(`/api/v1/findings/${id}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ status }),
   });
@@ -72,21 +82,7 @@ export const updateFindingStatus = async (
   if (!response.ok) {
     throw new Error("Не удалось обновить статус");
   }
-};
 
-export const assignResponsible = async (
-  id: string,
-  userId: string
-): Promise<void> => {
-  const response = await fetch(`/api/v1/findings/${id}/assign`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ userId }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Не удалось назначить ответственного");
-  }
+  const payload = await parseApiResponse<{ data: FindingDetail }>(response);
+  return payload.data;
 };
