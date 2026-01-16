@@ -27,7 +27,20 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB) {
 		return c.JSON(fiber.Map{"message": "Hello World"})
 	})
 
+	api := app.Group("/api/v1")
+	authHandler := handlers.NewAuthHandler(db, cfg.JWTSecret)
+	api.Post("/auth/login", authHandler.Login)
+	api.Post("/auth/logout", authHandler.Logout)
+
+	secured := api.Group("", middleware.RequireJWT(cfg.JWTSecret))
+
 	scanHandler := handlers.NewScanUploadHandler(db)
-	api := app.Group("/api/v1", middleware.RequireJWT(cfg.JWTSecret, handlers.ScanUploadScope()))
-	api.Post("/scans/upload", scanHandler.Handle)
+	secured.Post("/scans/upload", middleware.AuthorizeRole("analyst", "admin"), scanHandler.Handle)
+
+	findingsHandler := handlers.NewFindingsHandler(db)
+	secured.Get("/findings", findingsHandler.List)
+	secured.Get("/findings/:id", findingsHandler.Get)
+	secured.Post("/findings", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.Create)
+	secured.Put("/findings/:id", findingsHandler.Update)
+	secured.Delete("/findings/:id", middleware.AuthorizeRole("admin"), findingsHandler.Delete)
 }

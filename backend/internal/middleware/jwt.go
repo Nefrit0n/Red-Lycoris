@@ -9,21 +9,21 @@ import (
 )
 
 type JWTClaims struct {
-	UserID string `json:"user_id"`
-	Scope  string `json:"scope"`
+	UserID string   `json:"user_id"`
+	Roles  []string `json:"roles"`
 	jwt.RegisteredClaims
 }
 
-func RequireJWT(secret string, requiredScope string) fiber.Handler {
+func RequireJWT(secret string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing bearer token"})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "missing bearer token"})
 		}
 
 		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
 		if tokenString == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing bearer token"})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "missing bearer token"})
 		}
 
 		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
@@ -33,27 +33,19 @@ func RequireJWT(secret string, requiredScope string) fiber.Handler {
 			return []byte(secret), nil
 		})
 		if err != nil || !token.Valid {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token"})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "invalid token"})
 		}
 
 		claims, ok := token.Claims.(*JWTClaims)
 		if !ok || claims.UserID == "" {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "invalid token claims"})
-		}
-		if requiredScope != "" && !scopeAllows(claims.Scope, requiredScope) {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "insufficient scope"})
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "error": "invalid token claims"})
 		}
 
 		c.Locals("user_id", claims.UserID)
+		if claims.Roles == nil {
+			claims.Roles = []string{}
+		}
+		c.Locals("roles", claims.Roles)
 		return c.Next()
 	}
-}
-
-func scopeAllows(scope string, required string) bool {
-	for _, entry := range strings.Fields(scope) {
-		if entry == required {
-			return true
-		}
-	}
-	return false
 }
