@@ -9,6 +9,13 @@ import ScanUploadPage from "./pages/ScanUploadPage";
 import ImportJobsList from "./pages/ImportJobsList";
 import ImportJobDetail from "./pages/ImportJobDetail";
 import ProductsList from "./pages/ProductsList";
+import AdminOverview from "./pages/AdminOverview";
+import AdminAuditLogPage from "./pages/admin/AdminAuditLogPage";
+import AdminGroupsPage from "./pages/admin/AdminGroupsPage";
+import AdminScannersPage from "./pages/admin/AdminScannersPage";
+import AdminSetupPage from "./pages/admin/AdminSetupPage";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminWebhooksPage from "./pages/admin/AdminWebhooksPage";
 
 const App = () => {
   return (
@@ -26,6 +33,13 @@ const App = () => {
           <Route path="/imports" element={<ImportJobsList />} />
           <Route path="/imports/:id" element={<ImportJobDetail />} />
           <Route path="/products" element={<ProductsList />} />
+          <Route path="/admin" element={<AdminOverview />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/admin/groups" element={<AdminGroupsPage />} />
+          <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
+          <Route path="/admin/webhooks" element={<AdminWebhooksPage />} />
+          <Route path="/admin/scanners" element={<AdminScannersPage />} />
+          <Route path="/admin/setup" element={<AdminSetupPage />} />
         </Route>
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
