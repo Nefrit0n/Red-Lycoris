@@ -17,8 +17,6 @@ import {
   FindingStatus,
 } from "../types/findings";
 
-const appOptions = ["WebApp", "Mobile", "Internal API", "Gateway"];
-
 const FindingsList = () => {
   const [data, setData] = useState<Finding[]>([]);
   const [total, setTotal] = useState(0);
@@ -28,7 +26,7 @@ const FindingsList = () => {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
 
-  const [filterApp, setFilterApp] = useState("");
+  const [productId, setProductId] = useState("");
   const [filterSeverity, setFilterSeverity] = useState<FindingSeverity | "">("");
   const [filterStatus, setFilterStatus] = useState<FindingStatus | "">("");
 
@@ -46,7 +44,7 @@ const FindingsList = () => {
         {
           page: page + 1,
           pageSize,
-          filterApp,
+          filterProductId: productId,
           filterSeverity,
           filterStatus,
           sortField,
@@ -67,7 +65,7 @@ const FindingsList = () => {
   }, [
     page,
     pageSize,
-    filterApp,
+    productId,
     filterSeverity,
     filterStatus,
     sortField,
@@ -81,7 +79,7 @@ const FindingsList = () => {
   }, [fetchData]);
 
   const handleResetFilters = () => {
-    setFilterApp("");
+    setProductId("");
     setFilterSeverity("");
     setFilterStatus("");
     setPage(0);
@@ -133,16 +131,15 @@ const FindingsList = () => {
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
         Управляйте результатами сканирования уязвимостей, сортируйте и фильтруйте
-        данные по приложению, критичности и статусу.
+        данные по продукту, критичности и статусу.
       </Typography>
 
       <FiltersPanel
-        appOptions={appOptions}
-        filterApp={filterApp}
+        productId={productId}
         filterSeverity={filterSeverity}
         filterStatus={filterStatus}
-        onAppChange={(value) => {
-          setFilterApp(value);
+        onProductIdChange={(value) => {
+          setProductId(value);
           setPage(0);
         }}
         onSeverityChange={(value) => {
