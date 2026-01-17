@@ -4,25 +4,27 @@ import (
 	"database/sql"
 
 	"lotus-warden/backend/internal/config"
+	"lotus-warden/backend/internal/events"
 	"lotus-warden/backend/internal/handlers"
 	"lotus-warden/backend/internal/middleware"
+	"lotus-warden/backend/internal/objectstore"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 )
 
-func NewApp(cfg config.Config, db *sql.DB) *fiber.App {
+func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) *fiber.App {
 	app := fiber.New()
 	app.Use(requestid.New())
 	app.Use(logger.New(logger.Config{
 		Format: "${time} ${status} ${latency} ${method} ${path} request_id=${locals:requestid}\n",
 	}))
-	setupRoutes(app, cfg, db)
+	setupRoutes(app, cfg, db, publisher, store)
 	return app
 }
 
-func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB) {
+func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
@@ -52,6 +54,16 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB) {
 		middleware.AuthorizeRole("analyst", "admin"),
 		scanHandler.Handle,
 	)
+
+	analysisHandler := handlers.NewAnalysisJobsHandler(db, store, publisher, cfg)
+	secured.Post(
+		"/analysis-jobs",
+		middleware.AuthorizeRole("analyst", "admin"),
+		analysisHandler.Create,
+	)
+	secured.Get("/analysis-jobs", analysisHandler.List)
+	secured.Get("/analysis-jobs/:id", analysisHandler.Get)
+	secured.Get("/analysis-jobs/:id/artifacts/:artifact", analysisHandler.DownloadArtifact)
 
 	findingsHandler := handlers.NewFindingsHandler(db)
 	secured.Get("/findings", findingsHandler.List)

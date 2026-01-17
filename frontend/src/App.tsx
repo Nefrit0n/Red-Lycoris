@@ -11,6 +11,8 @@ import ImportJobsList from "./pages/ImportJobsList";
 import ImportJobDetail from "./pages/ImportJobDetail";
 import ProductsList from "./pages/ProductsList";
 import AdminOverview from "./pages/AdminOverview";
+import AnalyzeJobsPage from "./pages/AnalyzeJobsPage";
+import AnalysisJobDetail from "./pages/AnalysisJobDetail";
 
 import AdminAuditLogPage from "./pages/admin/AdminAuditLogPage";
 import AdminGroupsPage from "./pages/admin/AdminGroupsPage";
@@ -38,6 +40,8 @@ const App = () => {
           <Route path="/imports" element={<ImportJobsList />} />
           <Route path="/imports/:id" element={<ImportJobDetail />} />
           <Route path="/products" element={<ProductsList />} />
+          <Route path="/analyze" element={<AnalyzeJobsPage />} />
+          <Route path="/analyze/:id" element={<AnalysisJobDetail />} />
 
           <Route path="/admin" element={<AdminOverview />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
