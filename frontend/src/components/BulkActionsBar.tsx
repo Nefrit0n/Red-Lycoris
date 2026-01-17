@@ -44,7 +44,7 @@ const BulkActionsBar = ({
   return (
     <Box
       sx={{
-        p: 1.5,
+        p: 2,
         borderRadius: 2,
         border: "1px solid",
         borderColor: "divider",
@@ -125,7 +125,7 @@ const BulkActionsBar = ({
           color="inherit"
           onClick={onClearSelection}
         >
-          Снять выделение
+          Очистить выбор
         </Button>
       </Stack>
     </Box>
