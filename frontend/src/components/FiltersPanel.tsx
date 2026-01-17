@@ -6,7 +6,7 @@ import {
   CircularProgress,
   FormControl,
   FormControlLabel,
-  InputAdornment,
+  Grid,
   InputLabel,
   MenuItem,
   Paper,
@@ -18,7 +18,6 @@ import {
   Typography,
 } from "@mui/material";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
-import SearchIcon from "@mui/icons-material/Search";
 import { useEffect, useMemo, useState } from "react";
 import { fetchProducts } from "../api/products";
 import {
@@ -113,6 +112,7 @@ const FiltersPanel = ({
     return `${selectedProduct.name}${identifierSuffix}`;
   }, [productId, selectedProduct]);
 
+  // держим inputValue синхронно с выбранным продуктом
   useEffect(() => {
     setProductInput(productLabel);
   }, [productLabel]);
@@ -137,22 +137,22 @@ const FiltersPanel = ({
     filterSeverity === ""
       ? ""
       : { low: "Low", medium: "Medium", high: "High", critical: "Critical" }[
-          filterSeverity
-        ];
+      filterSeverity
+      ];
 
   const statusLabel =
     filterStatus === ""
       ? ""
       : {
-          new: "New",
-          under_review: "Under review",
-          confirmed: "Confirmed",
-          false_positive: "False positive",
-          out_of_scope: "Out of scope",
-          risk_accepted: "Risk accepted",
-          mitigated: "Mitigated",
-          duplicate: "Duplicate",
-        }[filterStatus];
+        new: "New",
+        under_review: "Under review",
+        confirmed: "Confirmed",
+        false_positive: "False positive",
+        out_of_scope: "Out of scope",
+        risk_accepted: "Risk accepted",
+        mitigated: "Mitigated",
+        duplicate: "Duplicate",
+      }[filterStatus];
 
   const occurrenceLabel =
     filterOccurrence === "" ? "" : { NEW: "New", REPEAT: "Repeat" }[filterOccurrence];
@@ -168,98 +168,6 @@ const FiltersPanel = ({
     Boolean(dateTo) ||
     showRepeats;
 
-  const chipItems = useMemo(
-    () => [
-      productId
-        ? {
-            key: "product",
-            label: `Продукт: ${productLabel || productId}`,
-            onDelete: () => onProductIdChange(""),
-          }
-        : null,
-      filterSeverity !== "" && severityLabel
-        ? {
-            key: "severity",
-            label: `Критичность: ${severityLabel}`,
-            onDelete: () => onSeverityChange(""),
-          }
-        : null,
-      filterStatus !== "" && statusLabel
-        ? {
-            key: "status",
-            label: `Статус: ${statusLabel}`,
-            onDelete: () => onStatusChange(""),
-          }
-        : null,
-      filterOccurrence !== "" && occurrenceLabel
-        ? {
-            key: "occurrence",
-            label: `Повторяемость: ${occurrenceLabel}`,
-            onDelete: () => onOccurrenceChange(""),
-          }
-        : null,
-      filterScannerType
-        ? {
-            key: "scanner",
-            label: `Сканер: ${filterScannerType}`,
-            onDelete: () => onScannerTypeChange(""),
-          }
-        : null,
-      dateFrom
-        ? {
-            key: "date-from",
-            label: `Last seen ≥ ${dateFrom}`,
-            onDelete: () => onDateFromChange(""),
-          }
-        : null,
-      dateTo
-        ? {
-            key: "date-to",
-            label: `Last seen ≤ ${dateTo}`,
-            onDelete: () => onDateToChange(""),
-          }
-        : null,
-      showRepeats
-        ? {
-            key: "repeats",
-            label: "Повторы включены",
-            onDelete: () => onShowRepeatsChange(false),
-          }
-        : null,
-      search
-        ? {
-            key: "search",
-            label: `Поиск: ${search}`,
-            onDelete: () => onSearchChange(""),
-          }
-        : null,
-    ],
-    [
-      productId,
-      productLabel,
-      filterSeverity,
-      severityLabel,
-      filterStatus,
-      statusLabel,
-      filterOccurrence,
-      occurrenceLabel,
-      filterScannerType,
-      dateFrom,
-      dateTo,
-      showRepeats,
-      search,
-      onProductIdChange,
-      onSeverityChange,
-      onStatusChange,
-      onOccurrenceChange,
-      onScannerTypeChange,
-      onDateFromChange,
-      onDateToChange,
-      onShowRepeatsChange,
-      onSearchChange,
-    ]
-  );
-
   return (
     <Paper
       variant="outlined"
@@ -270,42 +178,32 @@ const FiltersPanel = ({
         backgroundColor: "background.paper",
       }}
     >
-      <Stack spacing={2}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}>
-          <Box>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-              Фильтры
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Подберите параметры для triage и сохраняйте контекст поиска.
-            </Typography>
-          </Box>
+      <Stack spacing={1.5}>
+        <Box
+          display="flex"
+          alignItems="center"
+          justifyContent="space-between"
+          gap={2}
+          flexWrap="wrap"
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            Фильтры
+          </Typography>
 
           <Button
             variant="outlined"
-            color="primary"
+            color="inherit"
             size="small"
             startIcon={<RestartAltIcon />}
             onClick={onReset}
             sx={{ whiteSpace: "nowrap" }}
-            disabled={!hasActiveFilters}
           >
-            Сбросить все
+            Сбросить
           </Button>
-        </Stack>
+        </Box>
 
-        <Box
-          sx={{
-            display: "grid",
-            gap: 1.5,
-            gridTemplateColumns: {
-              xs: "1fr",
-              md: "repeat(12, minmax(0, 1fr))",
-            },
-            alignItems: "center",
-          }}
-        >
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 4" } }}>
+        <Grid container spacing={1.5} alignItems="center">
+          <Grid item xs={12} md={4}>
             <Autocomplete<Product, false, true, true>
               options={products}
               value={selectedProduct}
@@ -363,9 +261,9 @@ const FiltersPanel = ({
                 />
               )}
             />
-          </Box>
+          </Grid>
 
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 4" } }}>
+          <Grid item xs={12} md={4}>
             <TextField
               label="Поиск"
               value={search}
@@ -374,17 +272,10 @@ const FiltersPanel = ({
               fullWidth
               placeholder="title / fingerprint / CVE / rule id"
               inputProps={{ "aria-label": "Поиск по находкам" }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-              }}
             />
-          </Box>
+          </Grid>
 
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+          <Grid item xs={12} md={2}>
             <FormControl size="small" fullWidth>
               <InputLabel id="filter-severity-label">Критичность</InputLabel>
               <Select
@@ -402,9 +293,9 @@ const FiltersPanel = ({
                 <MenuItem value="critical">Critical</MenuItem>
               </Select>
             </FormControl>
-          </Box>
+          </Grid>
 
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+          <Grid item xs={12} md={2}>
             <FormControl size="small" fullWidth>
               <InputLabel id="filter-status-label">Статус</InputLabel>
               <Select
@@ -426,9 +317,9 @@ const FiltersPanel = ({
                 <MenuItem value="duplicate">Duplicate</MenuItem>
               </Select>
             </FormControl>
-          </Box>
+          </Grid>
 
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+          <Grid item xs={12} md={2}>
             <FormControl size="small" fullWidth>
               <InputLabel id="filter-occurrence-label">Повторяемость</InputLabel>
               <Select
@@ -444,9 +335,9 @@ const FiltersPanel = ({
                 <MenuItem value="REPEAT">Repeat</MenuItem>
               </Select>
             </FormControl>
-          </Box>
+          </Grid>
 
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+          <Grid item xs={12} md={2}>
             <FormControl size="small" fullWidth>
               <InputLabel id="filter-scanner-label">Сканер</InputLabel>
               <Select
@@ -463,9 +354,9 @@ const FiltersPanel = ({
                 <MenuItem value="semgrep">Semgrep</MenuItem>
               </Select>
             </FormControl>
-          </Box>
+          </Grid>
 
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+          <Grid item xs={12} md={2}>
             <TextField
               label="Last seen от"
               type="date"
@@ -475,9 +366,9 @@ const FiltersPanel = ({
               fullWidth
               InputLabelProps={{ shrink: true }}
             />
-          </Box>
+          </Grid>
 
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+          <Grid item xs={12} md={2}>
             <TextField
               label="Last seen до"
               type="date"
@@ -487,9 +378,9 @@ const FiltersPanel = ({
               fullWidth
               InputLabelProps={{ shrink: true }}
             />
-          </Box>
+          </Grid>
 
-          <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+          <Grid item xs={12} md={2}>
             <FormControlLabel
               control={
                 <Switch
@@ -501,28 +392,87 @@ const FiltersPanel = ({
               label="Повторы"
               sx={{ userSelect: "none" }}
             />
-          </Box>
-        </Box>
+          </Grid>
+        </Grid>
 
         {hasActiveFilters ? (
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {chipItems
-              .filter((item): item is { key: string; label: string; onDelete: () => void } =>
-                Boolean(item)
-              )
-              .map((item) => (
-                <Chip
-                  key={item.key}
-                  size="small"
-                  variant="outlined"
-                  label={item.label}
-                  onDelete={item.onDelete}
-                />
-              ))}
+            {productId && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Продукт: ${productLabel || productId}`}
+                onDelete={() => onProductIdChange("")}
+              />
+            )}
+            {filterSeverity !== "" && severityLabel && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Критичность: ${severityLabel}`}
+                onDelete={() => onSeverityChange("")}
+              />
+            )}
+            {filterStatus !== "" && statusLabel && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Статус: ${statusLabel}`}
+                onDelete={() => onStatusChange("")}
+              />
+            )}
+            {filterOccurrence !== "" && occurrenceLabel && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Повторяемость: ${occurrenceLabel}`}
+                onDelete={() => onOccurrenceChange("")}
+              />
+            )}
+            {filterScannerType && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Сканер: ${filterScannerType}`}
+                onDelete={() => onScannerTypeChange("")}
+              />
+            )}
+            {dateFrom && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Last seen ≥ ${dateFrom}`}
+                onDelete={() => onDateFromChange("")}
+              />
+            )}
+            {dateTo && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Last seen ≤ ${dateTo}`}
+                onDelete={() => onDateToChange("")}
+              />
+            )}
+            {showRepeats && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label="Повторы включены"
+                onDelete={() => onShowRepeatsChange(false)}
+              />
+            )}
+            {search && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Поиск: ${search}`}
+                onDelete={() => onSearchChange("")}
+              />
+            )}
           </Stack>
         ) : (
           <Typography variant="body2" color="text.secondary">
-            Фильтры не выбраны — показываем все доступные находки.
+            Выберите фильтры, чтобы сузить список находок.
           </Typography>
         )}
       </Stack>
