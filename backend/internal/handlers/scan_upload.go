@@ -70,20 +70,6 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 	}
 
 	checksum := computeChecksum(req.ReportBytes)
-	existing, err := storage.GetImportJobByChecksum(c.Context(), h.db, checksum)
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check import job"})
-	}
-	if existing != nil && existing.Status != models.ImportJobFailed {
-		return c.Status(http.StatusOK).JSON(ScanUploadResponse{
-			ImportJobID:     existing.ID,
-			ScanID:          uuid.Nil,
-			CreatedFindings: existing.FindingsNew,
-			Duplicates:      existing.DuplicatesTotal,
-			ProductCreated:  false,
-			Status:          existing.Status,
-		})
-	}
 
 	productName := strings.TrimSpace(req.ProductName)
 	productVersion := strings.TrimSpace(req.ProductVersion)
