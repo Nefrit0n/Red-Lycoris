@@ -9,7 +9,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import ClearIcon from "@mui/icons-material/Clear";
 import { useState } from "react";
 import { FindingStatus } from "../types/findings";
 
@@ -45,7 +44,7 @@ const BulkActionsBar = ({
   return (
     <Box
       sx={{
-        p: 1.5,
+        p: 2,
         borderRadius: 2,
         border: "1px solid",
         borderColor: "divider",
@@ -55,80 +54,78 @@ const BulkActionsBar = ({
     >
       <Stack
         direction={{ xs: "column", md: "row" }}
-        spacing={1.5}
+        spacing={2}
         alignItems={{ xs: "stretch", md: "center" }}
-        justifyContent="space-between"
       >
-        <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            Выбрано: {selectedCount}
-          </Typography>
+        <Typography variant="subtitle2">
+          Выбрано: {selectedCount}
+        </Typography>
 
-          <FormControl size="small" sx={{ minWidth: 170 }}>
-            <InputLabel id="bulk-action-label">Действие</InputLabel>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="bulk-action-label">Действие</InputLabel>
+          <Select
+            labelId="bulk-action-label"
+            label="Действие"
+            value={action}
+            onChange={(event) => {
+              const nextAction = event.target.value as BulkAction;
+              setAction(nextAction);
+              if (nextAction === "dismiss") {
+                setStatus("false_positive");
+              }
+            }}
+          >
+            <MenuItem value="set_status">Сменить статус</MenuItem>
+            <MenuItem value="assign">Назначить</MenuItem>
+            <MenuItem value="dismiss">Dismiss</MenuItem>
+          </Select>
+        </FormControl>
+
+        {(action === "set_status" || action === "dismiss") && (
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel id="bulk-status-label">Статус</InputLabel>
             <Select
-              labelId="bulk-action-label"
-              label="Действие"
-              value={action}
-              onChange={(event) => {
-                const nextAction = event.target.value as BulkAction;
-                setAction(nextAction);
-                if (nextAction === "dismiss") {
-                  setStatus("false_positive");
-                }
-              }}
+              labelId="bulk-status-label"
+              label="Статус"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as FindingStatus)}
             >
-              <MenuItem value="set_status">Изменить статус</MenuItem>
-              <MenuItem value="assign">Назначить</MenuItem>
-              <MenuItem value="dismiss">Dismiss</MenuItem>
+              <MenuItem value="new">New</MenuItem>
+              <MenuItem value="under_review">Under review</MenuItem>
+              <MenuItem value="confirmed">Confirmed</MenuItem>
+              <MenuItem value="false_positive">False positive</MenuItem>
+              <MenuItem value="out_of_scope">Out of scope</MenuItem>
+              <MenuItem value="risk_accepted">Risk accepted</MenuItem>
+              <MenuItem value="mitigated">Mitigated</MenuItem>
+              <MenuItem value="duplicate">Duplicate</MenuItem>
             </Select>
           </FormControl>
+        )}
 
-          {(action === "set_status" || action === "dismiss") && (
-            <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel id="bulk-status-label">Статус</InputLabel>
-              <Select
-                labelId="bulk-status-label"
-                label="Статус"
-                value={status}
-                onChange={(event) => setStatus(event.target.value as FindingStatus)}
-              >
-                <MenuItem value="new">New</MenuItem>
-                <MenuItem value="under_review">Under review</MenuItem>
-                <MenuItem value="confirmed">Confirmed</MenuItem>
-                <MenuItem value="false_positive">False positive</MenuItem>
-                <MenuItem value="out_of_scope">Out of scope</MenuItem>
-                <MenuItem value="risk_accepted">Risk accepted</MenuItem>
-                <MenuItem value="mitigated">Mitigated</MenuItem>
-                <MenuItem value="duplicate">Duplicate</MenuItem>
-              </Select>
-            </FormControl>
-          )}
+        {action === "assign" && (
+          <TextField
+            label="User ID"
+            size="small"
+            value={assigneeId}
+            onChange={(event) => setAssigneeId(event.target.value)}
+            placeholder="UUID пользователя"
+            sx={{ minWidth: 240 }}
+          />
+        )}
 
-          {action === "assign" && (
-            <TextField
-              label="User ID"
-              size="small"
-              value={assigneeId}
-              onChange={(event) => setAssigneeId(event.target.value)}
-              placeholder="UUID пользователя"
-              sx={{ minWidth: 220 }}
-            />
-          )}
-
-          <Button variant="contained" size="small" onClick={handleApply} disabled={selectedCount === 0}>
-            Применить
-          </Button>
-        </Stack>
-
+        <Button
+          variant="contained"
+          onClick={handleApply}
+          disabled={selectedCount === 0}
+        >
+          Применить
+        </Button>
         <Button
           variant="text"
           color="inherit"
-          size="small"
-          startIcon={<ClearIcon />}
           onClick={onClearSelection}
         >
-          Снять выделение
+          Очистить выбор
         </Button>
       </Stack>
     </Box>
