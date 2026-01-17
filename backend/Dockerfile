@@ -6,9 +6,9 @@ RUN go mod download
 
 FROM base AS dev
 COPY . .
-RUN go build -o /tmp/server ./cmd/server
 EXPOSE 8080
 CMD ["go", "run", "./cmd/server"]
+
 
 FROM base AS build
 COPY . .
