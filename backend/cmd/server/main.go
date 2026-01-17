@@ -6,6 +6,8 @@ import (
 	"log"
 
 	"lotus-warden/backend/internal/config"
+	"lotus-warden/backend/internal/events"
+	"lotus-warden/backend/internal/objectstore"
 	"lotus-warden/backend/internal/server"
 	"lotus-warden/backend/internal/storage"
 )
@@ -27,6 +29,18 @@ func main() {
 		log.Fatalf("root user initialization failed: %v", err)
 	}
 
-	app := server.NewApp(cfg, db)
+	store, err := objectstore.NewMinioStore(cfg)
+	if err != nil {
+		log.Fatalf("object store init failed: %v", err)
+	}
+
+	publisher, err := events.NewPublisher(cfg.NatsURL)
+	if err != nil {
+		log.Printf("nats connection failed: %v", err)
+	} else {
+		defer publisher.Close()
+	}
+
+	app := server.NewApp(cfg, db, publisher, store)
 	log.Fatal(app.Listen(fmt.Sprintf(":%s", cfg.AppPort)))
 }
