@@ -1,31 +1,51 @@
+// internal/storage/repository.go
 package storage
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
 
 	"lotus-warden/backend/internal/models"
 )
+
+// ---- helpers ----
+
+func nullStringPtr(s *string) sql.NullString {
+	if s == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: *s, Valid: true}
+}
+
+func anyUUIDPtr(id *uuid.UUID) any {
+	if id == nil {
+		return nil
+	}
+	return *id
+}
+
+func anyRawJSON(b []byte) any {
+	if len(b) == 0 {
+		return nil
+	}
+	return json.RawMessage(b)
+}
+
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// ---- products ----
 
 func CreateProduct(ctx context.Context, db *sql.DB, product *models.Product) error {
 	if err := product.Validate(); err != nil {
 		return err
 	}
 	product.PrepareForInsert()
-
-	var description sql.NullString
-	if product.Description != nil {
-		description = sql.NullString{String: *product.Description, Valid: true}
-	}
-	var identifier sql.NullString
-	if product.Identifier != nil {
-		identifier = sql.NullString{String: *product.Identifier, Valid: true}
-	}
-	var version sql.NullString
-	if product.Version != nil {
-		version = sql.NullString{String: *product.Version, Valid: true}
-	}
 
 	_, err := db.ExecContext(
 		ctx,
@@ -34,9 +54,9 @@ func CreateProduct(ctx context.Context, db *sql.DB, product *models.Product) err
 		product.ID,
 		product.Name,
 		product.Slug,
-		description,
-		identifier,
-		version,
+		nullStringPtr(product.Description),
+		nullStringPtr(product.Identifier),
+		nullStringPtr(product.Version),
 		product.CreatedAt,
 		product.UpdatedAt,
 	)
@@ -92,6 +112,8 @@ func FindProductBySlug(ctx context.Context, db *sql.DB, slug string) (*models.Pr
 	return scanProductRow(row)
 }
 
+// ---- engagements ----
+
 func CreateEngagement(ctx context.Context, db *sql.DB, engagement *models.Engagement) error {
 	if err := engagement.Validate(); err != nil {
 		return err
@@ -112,151 +134,62 @@ func CreateEngagement(ctx context.Context, db *sql.DB, engagement *models.Engage
 	return err
 }
 
+// ---- scan results ----
+
 func CreateScanResult(ctx context.Context, db *sql.DB, scanResult *models.ScanResult) error {
 	if err := scanResult.Validate(); err != nil {
 		return err
 	}
 	scanResult.PrepareForInsert()
 
-	var rawReport json.RawMessage
-	if len(scanResult.RawReport) > 0 {
-		rawReport = scanResult.RawReport
-	}
-	var engagementID interface{}
-	if scanResult.EngagementID != nil {
-		engagementID = *scanResult.EngagementID
-	}
-	var productID interface{}
-	if scanResult.ProductID != nil {
-		productID = *scanResult.ProductID
-	}
-	var uploaderID interface{}
-	if scanResult.UploaderID != nil {
-		uploaderID = *scanResult.UploaderID
-	}
-	var importJobID interface{}
-	if scanResult.ImportJobID != nil {
-		importJobID = *scanResult.ImportJobID
-	}
-
 	_, err := db.ExecContext(
 		ctx,
 		`INSERT INTO scan_results (id, engagement_id, product_id, uploader_id, import_job_id, scanner, raw_report, processed_at, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		scanResult.ID,
-		engagementID,
-		productID,
-		uploaderID,
-		importJobID,
+		anyUUIDPtr(scanResult.EngagementID),
+		anyUUIDPtr(scanResult.ProductID),
+		anyUUIDPtr(scanResult.UploaderID),
+		anyUUIDPtr(scanResult.ImportJobID),
 		scanResult.Scanner,
-		rawReport,
+		anyRawJSON(scanResult.RawReport),
 		scanResult.ProcessedAt,
 		scanResult.CreatedAt,
 	)
 	return err
 }
 
+// ---- findings ----
+
 func CreateFinding(ctx context.Context, db *sql.DB, finding *models.Finding) error {
-	if err := finding.Validate(); err != nil {
-		return err
-	}
-	finding.PrepareForInsert()
-
-	var description sql.NullString
-	if finding.Description != nil {
-		description = sql.NullString{String: *finding.Description, Valid: true}
-	}
-	var duplicateID interface{}
-	if finding.DuplicateID != nil {
-		duplicateID = *finding.DuplicateID
-	}
-	var productID interface{}
-	if finding.ProductID != nil {
-		productID = *finding.ProductID
-	}
-	var scanResultID interface{}
-	if finding.ScanResultID != nil {
-		scanResultID = *finding.ScanResultID
-	}
-	var assigneeID interface{}
-	if finding.AssigneeID != nil {
-		assigneeID = *finding.AssigneeID
-	}
-	var importJobID interface{}
-	if finding.ImportJobID != nil {
-		importJobID = *finding.ImportJobID
-	}
-
-	_, err := db.ExecContext(
-		ctx,
-		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-		finding.ID,
-		scanResultID,
-		productID,
-		finding.Fingerprint,
-		finding.Title,
-		description,
-		finding.Severity,
-		finding.Status,
-		duplicateID,
-		assigneeID,
-		importJobID,
-		finding.FirstSeenAt,
-		finding.LastSeenAt,
-		finding.RepeatCount,
-		finding.CreatedAt,
-		finding.UpdatedAt,
-	)
-	return err
+	return createFindingWithExecer(ctx, db, finding)
 }
 
 func CreateFindingTx(ctx context.Context, tx *sql.Tx, finding *models.Finding) error {
+	return createFindingWithExecer(ctx, tx, finding)
+}
+
+func createFindingWithExecer(ctx context.Context, ex execer, finding *models.Finding) error {
 	if err := finding.Validate(); err != nil {
 		return err
 	}
 	finding.PrepareForInsert()
 
-	var description sql.NullString
-	if finding.Description != nil {
-		description = sql.NullString{String: *finding.Description, Valid: true}
-	}
-	var duplicateID interface{}
-	if finding.DuplicateID != nil {
-		duplicateID = *finding.DuplicateID
-	}
-	var productID interface{}
-	if finding.ProductID != nil {
-		productID = *finding.ProductID
-	}
-	var scanResultID interface{}
-	if finding.ScanResultID != nil {
-		scanResultID = *finding.ScanResultID
-	}
-	var assigneeID interface{}
-	if finding.AssigneeID != nil {
-		assigneeID = *finding.AssigneeID
-	}
-	var importJobID interface{}
-	if finding.ImportJobID != nil {
-		importJobID = *finding.ImportJobID
-	}
-
-	_, err := tx.ExecContext(
+	_, err := ex.ExecContext(
 		ctx,
 		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		finding.ID,
-		scanResultID,
-		productID,
+		anyUUIDPtr(finding.ScanResultID),
+		anyUUIDPtr(finding.ProductID),
 		finding.Fingerprint,
 		finding.Title,
-		description,
+		nullStringPtr(finding.Description),
 		finding.Severity,
 		finding.Status,
-		duplicateID,
-		assigneeID,
-		importJobID,
+		anyUUIDPtr(finding.DuplicateID),
+		anyUUIDPtr(finding.AssigneeID),
+		anyUUIDPtr(finding.ImportJobID),
 		finding.FirstSeenAt,
 		finding.LastSeenAt,
 		finding.RepeatCount,
@@ -266,20 +199,26 @@ func CreateFindingTx(ctx context.Context, tx *sql.Tx, finding *models.Finding) e
 	return err
 }
 
+// FindingMasterRecord хранит минимальные данные по master finding.
 type FindingMasterRecord struct {
 	ID          uuid.UUID
 	RepeatCount int
 }
 
 func FindMasterFindingByFingerprint(ctx context.Context, db *sql.DB, fingerprint string, productID *uuid.UUID) (*FindingMasterRecord, error) {
+	// PostgreSQL использует позиционные параметры $1,$2,... :contentReference[oaicite:3]{index=3}
 	query := `SELECT id, repeat_count FROM findings WHERE fingerprint = $1 AND duplicate_id IS NULL AND deleted_at IS NULL`
-	args := []interface{}{fingerprint}
+	args := []any{fingerprint}
+
 	if productID != nil {
-		query += " AND product_id = $2"
+		query += fmt.Sprintf(" AND product_id = $%d", len(args)+1)
 		args = append(args, *productID)
 	} else {
+		// оставляю твою текущую семантику: nil => product_id IS NULL
+		// (если хочешь nil == "любой продукт" — скажи, поменяем)
 		query += " AND product_id IS NULL"
 	}
+
 	query += " LIMIT 1"
 
 	row := db.QueryRowContext(ctx, query, args...)
@@ -292,6 +231,8 @@ func FindMasterFindingByFingerprint(ctx context.Context, db *sql.DB, fingerprint
 	}
 	return &record, nil
 }
+
+// ---- scanners ----
 
 func scanProductRow(row *sql.Row) (*models.Product, error) {
 	var product models.Product

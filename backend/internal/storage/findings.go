@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"lotus-warden/backend/internal/models"
 )
 
 type FindingListItem struct {
@@ -66,64 +68,89 @@ type FindingFilters struct {
 	Offset           int
 }
 
+// COALESCE для last_seen_at, чтобы NEW (где last_seen_at может быть NULL) нормально работали с date filters / sort.
+const lastSeenExpr = "COALESCE(f.last_seen_at, f.created_at)"
+
 func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []interface{}) {
 	whereClause := "WHERE f.deleted_at IS NULL"
 	args := []interface{}{}
 
+	// По умолчанию хотим master-only (canonical).
+	// Текущее поведение: если CanonicalOnly=true ИЛИ IncludeRepeats=false => показываем только master.
 	if filters.CanonicalOnly || !filters.IncludeRepeats {
 		whereClause += " AND f.duplicate_id IS NULL"
 	}
+
 	if filters.Severity != "" {
 		args = append(args, filters.Severity)
 		whereClause += fmt.Sprintf(" AND f.severity = $%d", startIndex+len(args))
 	}
+
 	if filters.Status != "" {
 		args = append(args, filters.Status)
 		whereClause += fmt.Sprintf(" AND f.status = $%d", startIndex+len(args))
 	}
+
 	if filters.ProductID != nil {
 		args = append(args, *filters.ProductID)
 		whereClause += fmt.Sprintf(" AND f.product_id = $%d", startIndex+len(args))
 	}
+
 	if filters.ImportJobID != nil {
 		args = append(args, *filters.ImportJobID)
 		whereClause += fmt.Sprintf(" AND f.import_job_id = $%d", startIndex+len(args))
 	}
+
 	if filters.Query != "" {
 		args = append(args, "%"+filters.Query+"%")
+		ph := startIndex + len(args)
 		whereClause += fmt.Sprintf(
 			" AND (f.title ILIKE $%d OR f.description ILIKE $%d OR f.fingerprint ILIKE $%d OR p.identifier ILIKE $%d OR p.name ILIKE $%d)",
-			startIndex+len(args),
-			startIndex+len(args),
-			startIndex+len(args),
-			startIndex+len(args),
-			startIndex+len(args),
+			ph, ph, ph, ph, ph,
 		)
 	}
+
 	if filters.ScannerType != "" {
 		args = append(args, filters.ScannerType)
 		whereClause += fmt.Sprintf(" AND sr.scanner = $%d", startIndex+len(args))
 	}
+
 	if filters.OccurrenceStatus != "" {
 		switch strings.ToUpper(filters.OccurrenceStatus) {
 		case "NEW":
+			// NEW: master без повторов
 			whereClause += " AND f.duplicate_id IS NULL AND f.repeat_count = 0"
 		case "REPEAT":
+			// REPEAT: либо master с repeat_count>0, либо duplicate-строки (если включены)
 			whereClause += " AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL)"
 		}
 	}
+
 	if filters.DateFrom != nil {
 		args = append(args, *filters.DateFrom)
-		whereClause += fmt.Sprintf(" AND f.last_seen_at >= $%d", startIndex+len(args))
+		whereClause += fmt.Sprintf(" AND %s >= $%d", lastSeenExpr, startIndex+len(args))
 	}
+
 	if filters.DateTo != nil {
 		args = append(args, *filters.DateTo)
-		whereClause += fmt.Sprintf(" AND f.last_seen_at <= $%d", startIndex+len(args))
+		whereClause += fmt.Sprintf(" AND %s <= $%d", lastSeenExpr, startIndex+len(args))
 	}
+
 	return whereClause, args
 }
 
 func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]FindingListItem, int, error) {
+	// sane defaults / safety
+	if filters.Limit <= 0 {
+		filters.Limit = 50
+	}
+	if filters.Limit > 500 {
+		filters.Limit = 500
+	}
+	if filters.Offset < 0 {
+		filters.Offset = 0
+	}
+
 	whereClause, args := buildFindingWhereClause(filters, 0)
 
 	sortField := resolveFindingSortField(filters.SortField)
@@ -133,27 +160,48 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		sortOrder = "ASC"
 	}
 
-	countQuery := "SELECT COUNT(*) FROM findings f LEFT JOIN products p ON p.id = f.product_id LEFT JOIN scan_results sr ON sr.id = f.scan_result_id " + whereClause
+	// COUNT
+	countQuery := `
+		SELECT COUNT(*)
+		FROM findings f
+		LEFT JOIN products p ON p.id = f.product_id
+		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
+	` + " " + whereClause
+
 	var total int
 	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
+	// LIST
 	args = append(args, filters.Limit, filters.Offset)
+	limitPH := len(args) - 1
+	offsetPH := len(args)
+
+	// Стабильный ORDER BY: добавляем f.id как tie-breaker.
 	listQuery := fmt.Sprintf(`
-		SELECT f.id, f.title, f.severity, f.status, f.product_id, p.name, f.assignee_id, u.username, f.import_job_id, f.created_at, f.updated_at, f.last_seen_at, f.repeat_count, f.duplicate_id, sr.scanner
+		SELECT
+			f.id, f.title, f.severity, f.status,
+			f.product_id, p.name,
+			f.assignee_id, u.username,
+			f.import_job_id,
+			f.created_at, f.updated_at,
+			f.last_seen_at, f.repeat_count,
+			f.duplicate_id,
+			sr.scanner
 		FROM findings f
 		LEFT JOIN products p ON p.id = f.product_id
 		LEFT JOIN users u ON u.id = f.assignee_id
 		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
 		%s
-		ORDER BY %s %s
+		ORDER BY %s %s, f.id %s
 		LIMIT $%d OFFSET $%d`,
 		whereClause,
 		sortField,
 		sortOrder,
-		len(args)-1,
-		len(args),
+		sortOrder,
+		limitPH,
+		offsetPH,
 	)
 
 	rows, err := db.QueryContext(ctx, listQuery, args...)
@@ -202,20 +250,25 @@ type FindingNeighbors struct {
 
 func GetFindingNeighbors(ctx context.Context, db *sql.DB, id uuid.UUID, filters FindingFilters) (*FindingNeighbors, error) {
 	whereClause, args := buildFindingWhereClause(filters, 0)
+
 	sortField := resolveFindingSortField(filters.SortField)
+
 	sortOrder := "DESC"
 	if strings.EqualFold(filters.SortOrder, "asc") {
 		sortOrder = "ASC"
 	}
 
+	// Стабильный порядок: <field> <dir>, f.id <dir>
 	orderClause := fmt.Sprintf("%s %s, f.id %s", sortField, sortOrder, sortOrder)
+
 	args = append(args, id)
 	query := fmt.Sprintf(`
 		WITH ranked AS (
-			SELECT f.id,
+			SELECT
+				f.id,
 				row_number() OVER (ORDER BY %s) AS position,
 				count(*) OVER () AS total,
-				lag(f.id) OVER (ORDER BY %s) AS prev_id,
+				lag(f.id)  OVER (ORDER BY %s) AS prev_id,
 				lead(f.id) OVER (ORDER BY %s) AS next_id
 			FROM findings f
 			LEFT JOIN products p ON p.id = f.product_id
@@ -236,6 +289,7 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, id uuid.UUID, filters 
 	var nextID uuid.NullUUID
 	var position int
 	var total int
+
 	err := db.QueryRowContext(ctx, query, args...).Scan(&prevID, &nextID, &position, &total)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -255,7 +309,12 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, id uuid.UUID, filters 
 func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDetail, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT f.id, f.title, f.description, f.fingerprint, f.severity, f.status, f.product_id, p.name, f.assignee_id, f.import_job_id, f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id, f.created_at, f.updated_at, f.deleted_at
+		`SELECT
+			f.id, f.title, f.description, f.fingerprint, f.severity, f.status,
+			f.product_id, p.name,
+			f.assignee_id, f.import_job_id,
+			f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id,
+			f.created_at, f.updated_at, f.deleted_at
 		 FROM findings f
 		 LEFT JOIN products p ON p.id = f.product_id
 		 WHERE f.id = $1 AND f.deleted_at IS NULL`,
@@ -287,6 +346,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		}
 		return nil, err
 	}
+
 	return &detail, nil
 }
 
@@ -301,7 +361,7 @@ func resolveFindingSortField(sortField string) string {
 	case "status":
 		return "f.status"
 	case "last_seen_at", "lastSeenAt":
-		return "f.last_seen_at"
+		return lastSeenExpr
 	case "created_at", "createdAt":
 		return "f.created_at"
 	case "updated_at", "updatedAt":

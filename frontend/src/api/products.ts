@@ -1,5 +1,5 @@
 import { Product } from "../types/products";
-import { getAuthHeaders, parseApiResponseWithMeta } from "./http";
+import { getAuthHeaders, parseListApiResponse } from "./http";
 
 export const fetchProducts = async (
   limit: number,
@@ -7,27 +7,21 @@ export const fetchProducts = async (
   signal?: AbortSignal
 ): Promise<{ data: Product[]; total: number }> => {
   const searchParams = new URLSearchParams({
-    limit: limit.toString(),
-    offset: offset.toString(),
+    limit: String(limit),
+    offset: String(offset),
   });
 
-  const response = await fetch(`/api/v1/products?${searchParams}`, {
+  const response = await fetch(`/api/v1/products?${searchParams.toString()}`, {
     method: "GET",
     headers: getAuthHeaders(),
     signal,
   });
 
-  if (!response.ok) {
-    throw new Error("Не удалось загрузить список продуктов");
+  // parseListApiResponse сам даст нормальную ошибку на 401/403
+  // но для других кодов тоже пусть будет информативно
+  if (!response.ok && response.status !== 401 && response.status !== 403) {
+    throw new Error(`Не удалось загрузить список продуктов (${response.status})`);
   }
 
-  const payload = await parseApiResponseWithMeta<{
-    data: Product[];
-    total: number;
-  }>(response);
-
-  return {
-    data: Array.isArray(payload.data) ? payload.data : [],
-    total: typeof payload.total === "number" ? payload.total : 0,
-  };
+  return parseListApiResponse<Product>(response);
 };
