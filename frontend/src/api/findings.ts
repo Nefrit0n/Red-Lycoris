@@ -2,6 +2,7 @@ import {
   ApiResponse,
   BulkUpdateResponse,
   FetchFindingsParams,
+  Finding,
   FindingDetail,
   FindingNeighbors,
   FindingStatus,
@@ -10,79 +11,55 @@ import {
   getAuthHeaders,
   getJsonHeaders,
   parseApiResponse,
-  parseApiResponseWithMeta,
+  parseListApiResponse,
 } from "./http";
 
 export const fetchFindings = async (
   params: FetchFindingsParams,
   signal?: AbortSignal
 ): Promise<ApiResponse> => {
-  const searchParams = new URLSearchParams({
-    limit: params.limit.toString(),
-    offset: params.offset.toString(),
-  });
+  const searchParams = new URLSearchParams();
+  searchParams.set("limit", String(params.limit));
+  searchParams.set("offset", String(params.offset));
 
+  // product filter (держим оба ключа для совместимости, но отправляем только один)
   if (params.filterProduct) {
     searchParams.set("product", params.filterProduct);
   } else if (params.filterProductId) {
     searchParams.set("productId", params.filterProductId);
   }
-  if (params.filterSeverity) {
-    searchParams.set("severity", params.filterSeverity);
-  }
-  if (params.filterStatus) {
-    searchParams.set("status", params.filterStatus);
-  }
-  if (params.filterOccurrence) {
-    searchParams.set("occurrenceStatus", params.filterOccurrence);
-  }
-  if (params.filterScannerType) {
-    searchParams.set("scannerType", params.filterScannerType);
-  }
-  if (params.search) {
-    searchParams.set("search", params.search);
-  }
-  if (params.dateFrom) {
-    searchParams.set("dateFrom", params.dateFrom);
-  }
-  if (params.dateTo) {
-    searchParams.set("dateTo", params.dateTo);
-  }
+
+  if (params.filterSeverity) searchParams.set("severity", params.filterSeverity);
+  if (params.filterStatus) searchParams.set("status", params.filterStatus);
+  if (params.filterOccurrence) searchParams.set("occurrenceStatus", params.filterOccurrence);
+  if (params.filterScannerType) searchParams.set("scannerType", params.filterScannerType);
+
+  if (params.search) searchParams.set("search", params.search);
+
+  if (params.dateFrom) searchParams.set("dateFrom", params.dateFrom);
+  if (params.dateTo) searchParams.set("dateTo", params.dateTo);
+
   if (typeof params.canonicalOnly === "boolean") {
     searchParams.set("canonicalOnly", String(params.canonicalOnly));
   }
   if (typeof params.includeRepeats === "boolean") {
     searchParams.set("includeRepeats", String(params.includeRepeats));
   }
-  if (params.importJobId) {
-    searchParams.set("import_job_id", params.importJobId);
-  }
-  if (params.sortField) {
-    searchParams.set("sortField", params.sortField);
-  }
-  if (params.sortOrder) {
-    searchParams.set("sortOrder", params.sortOrder);
-  }
 
-  const response = await fetch(`/api/v1/findings?${searchParams}`, {
+  if (params.importJobId) searchParams.set("import_job_id", params.importJobId);
+  if (params.sortField) searchParams.set("sortField", String(params.sortField));
+  if (params.sortOrder) searchParams.set("sortOrder", params.sortOrder);
+
+  const response = await fetch(`/api/v1/findings?${searchParams.toString()}`, {
     method: "GET",
     signal,
     headers: getAuthHeaders(),
   });
 
-  if (!response.ok) {
-    throw new Error("Не удалось загрузить список находок");
-  }
-
-  const payload = await parseApiResponseWithMeta<{
-    data: ApiResponse["data"];
-    total: number;
-  }>(response);
-
-  return {
-    data: Array.isArray(payload.data) ? payload.data : [],
-    total: typeof payload.total === "number" ? payload.total : 0,
-  };
+  // parseListApiResponse сам:
+  // - корректно распарсит data/items/success.data и т.п.
+  // - кинет нормальную ошибку на 401/403
+  return parseListApiResponse<Finding>(response);
 };
 
 export const fetchFindingDetail = async (
@@ -96,7 +73,7 @@ export const fetchFindingDetail = async (
   });
 
   if (!response.ok) {
-    throw new Error("Не удалось загрузить детали уязвимости");
+    throw new Error(`Не удалось загрузить детали уязвимости (${response.status})`);
   }
 
   return parseApiResponse<FindingDetail>(response);
@@ -104,16 +81,18 @@ export const fetchFindingDetail = async (
 
 export const updateFindingStatus = async (
   id: string,
-  status: FindingStatus
+  status: FindingStatus,
+  signal?: AbortSignal
 ): Promise<FindingDetail> => {
   const response = await fetch(`/api/v1/findings/${id}`, {
     method: "PATCH",
+    signal,
     headers: getJsonHeaders(),
     body: JSON.stringify({ status }),
   });
 
   if (!response.ok) {
-    throw new Error("Не удалось обновить статус");
+    throw new Error(`Не удалось обновить статус (${response.status})`);
   }
 
   return parseApiResponse<FindingDetail>(response);
@@ -121,16 +100,18 @@ export const updateFindingStatus = async (
 
 export const addFindingComment = async (
   id: string,
-  body: string
+  body: string,
+  signal?: AbortSignal
 ): Promise<void> => {
   const response = await fetch(`/api/v1/findings/${id}/comments`, {
     method: "POST",
+    signal,
     headers: getJsonHeaders(),
     body: JSON.stringify({ body }),
   });
 
   if (!response.ok) {
-    throw new Error("Не удалось добавить комментарий");
+    throw new Error(`Не удалось добавить комментарий (${response.status})`);
   }
 
   await parseApiResponse(response);
@@ -138,16 +119,18 @@ export const addFindingComment = async (
 
 export const fetchFindingNeighbors = async (
   id: string,
-  queryParams: string
+  queryParams: string,
+  signal?: AbortSignal
 ): Promise<FindingNeighbors> => {
   const query = queryParams ? `?${queryParams}` : "";
   const response = await fetch(`/api/v1/findings/${id}/neighbors${query}`, {
     method: "GET",
+    signal,
     headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
-    throw new Error("Не удалось загрузить соседние находки");
+    throw new Error(`Не удалось загрузить соседние находки (${response.status})`);
   }
 
   return parseApiResponse<FindingNeighbors>(response);
@@ -179,7 +162,7 @@ export const bulkUpdateFindings = async (payload: {
   });
 
   if (!response.ok) {
-    throw new Error("Не удалось выполнить массовое действие");
+    throw new Error(`Не удалось выполнить массовое действие (${response.status})`);
   }
 
   return parseApiResponse<BulkUpdateResponse>(response);

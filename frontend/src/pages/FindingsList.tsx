@@ -194,7 +194,6 @@ const FindingsList = () => {
           pathname: location.pathname,
           search: nextSearch ? `?${nextSearch}` : "",
         },
-        // ✅ replace=true гасит дерготню истории и уменьшает “скачки” при навигации
         { replace: true }
       );
     }
@@ -277,6 +276,7 @@ const FindingsList = () => {
         const normalizedDateTo = dateTo
           ? new Date(`${dateTo}T23:59:59Z`).toISOString()
           : undefined;
+
         const response = await fetchFindings(
           {
             limit: pageSize,
@@ -336,11 +336,14 @@ const FindingsList = () => {
     ]
   );
 
+  // ✅ КЛЮЧЕВОЙ ФИКС: не фетчим, пока URL не распарсен (иначе будет 2 запроса и 499)
   useEffect(() => {
+    if (!hydrated) return;
+
     const controller = new AbortController();
     fetchData(controller.signal);
     return () => controller.abort();
-  }, [fetchData]);
+  }, [fetchData, hydrated]);
 
   useEffect(() => {
     setSelectedIds([]);
