@@ -84,7 +84,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("INSERT INTO import_jobs").
-		WithArgs(sqlmock.AnyArg(), "trivy", "Billing API", "1.0.0", "billing-api", "queued", 0, 0, 0, sqlmock.AnyArg(), nil, sqlmock.AnyArg(), nil, nil, sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), "Billing API", "1.0.0", "billing-api", "queued", 0, 0, 0, sqlmock.AnyArg(), nil, sqlmock.AnyArg(), nil, nil, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("UPDATE import_jobs").
@@ -95,24 +95,39 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery("SELECT id FROM findings WHERE fingerprint = \\$1 LIMIT 1").
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, repeat_count\\s+FROM findings\\s+WHERE fingerprint = \\$1").
 		WithArgs(fingerprintOne).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count"}))
 
 	mock.ExpectExec("INSERT INTO findings").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintOne, "SQL Injection", sqlmock.AnyArg(), "high", "new", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintOne, "SQL Injection", sqlmock.AnyArg(), "high", "new", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), 0, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 
-	mock.ExpectQuery("SELECT id FROM findings WHERE fingerprint = \\$1 LIMIT 1").
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, repeat_count\\s+FROM findings\\s+WHERE fingerprint = \\$1").
 		WithArgs(fingerprintTwo).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(duplicateID))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count"}).AddRow(duplicateID, 2))
 
 	mock.ExpectExec("INSERT INTO findings").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintTwo, "XSS", sqlmock.AnyArg(), "medium", "duplicate", duplicateID, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintTwo, "XSS", sqlmock.AnyArg(), "medium", "duplicate", duplicateID, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), 0, sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("UPDATE findings").
+		WithArgs(3, sqlmock.AnyArg(), duplicateID).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	mock.ExpectExec("INSERT INTO finding_events").
+		WithArgs(sqlmock.AnyArg(), duplicateID, sqlmock.AnyArg(), "repeat_detected", sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("UPDATE import_jobs").
-		WithArgs(2, 2, 1, sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec("UPDATE import_jobs").
+		WithArgs(2, 1, 1, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("UPDATE import_jobs").
@@ -145,8 +160,8 @@ func TestScanUploadEndpoint(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
-	if response.CreatedFindings != 2 {
-		t.Fatalf("expected 2 findings processed, got %d", response.CreatedFindings)
+	if response.CreatedFindings != 1 {
+		t.Fatalf("expected 1 finding created, got %d", response.CreatedFindings)
 	}
 	if response.Duplicates != 1 {
 		t.Fatalf("expected 1 duplicate, got %d", response.Duplicates)

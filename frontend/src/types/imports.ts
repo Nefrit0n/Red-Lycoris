@@ -9,6 +9,7 @@ export interface ImportJob {
   createdAt: string;
   startedAt?: string | null;
   finishedAt?: string | null;
+  productId?: string | null;
   productName?: string | null;
   productVersion?: string | null;
   productIdentifier?: string | null;

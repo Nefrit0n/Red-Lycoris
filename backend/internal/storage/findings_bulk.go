@@ -52,6 +52,7 @@ func ListFindingsByFilters(ctx context.Context, db *sql.DB, filters FindingFilte
 		`SELECT f.id, f.status, f.assignee_id, f.duplicate_id
 		 FROM findings f
 		 LEFT JOIN products p ON p.id = f.product_id
+		 LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
 		 %s
 		 ORDER BY f.created_at DESC`,
 		whereClause,
@@ -82,7 +83,7 @@ func ListFindingsByFilters(ctx context.Context, db *sql.DB, filters FindingFilte
 
 func CountFindingsByFilters(ctx context.Context, db *sql.DB, filters FindingFilters) (int, error) {
 	whereClause, args := buildFindingWhereClause(filters, 0)
-	countQuery := "SELECT COUNT(*) FROM findings f LEFT JOIN products p ON p.id = f.product_id " + whereClause
+	countQuery := "SELECT COUNT(*) FROM findings f LEFT JOIN products p ON p.id = f.product_id LEFT JOIN scan_results sr ON sr.id = f.scan_result_id " + whereClause
 	var total int
 	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return 0, err
@@ -121,6 +122,7 @@ func BulkUpdateFindingStatusByFilters(ctx context.Context, db *sql.DB, filters F
 		     SELECT f.id
 		     FROM findings f
 		     LEFT JOIN products p ON p.id = f.product_id
+		     LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
 		     %s
 		 )`,
 		whereClause,
@@ -171,6 +173,7 @@ func BulkUpdateFindingAssigneeByFilters(ctx context.Context, db *sql.DB, filters
 		     SELECT f.id
 		     FROM findings f
 		     LEFT JOIN products p ON p.id = f.product_id
+		     LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
 		     %s
 		 )`,
 		whereClause,

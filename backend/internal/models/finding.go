@@ -37,6 +37,9 @@ type Finding struct {
 	DuplicateID  *uuid.UUID `db:"duplicate_id"`
 	AssigneeID   *uuid.UUID `db:"assignee_id"`
 	ImportJobID  *uuid.UUID `db:"import_job_id"`
+	FirstSeenAt  time.Time  `db:"first_seen_at"`
+	LastSeenAt   time.Time  `db:"last_seen_at"`
+	RepeatCount  int        `db:"repeat_count"`
 	CreatedAt    time.Time  `db:"created_at"`
 	UpdatedAt    time.Time  `db:"updated_at"`
 	DeletedAt    *time.Time `db:"deleted_at"`
@@ -89,6 +92,12 @@ func (f *Finding) PrepareForInsert() {
 	}
 	if f.UpdatedAt.IsZero() {
 		f.UpdatedAt = f.CreatedAt
+	}
+	if f.FirstSeenAt.IsZero() {
+		f.FirstSeenAt = f.CreatedAt
+	}
+	if f.LastSeenAt.IsZero() {
+		f.LastSeenAt = f.UpdatedAt
 	}
 }
 

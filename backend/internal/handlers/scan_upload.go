@@ -142,6 +142,24 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(resp)
 }
 
+func createFindingEventForID(ctx context.Context, db *sql.DB, findingID uuid.UUID, actorID *uuid.UUID, eventType string, payload fiber.Map) error {
+	var rawPayload []byte
+	if payload != nil {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		rawPayload = data
+	}
+	event := &models.FindingEvent{
+		FindingID: findingID,
+		ActorID:   actorID,
+		EventType: eventType,
+		Payload:   rawPayload,
+	}
+	return storage.CreateFindingEvent(ctx, db, event)
+}
+
 func ScanUploadScope() string {
 	return scanUploadScope
 }
@@ -478,50 +496,133 @@ func (h *ScanUploadHandler) processImportJob(ctx context.Context, req ScanUpload
 
 	duplicates := 0
 	createdFindings := 0
+	seenAt := time.Now().UTC()
 	for _, finding := range findings {
 		fingerprint := dedup.ComputeFingerprint(req.ScannerType, finding)
-		existing, err := storage.FindFindingIDByFingerprint(ctx, h.db, fingerprint)
+
+		tx, err := h.db.BeginTx(ctx, nil)
 		if err != nil {
+			return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to start finding transaction")
+		}
+
+		var masterID uuid.UUID
+		var repeatCount int
+		query := `SELECT id, repeat_count
+		 FROM findings
+		 WHERE fingerprint = $1
+		   AND duplicate_id IS NULL
+		   AND deleted_at IS NULL`
+		args := []interface{}{fingerprint}
+		if productID != nil {
+			query += " AND product_id = $2"
+			args = append(args, *productID)
+		} else {
+			query += " AND product_id IS NULL"
+		}
+		query += " LIMIT 1 FOR UPDATE"
+		err = tx.QueryRowContext(ctx, query, args...).Scan(&masterID, &repeatCount)
+		if err != nil && err != sql.ErrNoRows {
+			_ = tx.Rollback()
 			return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to deduplicate finding")
 		}
 
-		status := models.StatusNew
-		var duplicateID *uuid.UUID
-		if existing != nil {
-			status = models.StatusDuplicate
-			duplicates++
-			duplicateID = &existing.ID
+		if err == sql.ErrNoRows {
+			model := &models.Finding{
+				ScanResultID: &scan.ID,
+				ProductID:    productID,
+				Fingerprint:  fingerprint,
+				Title:        finding.Title,
+				Description:  finding.Description,
+				Severity:     finding.Severity,
+				Status:       models.StatusNew,
+				ImportJobID:  &job.ID,
+				FirstSeenAt:  seenAt,
+				LastSeenAt:   seenAt,
+				RepeatCount:  0,
+			}
+			if err := storage.CreateFindingTx(ctx, tx, model); err != nil {
+				_ = tx.Rollback()
+				return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to store finding")
+			}
+			if err := tx.Commit(); err != nil {
+				return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to finalize finding")
+			}
+			_ = createAuditLog(ctx, h.db, &models.AuditLog{
+				ActorID:    uploaderID,
+				ActorType:  "user",
+				Action:     "finding.created",
+				TargetType: "finding",
+				TargetID:   stringPointer(model.ID.String()),
+				Scope:      "product",
+				ScopeID:    productID,
+			}, map[string]interface{}{
+				"status":        model.Status,
+				"severity":      model.Severity,
+				"import_job_id": job.ID.String(),
+				"meta":          auditMeta,
+			})
+			createdFindings++
+			continue
 		}
 
-		model := &models.Finding{
+		duplicate := &models.Finding{
 			ScanResultID: &scan.ID,
 			ProductID:    productID,
 			Fingerprint:  fingerprint,
 			Title:        finding.Title,
 			Description:  finding.Description,
 			Severity:     finding.Severity,
-			Status:       status,
-			DuplicateID:  duplicateID,
+			Status:       models.StatusDuplicate,
+			DuplicateID:  &masterID,
 			ImportJobID:  &job.ID,
+			FirstSeenAt:  seenAt,
+			LastSeenAt:   seenAt,
+			RepeatCount:  0,
 		}
-		if err := storage.CreateFinding(ctx, h.db, model); err != nil {
+		if err := storage.CreateFindingTx(ctx, tx, duplicate); err != nil {
+			_ = tx.Rollback()
 			return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to store finding")
 		}
+		if _, err := tx.ExecContext(
+			ctx,
+			`UPDATE findings
+			 SET repeat_count = $1,
+			     last_seen_at = $2,
+			     updated_at = $2
+			 WHERE id = $3`,
+			repeatCount+1,
+			seenAt,
+			masterID,
+		); err != nil {
+			_ = tx.Rollback()
+			return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to update master finding")
+		}
+		if err := tx.Commit(); err != nil {
+			return ScanUploadResponse{}, http.StatusInternalServerError, fmt.Errorf("failed to finalize finding")
+		}
+
+		_ = createFindingEventForID(ctx, h.db, masterID, uploaderID, "repeat_detected", fiber.Map{
+			"import_job_id": job.ID.String(),
+		})
 		_ = createAuditLog(ctx, h.db, &models.AuditLog{
 			ActorID:    uploaderID,
 			ActorType:  "user",
-			Action:     "finding.created",
+			Action:     "finding.duplicate.created",
 			TargetType: "finding",
-			TargetID:   stringPointer(model.ID.String()),
+			TargetID:   stringPointer(duplicate.ID.String()),
 			Scope:      "product",
 			ScopeID:    productID,
 		}, map[string]interface{}{
-			"status":        model.Status,
-			"severity":      model.Severity,
+			"status":        duplicate.Status,
+			"severity":      duplicate.Severity,
 			"import_job_id": job.ID.String(),
 			"meta":          auditMeta,
 		})
-		createdFindings++
+		duplicates++
+	}
+
+	if productID != nil {
+		_ = storage.UpdateImportJobProductID(ctx, h.db, job.ID, *productID)
 	}
 
 	if err := storage.UpdateImportJobStats(ctx, h.db, job.ID, len(findings), createdFindings, duplicates); err != nil {

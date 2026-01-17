@@ -79,6 +79,28 @@
             "schema": {
               "type": "integer"
             }
+          },
+          {
+            "name": "productId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scanner",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -248,10 +270,61 @@
             }
           },
           {
+            "name": "occurrenceStatus",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scannerType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "canonicalOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "includeRepeats",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -480,6 +553,11 @@
             "format": "date-time",
             "nullable": true
           },
+          "productId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "productName": {
             "type": "string",
             "nullable": true
@@ -584,6 +662,47 @@
           }
         }
       },
+      "FindingOwner": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "FindingOccurrence": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "importJobId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "seenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "scannerType": {
+            "type": "string",
+            "nullable": true
+          },
+          "snippet": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "FindingResponse": {
         "type": "object",
         "properties": {
@@ -608,6 +727,28 @@
           "status": {
             "type": "string"
           },
+          "scannerType": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurrenceStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "repeatCount": {
+            "type": "integer",
+            "nullable": true
+          },
           "productId": {
             "type": "string",
             "format": "uuid",
@@ -621,6 +762,9 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "owner": {
+            "$ref": "#/components/schemas/FindingOwner"
           },
           "importJobId": {
             "type": "string",
@@ -674,6 +818,12 @@
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/FindingEvent"
+                }
+              },
+              "occurrences": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingOccurrence"
                 }
               },
               "duplicates": {

@@ -33,8 +33,26 @@ export const fetchFindings = async (
   if (params.filterStatus) {
     searchParams.set("status", params.filterStatus);
   }
+  if (params.filterOccurrence) {
+    searchParams.set("occurrenceStatus", params.filterOccurrence);
+  }
+  if (params.filterScannerType) {
+    searchParams.set("scannerType", params.filterScannerType);
+  }
   if (params.search) {
-    searchParams.set("q", params.search);
+    searchParams.set("search", params.search);
+  }
+  if (params.dateFrom) {
+    searchParams.set("dateFrom", params.dateFrom);
+  }
+  if (params.dateTo) {
+    searchParams.set("dateTo", params.dateTo);
+  }
+  if (typeof params.canonicalOnly === "boolean") {
+    searchParams.set("canonicalOnly", String(params.canonicalOnly));
+  }
+  if (typeof params.includeRepeats === "boolean") {
+    searchParams.set("includeRepeats", String(params.includeRepeats));
   }
   if (params.importJobId) {
     searchParams.set("import_job_id", params.importJobId);
@@ -142,8 +160,14 @@ export const bulkUpdateFindings = async (payload: {
     product?: string;
     severity?: string;
     status?: string;
+    occurrenceStatus?: string;
+    scannerType?: string;
     q?: string;
     import_job_id?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    canonicalOnly?: boolean;
+    includeRepeats?: boolean;
   };
   action: "set_status" | "assign" | "dismiss";
   payload: Record<string, unknown>;
