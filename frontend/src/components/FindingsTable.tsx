@@ -3,6 +3,9 @@ import {
   Checkbox,
   Chip,
   IconButton,
+  Link as MuiLink,
+  Menu,
+  MenuItem,
   Skeleton,
   Stack,
   Table,
@@ -15,10 +18,13 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import LinkIcon from "@mui/icons-material/Link";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { ReactNode, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { ReactNode, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Finding,
   FindingOccurrenceStatus,
@@ -78,6 +84,35 @@ const occurrenceColors: Record<
   REPEAT: "warning",
 };
 
+const tableContainerSx = {
+  borderRadius: 2,
+  "& .MuiTableCell-head": {
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+    backgroundColor: "background.paper",
+  },
+  "& .MuiTableRow-root:hover": {
+    backgroundColor: "action.hover",
+  },
+};
+
+const tableSx = {
+  minWidth: 980,
+  tableLayout: "fixed" as const,
+};
+
+const issueCellSx = {
+  maxWidth: 620,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const metaLineSx = {
+  display: "block",
+  color: "text.secondary",
+};
+
 interface FindingsTableProps {
   data: Finding[];
   selectedIds: string[];
@@ -131,7 +166,40 @@ const prettifyScanner = (v?: string | null) => {
   return s.length <= 4 ? s.toUpperCase() : s[0].toUpperCase() + s.slice(1);
 };
 
-export default function FindingsTable({
+const isModifiedClick = (e: React.MouseEvent) =>
+  e.metaKey || e.ctrlKey || e.shiftKey || (e as any).button === 1;
+
+const clickedInteractive = (target: EventTarget | null) => {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  return Boolean(
+    el.closest(
+      'a,button,input,textarea,select,label,[role="button"],[role="checkbox"]'
+    )
+  );
+};
+
+const copyTextToClipboard = async (value: string) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textarea);
+  }
+};
+
+const FindingsTable = ({
   data,
   selectedIds,
   sortField,
@@ -148,13 +216,16 @@ export default function FindingsTable({
   rowCount,
   returnTo,
   onNavigateToDetail,
-  onOpenDetails,
-  activeFindingId,
-}: FindingsTableProps) {
+  onOpenDetail,
+  activeId,
+}: FindingsTableProps) => {
+  const navigate = useNavigate();
   const safeData = Array.isArray(data) ? data : [];
 
-  const allSelected =
-    safeData.length > 0 && selectedIds.length === safeData.length;
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [menuFinding, setMenuFinding] = useState<Finding | null>(null);
+
+  const allSelected = safeData.length > 0 && selectedIds.length === safeData.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
 
   const dtf = useMemo(() => {
@@ -220,14 +291,42 @@ export default function FindingsTable({
 
   const colCount = 5; // checkbox + issue + severity + status + actions
 
+  const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>, finding: Finding) => {
+    event.stopPropagation();
+    setMenuAnchor(event.currentTarget);
+    setMenuFinding(finding);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuFinding(null);
+  };
+
+  const handleOpenFromMenu = (finding: Finding) => {
+    handleMenuClose();
+    if (onOpenDetail) {
+      onNavigateToDetail();
+      onOpenDetail(finding.id);
+      return;
+    }
+    onNavigateToDetail();
+    navigate(buildDetailLink(finding.id));
+  };
+
+  const handleCopyPermalink = async (finding: Finding) => {
+    const url = `${window.location.origin}${buildDetailLink(finding.id)}`;
+    await copyTextToClipboard(url);
+    handleMenuClose();
+  };
+
+  const handleCopyId = async (finding: Finding) => {
+    await copyTextToClipboard(finding.id);
+    handleMenuClose();
+  };
+
   return (
-    <TableContainer
-      sx={{
-        borderRadius: 2,
-        "& .MuiTableCell-head": { fontWeight: 700, whiteSpace: "nowrap" },
-      }}
-    >
-      <Table stickyHeader size="small" sx={{ minWidth: 920 }}>
+    <TableContainer sx={tableContainerSx}>
+      <Table stickyHeader size="small" sx={tableSx}>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox" sx={{ width: 44 }}>
@@ -241,7 +340,7 @@ export default function FindingsTable({
               />
             </TableCell>
 
-            <TableCell>
+            <TableCell sx={{ width: "50%" }}>
               <TableSortLabel
                 active={sortField === "title"}
                 direction={sortField === "title" ? sortOrder : "asc"}
@@ -251,7 +350,7 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 130 }}>
+            <TableCell sx={{ width: 120 }}>
               <TableSortLabel
                 active={sortField === "severity"}
                 direction={sortField === "severity" ? sortOrder : "asc"}
@@ -261,7 +360,7 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 170 }}>
+            <TableCell sx={{ width: 150 }}>
               <TableSortLabel
                 active={sortField === "status"}
                 direction={sortField === "status" ? sortOrder : "asc"}
@@ -271,8 +370,22 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
+            <TableCell sx={{ width: 160, display: { xs: "none", md: "table-cell" } }}>
+              <TableSortLabel
+                active={sortField === "lastSeenAt"}
+                direction={sortField === "lastSeenAt" ? sortOrder : "asc"}
+                onClick={() => onSortChange("lastSeenAt")}
+              >
+                Last seen
+              </TableSortLabel>
+            </TableCell>
+
+            <TableCell sx={{ width: 120, display: { xs: "none", lg: "table-cell" } }}>
+              Occurrence
+            </TableCell>
+
             <TableCell align="right" sx={{ width: 64 }}>
-              {/* actions */}
+              Actions
             </TableCell>
           </TableRow>
         </TableHead>
@@ -285,14 +398,23 @@ export default function FindingsTable({
                   <Skeleton variant="rectangular" width={18} height={18} />
                 </TableCell>
                 <TableCell>
-                  <Skeleton width="70%" />
-                  <Skeleton width="45%" />
+                  <Skeleton width="85%" />
+                  <Skeleton width="60%" />
                 </TableCell>
                 <TableCell>
+                  <Skeleton width={80} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={110} />
+                </TableCell>
+                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
+                  <Skeleton width={140} />
+                </TableCell>
+                <TableCell sx={{ display: { xs: "none", lg: "table-cell" } }}>
                   <Skeleton width={90} />
                 </TableCell>
-                <TableCell>
-                  <Skeleton width={120} />
+                <TableCell align="right">
+                  <Skeleton width={32} />
                 </TableCell>
                 <TableCell align="right">
                   <Skeleton width={28} height={28} />
@@ -302,7 +424,7 @@ export default function FindingsTable({
 
           {!loading && errorMessage && (
             <TableRow>
-              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   {errorMessage}
                 </Typography>
@@ -315,7 +437,7 @@ export default function FindingsTable({
 
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   Ничего не найдено по фильтрам
                 </Typography>
@@ -335,15 +457,26 @@ export default function FindingsTable({
             !errorMessage &&
             safeData.map((f) => {
               const isSelected = selectedIds.includes(f.id);
-              const isActive = Boolean(activeFindingId) && activeFindingId === f.id;
-              const occurrence = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
-              const repeats = f.repeatCount ?? 0;
+
+              const occurrence: FindingOccurrenceStatus = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
+              const repeatCount = f.repeatCount ?? 0;
+              const repeatLabel =
+                repeatCount > 1
+                  ? `Repeat ×${repeatCount}`
+                  : occurrence === "REPEAT"
+                    ? "Repeat"
+                    : "";
+
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
+              const scannerLabel = prettifyScanner(f.scannerType);
+              const productLabel = f.productName || f.productId || "—";
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
                 else onOpenDetails(f.id);
               };
+
+              const metaLine = `App: ${productLabel} • Scanner: ${scannerLabel} • Last seen: ${formatDate(lastSeenAt)}`;
 
               return (
                 <TableRow
@@ -365,8 +498,9 @@ export default function FindingsTable({
                     "& td": { verticalAlign: "middle" },
                     ...(isActive && !isSelected
                       ? {
-                          bgcolor: "action.selected",
-                          "&:hover": { bgcolor: "action.selected" },
+                          outline: "2px solid",
+                          outlineColor: "primary.main",
+                          outlineOffset: "-2px",
                         }
                       : null),
                   }}
@@ -379,73 +513,57 @@ export default function FindingsTable({
                     />
                   </TableCell>
 
-                  {/* Issue details (2 строки) */}
-                  <TableCell sx={{ minWidth: 420 }}>
-                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-                      <Stack
-                        direction="row"
-                        alignItems="center"
-                        spacing={1}
-                        sx={{ minWidth: 0 }}
-                      >
-                        <Tooltip title={f.title} placement="top-start">
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 700,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              minWidth: 0,
-                              flex: 1,
-                            }}
-                          >
-                            {renderHighlightedTitle(f.title)}
-                          </Typography>
-                        </Tooltip>
-
-                        {/* маленькие “бейджи” справа от заголовка */}
-                        {occurrence === "REPEAT" && (
-                          <Chip
-                            size="small"
-                            label={occurrenceLabels[occurrence]}
-                            color={occurrenceColors[occurrence]}
-                            sx={{ height: 22 }}
-                          />
+                  <TableCell sx={issueCellSx}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        {batchMode ? (
+                          <Tooltip title={f.title} placement="top-start">
+                            <Typography color="text.primary" noWrap>
+                              {renderHighlightedTitle(f.title)}
+                            </Typography>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={f.title} placement="top-start">
+                            <MuiLink
+                              component={Link}
+                              to={buildDetailLink(f.id)}
+                              underline="hover"
+                              sx={{ display: "inline-flex", maxWidth: "100%" }}
+                              onClick={(e) => {
+                                if (onOpenDetail && !isModifiedClick(e)) {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  onNavigateToDetail();
+                                  onOpenDetail(f.id);
+                                } else {
+                                  onNavigateToDetail();
+                                }
+                              }}
+                            >
+                              <Typography component="span" noWrap>
+                                {renderHighlightedTitle(f.title)}
+                              </Typography>
+                            </MuiLink>
+                          </Tooltip>
                         )}
-                        {repeats > 0 && (
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            label={`x${repeats}`}
-                            sx={{ height: 22 }}
-                          />
-                        )}
-                      </Stack>
 
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        alignItems="center"
-                        flexWrap="wrap"
-                        useFlexGap
-                        sx={{ color: "text.secondary" }}
-                      >
-                        <Typography variant="caption">
-                          App: <b>{f.productName || "—"}</b>
+                        <Typography variant="caption" noWrap sx={metaLineSx}>
+                          {metaLine}
                         </Typography>
-                        <Typography variant="caption">
-                          Scanner: <b>{prettifyScanner(f.scannerType)}</b>
-                        </Typography>
-                        <Typography variant="caption">
-                          Last seen: <b>{formatDate(lastSeenAt)}</b>
-                        </Typography>
-                      </Stack>
-                    </Stack>
+                      </Box>
+
+                      {repeatLabel ? (
+                        <Chip
+                          size="small"
+                          label={repeatLabel}
+                          variant="outlined"
+                          sx={{ fontSize: 11, height: 22 }}
+                        />
+                      ) : null}
+                    </Box>
                   </TableCell>
 
-                  {/* Severity */}
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  <TableCell>
                     <Chip
                       size="small"
                       variant="outlined"
@@ -454,8 +572,7 @@ export default function FindingsTable({
                     />
                   </TableCell>
 
-                  {/* Status */}
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  <TableCell>
                     <Chip
                       label={statusLabels[f.status] ?? f.status}
                       color={statusColors[f.status]}
@@ -464,17 +581,30 @@ export default function FindingsTable({
                     />
                   </TableCell>
 
-                  {/* Actions */}
-                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                    <Tooltip title="Открыть на отдельной странице">
+                  <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
+                    <Typography variant="body2" noWrap>
+                      {formatDate(lastSeenAt)}
+                    </Typography>
+                  </TableCell>
+
+                  <TableCell sx={{ display: { xs: "none", lg: "table-cell" } }}>
+                    <Chip
+                      label={occurrenceLabels[occurrence] ?? occurrence}
+                      color={occurrenceColors[occurrence]}
+                      size="small"
+                      variant="outlined"
+                      sx={{ textTransform: "none" }}
+                    />
+                  </TableCell>
+
+                  <TableCell align="right">
+                    <Tooltip title="Действия">
                       <IconButton
                         size="small"
-                        component={Link}
-                        to={buildDetailLink(f.id)}
-                        onClick={() => onNavigateToDetail()}
-                        aria-label="Открыть на отдельной странице"
+                        aria-label="Действия строки"
+                        onClick={(event) => handleMenuOpen(event, f)}
                       >
-                        <OpenInNewIcon fontSize="small" />
+                        <MoreVertIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   </TableCell>
@@ -483,6 +613,42 @@ export default function FindingsTable({
             })}
         </TableBody>
       </Table>
+
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor) && Boolean(menuFinding)}
+        onClose={handleMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem
+          onClick={() => {
+            if (!menuFinding) return;
+            handleOpenFromMenu(menuFinding);
+          }}
+        >
+          <OpenInNewIcon fontSize="small" sx={{ mr: 1 }} />
+          Открыть detail
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (!menuFinding) return;
+            handleCopyPermalink(menuFinding);
+          }}
+        >
+          <LinkIcon fontSize="small" sx={{ mr: 1 }} />
+          Скопировать permalink
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (!menuFinding) return;
+            handleCopyId(menuFinding);
+          }}
+        >
+          <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} />
+          Скопировать ID
+        </MenuItem>
+      </Menu>
     </TableContainer>
   );
 }
