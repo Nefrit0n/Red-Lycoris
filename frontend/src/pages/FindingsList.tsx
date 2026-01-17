@@ -5,7 +5,6 @@ import {
   Container,
   Drawer,
   IconButton,
-  Paper,
   Snackbar,
   Stack,
   Typography,
@@ -660,14 +659,7 @@ const FindingsList = () => {
         />
       )}
 
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 2,
-          border: "1px solid",
-          borderColor: "divider",
-        }}
-      >
+      <Box>
         <Box onClickCapture={handleTableLinkClickCapture}>
           <FindingsTable
             data={data}
@@ -727,7 +719,7 @@ const FindingsList = () => {
             </Alert>
           </Box>
         )}
-      </Paper>
+      </Box>
 
       <PaginationControl
         page={page}
