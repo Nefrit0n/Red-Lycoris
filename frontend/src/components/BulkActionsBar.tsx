@@ -8,6 +8,8 @@ import {
   Stack,
   TextField,
   Typography,
+  Tooltip,
+  styled,
 } from "@mui/material";
 import { useState } from "react";
 import { FindingStatus } from "../types/findings";
@@ -19,6 +21,14 @@ interface BulkActionsBarProps {
   onApply: (action: BulkAction, payload: Record<string, unknown>) => void;
   onClearSelection: () => void;
 }
+
+const BulkContainer = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(1.5, 2),
+  borderRadius: theme.shape.borderRadius * 1.5,
+  border: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.paper,
+  marginBottom: theme.spacing(2),
+}));
 
 const BulkActionsBar = ({
   selectedCount,
@@ -42,24 +52,13 @@ const BulkActionsBar = ({
   };
 
   return (
-    <Box
-      sx={{
-        p: 2,
-        borderRadius: 2,
-        border: "1px solid",
-        borderColor: "divider",
-        backgroundColor: "background.paper",
-        mb: 2,
-      }}
-    >
+    <BulkContainer>
       <Stack
         direction={{ xs: "column", md: "row" }}
-        spacing={2}
+        spacing={1.5}
         alignItems={{ xs: "stretch", md: "center" }}
       >
-        <Typography variant="subtitle2">
-          Выбрано: {selectedCount}
-        </Typography>
+        <Typography variant="subtitle2">Выбрано: {selectedCount}</Typography>
 
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel id="bulk-action-label">Действие</InputLabel>
@@ -113,22 +112,16 @@ const BulkActionsBar = ({
           />
         )}
 
-        <Button
-          variant="contained"
-          onClick={handleApply}
-          disabled={selectedCount === 0}
-        >
-          Применить
+        <Button variant="contained" onClick={handleApply} disabled={selectedCount === 0}>
+          {action === "set_status" ? "Изменить статус" : "Применить"}
         </Button>
-        <Button
-          variant="text"
-          color="inherit"
-          onClick={onClearSelection}
-        >
-          Очистить выбор
-        </Button>
+        <Tooltip title="Снять выделение">
+          <Button variant="text" color="inherit" onClick={onClearSelection}>
+            Снять выделение
+          </Button>
+        </Tooltip>
       </Stack>
-    </Box>
+    </BulkContainer>
   );
 };
 
