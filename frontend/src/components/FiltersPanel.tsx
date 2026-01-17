@@ -2,6 +2,7 @@ import {
   Autocomplete,
   Box,
   Button,
+  Divider,
   Chip,
   CircularProgress,
   FormControl,
@@ -16,8 +17,10 @@ import {
   Switch,
   TextField,
   Typography,
+  styled,
 } from "@mui/material";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
 import { useEffect, useMemo, useState } from "react";
 import { fetchProducts } from "../api/products";
 import {
@@ -48,6 +51,21 @@ interface FiltersPanelProps {
   onShowRepeatsChange: (value: boolean) => void;
   onReset: () => void;
 }
+
+const FiltersContainer = styled(Paper)(({ theme }) => ({
+  marginBottom: theme.spacing(3),
+  padding: theme.spacing(2),
+  borderRadius: theme.shape.borderRadius * 1.5,
+  backgroundColor: theme.palette.background.paper,
+}));
+
+const FiltersToolbar = styled(Box)(({ theme }) => ({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing(2),
+  flexWrap: "wrap",
+}));
 
 const FiltersPanel = ({
   productId,
@@ -169,26 +187,15 @@ const FiltersPanel = ({
     showRepeats;
 
   return (
-    <Paper
-      variant="outlined"
-      sx={{
-        mb: 3,
-        p: 2,
-        borderRadius: 2,
-        backgroundColor: "background.paper",
-      }}
-    >
+    <FiltersContainer variant="outlined">
       <Stack spacing={1.5}>
-        <Box
-          display="flex"
-          alignItems="center"
-          justifyContent="space-between"
-          gap={2}
-          flexWrap="wrap"
-        >
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            Фильтры
-          </Typography>
+        <FiltersToolbar>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <FilterAltOutlinedIcon color="action" />
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              Filters
+            </Typography>
+          </Stack>
 
           <Button
             variant="outlined"
@@ -200,7 +207,9 @@ const FiltersPanel = ({
           >
             Сбросить
           </Button>
-        </Box>
+        </FiltersToolbar>
+
+        <Divider flexItem />
 
         <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} md={4}>
@@ -476,7 +485,7 @@ const FiltersPanel = ({
           </Typography>
         )}
       </Stack>
-    </Paper>
+    </FiltersContainer>
   );
 };
 
