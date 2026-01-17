@@ -15,12 +15,12 @@ import {
   Tooltip,
   Box,
 } from "@mui/material";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   Finding,
+  FindingOccurrenceStatus,
   FindingSeverity,
   FindingStatus,
 } from "../types/findings";
@@ -44,6 +44,14 @@ const statusColors: Record<
   risk_accepted: "warning",
   mitigated: "success",
   duplicate: "default",
+};
+
+const occurrenceColors: Record<
+  FindingOccurrenceStatus,
+  "default" | "info" | "warning"
+> = {
+  NEW: "info",
+  REPEAT: "warning",
 };
 
 interface FindingsTableProps {
@@ -145,7 +153,6 @@ const FindingsTable = ({
                 disabled={loading || Boolean(errorMessage)}
               />
             </TableCell>
-            <TableCell>ID</TableCell>
             <TableCell>
               <TableSortLabel
                 active={sortField === "title"}
@@ -206,19 +213,23 @@ const FindingsTable = ({
             </TableCell>
             <TableCell>
               <TableSortLabel
-                active={sortField === "createdAt"}
+                active={sortField === "lastSeenAt"}
                 direction={
-                  sortField === "createdAt"
+                  sortField === "lastSeenAt"
                     ? sortOrder
                     : "asc"
                 }
                 onClick={() =>
-                  onSortChange("createdAt")
+                  onSortChange("lastSeenAt")
                 }
               >
-                Дата
+                Last Seen
               </TableSortLabel>
             </TableCell>
+            <TableCell>Scanner</TableCell>
+            <TableCell>Occurrence</TableCell>
+            <TableCell>Repeats</TableCell>
+            <TableCell>Owner</TableCell>
           </TableRow>
         </TableHead>
 
@@ -228,9 +239,6 @@ const FindingsTable = ({
               <TableRow key={`skeleton-${index}`}>
                 <TableCell padding="checkbox">
                   <Skeleton variant="rectangular" width={20} height={20} />
-                </TableCell>
-                <TableCell>
-                  <Skeleton width={120} />
                 </TableCell>
                 <TableCell>
                   <Skeleton width="80%" />
@@ -247,11 +255,23 @@ const FindingsTable = ({
                 <TableCell>
                   <Skeleton width={140} />
                 </TableCell>
+                <TableCell>
+                  <Skeleton width={120} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={120} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={80} />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={120} />
+                </TableCell>
               </TableRow>
             ))}
           {!loading && errorMessage && (
             <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   {errorMessage}
                 </Typography>
@@ -267,7 +287,7 @@ const FindingsTable = ({
           )}
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   Ничего не найдено по фильтрам
                 </Typography>
@@ -291,7 +311,10 @@ const FindingsTable = ({
             safeData.map((f) => {
               const isSelected =
                 selectedIds.includes(f.id);
-              const shortId = f.id.slice(0, 8);
+              const occurrence = f.occurrenceStatus ?? "NEW";
+              const repeatCount = f.repeatCount ?? 0;
+              const ownerLabel = f.owner?.name || f.assigneeId || "—";
+              const lastSeenAt = f.lastSeenAt || f.updatedAt;
 
               return (
                 <TableRow
@@ -306,24 +329,6 @@ const FindingsTable = ({
                         onToggleOne(f.id)
                       }
                     />
-                  </TableCell>
-                  <TableCell>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                        {shortId}
-                      </Typography>
-                      <Tooltip title="Скопировать полный ID">
-                        <IconButton
-                          size="small"
-                          onClick={() =>
-                            navigator.clipboard.writeText(f.id)
-                          }
-                          aria-label="Скопировать полный ID"
-                        >
-                          <ContentCopyIcon fontSize="inherit" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
                   </TableCell>
                   <TableCell>
                     {batchMode ? (
@@ -359,9 +364,25 @@ const FindingsTable = ({
                     />
                   </TableCell>
                   <TableCell>
-                    {new Date(f.createdAt).toLocaleString(
+                    {new Date(lastSeenAt).toLocaleString(
                       "ru-RU"
                     )}
+                  </TableCell>
+                  <TableCell>{f.scannerType || "—"}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={occurrence}
+                      color={occurrenceColors[occurrence]}
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>{repeatCount}</TableCell>
+                  <TableCell>
+                    <Tooltip title={ownerLabel}>
+                      <Typography variant="body2" noWrap>
+                        {ownerLabel}
+                      </Typography>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               );

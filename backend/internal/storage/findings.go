@@ -7,22 +7,25 @@ import (
 	"strings"
 	"time"
 
-	"lotus-warden/backend/internal/models"
-
 	"github.com/google/uuid"
 )
 
 type FindingListItem struct {
-	ID          uuid.UUID
-	Title       string
-	Severity    string
-	Status      string
-	ProductID   uuid.NullUUID
-	ProductName sql.NullString
-	AssigneeID  uuid.NullUUID
-	ImportJobID uuid.NullUUID
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID           uuid.UUID
+	Title        string
+	Severity     string
+	Status       string
+	ProductID    uuid.NullUUID
+	ProductName  sql.NullString
+	AssigneeID   uuid.NullUUID
+	AssigneeName sql.NullString
+	ImportJobID  uuid.NullUUID
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	LastSeenAt   sql.NullTime
+	RepeatCount  int
+	DuplicateID  uuid.NullUUID
+	Scanner      sql.NullString
 }
 
 type FindingDetail struct {
@@ -36,27 +39,40 @@ type FindingDetail struct {
 	ProductName sql.NullString
 	AssigneeID  uuid.NullUUID
 	ImportJobID uuid.NullUUID
+	FirstSeenAt sql.NullTime
+	LastSeenAt  sql.NullTime
+	RepeatCount int
+	DuplicateID uuid.NullUUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   sql.NullTime
 }
 
 type FindingFilters struct {
-	Severity    string
-	Status      string
-	ProductID   *uuid.UUID
-	ImportJobID *uuid.UUID
-	Query       string
-	SortField   string
-	SortOrder   string
-	Limit       int
-	Offset      int
+	Severity         string
+	Status           string
+	OccurrenceStatus string
+	ScannerType      string
+	ProductID        *uuid.UUID
+	ImportJobID      *uuid.UUID
+	Query            string
+	DateFrom         *time.Time
+	DateTo           *time.Time
+	CanonicalOnly    bool
+	IncludeRepeats   bool
+	SortField        string
+	SortOrder        string
+	Limit            int
+	Offset           int
 }
 
 func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []interface{}) {
 	whereClause := "WHERE f.deleted_at IS NULL"
 	args := []interface{}{}
 
+	if filters.CanonicalOnly || !filters.IncludeRepeats {
+		whereClause += " AND f.duplicate_id IS NULL"
+	}
 	if filters.Severity != "" {
 		args = append(args, filters.Severity)
 		whereClause += fmt.Sprintf(" AND f.severity = $%d", startIndex+len(args))
@@ -76,11 +92,33 @@ func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []
 	if filters.Query != "" {
 		args = append(args, "%"+filters.Query+"%")
 		whereClause += fmt.Sprintf(
-			" AND (f.title ILIKE $%d OR f.fingerprint ILIKE $%d OR p.identifier ILIKE $%d)",
+			" AND (f.title ILIKE $%d OR f.description ILIKE $%d OR f.fingerprint ILIKE $%d OR p.identifier ILIKE $%d OR p.name ILIKE $%d)",
+			startIndex+len(args),
+			startIndex+len(args),
 			startIndex+len(args),
 			startIndex+len(args),
 			startIndex+len(args),
 		)
+	}
+	if filters.ScannerType != "" {
+		args = append(args, filters.ScannerType)
+		whereClause += fmt.Sprintf(" AND sr.scanner = $%d", startIndex+len(args))
+	}
+	if filters.OccurrenceStatus != "" {
+		switch strings.ToUpper(filters.OccurrenceStatus) {
+		case "NEW":
+			whereClause += " AND f.duplicate_id IS NULL AND f.repeat_count = 0"
+		case "REPEAT":
+			whereClause += " AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL)"
+		}
+	}
+	if filters.DateFrom != nil {
+		args = append(args, *filters.DateFrom)
+		whereClause += fmt.Sprintf(" AND f.last_seen_at >= $%d", startIndex+len(args))
+	}
+	if filters.DateTo != nil {
+		args = append(args, *filters.DateTo)
+		whereClause += fmt.Sprintf(" AND f.last_seen_at <= $%d", startIndex+len(args))
 	}
 	return whereClause, args
 }
@@ -95,7 +133,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		sortOrder = "ASC"
 	}
 
-	countQuery := "SELECT COUNT(*) FROM findings f LEFT JOIN products p ON p.id = f.product_id " + whereClause
+	countQuery := "SELECT COUNT(*) FROM findings f LEFT JOIN products p ON p.id = f.product_id LEFT JOIN scan_results sr ON sr.id = f.scan_result_id " + whereClause
 	var total int
 	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -103,9 +141,11 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 
 	args = append(args, filters.Limit, filters.Offset)
 	listQuery := fmt.Sprintf(`
-		SELECT f.id, f.title, f.severity, f.status, f.product_id, p.name, f.assignee_id, f.import_job_id, f.created_at, f.updated_at
+		SELECT f.id, f.title, f.severity, f.status, f.product_id, p.name, f.assignee_id, u.username, f.import_job_id, f.created_at, f.updated_at, f.last_seen_at, f.repeat_count, f.duplicate_id, sr.scanner
 		FROM findings f
 		LEFT JOIN products p ON p.id = f.product_id
+		LEFT JOIN users u ON u.id = f.assignee_id
+		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
 		%s
 		ORDER BY %s %s
 		LIMIT $%d OFFSET $%d`,
@@ -133,9 +173,14 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.ProductID,
 			&item.ProductName,
 			&item.AssigneeID,
+			&item.AssigneeName,
 			&item.ImportJobID,
 			&item.CreatedAt,
 			&item.UpdatedAt,
+			&item.LastSeenAt,
+			&item.RepeatCount,
+			&item.DuplicateID,
+			&item.Scanner,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -174,6 +219,7 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, id uuid.UUID, filters 
 				lead(f.id) OVER (ORDER BY %s) AS next_id
 			FROM findings f
 			LEFT JOIN products p ON p.id = f.product_id
+			LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
 			%s
 		)
 		SELECT prev_id, next_id, position, total
@@ -209,7 +255,7 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, id uuid.UUID, filters 
 func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDetail, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT f.id, f.title, f.description, f.fingerprint, f.severity, f.status, f.product_id, p.name, f.assignee_id, f.import_job_id, f.created_at, f.updated_at, f.deleted_at
+		`SELECT f.id, f.title, f.description, f.fingerprint, f.severity, f.status, f.product_id, p.name, f.assignee_id, f.import_job_id, f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id, f.created_at, f.updated_at, f.deleted_at
 		 FROM findings f
 		 LEFT JOIN products p ON p.id = f.product_id
 		 WHERE f.id = $1 AND f.deleted_at IS NULL`,
@@ -228,6 +274,10 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		&detail.ProductName,
 		&detail.AssigneeID,
 		&detail.ImportJobID,
+		&detail.FirstSeenAt,
+		&detail.LastSeenAt,
+		&detail.RepeatCount,
+		&detail.DuplicateID,
 		&detail.CreatedAt,
 		&detail.UpdatedAt,
 		&detail.DeletedAt,
@@ -250,6 +300,8 @@ func resolveFindingSortField(sortField string) string {
 		return "f.severity"
 	case "status":
 		return "f.status"
+	case "last_seen_at", "lastSeenAt":
+		return "f.last_seen_at"
 	case "created_at", "createdAt":
 		return "f.created_at"
 	case "updated_at", "updatedAt":
@@ -318,7 +370,7 @@ func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateF
 		UPDATE findings
 		SET %s
 		WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, created_at, updated_at, deleted_at`,
+		RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at, deleted_at`,
 		strings.Join(setClauses, ", "),
 		len(args),
 	)
@@ -342,7 +394,7 @@ func SoftDeleteFinding(ctx context.Context, db *sql.DB, id uuid.UUID) (*models.F
 		`UPDATE findings
 		 SET deleted_at = $1, updated_at = $1
 		 WHERE id = $2 AND deleted_at IS NULL
-		 RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, created_at, updated_at, deleted_at`,
+		 RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at, deleted_at`,
 		now,
 		id,
 	)
@@ -380,6 +432,9 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 		&duplicateID,
 		&assigneeID,
 		&importJobID,
+		&finding.FirstSeenAt,
+		&finding.LastSeenAt,
+		&finding.RepeatCount,
 		&finding.CreatedAt,
 		&finding.UpdatedAt,
 		&deletedAt,
