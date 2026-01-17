@@ -9,11 +9,15 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
 )
 
 func NewApp(cfg config.Config, db *sql.DB) *fiber.App {
 	app := fiber.New()
-	app.Use(logger.New())
+	app.Use(requestid.New())
+	app.Use(logger.New(logger.Config{
+		Format: "${time} ${status} ${latency} ${method} ${path} request_id=${locals:requestid}\n",
+	}))
 	setupRoutes(app, cfg, db)
 	return app
 }
@@ -55,9 +59,9 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB) {
 	secured.Get("/findings/:id/neighbors", findingsHandler.Neighbors)
 	secured.Get("/findings/:id/duplicates", findingsHandler.GetDuplicates)
 	secured.Post("/findings", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.Create)
-	secured.Put("/findings/:id", findingsHandler.Update)
-	secured.Patch("/findings/:id", findingsHandler.Update)
-	secured.Post("/findings/:id/comments", findingsHandler.AddComment)
+	secured.Put("/findings/:id", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.Update)
+	secured.Patch("/findings/:id", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.Update)
+	secured.Post("/findings/:id/comments", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.AddComment)
 	secured.Post("/findings/bulk", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.Bulk)
 	secured.Post("/findings/:id/make-master", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.MakeMaster)
 	secured.Post("/findings/:id/unlink-duplicate", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.UnlinkDuplicate)
