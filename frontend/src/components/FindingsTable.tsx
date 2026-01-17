@@ -3,10 +3,6 @@ import {
   Checkbox,
   Chip,
   IconButton,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
   Skeleton,
   Stack,
   Table,
@@ -16,19 +12,12 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
-  Stack,
-  Typography,
   Tooltip,
-  Box,
-  Divider,
+  Typography,
 } from "@mui/material";
-import { alpha, styled } from "@mui/material/styles";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import LinkIcon from "@mui/icons-material/Link";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import { ReactNode, useCallback, useMemo, useState } from "react";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import { ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Finding,
@@ -44,6 +33,13 @@ const severityLabels: Record<FindingSeverity, string> = {
   critical: "Critical",
 };
 
+const severityChipSx: Record<FindingSeverity, any> = {
+  low: { borderColor: "success.main", color: "success.main" },
+  medium: { borderColor: "warning.main", color: "warning.main" },
+  high: { borderColor: "error.main", color: "error.main" },
+  critical: { borderColor: "secondary.main", color: "secondary.main" },
+};
+
 const statusLabels: Record<FindingStatus, string> = {
   new: "New",
   under_review: "Under review",
@@ -53,6 +49,20 @@ const statusLabels: Record<FindingStatus, string> = {
   risk_accepted: "Risk accepted",
   mitigated: "Mitigated",
   duplicate: "Duplicate",
+};
+
+const statusColors: Record<
+  FindingStatus,
+  "default" | "info" | "success" | "warning"
+> = {
+  new: "info",
+  under_review: "warning",
+  confirmed: "success",
+  false_positive: "default",
+  out_of_scope: "default",
+  risk_accepted: "warning",
+  mitigated: "success",
+  duplicate: "default",
 };
 
 const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
@@ -67,132 +77,6 @@ const occurrenceColors: Record<
   NEW: "default",
   REPEAT: "warning",
 };
-
-const HiddenMdDownCell = styled(TableCell)(({ theme }) => ({
-  [theme.breakpoints.down("md")]: {
-    display: "none",
-  },
-}));
-
-const HiddenLgDownCell = styled(TableCell)(({ theme }) => ({
-  [theme.breakpoints.down("lg")]: {
-    display: "none",
-  },
-}));
-
-const ActionsCell = styled(TableCell)(({ theme }) => ({
-  width: 56,
-  paddingLeft: theme.spacing(0.5),
-  paddingRight: theme.spacing(0.5),
-}));
-
-const TableShell = styled(TableContainer)(({ theme }) => ({
-  borderRadius: theme.spacing(2),
-  border: `1px solid ${theme.palette.divider}`,
-  backgroundColor: theme.palette.background.paper,
-}));
-
-const StyledTable = styled(Table)(({ theme }) => ({
-  minWidth: 1080,
-  tableLayout: "fixed",
-  "& .MuiTableCell-head": {
-    fontWeight: 600,
-    whiteSpace: "nowrap",
-    backgroundColor: theme.palette.background.paper,
-  },
-}));
-
-const IssueCell = styled(TableCell)(({ theme }) => ({
-  paddingTop: theme.spacing(1),
-  paddingBottom: theme.spacing(1),
-}));
-
-const IssueTitleRow = styled(Stack)(({ theme }) => ({
-  alignItems: "center",
-  gap: theme.spacing(1),
-  minWidth: 0,
-  flexWrap: "nowrap",
-}));
-
-const IssueStack = styled(Stack)(() => ({
-  minWidth: 0,
-}));
-
-const IssueTitleText = styled(Typography)(({ theme }) => ({
-  fontWeight: 600,
-  color: theme.palette.text.primary,
-}));
-
-const IssueMetaText = styled(Typography)(({ theme }) => ({
-  color: theme.palette.text.secondary,
-  fontSize: theme.typography.pxToRem(12),
-}));
-
-const MetaDivider = styled("span")(({ theme }) => ({
-  margin: `0 ${theme.spacing(1)}`,
-  color: theme.palette.text.disabled,
-}));
-
-const IssueLink = styled(MuiLink)(() => ({
-  display: "inline-block",
-  minWidth: 0,
-  maxWidth: "100%",
-  flex: "1 1 auto",
-}));
-
-const SeverityChip = styled(Chip, {
-  shouldForwardProp: (prop) => prop !== "severity",
-})<{ severity: FindingSeverity }>(({ theme, severity }) => {
-  const paletteMap: Record<FindingSeverity, keyof typeof theme.palette> = {
-    low: "success",
-    medium: "warning",
-    high: "error",
-    critical: "secondary",
-  };
-  const paletteKey = paletteMap[severity];
-  const palette = theme.palette[paletteKey];
-  return {
-    borderColor: palette.main,
-    color: palette.main,
-    backgroundColor: alpha(palette.main, 0.12),
-    fontWeight: 600,
-  };
-});
-
-const StatusChip = styled(Chip, {
-  shouldForwardProp: (prop) => prop !== "status",
-})<{ status: FindingStatus }>(({ theme, status }) => {
-  const paletteKey: Record<FindingStatus, keyof typeof theme.palette> = {
-    new: "info",
-    under_review: "warning",
-    confirmed: "success",
-    false_positive: "grey",
-    out_of_scope: "grey",
-    risk_accepted: "warning",
-    mitigated: "success",
-    duplicate: "grey",
-  };
-  const palette = theme.palette[paletteKey[status]];
-  const mainColor = "main" in palette ? palette.main : theme.palette.text.secondary;
-  return {
-    borderColor: mainColor,
-    color: mainColor,
-    backgroundColor: alpha(mainColor, 0.12),
-    textTransform: "none",
-    fontWeight: 500,
-  };
-});
-
-const RepeatBadge = styled(Chip)(({ theme }) => ({
-  borderColor: theme.palette.divider,
-  color: theme.palette.text.secondary,
-  fontWeight: 600,
-}));
-
-const DenseCell = styled(TableCell)(({ theme }) => ({
-  paddingTop: theme.spacing(1),
-  paddingBottom: theme.spacing(1),
-}));
 
 interface FindingsTableProps {
   data: Finding[];
@@ -272,9 +156,6 @@ export default function FindingsTable({
   const allSelected =
     safeData.length > 0 && selectedIds.length === safeData.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
-  const [actionAnchorEl, setActionAnchorEl] = useState<null | HTMLElement>(null);
-  const [actionFinding, setActionFinding] = useState<Finding | null>(null);
-  const actionsOpen = Boolean(actionAnchorEl);
 
   const dtf = useMemo(() => {
     try {
@@ -339,75 +220,14 @@ export default function FindingsTable({
 
   const colCount = 5; // checkbox + issue + severity + status + actions
 
-  const handleOpenActions = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>, finding: Finding) => {
-      event.stopPropagation();
-      setActionAnchorEl(event.currentTarget);
-      setActionFinding(finding);
-    },
-    []
-  );
-
-  const handleCloseActions = useCallback(() => {
-    setActionAnchorEl(null);
-    setActionFinding(null);
-  }, []);
-
-  const copyToClipboard = useCallback(async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      return;
-    } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = value;
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      try {
-        document.execCommand("copy");
-      } finally {
-        document.body.removeChild(textarea);
-      }
-    }
-  }, []);
-
-  const handleOpenFromMenu = useCallback(() => {
-    if (!actionFinding) return;
-    if (onOpenDetail && !batchMode && !loading && !errorMessage) {
-      onNavigateToDetail();
-      onOpenDetail(actionFinding.id);
-    } else {
-      window.location.assign(buildDetailLink(actionFinding.id));
-    }
-    handleCloseActions();
-  }, [
-    actionFinding,
-    batchMode,
-    errorMessage,
-    handleCloseActions,
-    loading,
-    onNavigateToDetail,
-    onOpenDetail,
-  ]);
-
-  const handleCopyPermalink = useCallback(async () => {
-    if (!actionFinding) return;
-    const url = `${window.location.origin}${buildDetailLink(actionFinding.id)}`;
-    await copyToClipboard(url);
-    handleCloseActions();
-  }, [actionFinding, copyToClipboard, handleCloseActions]);
-
-  const handleCopyId = useCallback(async () => {
-    if (!actionFinding) return;
-    await copyToClipboard(actionFinding.id);
-    handleCloseActions();
-  }, [actionFinding, copyToClipboard, handleCloseActions]);
-
   return (
-    <TableShell>
-      <StyledTable stickyHeader size="small">
+    <TableContainer
+      sx={{
+        borderRadius: 2,
+        "& .MuiTableCell-head": { fontWeight: 700, whiteSpace: "nowrap" },
+      }}
+    >
+      <Table stickyHeader size="small" sx={{ minWidth: 920 }}>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox" sx={{ width: 44 }}>
@@ -421,7 +241,7 @@ export default function FindingsTable({
               />
             </TableCell>
 
-            <TableCell sx={{ width: "48%" }}>
+            <TableCell>
               <TableSortLabel
                 active={sortField === "title"}
                 direction={sortField === "title" ? sortOrder : "asc"}
@@ -451,25 +271,9 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
-            <HiddenMdDownCell sx={{ width: 190 }}>
-              <TableSortLabel
-                active={sortField === "lastSeenAt"}
-                direction={sortField === "lastSeenAt" ? sortOrder : "asc"}
-                onClick={() => onSortChange("lastSeenAt")}
-              >
-                Last seen
-              </TableSortLabel>
-            </HiddenMdDownCell>
-
-            <HiddenLgDownCell sx={{ width: 120 }}>
-              Occurrence
-            </HiddenLgDownCell>
-
-            <HiddenLgDownCell sx={{ width: 160 }}>
-              Owner
-            </HiddenLgDownCell>
-
-            <ActionsCell align="right">Actions</ActionsCell>
+            <TableCell align="right" sx={{ width: 64 }}>
+              {/* actions */}
+            </TableCell>
           </TableRow>
         </TableHead>
 
@@ -487,24 +291,18 @@ export default function FindingsTable({
                 <TableCell>
                   <Skeleton width={90} />
                 </TableCell>
-                <HiddenMdDownCell>
-                  <Skeleton width={110} />
-                </HiddenMdDownCell>
-                <HiddenLgDownCell>
-                  <Skeleton width={90} />
-                </HiddenLgDownCell>
-                <HiddenLgDownCell>
+                <TableCell>
                   <Skeleton width={120} />
-                </HiddenLgDownCell>
-                <ActionsCell>
-                  <Skeleton width={24} />
-                </ActionsCell>
+                </TableCell>
+                <TableCell align="right">
+                  <Skeleton width={28} height={28} />
+                </TableCell>
               </TableRow>
             ))}
 
           {!loading && errorMessage && (
             <TableRow>
-              <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   {errorMessage}
                 </Typography>
@@ -517,7 +315,7 @@ export default function FindingsTable({
 
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   Ничего не найдено по фильтрам
                 </Typography>
@@ -541,8 +339,6 @@ export default function FindingsTable({
               const occurrence = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
               const repeats = f.repeatCount ?? 0;
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
-              const showRepeatBadge = occurrence === "REPEAT" || repeatCount > 1;
-              const repeatLabel = repeatCount > 1 ? `Repeat x${repeatCount}` : "Repeat";
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
@@ -583,159 +379,110 @@ export default function FindingsTable({
                     />
                   </TableCell>
 
-                  <IssueCell>
-                    {batchMode ? (
-                      <Tooltip title={f.title} placement="top-start">
-                        <IssueStack spacing={0.5}>
-                          <IssueTitleRow direction="row">
-                            <IssueTitleText noWrap>
-                              {renderHighlightedTitle(f.title)}
-                            </IssueTitleText>
-                            {showRepeatBadge && (
-                              <RepeatBadge
-                                size="small"
-                                variant="outlined"
-                                label={repeatLabel}
-                              />
-                            )}
-                          </IssueTitleRow>
-                          <IssueMetaText variant="caption" noWrap>
-                            App: {f.productName || "—"}
-                            <MetaDivider>•</MetaDivider>
-                            Scanner: {prettifyScanner(f.scannerType)}
-                            <MetaDivider>•</MetaDivider>
-                            Last seen: {formatDate(lastSeenAt)}
-                          </IssueMetaText>
-                        </IssueStack>
-                      </Tooltip>
-                    ) : (
-                      <IssueStack spacing={0.5}>
-                        <IssueTitleRow direction="row">
-                          <Tooltip title={f.title} placement="top-start">
-                            <IssueLink
-                              component={Link}
-                              to={buildDetailLink(f.id)}
-                              underline="hover"
-                              onClick={(e) => {
-                                // ✅ если включен Drawer-режим — открываем панель
-                                if (onOpenDetail && !isModifiedClick(e)) {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  onNavigateToDetail();
-                                  onOpenDetail(f.id);
-                                } else {
-                                  // обычная навигация на detail page
-                                  onNavigateToDetail();
-                                }
-                              }}
-                            >
-                              <IssueTitleText component="span" noWrap>
-                                {renderHighlightedTitle(f.title)}
-                              </IssueTitleText>
-                            </IssueLink>
-                          </Tooltip>
-                          {showRepeatBadge && (
-                            <RepeatBadge
-                              size="small"
-                              variant="outlined"
-                              label={repeatLabel}
-                            />
-                          )}
-                        </IssueTitleRow>
-                          <IssueMetaText variant="caption" noWrap>
-                            App: {f.productName || "—"}
-                            <MetaDivider>•</MetaDivider>
-                            Scanner: {prettifyScanner(f.scannerType)}
-                            <MetaDivider>•</MetaDivider>
-                            Last seen: {formatDate(lastSeenAt)}
-                          </IssueMetaText>
-                      </IssueStack>
-                    )}
-                  </IssueCell>
+                  {/* Issue details (2 строки) */}
+                  <TableCell sx={{ minWidth: 420 }}>
+                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={1}
+                        sx={{ minWidth: 0 }}
+                      >
+                        <Tooltip title={f.title} placement="top-start">
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 700,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              minWidth: 0,
+                              flex: 1,
+                            }}
+                          >
+                            {renderHighlightedTitle(f.title)}
+                          </Typography>
+                        </Tooltip>
 
-                  <DenseCell sx={{ whiteSpace: "nowrap" }}>
-                    <SeverityChip
-                      size="small"
-                      variant="outlined"
-                      severity={f.severity}
-                      label={severityLabels[f.severity]}
-                    />
-                  </DenseCell>
+                        {/* маленькие “бейджи” справа от заголовка */}
+                        {occurrence === "REPEAT" && (
+                          <Chip
+                            size="small"
+                            label={occurrenceLabels[occurrence]}
+                            color={occurrenceColors[occurrence]}
+                            sx={{ height: 22 }}
+                          />
+                        )}
+                        {repeats > 0 && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={`x${repeats}`}
+                            sx={{ height: 22 }}
+                          />
+                        )}
+                      </Stack>
 
-                  <DenseCell sx={{ whiteSpace: "nowrap" }}>
-                    <StatusChip
-                      status={f.status}
-                      label={statusLabels[f.status] ?? f.status}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </DenseCell>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        flexWrap="wrap"
+                        useFlexGap
+                        sx={{ color: "text.secondary" }}
+                      >
+                        <Typography variant="caption">
+                          App: <b>{f.productName || "—"}</b>
+                        </Typography>
+                        <Typography variant="caption">
+                          Scanner: <b>{prettifyScanner(f.scannerType)}</b>
+                        </Typography>
+                        <Typography variant="caption">
+                          Last seen: <b>{formatDate(lastSeenAt)}</b>
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                  </TableCell>
 
-                  <HiddenMdDownCell sx={{ whiteSpace: "nowrap" }}>
-                    <Typography variant="body2">{formatDate(lastSeenAt)}</Typography>
-                  </HiddenMdDownCell>
-
-                  <HiddenLgDownCell sx={{ whiteSpace: "nowrap" }}>
+                  {/* Severity */}
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
-                      label={occurrenceLabels[occurrence] ?? occurrence}
-                      color={occurrenceColors[occurrence]}
+                      size="small"
+                      variant="outlined"
+                      label={severityLabels[f.severity]}
+                      sx={severityChipSx[f.severity]}
+                    />
+                  </TableCell>
+
+                  {/* Status */}
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                    <Chip
+                      label={statusLabels[f.status] ?? f.status}
+                      color={statusColors[f.status]}
                       size="small"
                       sx={{ textTransform: "none" }}
                     />
-                  </HiddenLgDownCell>
+                  </TableCell>
 
-                  <HiddenLgDownCell sx={{ maxWidth: 160 }}>
-                    <Tooltip title={ownerLabel}>
-                      <Typography variant="body2" noWrap>
-                        {ownerLabel}
-                      </Typography>
-                    </Tooltip>
-                  </HiddenLgDownCell>
-
-                  <ActionsCell align="right">
-                    <Tooltip title="Действия">
+                  {/* Actions */}
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                    <Tooltip title="Открыть на отдельной странице">
                       <IconButton
                         size="small"
-                        aria-label={`Действия для ${f.title}`}
-                        onClick={(event) => handleOpenActions(event, f)}
+                        component={Link}
+                        to={buildDetailLink(f.id)}
+                        onClick={() => onNavigateToDetail()}
+                        aria-label="Открыть на отдельной странице"
                       >
-                        <MoreVertIcon fontSize="small" />
+                        <OpenInNewIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                  </ActionsCell>
+                  </TableCell>
                 </TableRow>
               );
             })}
         </TableBody>
-      </StyledTable>
-
-      <Menu
-        anchorEl={actionAnchorEl}
-        open={actionsOpen}
-        onClose={handleCloseActions}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <MenuItem onClick={handleOpenFromMenu}>
-          <ListItemIcon>
-            <OpenInNewIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Открыть деталь" />
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={handleCopyPermalink}>
-          <ListItemIcon>
-            <LinkIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Копировать permalink" />
-        </MenuItem>
-        <MenuItem onClick={handleCopyId}>
-          <ListItemIcon>
-            <ContentCopyIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Копировать ID" />
-        </MenuItem>
-      </Menu>
-    </TableShell>
+      </Table>
+    </TableContainer>
   );
 }
