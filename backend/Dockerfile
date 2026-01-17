@@ -7,7 +7,6 @@ RUN go mod download
 FROM base AS dev
 COPY . .
 EXPOSE 8080
-RUN go mod tidy
 CMD ["go", "run", "./cmd/server"]
 
 
