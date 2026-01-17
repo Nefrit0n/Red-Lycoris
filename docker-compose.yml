@@ -1,19 +1,4 @@
 services:
-  frontend:
-    build:
-      context: ./frontend
-      target: dev
-    environment:
-      - VITE_API_URL=${VITE_API_URL:-http://localhost:${NGINX_PORT:-8081}}
-    ports:
-      - "${FRONTEND_PORT:-5173}:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - backend
-      - python-api
-
   backend:
     build:
       context: ./backend

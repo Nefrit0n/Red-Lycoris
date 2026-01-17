@@ -71,70 +71,68 @@ const FindingDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+
   const [data, setData] = useState<FindingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [status, setStatus] = useState<FindingStatus | "">("");
   const [statusState, setStatusState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [statusError, setStatusError] = useState<string | null>(null);
+
   const [comment, setComment] = useState("");
   const [commentState, setCommentState] = useState<"idle" | "saving" | "error">("idle");
   const [commentError, setCommentError] = useState<string | null>(null);
+
   const [neighbors, setNeighbors] = useState<FindingNeighbors | null>(null);
   const [neighborsLoading, setNeighborsLoading] = useState(false);
   const [neighborsError, setNeighborsError] = useState<string | null>(null);
+
   const [eventFilter, setEventFilter] = useState<"all" | "status" | "comment" | "dedup" | "other">("all");
   const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
 
   const user = getCurrentUser();
-  const canEdit =
-    user?.roles?.includes("admin") || user?.roles?.includes("analyst");
+  const canEdit = user?.roles?.includes("admin") || user?.roles?.includes("analyst");
 
   const returnTo = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const raw = params.get("returnTo");
-    if (!raw) {
-      return null;
-    }
+    if (!raw) return null;
+
+    // URLSearchParams уже декодит, но оставим try/catch на всякий случай
     try {
       return decodeURIComponent(raw);
-    } catch (err) {
+    } catch {
       return raw;
     }
   }, [location.search]);
 
   const returnToUrl = useMemo(() => {
-    if (!returnTo) {
-      return null;
-    }
+    if (!returnTo) return null;
     try {
       return new URL(returnTo, window.location.origin);
-    } catch (err) {
+    } catch {
       return null;
     }
   }, [returnTo]);
 
-  const returnToParam = returnToUrl ? encodeURIComponent(`${returnToUrl.pathname}${returnToUrl.search}`) : "";
+  const returnToParam = returnToUrl
+    ? encodeURIComponent(`${returnToUrl.pathname}${returnToUrl.search}`)
+    : "";
   const returnToQuery = returnToUrl?.search.replace(/^\?/, "") ?? "";
 
   const handleCopyValue = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
-    } catch (err) {
-      // ignore clipboard errors for now
+    } catch {
+      // ignore
     }
   };
 
   const getEventCategory = (event: FindingEvent) => {
-    if (event.eventType.startsWith("status")) {
-      return "status";
-    }
-    if (event.eventType.startsWith("comment")) {
-      return "comment";
-    }
-    if (event.eventType.startsWith("duplicate")) {
-      return "dedup";
-    }
+    if (event.eventType.startsWith("status")) return "status";
+    if (event.eventType.startsWith("comment")) return "comment";
+    if (event.eventType.startsWith("duplicate")) return "dedup";
     return "other";
   };
 
@@ -165,36 +163,31 @@ const FindingDetailPage = () => {
     }
   };
 
-  const filteredEvents = data.events.filter((event) => {
-    if (eventFilter === "all") {
-      return true;
-    }
-    return getEventCategory(event) === eventFilter;
-  });
+  // ✅ СЕЙФОВО: на первом рендере data = null, но массивы всегда есть
+  const events = useMemo(() => data?.events ?? [], [data]);
+  const comments = useMemo(() => data?.comments ?? [], [data]);
+
+  const filteredEvents = useMemo(() => {
+    if (eventFilter === "all") return events;
+    return events.filter((event) => getEventCategory(event) === eventFilter);
+  }, [events, eventFilter]);
 
   const toggleEventPayload = (eventId: string) => {
     setExpandedEventIds((prev) => {
       const next = new Set(prev);
-      if (next.has(eventId)) {
-        next.delete(eventId);
-      } else {
-        next.add(eventId);
-      }
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
       return next;
     });
   };
 
   const handleBackToResults = () => {
-    if (!returnToUrl) {
-      return;
-    }
+    if (!returnToUrl) return;
     navigate(`${returnToUrl.pathname}${returnToUrl.search}`);
   };
 
   const handleNavigateNeighbor = (neighborId: string) => {
-    if (!neighborId) {
-      return;
-    }
+    if (!neighborId) return;
     const query = returnToParam ? `?returnTo=${returnToParam}` : "";
     navigate(`/findings/${neighborId}${query}`);
   };
@@ -204,23 +197,26 @@ const FindingDetailPage = () => {
     return `/findings/${findingId}${query}`;
   };
 
-  const fetchDetail = useCallback(async (signal?: AbortSignal) => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
+  const fetchDetail = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!id) return;
+      setLoading(true);
+      setError(null);
 
-    try {
-      const response = await fetchFindingDetail(id, signal);
-      setData(response);
-      setStatus(response.status);
-    } catch (fetchError) {
-      if (!(fetchError instanceof DOMException && fetchError.name === "AbortError")) {
-        setError("Не удалось загрузить детали уязвимости.");
+      try {
+        const response = await fetchFindingDetail(id, signal);
+        setData(response);
+        setStatus(response.status);
+      } catch (fetchError) {
+        if (!(fetchError instanceof DOMException && fetchError.name === "AbortError")) {
+          setError("Не удалось загрузить детали уязвимости.");
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+    },
+    [id]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -233,11 +229,15 @@ const FindingDetailPage = () => {
       setNeighbors(null);
       return;
     }
+
+    const controller = new AbortController();
+
     const loadNeighbors = async () => {
       setNeighborsLoading(true);
       setNeighborsError(null);
       try {
-        const response = await fetchFindingNeighbors(id, returnToQuery);
+        const response = await fetchFindingNeighbors(id, returnToQuery, controller.signal as any);
+        // ↑ если у тебя fetchFindingNeighbors не принимает signal — убери 3-й аргумент и просто оставь controller для future
         setNeighbors(response);
       } catch (neighborsLoadError) {
         if (!(neighborsLoadError instanceof DOMException && neighborsLoadError.name === "AbortError")) {
@@ -247,14 +247,14 @@ const FindingDetailPage = () => {
         setNeighborsLoading(false);
       }
     };
+
     loadNeighbors();
+    return () => controller.abort();
   }, [id, returnToQuery, returnToUrl]);
 
   useEffect(() => {
     if (statusState === "saved") {
-      const timer = window.setTimeout(() => {
-        setStatusState("idle");
-      }, 2000);
+      const timer = window.setTimeout(() => setStatusState("idle"), 2000);
       return () => window.clearTimeout(timer);
     }
     return undefined;
@@ -270,9 +270,10 @@ const FindingDetailPage = () => {
       setData(updated);
       setStatusState("saved");
     } catch (updateError) {
-      const errorMessage = updateError instanceof Error && updateError.message
-        ? `Не удалось сохранить: ${updateError.message}`
-        : "Не удалось сохранить";
+      const errorMessage =
+        updateError instanceof Error && updateError.message
+          ? `Не удалось сохранить: ${updateError.message}`
+          : "Не удалось сохранить";
       setStatusError(errorMessage);
       setStatusState("error");
     }
@@ -287,8 +288,8 @@ const FindingDetailPage = () => {
       setComment("");
       await fetchDetail();
       setCommentState("idle");
-    } catch (commentError) {
-      const errorMessage = commentError instanceof Error ? commentError.message : "Не удалось добавить комментарий";
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Не удалось добавить комментарий";
       setCommentError(errorMessage);
       setCommentState("error");
     }
@@ -311,6 +312,11 @@ const FindingDetailPage = () => {
   }
 
   const statusChanged = status !== "" && status !== data.status;
+
+  const sev = severityStyles[data.severity] ?? {
+    label: String(data.severity ?? "unknown"),
+    color: "#666",
+  };
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
@@ -350,6 +356,7 @@ const FindingDetailPage = () => {
           </Stack>
         </Stack>
       )}
+
       <Typography variant="h4" component="h1" gutterBottom>
         {data.title}
       </Typography>
@@ -369,24 +376,13 @@ const FindingDetailPage = () => {
 
             <Box mt={3} display="flex" flexWrap="wrap" gap={2}>
               <Chip
-                label={severityStyles[data.severity].label}
-                sx={{
-                  color: severityStyles[data.severity].color,
-                  borderColor: severityStyles[data.severity].color,
-                }}
+                label={sev.label}
+                sx={{ color: sev.color, borderColor: sev.color }}
                 variant="outlined"
               />
-              <Chip
-                label={data.status}
-                color={statusColors[data.status]}
-                sx={{ textTransform: "capitalize" }}
-              />
-              {data.productName && (
-                <Chip label={`Продукт: ${data.productName}`} variant="outlined" />
-              )}
-              {data.fingerprint && (
-                <Chip label={`Fingerprint: ${data.fingerprint}`} variant="outlined" />
-              )}
+              <Chip label={data.status} color={statusColors[data.status] ?? "default"} sx={{ textTransform: "capitalize" }} />
+              {data.productName && <Chip label={`Продукт: ${data.productName}`} variant="outlined" />}
+              {data.fingerprint && <Chip label={`Fingerprint: ${data.fingerprint}`} variant="outlined" />}
             </Box>
           </Paper>
 
@@ -394,13 +390,13 @@ const FindingDetailPage = () => {
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Комментарии
             </Typography>
+
             <Stack spacing={2} sx={{ mt: 2 }}>
-              {data.comments.length === 0 && (
-                <Typography color="text.secondary">
-                  Комментариев пока нет.
-                </Typography>
+              {comments.length === 0 && (
+                <Typography color="text.secondary">Комментариев пока нет.</Typography>
               )}
-              {data.comments.map((item: FindingComment) => (
+
+              {comments.map((item: FindingComment) => (
                 <Box key={item.id} sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
                   <Typography variant="subtitle2">
                     {item.author || "Пользователь"} · {new Date(item.createdAt).toLocaleString("ru-RU")}
@@ -411,6 +407,7 @@ const FindingDetailPage = () => {
                 </Box>
               ))}
             </Stack>
+
             {commentError && (
               <Alert
                 severity="error"
@@ -424,18 +421,15 @@ const FindingDetailPage = () => {
                 {commentError}
               </Alert>
             )}
+
             <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mt: 3 }}>
               <TextField
                 label="Добавить комментарий"
                 value={comment}
                 onChange={(event) => {
                   setComment(event.target.value);
-                  if (commentError) {
-                    setCommentError(null);
-                  }
-                  if (commentState === "error") {
-                    setCommentState("idle");
-                  }
+                  if (commentError) setCommentError(null);
+                  if (commentState === "error") setCommentState("idle");
                 }}
                 onKeyDown={(event) => {
                   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -462,6 +456,7 @@ const FindingDetailPage = () => {
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               История изменений
             </Typography>
+
             <ToggleButtonGroup
               exclusive
               size="small"
@@ -475,10 +470,12 @@ const FindingDetailPage = () => {
               <ToggleButton value="dedup">Дубликаты</ToggleButton>
               <ToggleButton value="other">Другое</ToggleButton>
             </ToggleButtonGroup>
+
             <Stack spacing={1} sx={{ mt: 2 }}>
               {filteredEvents.length === 0 && (
                 <Typography color="text.secondary">История пуста.</Typography>
               )}
+
               {filteredEvents.map((event: FindingEvent) => (
                 <Box key={event.id} sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
                   <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1}>
@@ -487,6 +484,7 @@ const FindingDetailPage = () => {
                       {event.actor || "system"} · {new Date(event.createdAt).toLocaleString("ru-RU")}
                     </Typography>
                   </Stack>
+
                   <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                     <Typography variant="body2" color="text.secondary">
                       Тип: {event.eventType}
@@ -495,6 +493,7 @@ const FindingDetailPage = () => {
                       {expandedEventIds.has(event.id) ? "Скрыть raw payload" : "Показать raw payload"}
                     </Button>
                   </Stack>
+
                   <Collapse in={expandedEventIds.has(event.id)} timeout="auto" unmountOnExit>
                     <Box
                       component="pre"
@@ -516,11 +515,12 @@ const FindingDetailPage = () => {
             </Stack>
           </Paper>
 
-          {data.duplicates && (
+          {data.duplicates?.master?.id && (
             <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mt: 3 }}>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                 Дубликаты
               </Typography>
+
               {data.duplicates.master.id !== data.id ? (
                 <Stack spacing={1}>
                   <Typography variant="body2">
@@ -530,12 +530,12 @@ const FindingDetailPage = () => {
                     </MuiLink>
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Сиблинги: {data.duplicates.duplicates.length}
+                    Сиблинги: {data.duplicates.duplicates?.length ?? 0}
                   </Typography>
                 </Stack>
               ) : (
                 <>
-                  {data.duplicates.duplicates.length === 0 ? (
+                  {(data.duplicates.duplicates?.length ?? 0) === 0 ? (
                     <Typography color="text.secondary" sx={{ mt: 1 }}>
                       Дубликатов нет.
                     </Typography>
@@ -563,6 +563,7 @@ const FindingDetailPage = () => {
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                 Управление статусом
               </Typography>
+
               <TextField
                 select
                 fullWidth
@@ -585,6 +586,7 @@ const FindingDetailPage = () => {
                 <MenuItem value="mitigated">Mitigated</MenuItem>
                 <MenuItem value="duplicate">Duplicate</MenuItem>
               </TextField>
+
               <Button
                 variant="contained"
                 fullWidth
@@ -594,11 +596,13 @@ const FindingDetailPage = () => {
               >
                 {statusState === "saving" ? "Saving..." : "Сохранить"}
               </Button>
+
               {statusState === "saved" && (
                 <Alert severity="success" sx={{ mt: 2 }}>
                   Saved
                 </Alert>
               )}
+
               {statusState === "error" && statusError && (
                 <Alert
                   severity="error"
@@ -619,6 +623,7 @@ const FindingDetailPage = () => {
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Метаданные
             </Typography>
+
             <Stack spacing={1}>
               <Typography variant="body2">
                 Создано: {new Date(data.createdAt).toLocaleString("ru-RU")}
@@ -626,6 +631,7 @@ const FindingDetailPage = () => {
               <Typography variant="body2">
                 Обновлено: {new Date(data.updatedAt).toLocaleString("ru-RU")}
               </Typography>
+
               <Box display="flex" alignItems="center" gap={1}>
                 <Typography variant="body2">Finding ID: {data.id}</Typography>
                 <Tooltip title="Скопировать ID">
@@ -634,6 +640,7 @@ const FindingDetailPage = () => {
                   </IconButton>
                 </Tooltip>
               </Box>
+
               {data.fingerprint && (
                 <Box display="flex" alignItems="center" gap={1}>
                   <Typography variant="body2">Fingerprint: {data.fingerprint}</Typography>
@@ -644,6 +651,7 @@ const FindingDetailPage = () => {
                   </Tooltip>
                 </Box>
               )}
+
               {data.productId && (
                 <Typography variant="body2">
                   Product ID:{" "}
@@ -652,6 +660,7 @@ const FindingDetailPage = () => {
                   </MuiLink>
                 </Typography>
               )}
+
               {data.importJobId && (
                 <Typography variant="body2">
                   Import Job ID:{" "}
@@ -660,9 +669,9 @@ const FindingDetailPage = () => {
                   </MuiLink>
                 </Typography>
               )}
-              {data.assigneeId && (
-                <Typography variant="body2">Assignee ID: {data.assigneeId}</Typography>
-              )}
+
+              {data.assigneeId && <Typography variant="body2">Assignee ID: {data.assigneeId}</Typography>}
+
               <Button
                 size="small"
                 startIcon={<LinkIcon fontSize="small" />}
