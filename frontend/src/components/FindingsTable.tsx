@@ -3,6 +3,7 @@ import {
   Chip,
   Link as MuiLink,
   IconButton,
+  Stack,
   Skeleton,
   Table,
   TableBody,
@@ -16,6 +17,9 @@ import {
   Box,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import LinkIcon from "@mui/icons-material/Link";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -70,6 +74,38 @@ const occurrenceColors: Record<FindingOccurrenceStatus, "default" | "info" | "wa
   NEW: "info",
   REPEAT: "warning",
 };
+
+const tableContainerSx = {
+  borderRadius: 2,
+  border: "1px solid",
+  borderColor: "divider",
+  maxHeight: "70vh",
+  "& .MuiTableCell-head": {
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+    backgroundColor: "background.paper",
+  },
+  "& .MuiTableCell-root": {
+    py: 1,
+    px: 1.5,
+  },
+} as const;
+
+const titleCellSx = {
+  maxWidth: 560,
+} as const;
+
+const sublineSx = {
+  color: "text.secondary",
+  display: "block",
+  fontSize: "0.75rem",
+} as const;
+
+const actionCellSx = {
+  width: 120,
+  textAlign: "right",
+  whiteSpace: "nowrap",
+} as const;
 
 interface FindingsTableProps {
   data: Finding[];
@@ -191,6 +227,20 @@ const FindingsTable = ({
   const buildDetailLink = (id: string) =>
     returnTo ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}` : `/findings/${id}`;
 
+  const getPermalink = (id: string) => {
+    if (typeof window === "undefined") return buildDetailLink(id);
+    return `${window.location.origin}${buildDetailLink(id)}`;
+  };
+
+  const handleCopy = async (value: string) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
   const renderHighlightedTitle = (title: string) => {
     const query = highlightQuery.trim();
     if (!query) return title;
@@ -237,10 +287,7 @@ const FindingsTable = ({
 
   return (
     <TableContainer
-      sx={{
-        borderRadius: 2,
-        "& .MuiTableCell-head": { fontWeight: 600, whiteSpace: "nowrap" },
-      }}
+      sx={tableContainerSx}
     >
       <Table stickyHeader size="small" sx={{ minWidth: 980 }}>
         <TableHead>
@@ -255,23 +302,13 @@ const FindingsTable = ({
               />
             </TableCell>
 
-            <TableCell sx={{ width: "42%" }}>
+            <TableCell sx={{ width: "46%" }}>
               <TableSortLabel
                 active={sortField === "title"}
                 direction={sortField === "title" ? sortOrder : "asc"}
                 onClick={() => onSortChange("title")}
               >
-                Название
-              </TableSortLabel>
-            </TableCell>
-
-            <TableCell sx={{ width: 140 }}>
-              <TableSortLabel
-                active={sortField === "productName"}
-                direction={sortField === "productName" ? sortOrder : "asc"}
-                onClick={() => onSortChange("productName")}
-              >
-                Приложение
+                Issue details
               </TableSortLabel>
             </TableCell>
 
@@ -281,21 +318,21 @@ const FindingsTable = ({
                 direction={sortField === "severity" ? sortOrder : "asc"}
                 onClick={() => onSortChange("severity")}
               >
-                Критичность
+                Severity
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 140 }}>
+            <TableCell sx={{ width: 150 }}>
               <TableSortLabel
                 active={sortField === "status"}
                 direction={sortField === "status" ? sortOrder : "asc"}
                 onClick={() => onSortChange("status")}
               >
-                Статус
+                Status
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 190 }}>
+            <TableCell sx={{ width: 170, display: { xs: "none", md: "table-cell" } }}>
               <TableSortLabel
                 active={sortField === "lastSeenAt"}
                 direction={sortField === "lastSeenAt" ? sortOrder : "asc"}
@@ -305,21 +342,10 @@ const FindingsTable = ({
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 110, display: { xs: "none", md: "table-cell" } }}>
-              Scanner
-            </TableCell>
-            <TableCell sx={{ width: 120, display: { xs: "none", md: "table-cell" } }}>
+            <TableCell sx={{ width: 120, display: { xs: "none", lg: "table-cell" } }}>
               Occurrence
             </TableCell>
-            <TableCell
-              align="right"
-              sx={{ width: 90, display: { xs: "none", md: "table-cell" } }}
-            >
-              Repeats
-            </TableCell>
-            <TableCell sx={{ width: 160, display: { xs: "none", lg: "table-cell" } }}>
-              Owner
-            </TableCell>
+            <TableCell sx={actionCellSx}>Actions</TableCell>
           </TableRow>
         </TableHead>
 
@@ -339,30 +365,21 @@ const FindingsTable = ({
                 <TableCell>
                   <Skeleton width={90} />
                 </TableCell>
-                <TableCell>
-                  <Skeleton width={110} />
-                </TableCell>
-                <TableCell>
-                  <Skeleton width={160} />
-                </TableCell>
                 <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
                   <Skeleton width={90} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={90} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={60} />
                 </TableCell>
                 <TableCell sx={{ display: { xs: "none", lg: "table-cell" } }}>
-                  <Skeleton width={120} />
+                  <Skeleton width={90} />
+                </TableCell>
+                <TableCell sx={actionCellSx}>
+                  <Skeleton width={80} />
                 </TableCell>
               </TableRow>
             ))}
 
           {!loading && errorMessage && (
             <TableRow>
-              <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   {errorMessage}
                 </Typography>
@@ -375,7 +392,7 @@ const FindingsTable = ({
 
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   Ничего не найдено по фильтрам
                 </Typography>
@@ -403,7 +420,6 @@ const FindingsTable = ({
               const occurrence: FindingOccurrenceStatus = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
               const repeatCount = f.repeatCount ?? 0;
 
-              const ownerLabel = f.owner?.name || f.assigneeId || "—";
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
 
               const isActive = Boolean(activeId) && f.id === activeId;
@@ -439,53 +455,63 @@ const FindingsTable = ({
                   </TableCell>
 
                   <TableCell
-                    sx={{
-                      maxWidth: 520,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
+                    sx={titleCellSx}
                   >
-                    {batchMode ? (
-                      <Tooltip title={f.title} placement="top-start">
-                        <Typography color="text.primary" noWrap>
-                          {renderHighlightedTitle(f.title)}
+                    <Stack spacing={0.2} sx={{ minWidth: 0 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                        {batchMode ? (
+                          <Tooltip title={f.title} placement="top-start">
+                            <Typography color="text.primary" noWrap sx={{ fontWeight: 600 }}>
+                              {renderHighlightedTitle(f.title)}
+                            </Typography>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={f.title} placement="top-start">
+                            <MuiLink
+                              component={Link}
+                              to={buildDetailLink(f.id)}
+                              underline="hover"
+                              sx={{ display: "inline-block", maxWidth: "100%" }}
+                              onClick={(e) => {
+                                if (onOpenDetail && !isModifiedClick(e)) {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  onNavigateToDetail();
+                                  onOpenDetail(f.id);
+                                } else {
+                                  onNavigateToDetail();
+                                }
+                              }}
+                            >
+                              <Typography component="span" noWrap sx={{ fontWeight: 600 }}>
+                                {renderHighlightedTitle(f.title)}
+                              </Typography>
+                            </MuiLink>
+                          </Tooltip>
+                        )}
+
+                        {repeatCount > 1 && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={`x${repeatCount}`}
+                            sx={{ fontSize: "0.7rem", height: 20 }}
+                          />
+                        )}
+                      </Stack>
+
+                      <Tooltip
+                        title={`App: ${f.productName || "—"} • Scanner: ${prettifyScanner(
+                          f.scannerType
+                        )} • Last seen: ${formatDate(lastSeenAt)}`}
+                      >
+                        <Typography noWrap sx={sublineSx}>
+                          App: {f.productName || "—"} • Scanner:{" "}
+                          {prettifyScanner(f.scannerType)} • Last seen:{" "}
+                          {formatDate(lastSeenAt)}
                         </Typography>
                       </Tooltip>
-                    ) : (
-                      <Tooltip title={f.title} placement="top-start">
-                        <MuiLink
-                          component={Link}
-                          to={buildDetailLink(f.id)}
-                          underline="hover"
-                          sx={{ display: "inline-block", maxWidth: "100%" }}
-                          onClick={(e) => {
-                            // ✅ если включен Drawer-режим — открываем панель
-                            if (onOpenDetail && !isModifiedClick(e)) {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              onNavigateToDetail();
-                              onOpenDetail(f.id);
-                            } else {
-                              // обычная навигация на detail page
-                              onNavigateToDetail();
-                            }
-                          }}
-                        >
-                          <Typography component="span" noWrap>
-                            {renderHighlightedTitle(f.title)}
-                          </Typography>
-                        </MuiLink>
-                      </Tooltip>
-                    )}
-                  </TableCell>
-
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
-                    <Tooltip title={f.productName || "—"}>
-                      <Typography variant="body2" noWrap>
-                        {f.productName || "—"}
-                      </Typography>
-                    </Tooltip>
+                    </Stack>
                   </TableCell>
 
                   <TableCell sx={{ whiteSpace: "nowrap" }}>
@@ -493,7 +519,7 @@ const FindingsTable = ({
                       size="small"
                       variant="outlined"
                       label={severityLabels[f.severity]}
-                      sx={severityChipSx[f.severity]}
+                      sx={{ ...severityChipSx[f.severity], fontWeight: 600 }}
                     />
                   </TableCell>
 
@@ -502,19 +528,18 @@ const FindingsTable = ({
                       label={statusLabels[f.status] ?? f.status}
                       color={statusColors[f.status]}
                       size="small"
-                      sx={{ textTransform: "none" }}
+                      variant="outlined"
+                      sx={{ textTransform: "none", fontWeight: 500 }}
                     />
                   </TableCell>
 
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  <TableCell
+                    sx={{ whiteSpace: "nowrap", display: { xs: "none", md: "table-cell" } }}
+                  >
                     <Typography variant="body2">{formatDate(lastSeenAt)}</Typography>
                   </TableCell>
 
-                  <TableCell sx={{ display: { xs: "none", md: "table-cell" }, whiteSpace: "nowrap" }}>
-                    <Typography variant="body2">{prettifyScanner(f.scannerType)}</Typography>
-                  </TableCell>
-
-                  <TableCell sx={{ display: { xs: "none", md: "table-cell" }, whiteSpace: "nowrap" }}>
+                  <TableCell sx={{ display: { xs: "none", lg: "table-cell" }, whiteSpace: "nowrap" }}>
                     <Chip
                       label={occurrenceLabels[occurrence] ?? occurrence}
                       color={occurrenceColors[occurrence]}
@@ -523,23 +548,58 @@ const FindingsTable = ({
                     />
                   </TableCell>
 
-                  <TableCell
-                    align="right"
-                    sx={{
-                      display: { xs: "none", md: "table-cell" },
-                      fontFamily: "monospace",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {repeatCount}
-                  </TableCell>
+                  <TableCell sx={actionCellSx}>
+                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                      <Tooltip title="Открыть деталь">
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label={`Открыть ${f.title}`}
+                            component={Link}
+                            to={buildDetailLink(f.id)}
+                            onClick={(e) => {
+                              if (onOpenDetail && !isModifiedClick(e)) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onNavigateToDetail();
+                                onOpenDetail(f.id);
+                                return;
+                              }
+                              if (!isModifiedClick(e)) {
+                                onNavigateToDetail();
+                              }
+                            }}
+                            disabled={batchMode || loading || Boolean(errorMessage)}
+                          >
+                            <OpenInNewIcon fontSize="inherit" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
 
-                  <TableCell sx={{ display: { xs: "none", lg: "table-cell" }, maxWidth: 160 }}>
-                    <Tooltip title={ownerLabel}>
-                      <Typography variant="body2" noWrap>
-                        {ownerLabel}
-                      </Typography>
-                    </Tooltip>
+                      <Tooltip title="Скопировать ссылку">
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Скопировать permalink"
+                            onClick={() => handleCopy(getPermalink(f.id))}
+                          >
+                            <LinkIcon fontSize="inherit" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+
+                      <Tooltip title="Скопировать ID">
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Скопировать ID"
+                            onClick={() => handleCopy(f.id)}
+                          >
+                            <ContentCopyIcon fontSize="inherit" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               );
