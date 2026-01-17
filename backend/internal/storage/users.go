@@ -13,12 +13,21 @@ func GetUserByEmail(ctx context.Context, db *sql.DB, email string) (*models.User
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT id, username, email, hashed_password, password_changed, must_change_password, created_at
-		 FROM users WHERE email = $1`,
+		 FROM users
+		 WHERE email = $1`,
 		email,
 	)
 
 	var user models.User
-	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.HashedPassword, &user.PasswordChanged, &user.MustChangePassword, &user.CreatedAt); err != nil {
+	if err := row.Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.HashedPassword,
+		&user.PasswordChanged,
+		&user.MustChangePassword,
+		&user.CreatedAt,
+	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -31,13 +40,22 @@ func GetUserByLogin(ctx context.Context, db *sql.DB, email string, username stri
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT id, username, email, hashed_password, password_changed, must_change_password, created_at
-		 FROM users WHERE email = $1 OR username = $2`,
+		 FROM users
+		 WHERE email = $1 OR username = $2`,
 		email,
 		username,
 	)
 
 	var user models.User
-	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.HashedPassword, &user.PasswordChanged, &user.MustChangePassword, &user.CreatedAt); err != nil {
+	if err := row.Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.HashedPassword,
+		&user.PasswordChanged,
+		&user.MustChangePassword,
+		&user.CreatedAt,
+	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -50,12 +68,21 @@ func GetUserByID(ctx context.Context, db *sql.DB, userID uuid.UUID) (*models.Use
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT id, username, email, hashed_password, password_changed, must_change_password, created_at
-		 FROM users WHERE id = $1`,
+		 FROM users
+		 WHERE id = $1`,
 		userID,
 	)
 
 	var user models.User
-	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.HashedPassword, &user.PasswordChanged, &user.MustChangePassword, &user.CreatedAt); err != nil {
+	if err := row.Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.HashedPassword,
+		&user.PasswordChanged,
+		&user.MustChangePassword,
+		&user.CreatedAt,
+	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -92,7 +119,14 @@ func GetUserRoles(ctx context.Context, db *sql.DB, userID uuid.UUID) ([]string, 
 	return roles, nil
 }
 
-func UpdateUserPassword(ctx context.Context, db *sql.DB, userID uuid.UUID, hashedPassword string, passwordChanged bool, mustChangePassword bool) error {
+func UpdateUserPassword(
+	ctx context.Context,
+	db *sql.DB,
+	userID uuid.UUID,
+	hashedPassword string,
+	passwordChanged bool,
+	mustChangePassword bool,
+) error {
 	_, err := db.ExecContext(
 		ctx,
 		`UPDATE users
@@ -106,4 +140,14 @@ func UpdateUserPassword(ctx context.Context, db *sql.DB, userID uuid.UUID, hashe
 		userID,
 	)
 	return err
+}
+
+func UserExists(ctx context.Context, db *sql.DB, userID uuid.UUID) (bool, error) {
+	var exists bool
+	err := db.QueryRowContext(
+		ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)`,
+		userID,
+	).Scan(&exists)
+	return exists, err
 }

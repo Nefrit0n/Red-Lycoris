@@ -69,6 +69,25 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	uploaderID := userIDFromContext(c)
+	if uploaderID == nil {
+		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{
+			"error": "unauthorized: user id missing",
+		})
+	}
+
+	exists, err := storage.UserExists(c.Context(), h.db, *uploaderID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to verify user",
+		})
+	}
+	if !exists {
+		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{
+			"error": "user not found",
+		})
+	}
+
 	checksum := computeChecksum(req.ReportBytes)
 
 	productName := strings.TrimSpace(req.ProductName)
@@ -79,8 +98,9 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		Scanner:   req.ScannerType,
 		Status:    models.ImportJobQueued,
 		Checksum:  checksum,
-		CreatedBy: userIDFromContext(c),
+		CreatedBy: uploaderID, // ✅ ТЕПЕРЬ КОРРЕКТНО
 	}
+
 	if productName != "" {
 		job.ProductName = &productName
 	}
@@ -108,7 +128,13 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		"meta":    auditMeta,
 	})
 
-	resp, status, err := h.processImportJob(c.Context(), req, job, userIDFromContext(c), auditMeta)
+	resp, status, err := h.processImportJob(
+		c.Context(),
+		req,
+		job,
+		uploaderID,
+		auditMeta,
+	)
 	if err != nil {
 		return c.Status(status).JSON(fiber.Map{"error": err.Error()})
 	}

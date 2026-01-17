@@ -9,9 +9,9 @@ import (
 )
 
 type JWTClaims struct {
-	UserID              string   `json:"user_id"`
-	Roles               []string `json:"roles"`
-	MustChangePassword  bool     `json:"must_change_password"`
+	UserID             string   `json:"user_id"`
+	Roles              []string `json:"roles"`
+	MustChangePassword bool     `json:"must_change_password"`
 	jwt.RegisteredClaims
 }
 
@@ -32,6 +32,7 @@ func RequireJWT(secret string) fiber.Handler {
 			}
 			return []byte(secret), nil
 		})
+
 		if err != nil || !token.Valid {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "invalid token",
@@ -39,7 +40,18 @@ func RequireJWT(secret string) fiber.Handler {
 		}
 
 		claims, ok := token.Claims.(*JWTClaims)
-		if !ok || claims.UserID == "" {
+		if !ok {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "invalid claims",
+			})
+		}
+
+		userID := claims.UserID
+		if userID == "" {
+			userID = claims.Subject
+		}
+
+		if userID == "" {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error": "invalid claims",
 			})
@@ -55,7 +67,7 @@ func RequireJWT(secret string) fiber.Handler {
 			})
 		}
 
-		c.Locals("user_id", claims.UserID)
+		c.Locals("user_id", userID)
 		c.Locals("roles", claims.Roles)
 
 		return c.Next()
