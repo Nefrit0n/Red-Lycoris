@@ -664,8 +664,8 @@ const FindingsList = () => {
         elevation={0}
         sx={{
           borderRadius: 2,
-          border: "none",
-          backgroundColor: "transparent",
+          border: "1px solid",
+          borderColor: "divider",
         }}
       >
         <Box onClickCapture={handleTableLinkClickCapture}>
