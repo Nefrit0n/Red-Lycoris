@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"time"
 
 	"lotus-warden/backend/internal/models"
@@ -21,6 +22,7 @@ type ImportJobListItem struct {
 	CreatedAt         time.Time
 	StartedAt         sql.NullTime
 	FinishedAt        sql.NullTime
+	ProductID         uuid.NullUUID
 	ProductName       sql.NullString
 	ProductVersion    sql.NullString
 	ProductIdentifier sql.NullString
@@ -38,6 +40,10 @@ func CreateImportJob(ctx context.Context, db *sql.DB, job *models.ImportJob) err
 	}
 	job.PrepareForInsert()
 
+	var productID interface{}
+	if job.ProductID != nil {
+		productID = *job.ProductID
+	}
 	var productName sql.NullString
 	if job.ProductName != nil {
 		productName = sql.NullString{String: *job.ProductName, Valid: true}
@@ -57,10 +63,11 @@ func CreateImportJob(ctx context.Context, db *sql.DB, job *models.ImportJob) err
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO import_jobs (id, scanner, product_name, product_version, product_identifier, status, findings_total, findings_new, duplicates_total, checksum, error_message, created_at, started_at, finished_at, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		`INSERT INTO import_jobs (id, scanner, product_id, product_name, product_version, product_identifier, status, findings_total, findings_new, duplicates_total, checksum, error_message, created_at, started_at, finished_at, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		job.ID,
 		job.Scanner,
+		productID,
 		productName,
 		productVersion,
 		productIdentifier,
@@ -81,7 +88,7 @@ func CreateImportJob(ctx context.Context, db *sql.DB, job *models.ImportJob) err
 func GetImportJobByChecksum(ctx context.Context, db *sql.DB, checksum string) (*ImportJobDetail, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, scanner, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_name, product_version, product_identifier, created_by, error_message
+		`SELECT id, scanner, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by, error_message
 		 FROM import_jobs
 		 WHERE checksum = $1
 		 ORDER BY created_at DESC
@@ -109,6 +116,18 @@ func UpdateImportJobStatus(ctx context.Context, db *sql.DB, id uuid.UUID, status
 	return err
 }
 
+func UpdateImportJobProductID(ctx context.Context, db *sql.DB, id uuid.UUID, productID uuid.UUID) error {
+	_, err := db.ExecContext(
+		ctx,
+		`UPDATE import_jobs
+		 SET product_id = $1
+		 WHERE id = $2`,
+		productID,
+		id,
+	)
+	return err
+}
+
 func UpdateImportJobStats(ctx context.Context, db *sql.DB, id uuid.UUID, findingsTotal int, findingsNew int, duplicates int) error {
 	_, err := db.ExecContext(
 		ctx,
@@ -125,20 +144,45 @@ func UpdateImportJobStats(ctx context.Context, db *sql.DB, id uuid.UUID, finding
 	return err
 }
 
-func ListImportJobs(ctx context.Context, db *sql.DB, limit int, offset int) ([]ImportJobListItem, int, error) {
+type ImportJobFilters struct {
+	ProductID *uuid.UUID
+	Scanner   string
+	Status    string
+	Limit     int
+	Offset    int
+}
+
+func ListImportJobs(ctx context.Context, db *sql.DB, filters ImportJobFilters) ([]ImportJobListItem, int, error) {
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+	if filters.ProductID != nil {
+		args = append(args, *filters.ProductID)
+		whereClause += " AND product_id = $" + itoa(len(args))
+	}
+	if filters.Scanner != "" {
+		args = append(args, filters.Scanner)
+		whereClause += " AND scanner = $" + itoa(len(args))
+	}
+	if filters.Status != "" {
+		args = append(args, filters.Status)
+		whereClause += " AND status = $" + itoa(len(args))
+	}
+
 	var total int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM import_jobs`).Scan(&total); err != nil {
+	countQuery := "SELECT COUNT(*) FROM import_jobs " + whereClause
+	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
+	args = append(args, filters.Limit, filters.Offset)
 	rows, err := db.QueryContext(
 		ctx,
-		`SELECT id, scanner, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_name, product_version, product_identifier, created_by
+		`SELECT id, scanner, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by
 		 FROM import_jobs
+		 `+whereClause+`
 		 ORDER BY created_at DESC
-		 LIMIT $1 OFFSET $2`,
-		limit,
-		offset,
+		 LIMIT $`+itoa(len(args)-1)+` OFFSET $`+itoa(len(args))+``,
+		args...,
 	)
 	if err != nil {
 		return nil, 0, err
@@ -159,6 +203,7 @@ func ListImportJobs(ctx context.Context, db *sql.DB, limit int, offset int) ([]I
 			&item.CreatedAt,
 			&item.StartedAt,
 			&item.FinishedAt,
+			&item.ProductID,
 			&item.ProductName,
 			&item.ProductVersion,
 			&item.ProductIdentifier,
@@ -177,7 +222,7 @@ func ListImportJobs(ctx context.Context, db *sql.DB, limit int, offset int) ([]I
 func GetImportJobByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*ImportJobDetail, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, scanner, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_name, product_version, product_identifier, created_by, error_message
+		`SELECT id, scanner, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by, error_message
 		 FROM import_jobs
 		 WHERE id = $1`,
 		id,
@@ -198,6 +243,7 @@ func scanImportJobDetail(row *sql.Row) (*ImportJobDetail, error) {
 		&item.CreatedAt,
 		&item.StartedAt,
 		&item.FinishedAt,
+		&item.ProductID,
 		&item.ProductName,
 		&item.ProductVersion,
 		&item.ProductIdentifier,
@@ -210,4 +256,8 @@ func scanImportJobDetail(row *sql.Row) (*ImportJobDetail, error) {
 		return nil, err
 	}
 	return &item, nil
+}
+
+func itoa(value int) string {
+	return strconv.Itoa(value)
 }

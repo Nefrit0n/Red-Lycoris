@@ -18,6 +18,7 @@ import PaginationControl from "../components/PaginationControl";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import {
   Finding,
+  FindingOccurrenceStatus,
   FindingSeverity,
   FindingStatus,
 } from "../types/findings";
@@ -34,6 +35,8 @@ const statusOptions: FindingStatus[] = [
   "mitigated",
   "duplicate",
 ];
+
+const occurrenceOptions: FindingOccurrenceStatus[] = ["NEW", "REPEAT"];
 
 type BulkUndoItem = {
   id: string;
@@ -63,8 +66,13 @@ const FindingsList = () => {
   const [importJobId, setImportJobId] = useState("");
   const [filterSeverity, setFilterSeverity] = useState<FindingSeverity | "">("");
   const [filterStatus, setFilterStatus] = useState<FindingStatus | "">("");
+  const [filterOccurrence, setFilterOccurrence] = useState<FindingOccurrenceStatus | "">("");
+  const [filterScannerType, setFilterScannerType] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showRepeats, setShowRepeats] = useState(false);
 
-  const [sortField, setSortField] = useState<keyof Finding>("createdAt");
+  const [sortField, setSortField] = useState<keyof Finding>("lastSeenAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -81,11 +89,17 @@ const FindingsList = () => {
     const queryImportJobId = params.get("import_job_id");
     const querySeverity = params.get("severity");
     const queryStatus = params.get("status");
-    const querySearch = params.get("q") ?? "";
+    const querySearch = params.get("search") ?? params.get("q") ?? "";
     const queryPage = Number(params.get("page") ?? "1");
     const queryLimit = Number(params.get("limit") ?? "20");
     const querySortField = params.get("sortField");
     const querySortOrder = params.get("sortOrder");
+    const queryOccurrence = params.get("occurrenceStatus");
+    const queryScanner = params.get("scannerType") ?? "";
+    const queryDateFrom = params.get("dateFrom") ?? "";
+    const queryDateTo = params.get("dateTo") ?? "";
+    const queryIncludeRepeats = params.get("includeRepeats");
+    const queryCanonicalOnly = params.get("canonicalOnly");
 
     const nextPage =
       Number.isFinite(queryPage) && queryPage > 0 ? queryPage - 1 : 0;
@@ -108,24 +122,39 @@ const FindingsList = () => {
       : "";
     setFilterStatus((prev) => (prev !== nextStatus ? nextStatus : prev));
 
+    const nextOccurrence = occurrenceOptions.includes(queryOccurrence as FindingOccurrenceStatus)
+      ? (queryOccurrence as FindingOccurrenceStatus)
+      : "";
+    setFilterOccurrence((prev) => (prev !== nextOccurrence ? nextOccurrence : prev));
+
+    setFilterScannerType((prev) => (prev !== queryScanner ? queryScanner : prev));
+    setDateFrom((prev) => (prev !== queryDateFrom ? queryDateFrom : prev));
+    setDateTo((prev) => (prev !== queryDateTo ? queryDateTo : prev));
+
+    const nextShowRepeats =
+      queryIncludeRepeats === "true" ||
+      queryCanonicalOnly === "false";
+    setShowRepeats((prev) => (prev !== nextShowRepeats ? nextShowRepeats : prev));
+
     setSearchInput((prev) => (prev !== querySearch ? querySearch : prev));
 
     setImportJobId((prev) =>
       prev !== (queryImportJobId || "") ? queryImportJobId || "" : prev
     );
 
-    const nextSortField = (querySortField as keyof Finding) || "createdAt";
+    const nextSortField = (querySortField as keyof Finding) || "lastSeenAt";
     const allowedSortFields: Array<keyof Finding> = [
       "title",
       "productName",
       "severity",
       "status",
+      "lastSeenAt",
       "createdAt",
       "updatedAt",
     ];
     const safeSortField = allowedSortFields.includes(nextSortField)
       ? nextSortField
-      : "createdAt";
+      : "lastSeenAt";
     setSortField((prev) => (prev !== safeSortField ? safeSortField : prev));
 
     const safeSortOrder = querySortOrder === "asc" ? "asc" : "desc";
@@ -145,8 +174,14 @@ const FindingsList = () => {
     if (productId) params.set("product", productId);
     if (filterSeverity) params.set("severity", filterSeverity);
     if (filterStatus) params.set("status", filterStatus);
-    if (searchInput) params.set("q", searchInput);
+    if (filterOccurrence) params.set("occurrenceStatus", filterOccurrence);
+    if (filterScannerType) params.set("scannerType", filterScannerType);
+    if (searchInput) params.set("search", searchInput);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
     if (importJobId) params.set("import_job_id", importJobId);
+    params.set("canonicalOnly", showRepeats ? "false" : "true");
+    params.set("includeRepeats", showRepeats ? "true" : "false");
     if (sortField) params.set("sortField", String(sortField));
     if (sortOrder) params.set("sortOrder", sortOrder);
 
@@ -170,7 +205,12 @@ const FindingsList = () => {
     productId,
     filterSeverity,
     filterStatus,
+    filterOccurrence,
+    filterScannerType,
     searchInput,
+    dateFrom,
+    dateTo,
+    showRepeats,
     importJobId,
     sortField,
     sortOrder,
@@ -231,6 +271,12 @@ const FindingsList = () => {
       setError(null);
 
       try {
+        const normalizedDateFrom = dateFrom
+          ? new Date(`${dateFrom}T00:00:00Z`).toISOString()
+          : undefined;
+        const normalizedDateTo = dateTo
+          ? new Date(`${dateTo}T23:59:59Z`).toISOString()
+          : undefined;
         const response = await fetchFindings(
           {
             limit: pageSize,
@@ -238,7 +284,13 @@ const FindingsList = () => {
             filterProduct: productId,
             filterSeverity,
             filterStatus,
+            filterOccurrence,
+            filterScannerType,
             search: debouncedSearch,
+            dateFrom: normalizedDateFrom,
+            dateTo: normalizedDateTo,
+            canonicalOnly: !showRepeats,
+            includeRepeats: showRepeats,
             importJobId,
             sortField,
             sortOrder,
@@ -273,6 +325,11 @@ const FindingsList = () => {
       importJobId,
       filterSeverity,
       filterStatus,
+      filterOccurrence,
+      filterScannerType,
+      dateFrom,
+      dateTo,
+      showRepeats,
       sortField,
       sortOrder,
       selectAllMatching,
@@ -288,7 +345,20 @@ const FindingsList = () => {
   useEffect(() => {
     setSelectedIds([]);
     setSelectAllMatching(false);
-  }, [productId, filterSeverity, filterStatus, searchInput, importJobId, sortField, sortOrder]);
+  }, [
+    productId,
+    filterSeverity,
+    filterStatus,
+    filterOccurrence,
+    filterScannerType,
+    dateFrom,
+    dateTo,
+    showRepeats,
+    searchInput,
+    importJobId,
+    sortField,
+    sortOrder,
+  ]);
 
   useEffect(() => {
     if (selectAllMatching) setSelectedIds(data.map((item) => item.id));
@@ -300,8 +370,13 @@ const FindingsList = () => {
     setImportJobId("");
     setFilterSeverity("");
     setFilterStatus("");
+    setFilterOccurrence("");
+    setFilterScannerType("");
+    setDateFrom("");
+    setDateTo("");
+    setShowRepeats(false);
     setPage(0);
-    setSortField("createdAt");
+    setSortField("lastSeenAt");
     setSortOrder("desc");
     setSelectedIds([]);
     setSelectAllMatching(false);
@@ -373,8 +448,14 @@ const FindingsList = () => {
             product: productId || undefined,
             severity: filterSeverity || undefined,
             status: filterStatus || undefined,
+            occurrenceStatus: filterOccurrence || undefined,
+            scannerType: filterScannerType || undefined,
             q: debouncedSearch || undefined,
             import_job_id: importJobId || undefined,
+            dateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00Z`).toISOString() : undefined,
+            dateTo: dateTo ? new Date(`${dateTo}T23:59:59Z`).toISOString() : undefined,
+            canonicalOnly: !showRepeats,
+            includeRepeats: showRepeats,
           }
           : undefined,
         action,
@@ -444,6 +525,11 @@ const FindingsList = () => {
         search={searchInput}
         filterSeverity={filterSeverity}
         filterStatus={filterStatus}
+        filterOccurrence={filterOccurrence}
+        filterScannerType={filterScannerType}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        showRepeats={showRepeats}
         onProductIdChange={(v) => {
           setProductId(v);
           setPage(0);
@@ -458,6 +544,26 @@ const FindingsList = () => {
         }}
         onStatusChange={(v) => {
           setFilterStatus(v);
+          setPage(0);
+        }}
+        onOccurrenceChange={(v) => {
+          setFilterOccurrence(v);
+          setPage(0);
+        }}
+        onScannerTypeChange={(v) => {
+          setFilterScannerType(v);
+          setPage(0);
+        }}
+        onDateFromChange={(v) => {
+          setDateFrom(v);
+          setPage(0);
+        }}
+        onDateToChange={(v) => {
+          setDateTo(v);
+          setPage(0);
+        }}
+        onShowRepeatsChange={(value) => {
+          setShowRepeats(value);
           setPage(0);
         }}
         onReset={handleResetFilters}

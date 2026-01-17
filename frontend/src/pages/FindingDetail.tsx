@@ -12,6 +12,11 @@ import {
   MenuItem,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -34,6 +39,7 @@ import {
   FindingDetail,
   FindingEvent,
   FindingNeighbors,
+  FindingOccurrence,
   FindingSeverity,
   FindingStatus,
 } from "../types/findings";
@@ -166,6 +172,7 @@ const FindingDetailPage = () => {
   // ✅ СЕЙФОВО: на первом рендере data = null, но массивы всегда есть
   const events = useMemo(() => data?.events ?? [], [data]);
   const comments = useMemo(() => data?.comments ?? [], [data]);
+  const occurrences = useMemo(() => data?.occurrences ?? [], [data]);
 
   const filteredEvents = useMemo(() => {
     if (eventFilter === "all") return events;
@@ -381,9 +388,65 @@ const FindingDetailPage = () => {
                 variant="outlined"
               />
               <Chip label={data.status} color={statusColors[data.status] ?? "default"} sx={{ textTransform: "capitalize" }} />
+              {data.occurrenceStatus && (
+                <Chip label={`Occurrence: ${data.occurrenceStatus}`} variant="outlined" />
+              )}
+              {typeof data.repeatCount === "number" && (
+                <Chip label={`Repeats: ${data.repeatCount}`} variant="outlined" />
+              )}
+              {data.lastSeenAt && (
+                <Chip label={`Last seen: ${new Date(data.lastSeenAt).toLocaleString("ru-RU")}`} variant="outlined" />
+              )}
               {data.productName && <Chip label={`Продукт: ${data.productName}`} variant="outlined" />}
               {data.fingerprint && <Chip label={`Fingerprint: ${data.fingerprint}`} variant="outlined" />}
             </Box>
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mt: 3 }}>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Occurrences / Repeats
+            </Typography>
+
+            {occurrences.length === 0 ? (
+              <Typography color="text.secondary">Повторов пока нет.</Typography>
+            ) : (
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Seen at</TableCell>
+                    <TableCell>Import Job</TableCell>
+                    <TableCell>Scanner</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Snippet</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {occurrences.map((occurrence: FindingOccurrence) => (
+                    <TableRow key={occurrence.id}>
+                      <TableCell>
+                        {new Date(occurrence.seenAt).toLocaleString("ru-RU")}
+                      </TableCell>
+                      <TableCell>
+                        {occurrence.importJobId ? (
+                          <MuiLink component={Link} to={`/imports/${occurrence.importJobId}`}>
+                            {occurrence.importJobId}
+                          </MuiLink>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell>{occurrence.scannerType || "—"}</TableCell>
+                      <TableCell>{occurrence.status}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" noWrap>
+                          {occurrence.snippet || "—"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </Paper>
 
           <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mt: 3 }}>
@@ -631,6 +694,16 @@ const FindingDetailPage = () => {
               <Typography variant="body2">
                 Обновлено: {new Date(data.updatedAt).toLocaleString("ru-RU")}
               </Typography>
+              {data.firstSeenAt && (
+                <Typography variant="body2">
+                  First seen: {new Date(data.firstSeenAt).toLocaleString("ru-RU")}
+                </Typography>
+              )}
+              {data.lastSeenAt && (
+                <Typography variant="body2">
+                  Last seen: {new Date(data.lastSeenAt).toLocaleString("ru-RU")}
+                </Typography>
+              )}
 
               <Box display="flex" alignItems="center" gap={1}>
                 <Typography variant="body2">Finding ID: {data.id}</Typography>
@@ -670,6 +743,9 @@ const FindingDetailPage = () => {
                 </Typography>
               )}
 
+              {data.owner?.name && (
+                <Typography variant="body2">Owner: {data.owner.name}</Typography>
+              )}
               {data.assigneeId && <Typography variant="body2">Assignee ID: {data.assigneeId}</Typography>}
 
               <Button
