@@ -4,12 +4,10 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Divider,
   FormControl,
   FormControlLabel,
   Grid,
   InputLabel,
-  InputAdornment,
   MenuItem,
   Paper,
   Select,
@@ -20,7 +18,6 @@ import {
   Typography,
 } from "@mui/material";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
-import SearchIcon from "@mui/icons-material/Search";
 import { useEffect, useMemo, useState } from "react";
 import { fetchProducts } from "../api/products";
 import {
@@ -176,38 +173,34 @@ const FiltersPanel = ({
       variant="outlined"
       sx={{
         mb: 3,
-        p: 2.5,
+        p: 2,
         borderRadius: 2,
         backgroundColor: "background.paper",
       }}
     >
-      <Stack spacing={2}>
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          alignItems={{ xs: "flex-start", sm: "center" }}
+      <Stack spacing={1.5}>
+        <Box
+          display="flex"
+          alignItems="center"
           justifyContent="space-between"
           gap={2}
+          flexWrap="wrap"
         >
-          <Box>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              Filters
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Use filters to narrow down triage results
-            </Typography>
-          </Box>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            Фильтры
+          </Typography>
 
           <Button
             variant="outlined"
-            color="secondary"
+            color="inherit"
             size="small"
             startIcon={<RestartAltIcon />}
             onClick={onReset}
             sx={{ whiteSpace: "nowrap" }}
           >
-            Сбросить все
+            Сбросить
           </Button>
-        </Stack>
+        </Box>
 
         <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} md={4}>
@@ -279,13 +272,6 @@ const FiltersPanel = ({
               fullWidth
               placeholder="title / fingerprint / CVE / rule id"
               inputProps={{ "aria-label": "Поиск по находкам" }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" sx={{ color: "text.secondary" }} />
-                  </InputAdornment>
-                ),
-              }}
             />
           </Grid>
 
@@ -408,8 +394,6 @@ const FiltersPanel = ({
             />
           </Grid>
         </Grid>
-
-        <Divider />
 
         {hasActiveFilters ? (
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
