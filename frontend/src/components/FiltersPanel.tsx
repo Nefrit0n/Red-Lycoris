@@ -47,49 +47,46 @@ const FiltersPanel = ({
 
   useEffect(() => {
     const controller = new AbortController();
+
     const loadProducts = async () => {
       setProductsLoading(true);
       try {
         const response = await fetchProducts(200, 0, controller.signal);
-        setProducts(response.data);
+        setProducts(Array.isArray(response?.data) ? response.data : []);
       } catch {
         setProducts([]);
       } finally {
         setProductsLoading(false);
       }
     };
+
     loadProducts();
     return () => controller.abort();
   }, []);
 
   const selectedProduct = useMemo(() => {
-    if (!productId) {
-      return null;
-    }
+    if (!productId) return null;
     return (
-      products.find((item) => item.id === productId) ||
-      products.find((item) => item.identifier === productId) ||
+      products.find((p) => p.id === productId) ||
+      products.find((p) => p.identifier === productId) ||
       null
     );
   }, [productId, products]);
 
   const productLabel = useMemo(() => {
-    if (!selectedProduct) {
-      return productId;
-    }
+    if (!productId) return "";
+    if (!selectedProduct) return productId;
+
     const identifierSuffix = selectedProduct.identifier
       ? ` · ${selectedProduct.identifier}`
       : "";
     return `${selectedProduct.name}${identifierSuffix}`;
   }, [productId, selectedProduct]);
 
+  // держим отображаемый inputValue в синхре с текущим productId
   useEffect(() => {
-    if (!productId) {
-      setProductInput("");
-      return;
-    }
     setProductInput(productLabel);
-  }, [productId, productLabel]);
+  }, [productLabel]);
 
   const handleSeverityChange = (event: SelectChangeEvent) => {
     onSeverityChange(event.target.value as FindingSeverity | "");
@@ -103,25 +100,25 @@ const FiltersPanel = ({
     filterSeverity === ""
       ? ""
       : {
-          low: "Low",
-          medium: "Medium",
-          high: "High",
-          critical: "Critical",
-        }[filterSeverity];
+        low: "Low",
+        medium: "Medium",
+        high: "High",
+        critical: "Critical",
+      }[filterSeverity];
 
   const statusLabel =
     filterStatus === ""
       ? ""
       : {
-          new: "New",
-          under_review: "Under review",
-          confirmed: "Confirmed",
-          false_positive: "False positive",
-          out_of_scope: "Out of scope",
-          risk_accepted: "Risk accepted",
-          mitigated: "Mitigated",
-          duplicate: "Duplicate",
-        }[filterStatus];
+        new: "New",
+        under_review: "Under review",
+        confirmed: "Confirmed",
+        false_positive: "False positive",
+        out_of_scope: "Out of scope",
+        risk_accepted: "Risk accepted",
+        mitigated: "Mitigated",
+        duplicate: "Duplicate",
+      }[filterStatus];
 
   const hasActiveFilters =
     Boolean(productId) ||
@@ -147,17 +144,20 @@ const FiltersPanel = ({
         spacing={2}
         alignItems={{ xs: "stretch", md: "center" }}
       >
-        <Autocomplete
+        <Autocomplete<Product, false, true, true>
           options={products}
           value={selectedProduct}
           inputValue={productInput}
-          onInputChange={(_, value, reason) => {
+          loading={productsLoading}
+          freeSolo
+          // ✅ КРИТИЧНО: правильное сравнение value с options (а не по ссылке)
+          isOptionEqualToValue={(option, value) => option.id === value.id}
+          onInputChange={(_, value) => {
+            // ⚠️ НЕ чистим фильтр отсюда — только отображаемый текст
             setProductInput(value);
-            if (reason === "clear") {
-              onProductIdChange("");
-            }
           }}
           onChange={(_, value) => {
+            // ✅ Любые реальные изменения фильтра — только тут
             if (typeof value === "string") {
               onProductIdChange(value.trim());
               return;
@@ -169,13 +169,13 @@ const FiltersPanel = ({
             onProductIdChange("");
           }}
           getOptionLabel={(option) => {
-            if (typeof option === "string") {
-              return option;
-            }
+            if (typeof option === "string") return option;
             return `${option.name}${option.identifier ? ` · ${option.identifier}` : ""}`;
           }}
           filterOptions={(options, state) => {
             const input = state.inputValue.toLowerCase();
+            if (!input) return options;
+
             return options.filter((option) => {
               const identifier = option.identifier?.toLowerCase() ?? "";
               return (
@@ -185,8 +185,6 @@ const FiltersPanel = ({
               );
             });
           }}
-          freeSolo
-          loading={productsLoading}
           renderInput={(params) => (
             <TextField
               {...params}
@@ -286,7 +284,7 @@ const FiltersPanel = ({
         >
           {productId && (
             <Chip
-              label={`Product: ${productLabel}`}
+              label={`Product: ${productLabel || productId}`}
               onDelete={() => onProductIdChange("")}
             />
           )}
@@ -303,13 +301,11 @@ const FiltersPanel = ({
             />
           )}
           {search && (
-            <Chip
-              label={`q: ${search}`}
-              onDelete={() => onSearchChange("")}
-            />
+            <Chip label={`q: ${search}`} onDelete={() => onSearchChange("")} />
           )}
         </Stack>
       )}
+
       {!hasActiveFilters && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           Выберите фильтры, чтобы сузить список находок.

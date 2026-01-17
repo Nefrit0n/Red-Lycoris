@@ -7,7 +7,7 @@ import {
   Snackbar,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { bulkUpdateFindings, fetchFindings } from "../api/findings";
 import { getCurrentUser } from "../api/auth";
@@ -16,18 +16,13 @@ import FiltersPanel from "../components/FiltersPanel";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
 import useDebouncedValue from "../hooks/useDebouncedValue";
-import {
-  Finding,
-  FindingSeverity,
-  FindingStatus,
-} from "../types/findings";
+import { Finding, FindingSeverity, FindingStatus } from "../types/findings";
 
-const severityOptions: FindingSeverity[] = [
-  "low",
-  "medium",
-  "high",
-  "critical",
-];
+const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_SORT_FIELD: keyof Finding = "createdAt";
+const DEFAULT_SORT_ORDER: "asc" | "desc" = "desc";
+
+const severityOptions: FindingSeverity[] = ["low", "medium", "high", "critical"];
 
 const statusOptions: FindingStatus[] = [
   "new",
@@ -45,33 +40,108 @@ type BulkUndoItem = {
   status: FindingStatus;
 };
 
+const allowedSortFields: Array<keyof Finding> = [
+  "title",
+  "productName",
+  "severity",
+  "status",
+  "createdAt",
+  "updatedAt",
+];
+
+type ParsedQuery = {
+  page: number;
+  pageSize: number;
+  productId: string;
+  importJobId: string;
+  filterSeverity: FindingSeverity | "";
+  filterStatus: FindingStatus | "";
+  searchInput: string;
+  sortField: keyof Finding;
+  sortOrder: "asc" | "desc";
+  // чтобы не “переписывать” productId -> product и не ловить лишний navigate
+  productParamKey: "product" | "productId";
+};
+
+function parseQuery(search: string): ParsedQuery {
+  const params = new URLSearchParams(search);
+
+  const queryProduct = params.get("product");
+  const queryProductId = params.get("productId");
+
+  const productParamKey: "product" | "productId" =
+    !queryProduct && queryProductId ? "productId" : "product";
+
+  const queryPage = Number(params.get("page") ?? "1");
+  const queryLimit = Number(params.get("limit") ?? String(DEFAULT_PAGE_SIZE));
+
+  const page = Number.isFinite(queryPage) && queryPage > 0 ? queryPage - 1 : 0;
+  const pageSize =
+    Number.isFinite(queryLimit) && queryLimit > 0 ? queryLimit : DEFAULT_PAGE_SIZE;
+
+  const querySeverity = params.get("severity");
+  const filterSeverity = severityOptions.includes(querySeverity as FindingSeverity)
+    ? (querySeverity as FindingSeverity)
+    : "";
+
+  const queryStatus = params.get("status");
+  const filterStatus = statusOptions.includes(queryStatus as FindingStatus)
+    ? (queryStatus as FindingStatus)
+    : "";
+
+  const searchInput = params.get("q") ?? "";
+  const importJobId = params.get("import_job_id") ?? "";
+
+  const querySortField = params.get("sortField") as keyof Finding | null;
+  const safeSortField = querySortField && allowedSortFields.includes(querySortField)
+    ? querySortField
+    : DEFAULT_SORT_FIELD;
+
+  const querySortOrder = params.get("sortOrder");
+  const sortOrder: "asc" | "desc" = querySortOrder === "asc" ? "asc" : DEFAULT_SORT_ORDER;
+
+  return {
+    page,
+    pageSize,
+    productId: queryProduct || queryProductId || "",
+    importJobId,
+    filterSeverity,
+    filterStatus,
+    searchInput,
+    sortField: safeSortField,
+    sortOrder,
+    productParamKey,
+  };
+}
+
 const FindingsList = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
   const listStateKey = "lotus_warden_findings_list_state";
-  // ⚠️ Никогда не undefined
+
+  // ВАЖНО: инициализируемся сразу из URL, чтобы НЕ было первого запроса “без product”
+  const initial = useMemo(() => parseQuery(location.search), []); // только на маунте
+
   const [data, setData] = useState<Finding[]>([]);
   const [total, setTotal] = useState<number>(0);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(20);
+  const [page, setPage] = useState(initial.page);
+  const [pageSize, setPageSize] = useState(initial.pageSize);
 
-  const [productId, setProductId] = useState("");
-  const [searchInput, setSearchInput] = useState("");
+  const [productId, setProductId] = useState(initial.productId);
+  const [searchInput, setSearchInput] = useState(initial.searchInput);
   const debouncedSearch = useDebouncedValue(searchInput, 400);
-  const [importJobId, setImportJobId] = useState("");
-  const [filterSeverity, setFilterSeverity] =
-    useState<FindingSeverity | "">("");
-  const [filterStatus, setFilterStatus] =
-    useState<FindingStatus | "">("");
 
-  const [sortField, setSortField] =
-    useState<keyof Finding>("createdAt");
-  const [sortOrder, setSortOrder] =
-    useState<"asc" | "desc">("desc");
+  const [importJobId, setImportJobId] = useState(initial.importJobId);
+  const [filterSeverity, setFilterSeverity] = useState<FindingSeverity | "">(initial.filterSeverity);
+  const [filterStatus, setFilterStatus] = useState<FindingStatus | "">(initial.filterStatus);
+
+  const [sortField, setSortField] = useState<keyof Finding>(initial.sortField);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initial.sortOrder);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectAllMatching, setSelectAllMatching] = useState(false);
@@ -79,98 +149,55 @@ const FindingsList = () => {
   const [bulkToast, setBulkToast] = useState<string | null>(null);
   const [undoToastOpen, setUndoToastOpen] = useState(false);
 
+  // чтобы не “переписывать” productId <-> product при переходах
+  const productParamKeyRef = useRef<"product" | "productId">(initial.productParamKey);
+
+  // 1) URL -> state (для back/forward и переходов с других страниц)
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const queryProduct = params.get("product");
-    const queryProductId = params.get("productId");
-    const queryImportJobId = params.get("import_job_id");
-    const querySeverity = params.get("severity");
-    const queryStatus = params.get("status");
-    const querySearch = params.get("q") ?? "";
-    const queryPage = Number(params.get("page") ?? "1");
-    const queryLimit = Number(params.get("limit") ?? "20");
-    const querySortField = params.get("sortField");
-    const querySortOrder = params.get("sortOrder");
+    const parsed = parseQuery(location.search);
 
-    const nextPage = Number.isFinite(queryPage) && queryPage > 0 ? queryPage - 1 : 0;
-    const nextPageSize =
-      Number.isFinite(queryLimit) && queryLimit > 0 ? queryLimit : 20;
+    productParamKeyRef.current = parsed.productParamKey;
 
-    setPage((prev) => (prev !== nextPage ? nextPage : prev));
-    setPageSize((prev) => (prev !== nextPageSize ? nextPageSize : prev));
+    setPage((prev) => (prev !== parsed.page ? parsed.page : prev));
+    setPageSize((prev) => (prev !== parsed.pageSize ? parsed.pageSize : prev));
 
-    const nextProduct = queryProduct || queryProductId || "";
-    setProductId((prev) => (prev !== nextProduct ? nextProduct : prev));
+    setProductId((prev) => (prev !== parsed.productId ? parsed.productId : prev));
+    setFilterSeverity((prev) => (prev !== parsed.filterSeverity ? parsed.filterSeverity : prev));
+    setFilterStatus((prev) => (prev !== parsed.filterStatus ? parsed.filterStatus : prev));
 
-    const nextSeverity = severityOptions.includes(querySeverity as FindingSeverity)
-      ? (querySeverity as FindingSeverity)
-      : "";
-    setFilterSeverity((prev) => (prev !== nextSeverity ? nextSeverity : prev));
+    setSearchInput((prev) => (prev !== parsed.searchInput ? parsed.searchInput : prev));
+    setImportJobId((prev) => (prev !== parsed.importJobId ? parsed.importJobId : prev));
 
-    const nextStatus = statusOptions.includes(queryStatus as FindingStatus)
-      ? (queryStatus as FindingStatus)
-      : "";
-    setFilterStatus((prev) => (prev !== nextStatus ? nextStatus : prev));
-
-    setSearchInput((prev) => (prev !== querySearch ? querySearch : prev));
-
-    setImportJobId((prev) =>
-      prev !== (queryImportJobId || "") ? queryImportJobId || "" : prev
-    );
-
-    const nextSortField = (querySortField as keyof Finding) || "createdAt";
-    const allowedSortFields: Array<keyof Finding> = [
-      "title",
-      "productName",
-      "severity",
-      "status",
-      "createdAt",
-      "updatedAt",
-    ];
-    const safeSortField = allowedSortFields.includes(nextSortField)
-      ? nextSortField
-      : "createdAt";
-    setSortField((prev) => (prev !== safeSortField ? safeSortField : prev));
-
-    const safeSortOrder = querySortOrder === "asc" ? "asc" : "desc";
-    setSortOrder((prev) => (prev !== safeSortOrder ? safeSortOrder : prev));
+    setSortField((prev) => (prev !== parsed.sortField ? parsed.sortField : prev));
+    setSortOrder((prev) => (prev !== parsed.sortOrder ? parsed.sortOrder : prev));
   }, [location.search]);
 
+  // 2) state -> URL (НО: не пишем дефолты в URL, чтобы не было лишних переходов/запросов)
   useEffect(() => {
     const params = new URLSearchParams();
-    params.set("page", (page + 1).toString());
-    params.set("limit", pageSize.toString());
+
+    // не добавляем дефолты в URL
+    if (page !== 0) params.set("page", (page + 1).toString());
+    if (pageSize !== DEFAULT_PAGE_SIZE) params.set("limit", pageSize.toString());
+
     if (productId) {
-      params.set("product", productId);
+      params.set(productParamKeyRef.current, productId);
     }
-    if (filterSeverity) {
-      params.set("severity", filterSeverity);
-    }
-    if (filterStatus) {
-      params.set("status", filterStatus);
-    }
-    if (searchInput) {
-      params.set("q", searchInput);
-    }
-    if (importJobId) {
-      params.set("import_job_id", importJobId);
-    }
-    if (sortField) {
-      params.set("sortField", sortField);
-    }
-    if (sortOrder) {
-      params.set("sortOrder", sortOrder);
-    }
+    if (filterSeverity) params.set("severity", filterSeverity);
+    if (filterStatus) params.set("status", filterStatus);
+    if (searchInput) params.set("q", searchInput);
+    if (importJobId) params.set("import_job_id", importJobId);
+
+    if (sortField !== DEFAULT_SORT_FIELD) params.set("sortField", String(sortField));
+    if (sortOrder !== DEFAULT_SORT_ORDER) params.set("sortOrder", sortOrder);
 
     const nextSearch = params.toString();
     const currentSearch = location.search.replace(/^\?/, "");
+
     if (nextSearch !== currentSearch) {
       navigate(
-        {
-          pathname: location.pathname,
-          search: nextSearch ? `?${nextSearch}` : "",
-        },
-        { replace: false }
+        { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
+        { replace: true } // важно: не засоряем history и уменьшаем “дёрганье”
       );
     }
   }, [
@@ -188,49 +215,44 @@ const FindingsList = () => {
     navigate,
   ]);
 
+  // Авто-фокус после upload (оставляем как было)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const queryProduct = params.get("product") || params.get("productId");
     const queryImportJobId = params.get("import_job_id");
-    if (queryProduct || queryImportJobId) {
-      return;
-    }
+    if (queryProduct || queryImportJobId) return;
+
     const raw = localStorage.getItem("lotus_warden_last_upload");
-    if (!raw) {
-      return;
-    }
+    if (!raw) return;
+
     try {
       const parsed = JSON.parse(raw) as { productId?: string | null };
       if (parsed.productId) {
-        params.set("product", parsed.productId);
-        params.set("page", "1");
-        params.set("limit", pageSize.toString());
-        navigate(
-          {
-            pathname: location.pathname,
-            search: `?${params.toString()}`,
-          },
-          { replace: true }
-        );
+        // мы просто задаём стейт — URL эффект сам подстроится
+        productParamKeyRef.current = "product";
+        setProductId(parsed.productId);
+        setPage(0);
       }
     } finally {
       localStorage.removeItem("lotus_warden_last_upload");
     }
-  }, [location.pathname, location.search, navigate, pageSize]);
+  }, [location.search]);
 
+  // Восстановление скролла
   useEffect(() => {
     const raw = sessionStorage.getItem(listStateKey);
-    if (!raw) {
-      return;
-    }
+    if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as { path?: string; scrollY?: number };
-      if (parsed.path === `${location.pathname}${location.search}` && typeof parsed.scrollY === "number") {
+      if (
+        parsed.path === `${location.pathname}${location.search}` &&
+        typeof parsed.scrollY === "number"
+      ) {
         window.requestAnimationFrame(() => {
           window.scrollTo({ top: parsed.scrollY ?? 0, behavior: "auto" });
         });
       }
-    } catch (err) {
+    } catch {
       sessionStorage.removeItem(listStateKey);
     }
   }, [listStateKey, location.pathname, location.search]);
@@ -245,7 +267,7 @@ const FindingsList = () => {
           {
             limit: pageSize,
             offset: page * pageSize,
-            filterProduct: productId,
+            filterProduct: productId, // как у тебя было
             filterSeverity,
             filterStatus,
             search: debouncedSearch,
@@ -256,24 +278,19 @@ const FindingsList = () => {
           signal
         );
 
-        // 🛡️ НОРМАЛИЗАЦИЯ
         if (!response || !Array.isArray(response.data)) {
           setData([]);
           setTotal(0);
         } else {
           setData(response.data);
-          setTotal(
-            typeof response.total === "number" ? response.total : 0
-          );
+          setTotal(typeof response.total === "number" ? response.total : 0);
         }
 
         if (!selectAllMatching) {
           setSelectedIds([]);
         }
       } catch (err) {
-        if (
-          !(err instanceof DOMException && err.name === "AbortError")
-        ) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
           setError("Не удалось загрузить данные. Попробуйте позже.");
           setData([]);
           setTotal(0);
@@ -305,15 +322,7 @@ const FindingsList = () => {
   useEffect(() => {
     setSelectedIds([]);
     setSelectAllMatching(false);
-  }, [
-    productId,
-    filterSeverity,
-    filterStatus,
-    searchInput,
-    importJobId,
-    sortField,
-    sortOrder,
-  ]);
+  }, [productId, filterSeverity, filterStatus, searchInput, importJobId, sortField, sortOrder]);
 
   useEffect(() => {
     if (selectAllMatching) {
@@ -322,14 +331,15 @@ const FindingsList = () => {
   }, [data, selectAllMatching]);
 
   const handleResetFilters = () => {
+    productParamKeyRef.current = "product";
     setProductId("");
     setSearchInput("");
     setImportJobId("");
     setFilterSeverity("");
     setFilterStatus("");
     setPage(0);
-    setSortField("createdAt");
-    setSortOrder("desc");
+    setSortField(DEFAULT_SORT_FIELD);
+    setSortOrder(DEFAULT_SORT_ORDER);
     setSelectedIds([]);
     setSelectAllMatching(false);
   };
@@ -355,46 +365,28 @@ const FindingsList = () => {
   };
 
   const handleToggleOne = (id: string) => {
-    if (selectAllMatching) {
-      setSelectAllMatching(false);
-    }
-    setSelectedIds((prev) =>
-      prev.includes(id)
-        ? prev.filter((item) => item !== id)
-        : [...prev, id]
-    );
+    if (selectAllMatching) setSelectAllMatching(false);
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const user = getCurrentUser();
-  const canBulk =
-    user?.roles?.includes("admin") || user?.roles?.includes("analyst");
+  const canBulk = user?.roles?.includes("admin") || user?.roles?.includes("analyst");
 
   const selectionCount = selectAllMatching ? total : selectedIds.length;
   const showSelectAllPrompt =
-    !selectAllMatching &&
-    selectedIds.length > 0 &&
-    selectedIds.length === data.length &&
-    total > data.length;
+    !selectAllMatching && selectedIds.length > 0 && selectedIds.length === data.length && total > data.length;
 
   const handleClearSelection = () => {
     setSelectedIds([]);
     setSelectAllMatching(false);
   };
 
-  const handleSelectAllResults = () => {
-    setSelectAllMatching(true);
-  };
-
-  const handleRetry = () => {
-    fetchData();
-  };
+  const handleSelectAllResults = () => setSelectAllMatching(true);
+  const handleRetry = () => fetchData();
 
   const handleNavigateToDetail = () => {
     const listPath = `${location.pathname}${location.search}`;
-    sessionStorage.setItem(
-      listStateKey,
-      JSON.stringify({ path: listPath, scrollY: window.scrollY })
-    );
+    sessionStorage.setItem(listStateKey, JSON.stringify({ path: listPath, scrollY: window.scrollY }));
   };
 
   const handleBulkApply = async (
@@ -409,35 +401,31 @@ const FindingsList = () => {
         select_all: selectAllMatching,
         filters: selectAllMatching
           ? {
-              product: productId || undefined,
-              severity: filterSeverity || undefined,
-              status: filterStatus || undefined,
-              q: debouncedSearch || undefined,
-              import_job_id: importJobId || undefined,
-            }
+            product: productId || undefined,
+            severity: filterSeverity || undefined,
+            status: filterStatus || undefined,
+            q: debouncedSearch || undefined,
+            import_job_id: importJobId || undefined,
+          }
           : undefined,
         action,
         payload,
       });
+
       const undoItems =
         response?.prevStatuses?.filter(
-          (item): item is BulkUndoItem =>
-            Boolean(item?.id) && Boolean(item?.status)
+          (item): item is BulkUndoItem => Boolean(item?.id) && Boolean(item?.status)
         ) ?? [];
+
       setBulkUndoItems(undoItems);
-      setBulkToast(
-        `Обновлено находок: ${response?.affectedCount ?? 0}`
-      );
+      setBulkToast(`Обновлено находок: ${response?.affectedCount ?? 0}`);
       setUndoToastOpen(true);
+
       setSelectedIds([]);
       setSelectAllMatching(false);
       await fetchData();
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Не удалось выполнить массовую операцию");
-      }
+      setError(err instanceof Error ? err.message : "Не удалось выполнить массовую операцию");
     } finally {
       setLoading(false);
     }
@@ -451,17 +439,12 @@ const FindingsList = () => {
     setLoading(true);
     setError(null);
     try {
-      const grouped = bulkUndoItems.reduce<Record<FindingStatus, string[]>>(
-        (acc, item) => {
-          const status = item.status;
-          if (!acc[status]) {
-            acc[status] = [];
-          }
-          acc[status].push(item.id);
-          return acc;
-        },
-        {} as Record<FindingStatus, string[]>
-      );
+      const grouped = bulkUndoItems.reduce<Record<FindingStatus, string[]>>((acc, item) => {
+        if (!acc[item.status]) acc[item.status] = [];
+        acc[item.status].push(item.id);
+        return acc;
+      }, {} as Record<FindingStatus, string[]>);
+
       for (const [status, ids] of Object.entries(grouped)) {
         await bulkUpdateFindings({
           ids,
@@ -469,16 +452,13 @@ const FindingsList = () => {
           payload: { status },
         });
       }
+
       setBulkToast("Изменения отменены");
       setUndoToastOpen(true);
       setBulkUndoItems([]);
       await fetchData();
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Не удалось отменить изменения");
-      }
+      setError(err instanceof Error ? err.message : "Не удалось отменить изменения");
     } finally {
       setLoading(false);
     }
@@ -496,6 +476,8 @@ const FindingsList = () => {
         filterSeverity={filterSeverity}
         filterStatus={filterStatus}
         onProductIdChange={(v) => {
+          // если пользователь меняет фильтр руками — считаем ключ каноничным
+          productParamKeyRef.current = "product";
           setProductId(v);
           setPage(0);
         }}
@@ -522,14 +504,7 @@ const FindingsList = () => {
         />
       )}
 
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 2,
-          border: "1px solid",
-          borderColor: "divider",
-        }}
-      >
+      <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
         <FindingsTable
           data={data}
           selectedIds={selectedIds}
@@ -554,11 +529,7 @@ const FindingsList = () => {
             <Alert
               severity="info"
               action={
-                <Button
-                  color="inherit"
-                  size="small"
-                  onClick={handleSelectAllResults}
-                >
+                <Button color="inherit" size="small" onClick={handleSelectAllResults}>
                   Выбрать все {total} результатов
                 </Button>
               }
@@ -573,11 +544,7 @@ const FindingsList = () => {
             <Alert
               severity="info"
               action={
-                <Button
-                  color="inherit"
-                  size="small"
-                  onClick={handleClearSelection}
-                >
+                <Button color="inherit" size="small" onClick={handleClearSelection}>
                   Снять выбор
                 </Button>
               }
@@ -594,16 +561,12 @@ const FindingsList = () => {
         total={total}
         onPageChange={(nextPage) => {
           setPage(nextPage);
-          if (!selectAllMatching) {
-            setSelectedIds([]);
-          }
+          if (!selectAllMatching) setSelectedIds([]);
         }}
         onPageSizeChange={(v) => {
           setPageSize(v);
           setPage(0);
-          if (!selectAllMatching) {
-            setSelectedIds([]);
-          }
+          if (!selectAllMatching) setSelectedIds([]);
         }}
       />
 
