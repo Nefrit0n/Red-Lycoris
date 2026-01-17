@@ -40,6 +40,7 @@ const TopBar = ({ onLoggedOut }: TopBarProps) => {
         <Stack direction="row" spacing={2} alignItems="center">
           <Button variant="text" onClick={() => navigate("/findings")}>Findings</Button>
           <Button variant="text" onClick={() => navigate("/products")}>Products</Button>
+          <Button variant="text" onClick={() => navigate("/analyze")}>Analyze</Button>
           <Button variant="text" onClick={() => navigate("/imports")}>Imports</Button>
           <Button variant="text" onClick={() => navigate("/scans/upload")}>Upload Scan</Button>
           {canSeeAdmin && (
