@@ -23,7 +23,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const scanUploadScope = "scan:upload"
+const (
+	scanUploadScope    = "scan:upload"
+	maxScanReportBytes = 10 << 20
+)
 
 type ScanUploadRequest struct {
 	ScannerType       string `json:"scanner_type" validate:"required,oneof=trivy zap semgrep"`
@@ -71,7 +74,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check import job"})
 	}
-	if existing != nil && existing.Status == models.ImportJobSucceeded {
+	if existing != nil && existing.Status != models.ImportJobFailed {
 		return c.Status(http.StatusOK).JSON(ScanUploadResponse{
 			ImportJobID:     existing.ID,
 			ScanID:          uuid.Nil,
@@ -157,6 +160,9 @@ func (h *ScanUploadHandler) parseRequest(c *fiber.Ctx) (ScanUploadRequest, error
 	}
 
 	raw := json.RawMessage(payload.Report)
+	if len(raw) > maxScanReportBytes {
+		return ScanUploadRequest{}, fmt.Errorf("report exceeds maximum size of %d bytes", maxScanReportBytes)
+	}
 	if !json.Valid(raw) {
 		return ScanUploadRequest{}, fmt.Errorf("report must be valid json")
 	}
@@ -180,6 +186,9 @@ func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadReque
 	var reportData []byte
 	fileHeader, err := c.FormFile("report")
 	if err == nil && fileHeader != nil {
+		if fileHeader.Size > maxScanReportBytes {
+			return ScanUploadRequest{}, fmt.Errorf("report exceeds maximum size of %d bytes", maxScanReportBytes)
+		}
 		file, err := fileHeader.Open()
 		if err != nil {
 			return ScanUploadRequest{}, fmt.Errorf("failed to read report file")
@@ -201,6 +210,9 @@ func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadReque
 
 	if len(reportData) == 0 {
 		return ScanUploadRequest{}, fmt.Errorf("report is required")
+	}
+	if len(reportData) > maxScanReportBytes {
+		return ScanUploadRequest{}, fmt.Errorf("report exceeds maximum size of %d bytes", maxScanReportBytes)
 	}
 
 	if !json.Valid(reportData) {
