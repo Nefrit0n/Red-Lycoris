@@ -7,6 +7,7 @@ import {
   Menu,
   MenuItem,
   Skeleton,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -56,7 +57,10 @@ const statusLabels: Record<FindingStatus, string> = {
   duplicate: "Duplicate",
 };
 
-const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warning"> = {
+const statusColors: Record<
+  FindingStatus,
+  "default" | "info" | "success" | "warning"
+> = {
   new: "info",
   under_review: "warning",
   confirmed: "success",
@@ -69,11 +73,14 @@ const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warn
 
 const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
   NEW: "New",
-  REPEAT: "Repeat",
+  REPEAT: "Repeated",
 };
 
-const occurrenceColors: Record<FindingOccurrenceStatus, "default" | "info" | "warning"> = {
-  NEW: "info",
+const occurrenceColors: Record<
+  FindingOccurrenceStatus,
+  "default" | "info" | "warning"
+> = {
+  NEW: "default",
   REPEAT: "warning",
 };
 
@@ -121,35 +128,31 @@ interface FindingsTableProps {
   batchMode: boolean;
   highlightQuery: string;
   rowCount: number;
+
+  /** путь списка (для открытия полной страницы детали) */
   returnTo: string;
+
+  /** сохранить scroll / состояние списка */
   onNavigateToDetail: () => void;
 
-  /**
-   * ✅ Если передан — таблица НЕ уходит на роут,
-   * а открывает деталь через Drawer/side panel.
-   */
-  onOpenDetail?: (id: string) => void;
+  /** открыть Drawer справа */
+  onOpenDetails: (id: string) => void;
 
-  /**
-   * (опционально) подсветка “активной” строки,
-   * когда деталь открыта справа
-   */
-  activeId?: string | null;
+  /** id находки, которая сейчас открыта в Drawer (для подсветки строки) */
+  activeFindingId?: string | null;
 }
 
-const formatDateTimeRu = (value?: string | null) => {
+const formatDateTimeRuCompact = (value?: string | null) => {
   if (!value) return "—";
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return "—";
-
   try {
     return new Intl.DateTimeFormat("ru-RU", {
-      year: "numeric",
+      year: "2-digit",
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit",
     }).format(dt);
   } catch {
     return dt.toLocaleString("ru-RU");
@@ -228,7 +231,7 @@ const FindingsTable = ({
   const dtf = useMemo(() => {
     try {
       return new Intl.DateTimeFormat("ru-RU", {
-        year: "numeric",
+        year: "2-digit",
         month: "2-digit",
         day: "2-digit",
         hour: "2-digit",
@@ -243,11 +246,13 @@ const FindingsTable = ({
     if (!value) return "—";
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return "—";
-    return dtf ? dtf.format(dt) : formatDateTimeRu(value);
+    return dtf ? dtf.format(dt) : formatDateTimeRuCompact(value);
   };
 
   const buildDetailLink = (id: string) =>
-    returnTo ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}` : `/findings/${id}`;
+    returnTo
+      ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}`
+      : `/findings/${id}`;
 
   const renderHighlightedTitle = (title: string) => {
     const query = highlightQuery.trim();
@@ -262,22 +267,20 @@ const FindingsTable = ({
 
     while (matchIndex !== -1) {
       if (matchIndex > startIndex) parts.push(title.slice(startIndex, matchIndex));
-
       parts.push(
         <Box
           key={`${title}-${matchIndex}`}
           component="span"
           sx={{
             backgroundColor: "rgba(255, 193, 7, 0.22)",
-            fontWeight: 600,
+            fontWeight: 700,
             px: 0.5,
-            borderRadius: 0.5,
+            borderRadius: 0.75,
           }}
         >
           {title.slice(matchIndex, matchIndex + lowerQuery.length)}
         </Box>
       );
-
       startIndex = matchIndex + lowerQuery.length;
       matchIndex = lowerTitle.indexOf(lowerQuery, startIndex);
     }
@@ -286,12 +289,7 @@ const FindingsTable = ({
     return parts;
   };
 
-  const canOpenDetail = Boolean(onOpenDetail) && !batchMode && !loading && !errorMessage;
-
-  const handleOpenDetail = (id: string) => {
-    if (!onOpenDetail) return;
-    onOpenDetail(id);
-  };
+  const colCount = 5; // checkbox + issue + severity + status + actions
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>, finding: Finding) => {
     event.stopPropagation();
@@ -338,6 +336,7 @@ const FindingsTable = ({
                 onChange={(e) => onToggleAll(e.target.checked)}
                 disabled={loading || Boolean(errorMessage)}
                 inputProps={{ "aria-label": "Выбрать все" }}
+                onClick={(e) => e.stopPropagation()}
               />
             </TableCell>
 
@@ -393,7 +392,7 @@ const FindingsTable = ({
 
         <TableBody>
           {loading &&
-            Array.from({ length: Math.max(rowCount, 6) }).map((_, index) => (
+            Array.from({ length: Math.max(rowCount, 8) }).map((_, index) => (
               <TableRow key={`skeleton-${index}`}>
                 <TableCell padding="checkbox">
                   <Skeleton variant="rectangular" width={18} height={18} />
@@ -417,6 +416,9 @@ const FindingsTable = ({
                 <TableCell align="right">
                   <Skeleton width={32} />
                 </TableCell>
+                <TableCell align="right">
+                  <Skeleton width={28} height={28} />
+                </TableCell>
               </TableRow>
             ))}
 
@@ -439,9 +441,6 @@ const FindingsTable = ({
                 <Typography color="text.secondary" gutterBottom>
                   Ничего не найдено по фильтрам
                 </Typography>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Попробуйте изменить условия поиска.
-                </Typography>
                 <Typography
                   variant="body2"
                   color="primary"
@@ -456,7 +455,6 @@ const FindingsTable = ({
 
           {!loading &&
             !errorMessage &&
-            safeData.length > 0 &&
             safeData.map((f) => {
               const isSelected = selectedIds.includes(f.id);
 
@@ -473,7 +471,10 @@ const FindingsTable = ({
               const scannerLabel = prettifyScanner(f.scannerType);
               const productLabel = f.productName || f.productId || "—";
 
-              const isActive = Boolean(activeId) && f.id === activeId;
+              const handleRowClick = () => {
+                if (batchMode) onToggleOne(f.id);
+                else onOpenDetails(f.id);
+              };
 
               const metaLine = `App: ${productLabel} • Scanner: ${scannerLabel} • Last seen: ${formatDate(lastSeenAt)}`;
 
@@ -481,16 +482,21 @@ const FindingsTable = ({
                 <TableRow
                   key={f.id}
                   hover
-                  selected={isSelected || isActive}
-                  onClick={(e) => {
-                    if (!canOpenDetail) return;
-                    if (clickedInteractive(e.target)) return;
-                    handleOpenDetail(f.id);
+                  selected={isSelected}
+                  onClick={handleRowClick}
+                  role="button"
+                  aria-current={isActive ? "true" : undefined}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleRowClick();
+                    }
                   }}
                   sx={{
+                    cursor: "pointer",
                     "& td": { verticalAlign: "middle" },
-                    cursor: canOpenDetail ? "pointer" : "default",
-                    ...(isActive
+                    ...(isActive && !isSelected
                       ? {
                           outline: "2px solid",
                           outlineColor: "primary.main",
@@ -499,7 +505,7 @@ const FindingsTable = ({
                       : null),
                   }}
                 >
-                  <TableCell padding="checkbox">
+                  <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={isSelected}
                       onChange={() => onToggleOne(f.id)}
@@ -645,6 +651,4 @@ const FindingsTable = ({
       </Menu>
     </TableContainer>
   );
-};
-
-export default FindingsTable;
+}
