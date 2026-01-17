@@ -3,11 +3,17 @@ import {
   Box,
   Button,
   Container,
+  Drawer,
+  IconButton,
   Paper,
   Snackbar,
+  Stack,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import CloseIcon from "@mui/icons-material/Close";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { bulkUpdateFindings, fetchFindings } from "../api/findings";
 import { getCurrentUser } from "../api/auth";
@@ -22,6 +28,9 @@ import {
   FindingSeverity,
   FindingStatus,
 } from "../types/findings";
+
+// 👇 важно: нужен экспорт FindingDetailContent из FindingDetail.tsx
+import { FindingDetailContent } from "./FindingDetail";
 
 const severityOptions: FindingSeverity[] = ["low", "medium", "high", "critical"];
 
@@ -47,6 +56,8 @@ const FindingsList = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const listStateKey = "lotus_warden_findings_list_state";
+
+  const isMdUp = useMediaQuery("(min-width:900px)");
 
   // ✅ ВАЖНО: не даём эффекту "state -> URL" работать, пока не распарсили URL -> state
   const [hydrated, setHydrated] = useState(false);
@@ -81,6 +92,30 @@ const FindingsList = () => {
   const [bulkToast, setBulkToast] = useState<string | null>(null);
   const [undoToastOpen, setUndoToastOpen] = useState(false);
 
+  // ✅ Drawer: выбранная находка
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
+
+  // base returnTo без selected (чтобы если открыть в новой вкладке — назад не открывал Drawer снова)
+  const listReturnTo = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    params.delete("selected");
+    const qs = params.toString();
+    return `${location.pathname}${qs ? `?${qs}` : ""}`;
+  }, [location.pathname, location.search]);
+
+  const openDrawer = useCallback((id: string) => {
+    const listPath = `${location.pathname}${location.search}`;
+    sessionStorage.setItem(
+      listStateKey,
+      JSON.stringify({ path: listPath, scrollY: window.scrollY })
+    );
+    setSelectedFindingId(id);
+  }, [location.pathname, location.search, listStateKey]);
+
+  const closeDrawer = useCallback(() => {
+    setSelectedFindingId(null);
+  }, []);
+
   // 1) URL -> state
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -100,6 +135,9 @@ const FindingsList = () => {
     const queryDateTo = params.get("dateTo") ?? "";
     const queryIncludeRepeats = params.get("includeRepeats");
     const queryCanonicalOnly = params.get("canonicalOnly");
+
+    // ✅ Drawer param
+    const querySelected = params.get("selected");
 
     const nextPage =
       Number.isFinite(queryPage) && queryPage > 0 ? queryPage - 1 : 0;
@@ -160,7 +198,9 @@ const FindingsList = () => {
     const safeSortOrder = querySortOrder === "asc" ? "asc" : "desc";
     setSortOrder((prev) => (prev !== safeSortOrder ? safeSortOrder : prev));
 
-    // ✅ после первого парса разрешаем state -> URL
+    // ✅ selected (Drawer)
+    setSelectedFindingId((prev) => (prev !== querySelected ? querySelected : prev));
+
     setHydrated(true);
   }, [location.search]);
 
@@ -185,15 +225,15 @@ const FindingsList = () => {
     if (sortField) params.set("sortField", String(sortField));
     if (sortOrder) params.set("sortOrder", sortOrder);
 
+    // ✅ Drawer param
+    if (selectedFindingId) params.set("selected", selectedFindingId);
+
     const nextSearch = params.toString();
     const currentSearch = location.search.replace(/^\?/, "");
 
     if (nextSearch !== currentSearch) {
       navigate(
-        {
-          pathname: location.pathname,
-          search: nextSearch ? `?${nextSearch}` : "",
-        },
+        { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
         { replace: true }
       );
     }
@@ -213,12 +253,13 @@ const FindingsList = () => {
     importJobId,
     sortField,
     sortOrder,
+    selectedFindingId,
     location.pathname,
     location.search,
     navigate,
   ]);
 
-  // авто-переход на product после upload (оставляю как у тебя)
+  // авто-переход на product после upload
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const queryProduct = params.get("product") || params.get("productId");
@@ -336,10 +377,8 @@ const FindingsList = () => {
     ]
   );
 
-  // ✅ КЛЮЧЕВОЙ ФИКС: не фетчим, пока URL не распарсен (иначе будет 2 запроса и 499)
   useEffect(() => {
     if (!hydrated) return;
-
     const controller = new AbortController();
     fetchData(controller.signal);
     return () => controller.abort();
@@ -367,6 +406,12 @@ const FindingsList = () => {
     if (selectAllMatching) setSelectedIds(data.map((item) => item.id));
   }, [data, selectAllMatching]);
 
+  // если включили batch mode — лучше закрыть Drawer, чтобы не мешал
+  const selectionCount = selectAllMatching ? total : selectedIds.length;
+  useEffect(() => {
+    if (selectionCount > 0 && selectedFindingId) setSelectedFindingId(null);
+  }, [selectionCount, selectedFindingId]);
+
   const handleResetFilters = () => {
     setProductId("");
     setSearchInput("");
@@ -383,6 +428,7 @@ const FindingsList = () => {
     setSortOrder("desc");
     setSelectedIds([]);
     setSelectAllMatching(false);
+    setSelectedFindingId(null);
   };
 
   const handleSortChange = (field: keyof Finding) => {
@@ -415,7 +461,6 @@ const FindingsList = () => {
   const user = getCurrentUser();
   const canBulk = user?.roles?.includes("admin") || user?.roles?.includes("analyst");
 
-  const selectionCount = selectAllMatching ? total : selectedIds.length;
   const showSelectAllPrompt =
     !selectAllMatching &&
     selectedIds.length > 0 &&
@@ -430,11 +475,6 @@ const FindingsList = () => {
   const handleSelectAllResults = () => setSelectAllMatching(true);
 
   const handleRetry = () => fetchData();
-
-  const handleNavigateToDetail = () => {
-    const listPath = `${location.pathname}${location.search}`;
-    sessionStorage.setItem(listStateKey, JSON.stringify({ path: listPath, scrollY: window.scrollY }));
-  };
 
   const handleBulkApply = async (
     action: "set_status" | "assign" | "dismiss",
@@ -455,8 +495,12 @@ const FindingsList = () => {
             scannerType: filterScannerType || undefined,
             q: debouncedSearch || undefined,
             import_job_id: importJobId || undefined,
-            dateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00Z`).toISOString() : undefined,
-            dateTo: dateTo ? new Date(`${dateTo}T23:59:59Z`).toISOString() : undefined,
+            dateFrom: dateFrom
+              ? new Date(`${dateFrom}T00:00:00Z`).toISOString()
+              : undefined,
+            dateTo: dateTo
+              ? new Date(`${dateTo}T23:59:59Z`).toISOString()
+              : undefined,
             canonicalOnly: !showRepeats,
             includeRepeats: showRepeats,
           }
@@ -517,8 +561,44 @@ const FindingsList = () => {
     }
   };
 
+  // ✅ Перехват клика по ссылкам /findings/:id, чтобы открыть Drawer вместо перехода
+  const handleTableLinkClickCapture = (e: React.MouseEvent) => {
+    // уважим открытия в новой вкладке/окне
+    if ((e as any).metaKey || (e as any).ctrlKey || (e as any).shiftKey || (e as any).button === 1) return;
+
+    const target = e.target as HTMLElement | null;
+    const a = target?.closest("a") as HTMLAnchorElement | null;
+    if (!a?.href) return;
+
+    let url: URL;
+    try {
+      url = new URL(a.href);
+    } catch {
+      return;
+    }
+
+    // только ссылки на finding detail
+    if (!url.pathname.startsWith("/findings/")) return;
+
+    const parts = url.pathname.split("/").filter(Boolean);
+    const id = parts[1];
+    if (!id) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    openDrawer(id);
+  };
+
+  const drawerWidth = isMdUp ? 620 : "100vw";
+
+  const openInNewTab = () => {
+    if (!selectedFindingId) return;
+    const url = `/findings/${selectedFindingId}?returnTo=${encodeURIComponent(listReturnTo)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
+    <Container maxWidth="xl" sx={{ py: { xs: 2, md: 3 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
         Список находок
       </Typography>
@@ -588,24 +668,35 @@ const FindingsList = () => {
           borderColor: "divider",
         }}
       >
-        <FindingsTable
-          data={data}
-          selectedIds={selectedIds}
-          sortField={sortField}
-          sortOrder={sortOrder}
-          onToggleAll={handleToggleAll}
-          onToggleOne={handleToggleOne}
-          onSortChange={handleSortChange}
-          loading={loading}
-          errorMessage={error}
-          onRetry={handleRetry}
-          onResetFilters={handleResetFilters}
-          batchMode={selectionCount > 0}
-          highlightQuery={debouncedSearch}
-          rowCount={pageSize}
-          returnTo={`${location.pathname}${location.search}`}
-          onNavigateToDetail={handleNavigateToDetail}
-        />
+        <Box onClickCapture={handleTableLinkClickCapture}>
+          <FindingsTable
+            data={data}
+            selectedIds={selectedIds}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onToggleAll={handleToggleAll}
+            onToggleOne={handleToggleOne}
+            onSortChange={handleSortChange}
+            loading={loading}
+            errorMessage={error}
+            onRetry={handleRetry}
+            onResetFilters={handleResetFilters}
+            batchMode={selectionCount > 0}
+            highlightQuery={debouncedSearch}
+            rowCount={pageSize}
+            onOpenDetail={(id) => openDrawer(id)}
+            activeId={selectedFindingId}
+            returnTo={`${location.pathname}${location.search}`}
+            onNavigateToDetail={() => {
+              // оставляем как было (на всякий), но теперь в основном открываем Drawer
+              const listPath = `${location.pathname}${location.search}`;
+              sessionStorage.setItem(
+                listStateKey,
+                JSON.stringify({ path: listPath, scrollY: window.scrollY })
+              );
+            }}
+          />
+        </Box>
 
         {showSelectAllPrompt && (
           <Box px={3} pb={3}>
@@ -673,6 +764,56 @@ const FindingsList = () => {
           {bulkToast ?? ""}
         </Alert>
       </Snackbar>
+
+      {/* ✅ Right Drawer */}
+      <Drawer
+        anchor="right"
+        open={Boolean(selectedFindingId)}
+        onClose={closeDrawer}
+        PaperProps={{
+          sx: {
+            width: drawerWidth,
+            maxWidth: "100vw",
+            borderTopLeftRadius: isMdUp ? 16 : 0,
+            borderBottomLeftRadius: isMdUp ? 16 : 0,
+          },
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: "1px solid", borderColor: "divider" }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Детали находки
+            </Typography>
+
+            <Stack direction="row" gap={1} alignItems="center">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<OpenInNewIcon />}
+                onClick={openInNewTab}
+                disabled={!selectedFindingId}
+              >
+                Открыть
+              </Button>
+              <IconButton onClick={closeDrawer} aria-label="Закрыть">
+                <CloseIcon />
+              </IconButton>
+            </Stack>
+          </Stack>
+
+          {selectedFindingId && (
+            <Typography variant="caption" color="text.secondary">
+              ID: {selectedFindingId}
+            </Typography>
+          )}
+        </Box>
+
+        <Box sx={{ p: 2, height: "100%", overflow: "auto" }}>
+          {selectedFindingId ? (
+            <FindingDetailContent id={selectedFindingId} compact onClose={closeDrawer} />
+          ) : null}
+        </Box>
+      </Drawer>
     </Container>
   );
 };
