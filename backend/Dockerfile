@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS base
+FROM golang:1.24-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache ca-certificates
 COPY go.mod go.sum ./
@@ -7,6 +7,7 @@ RUN go mod download
 FROM base AS dev
 COPY . .
 EXPOSE 8080
+RUN go mod tidy
 CMD ["go", "run", "./cmd/server"]
 
 
