@@ -8,7 +8,6 @@ import {
   FormControlLabel,
   Grid,
   InputLabel,
-  InputAdornment,
   MenuItem,
   Paper,
   Select,
@@ -18,8 +17,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { alpha, styled } from "@mui/material/styles";
-import SearchIcon from "@mui/icons-material/Search";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import { useEffect, useMemo, useState } from "react";
 import { fetchProducts } from "../api/products";
@@ -29,26 +26,6 @@ import {
   FindingStatus,
 } from "../types/findings";
 import { Product } from "../types/products";
-
-const FiltersShell = styled(Paper)(({ theme }) => ({
-  marginBottom: theme.spacing(3),
-  padding: theme.spacing(2),
-  borderRadius: theme.spacing(2),
-  borderColor: alpha(theme.palette.divider, 0.9),
-}));
-
-const FiltersHeader = styled(Box)(({ theme }) => ({
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: theme.spacing(2),
-  flexWrap: "wrap",
-}));
-
-const FiltersChipRow = styled(Stack)(({ theme }) => ({
-  gap: theme.spacing(1),
-  flexWrap: "wrap",
-}));
 
 interface FiltersPanelProps {
   productId: string;
@@ -192,16 +169,30 @@ const FiltersPanel = ({
     showRepeats;
 
   return (
-    <FiltersShell variant="outlined">
+    <Paper
+      variant="outlined"
+      sx={{
+        mb: 3,
+        p: 2,
+        borderRadius: 2,
+        backgroundColor: "background.paper",
+      }}
+    >
       <Stack spacing={1.5}>
-        <FiltersHeader>
+        <Box
+          display="flex"
+          alignItems="center"
+          justifyContent="space-between"
+          gap={2}
+          flexWrap="wrap"
+        >
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
             Фильтры
           </Typography>
 
           <Button
-            variant="contained"
-            color="primary"
+            variant="outlined"
+            color="inherit"
             size="small"
             startIcon={<RestartAltIcon />}
             onClick={onReset}
@@ -209,7 +200,7 @@ const FiltersPanel = ({
           >
             Сбросить
           </Button>
-        </FiltersHeader>
+        </Box>
 
         <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} md={4}>
@@ -281,13 +272,6 @@ const FiltersPanel = ({
               fullWidth
               placeholder="title / fingerprint / CVE / rule id"
               inputProps={{ "aria-label": "Поиск по находкам" }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-              }}
             />
           </Grid>
 
@@ -412,7 +396,7 @@ const FiltersPanel = ({
         </Grid>
 
         {hasActiveFilters ? (
-          <FiltersChipRow direction="row">
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {productId && (
               <Chip
                 size="small"
@@ -485,14 +469,14 @@ const FiltersPanel = ({
                 onDelete={() => onSearchChange("")}
               />
             )}
-          </FiltersChipRow>
+          </Stack>
         ) : (
           <Typography variant="body2" color="text.secondary">
             Выберите фильтры, чтобы сузить список находок.
           </Typography>
         )}
       </Stack>
-    </FiltersShell>
+    </Paper>
   );
 };
 
