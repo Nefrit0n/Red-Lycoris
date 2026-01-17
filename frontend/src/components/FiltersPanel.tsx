@@ -10,12 +10,18 @@ import {
   Select,
   SelectChangeEvent,
   Stack,
+  Switch,
+  FormControlLabel,
   TextField,
   Typography,
 } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { fetchProducts } from "../api/products";
-import { FindingSeverity, FindingStatus } from "../types/findings";
+import {
+  FindingOccurrenceStatus,
+  FindingSeverity,
+  FindingStatus,
+} from "../types/findings";
 import { Product } from "../types/products";
 
 interface FiltersPanelProps {
@@ -23,10 +29,20 @@ interface FiltersPanelProps {
   search: string;
   filterSeverity: FindingSeverity | "";
   filterStatus: FindingStatus | "";
+  filterOccurrence: FindingOccurrenceStatus | "";
+  filterScannerType: string;
+  dateFrom: string;
+  dateTo: string;
+  showRepeats: boolean;
   onProductIdChange: (value: string) => void;
   onSearchChange: (value: string) => void;
   onSeverityChange: (value: FindingSeverity | "") => void;
   onStatusChange: (value: FindingStatus | "") => void;
+  onOccurrenceChange: (value: FindingOccurrenceStatus | "") => void;
+  onScannerTypeChange: (value: string) => void;
+  onDateFromChange: (value: string) => void;
+  onDateToChange: (value: string) => void;
+  onShowRepeatsChange: (value: boolean) => void;
   onReset: () => void;
 }
 
@@ -35,10 +51,20 @@ const FiltersPanel = ({
   search,
   filterSeverity,
   filterStatus,
+  filterOccurrence,
+  filterScannerType,
+  dateFrom,
+  dateTo,
+  showRepeats,
   onProductIdChange,
   onSearchChange,
   onSeverityChange,
   onStatusChange,
+  onOccurrenceChange,
+  onScannerTypeChange,
+  onDateFromChange,
+  onDateToChange,
+  onShowRepeatsChange,
   onReset,
 }: FiltersPanelProps) => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -96,6 +122,14 @@ const FiltersPanel = ({
     onStatusChange(event.target.value as FindingStatus | "");
   };
 
+  const handleOccurrenceChange = (event: SelectChangeEvent) => {
+    onOccurrenceChange(event.target.value as FindingOccurrenceStatus | "");
+  };
+
+  const handleScannerChange = (event: SelectChangeEvent) => {
+    onScannerTypeChange(event.target.value);
+  };
+
   const severityLabel =
     filterSeverity === ""
       ? ""
@@ -120,11 +154,24 @@ const FiltersPanel = ({
         duplicate: "Duplicate",
       }[filterStatus];
 
+  const occurrenceLabel =
+    filterOccurrence === ""
+      ? ""
+      : {
+        NEW: "New",
+        REPEAT: "Repeat",
+      }[filterOccurrence];
+
   const hasActiveFilters =
     Boolean(productId) ||
     Boolean(search) ||
     filterSeverity !== "" ||
-    filterStatus !== "";
+    filterStatus !== "" ||
+    filterOccurrence !== "" ||
+    Boolean(filterScannerType) ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo) ||
+    showRepeats;
 
   return (
     <Box
@@ -264,6 +311,72 @@ const FiltersPanel = ({
           </Select>
         </FormControl>
 
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel id="filter-occurrence-label">Occurrence</InputLabel>
+          <Select
+            labelId="filter-occurrence-label"
+            label="Occurrence"
+            value={filterOccurrence}
+            onChange={handleOccurrenceChange}
+            inputProps={{ "aria-label": "Фильтр по повторяемости" }}
+          >
+            <MenuItem value="">
+              <em>Все</em>
+            </MenuItem>
+            <MenuItem value="NEW">New</MenuItem>
+            <MenuItem value="REPEAT">Repeat</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel id="filter-scanner-label">Scanner</InputLabel>
+          <Select
+            labelId="filter-scanner-label"
+            label="Scanner"
+            value={filterScannerType}
+            onChange={handleScannerChange}
+            inputProps={{ "aria-label": "Фильтр по scanner" }}
+          >
+            <MenuItem value="">
+              <em>Все</em>
+            </MenuItem>
+            <MenuItem value="trivy">Trivy</MenuItem>
+            <MenuItem value="zap">ZAP</MenuItem>
+            <MenuItem value="semgrep">Semgrep</MenuItem>
+          </Select>
+        </FormControl>
+
+        <TextField
+          label="Last seen from"
+          type="date"
+          value={dateFrom}
+          onChange={(event) => onDateFromChange(event.target.value)}
+          size="small"
+          InputLabelProps={{ shrink: true }}
+          sx={{ minWidth: 160 }}
+        />
+
+        <TextField
+          label="Last seen to"
+          type="date"
+          value={dateTo}
+          onChange={(event) => onDateToChange(event.target.value)}
+          size="small"
+          InputLabelProps={{ shrink: true }}
+          sx={{ minWidth: 160 }}
+        />
+
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showRepeats}
+              onChange={(event) => onShowRepeatsChange(event.target.checked)}
+              color="primary"
+            />
+          }
+          label="Show repeats"
+        />
+
         <Button
           variant="outlined"
           color="inherit"
@@ -298,6 +411,30 @@ const FiltersPanel = ({
             <Chip
               label={`Status: ${statusLabel}`}
               onDelete={() => onStatusChange("")}
+            />
+          )}
+          {filterOccurrence !== "" && occurrenceLabel && (
+            <Chip
+              label={`Occurrence: ${occurrenceLabel}`}
+              onDelete={() => onOccurrenceChange("")}
+            />
+          )}
+          {filterScannerType && (
+            <Chip
+              label={`Scanner: ${filterScannerType}`}
+              onDelete={() => onScannerTypeChange("")}
+            />
+          )}
+          {dateFrom && (
+            <Chip label={`Last seen ≥ ${dateFrom}`} onDelete={() => onDateFromChange("")} />
+          )}
+          {dateTo && (
+            <Chip label={`Last seen ≤ ${dateTo}`} onDelete={() => onDateToChange("")} />
+          )}
+          {showRepeats && (
+            <Chip
+              label="Show repeats"
+              onDelete={() => onShowRepeatsChange(false)}
             />
           )}
           {search && (

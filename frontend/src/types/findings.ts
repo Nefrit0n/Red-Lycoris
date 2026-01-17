@@ -8,6 +8,12 @@ export type FindingStatus =
   | "risk_accepted"
   | "mitigated"
   | "duplicate";
+export type FindingOccurrenceStatus = "NEW" | "REPEAT";
+
+export interface FindingOwner {
+  id: string;
+  name: string;
+}
 
 export interface Finding {
   id: string;
@@ -15,9 +21,15 @@ export interface Finding {
   productId?: string | null;
   productName?: string | null;
   assigneeId?: string | null;
+  owner?: FindingOwner | null;
   importJobId?: string | null;
+  scannerType?: string | null;
   severity: FindingSeverity;
   status: FindingStatus;
+  occurrenceStatus?: FindingOccurrenceStatus | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
+  repeatCount?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,7 +46,13 @@ export interface FetchFindingsParams {
   filterProductId?: string;
   filterSeverity?: FindingSeverity | "";
   filterStatus?: FindingStatus | "";
+  filterOccurrence?: FindingOccurrenceStatus | "";
+  filterScannerType?: string;
   search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  canonicalOnly?: boolean;
+  includeRepeats?: boolean;
   importJobId?: string;
   sortField?: keyof Finding | "";
   sortOrder?: "asc" | "desc" | "";
@@ -56,15 +74,21 @@ export interface FindingDetail {
   fingerprint?: string | null;
   severity: FindingSeverity;
   status: FindingStatus;
+  occurrenceStatus?: FindingOccurrenceStatus | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
+  repeatCount?: number | null;
   productId?: string | null;
   productName?: string | null;
   assigneeId?: string | null;
+  owner?: FindingOwner | null;
   importJobId?: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
   comments: FindingComment[];
   events: FindingEvent[];
+  occurrences?: FindingOccurrence[];
   duplicates?: FindingDuplicateGroup | null;
 }
 
@@ -88,6 +112,15 @@ export interface FindingEvent {
 export interface FindingDuplicateGroup {
   master: Finding;
   duplicates: Finding[];
+}
+
+export interface FindingOccurrence {
+  id: string;
+  importJobId?: string | null;
+  seenAt: string;
+  status: FindingStatus;
+  scannerType?: string | null;
+  snippet?: string | null;
 }
 
 export interface FindingNeighbors {
