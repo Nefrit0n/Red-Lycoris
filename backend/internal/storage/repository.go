@@ -189,8 +189,8 @@ func CreateFinding(ctx context.Context, db *sql.DB, finding *models.Finding) err
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		finding.ID,
 		scanResultID,
 		productID,
@@ -202,22 +202,95 @@ func CreateFinding(ctx context.Context, db *sql.DB, finding *models.Finding) err
 		duplicateID,
 		assigneeID,
 		importJobID,
+		finding.FirstSeenAt,
+		finding.LastSeenAt,
+		finding.RepeatCount,
 		finding.CreatedAt,
 		finding.UpdatedAt,
 	)
 	return err
 }
 
-func FindFindingIDByFingerprint(ctx context.Context, db *sql.DB, fingerprint string) (*models.Finding, error) {
-	row := db.QueryRowContext(ctx, `SELECT id FROM findings WHERE fingerprint = $1 LIMIT 1`, fingerprint)
-	var id models.Finding
-	if err := row.Scan(&id.ID); err != nil {
+func CreateFindingTx(ctx context.Context, tx *sql.Tx, finding *models.Finding) error {
+	if err := finding.Validate(); err != nil {
+		return err
+	}
+	finding.PrepareForInsert()
+
+	var description sql.NullString
+	if finding.Description != nil {
+		description = sql.NullString{String: *finding.Description, Valid: true}
+	}
+	var duplicateID interface{}
+	if finding.DuplicateID != nil {
+		duplicateID = *finding.DuplicateID
+	}
+	var productID interface{}
+	if finding.ProductID != nil {
+		productID = *finding.ProductID
+	}
+	var scanResultID interface{}
+	if finding.ScanResultID != nil {
+		scanResultID = *finding.ScanResultID
+	}
+	var assigneeID interface{}
+	if finding.AssigneeID != nil {
+		assigneeID = *finding.AssigneeID
+	}
+	var importJobID interface{}
+	if finding.ImportJobID != nil {
+		importJobID = *finding.ImportJobID
+	}
+
+	_, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		finding.ID,
+		scanResultID,
+		productID,
+		finding.Fingerprint,
+		finding.Title,
+		description,
+		finding.Severity,
+		finding.Status,
+		duplicateID,
+		assigneeID,
+		importJobID,
+		finding.FirstSeenAt,
+		finding.LastSeenAt,
+		finding.RepeatCount,
+		finding.CreatedAt,
+		finding.UpdatedAt,
+	)
+	return err
+}
+
+type FindingMasterRecord struct {
+	ID          uuid.UUID
+	RepeatCount int
+}
+
+func FindMasterFindingByFingerprint(ctx context.Context, db *sql.DB, fingerprint string, productID *uuid.UUID) (*FindingMasterRecord, error) {
+	query := `SELECT id, repeat_count FROM findings WHERE fingerprint = $1 AND duplicate_id IS NULL AND deleted_at IS NULL`
+	args := []interface{}{fingerprint}
+	if productID != nil {
+		query += " AND product_id = $2"
+		args = append(args, *productID)
+	} else {
+		query += " AND product_id IS NULL"
+	}
+	query += " LIMIT 1"
+
+	row := db.QueryRowContext(ctx, query, args...)
+	var record FindingMasterRecord
+	if err := row.Scan(&record.ID, &record.RepeatCount); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &id, nil
+	return &record, nil
 }
 
 func scanProductRow(row *sql.Row) (*models.Product, error) {

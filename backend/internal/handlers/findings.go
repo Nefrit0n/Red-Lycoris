@@ -25,19 +25,30 @@ type FindingsHandler struct {
 }
 
 type FindingResponse struct {
-	ID          string  `json:"id"`
-	Title       string  `json:"title"`
-	Description *string `json:"description,omitempty"`
-	Fingerprint *string `json:"fingerprint,omitempty"`
-	Severity    string  `json:"severity"`
-	Status      string  `json:"status"`
-	ProductID   *string `json:"productId,omitempty"`
-	ProductName *string `json:"productName,omitempty"`
-	AssigneeID  *string `json:"assigneeId,omitempty"`
-	ImportJobID *string `json:"importJobId,omitempty"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   string  `json:"updatedAt"`
-	DeletedAt   *string `json:"deletedAt,omitempty"`
+	ID          string         `json:"id"`
+	Title       string         `json:"title"`
+	Description *string        `json:"description,omitempty"`
+	Fingerprint *string        `json:"fingerprint,omitempty"`
+	Severity    string         `json:"severity"`
+	Status      string         `json:"status"`
+	ScannerType *string        `json:"scannerType,omitempty"`
+	Occurrence  *string        `json:"occurrenceStatus,omitempty"`
+	FirstSeenAt *string        `json:"firstSeenAt,omitempty"`
+	LastSeenAt  *string        `json:"lastSeenAt,omitempty"`
+	RepeatCount *int           `json:"repeatCount,omitempty"`
+	ProductID   *string        `json:"productId,omitempty"`
+	ProductName *string        `json:"productName,omitempty"`
+	AssigneeID  *string        `json:"assigneeId,omitempty"`
+	Owner       *OwnerResponse `json:"owner,omitempty"`
+	ImportJobID *string        `json:"importJobId,omitempty"`
+	CreatedAt   string         `json:"createdAt"`
+	UpdatedAt   string         `json:"updatedAt"`
+	DeletedAt   *string        `json:"deletedAt,omitempty"`
+}
+
+type OwnerResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type FindingCommentResponse struct {
@@ -59,9 +70,19 @@ type FindingEventResponse struct {
 
 type FindingDetailResponse struct {
 	FindingResponse
-	Comments   []FindingCommentResponse `json:"comments"`
-	Events     []FindingEventResponse   `json:"events"`
-	Duplicates *DuplicateGroupResponse  `json:"duplicates,omitempty"`
+	Comments    []FindingCommentResponse    `json:"comments"`
+	Events      []FindingEventResponse      `json:"events"`
+	Occurrences []FindingOccurrenceResponse `json:"occurrences"`
+	Duplicates  *DuplicateGroupResponse     `json:"duplicates,omitempty"`
+}
+
+type FindingOccurrenceResponse struct {
+	ID          string  `json:"id"`
+	ImportJobID *string `json:"importJobId,omitempty"`
+	SeenAt      string  `json:"seenAt"`
+	Status      string  `json:"status"`
+	ScannerType *string `json:"scannerType,omitempty"`
+	Snippet     *string `json:"snippet,omitempty"`
 }
 
 type DuplicateGroupResponse struct {
@@ -106,12 +127,18 @@ type BulkActionRequest struct {
 }
 
 type BulkActionFilters struct {
-	ProductID   *string `json:"productId,omitempty" validate:"omitempty,uuid4"`
-	Product     *string `json:"product,omitempty" validate:"omitempty,max=200"`
-	Severity    string  `json:"severity,omitempty"`
-	Status      string  `json:"status,omitempty"`
-	Query       string  `json:"q,omitempty"`
-	ImportJobID *string `json:"import_job_id,omitempty" validate:"omitempty,uuid4"`
+	ProductID        *string `json:"productId,omitempty" validate:"omitempty,uuid4"`
+	Product          *string `json:"product,omitempty" validate:"omitempty,max=200"`
+	Severity         string  `json:"severity,omitempty"`
+	Status           string  `json:"status,omitempty"`
+	OccurrenceStatus string  `json:"occurrenceStatus,omitempty"`
+	ScannerType      string  `json:"scannerType,omitempty"`
+	Query            string  `json:"q,omitempty"`
+	ImportJobID      *string `json:"import_job_id,omitempty" validate:"omitempty,uuid4"`
+	DateFrom         *string `json:"dateFrom,omitempty"`
+	DateTo           *string `json:"dateTo,omitempty"`
+	CanonicalOnly    *bool   `json:"canonicalOnly,omitempty"`
+	IncludeRepeats   *bool   `json:"includeRepeats,omitempty"`
 }
 
 type BulkActionResponse struct {
@@ -207,17 +234,39 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		}
 		importJobID = &parsed
 	}
+	var dateFrom *time.Time
+	if raw := strings.TrimSpace(c.Query("dateFrom")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dateFrom"})
+		}
+		dateFrom = &parsed
+	}
+	var dateTo *time.Time
+	if raw := strings.TrimSpace(c.Query("dateTo")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dateTo"})
+		}
+		dateTo = &parsed
+	}
 
 	filters := storage.FindingFilters{
-		Severity:    strings.TrimSpace(c.Query("severity")),
-		Status:      strings.TrimSpace(c.Query("status")),
-		ProductID:   productID,
-		ImportJobID: importJobID,
-		Query:       strings.TrimSpace(c.Query("q")),
-		SortField:   strings.TrimSpace(c.Query("sortField")),
-		SortOrder:   strings.TrimSpace(c.Query("sortOrder")),
-		Limit:       limit,
-		Offset:      offset,
+		Severity:         strings.TrimSpace(c.Query("severity")),
+		Status:           strings.TrimSpace(c.Query("status")),
+		OccurrenceStatus: strings.TrimSpace(c.Query("occurrenceStatus")),
+		ScannerType:      strings.TrimSpace(c.Query("scannerType")),
+		ProductID:        productID,
+		ImportJobID:      importJobID,
+		Query:            firstNonEmpty(strings.TrimSpace(c.Query("search")), strings.TrimSpace(c.Query("q"))),
+		DateFrom:         dateFrom,
+		DateTo:           dateTo,
+		CanonicalOnly:    parseBoolWithDefault(c.Query("canonicalOnly"), true),
+		IncludeRepeats:   parseBoolWithDefault(c.Query("includeRepeats"), false),
+		SortField:        strings.TrimSpace(c.Query("sortField")),
+		SortOrder:        strings.TrimSpace(c.Query("sortOrder")),
+		Limit:            limit,
+		Offset:           offset,
 	}
 
 	items, total, err := storage.ListFindings(c.Context(), h.db, filters)
@@ -256,23 +305,43 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
 
-	comments, err := storage.ListFindingComments(c.Context(), h.db, id)
+	masterID := finding.ID
+	if finding.DuplicateID.Valid {
+		masterID = finding.DuplicateID.UUID
+		if masterID != finding.ID {
+			masterFinding, err := storage.GetFindingByID(c.Context(), h.db, masterID)
+			if err != nil {
+				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch finding"})
+			}
+			if masterFinding == nil {
+				return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
+			}
+			finding = masterFinding
+		}
+	}
+
+	comments, err := storage.ListFindingComments(c.Context(), h.db, masterID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch comments"})
 	}
-	events, err := storage.ListFindingEvents(c.Context(), h.db, id)
+	events, err := storage.ListFindingEvents(c.Context(), h.db, masterID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch events"})
 	}
-	duplicates, err := storage.GetFindingDuplicateGroup(c.Context(), h.db, id)
+	duplicates, err := storage.GetFindingDuplicateGroup(c.Context(), h.db, masterID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch duplicates"})
+	}
+	occurrences, err := storage.ListFindingOccurrences(c.Context(), h.db, masterID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch occurrences"})
 	}
 
 	resp := FindingDetailResponse{
 		FindingResponse: mapFindingDetail(*finding),
 		Comments:        mapFindingComments(comments),
 		Events:          mapFindingEvents(events),
+		Occurrences:     mapFindingOccurrences(occurrences),
 		Duplicates:      mapDuplicateGroup(duplicates),
 	}
 
@@ -319,15 +388,37 @@ func (h *FindingsHandler) Neighbors(c *fiber.Ctx) error {
 		}
 		importJobID = &parsed
 	}
+	var dateFrom *time.Time
+	if raw := strings.TrimSpace(c.Query("dateFrom")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dateFrom"})
+		}
+		dateFrom = &parsed
+	}
+	var dateTo *time.Time
+	if raw := strings.TrimSpace(c.Query("dateTo")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dateTo"})
+		}
+		dateTo = &parsed
+	}
 
 	filters := storage.FindingFilters{
-		Severity:    strings.TrimSpace(c.Query("severity")),
-		Status:      strings.TrimSpace(c.Query("status")),
-		ProductID:   productID,
-		ImportJobID: importJobID,
-		Query:       strings.TrimSpace(c.Query("q")),
-		SortField:   strings.TrimSpace(c.Query("sortField")),
-		SortOrder:   strings.TrimSpace(c.Query("sortOrder")),
+		Severity:         strings.TrimSpace(c.Query("severity")),
+		Status:           strings.TrimSpace(c.Query("status")),
+		OccurrenceStatus: strings.TrimSpace(c.Query("occurrenceStatus")),
+		ScannerType:      strings.TrimSpace(c.Query("scannerType")),
+		ProductID:        productID,
+		ImportJobID:      importJobID,
+		Query:            firstNonEmpty(strings.TrimSpace(c.Query("search")), strings.TrimSpace(c.Query("q"))),
+		DateFrom:         dateFrom,
+		DateTo:           dateTo,
+		CanonicalOnly:    parseBoolWithDefault(c.Query("canonicalOnly"), true),
+		IncludeRepeats:   parseBoolWithDefault(c.Query("includeRepeats"), false),
+		SortField:        strings.TrimSpace(c.Query("sortField")),
+		SortOrder:        strings.TrimSpace(c.Query("sortOrder")),
 	}
 
 	neighbors, err := storage.GetFindingNeighbors(c.Context(), h.db, id, filters)
@@ -675,7 +766,10 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 	}
 
 	var snapshots []storage.FindingSnapshot
-	var filters storage.FindingFilters
+	filters := storage.FindingFilters{
+		CanonicalOnly:  true,
+		IncludeRepeats: false,
+	}
 	var totalMatches int
 
 	if req.SelectAll {
@@ -691,7 +785,29 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 			}
 			filters.Severity = strings.TrimSpace(filterInput.Severity)
 			filters.Status = strings.TrimSpace(filterInput.Status)
+			filters.OccurrenceStatus = strings.TrimSpace(filterInput.OccurrenceStatus)
+			filters.ScannerType = strings.TrimSpace(filterInput.ScannerType)
 			filters.Query = strings.TrimSpace(filterInput.Query)
+			if filterInput.DateFrom != nil && strings.TrimSpace(*filterInput.DateFrom) != "" {
+				parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*filterInput.DateFrom))
+				if err != nil {
+					return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dateFrom"})
+				}
+				filters.DateFrom = &parsed
+			}
+			if filterInput.DateTo != nil && strings.TrimSpace(*filterInput.DateTo) != "" {
+				parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*filterInput.DateTo))
+				if err != nil {
+					return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dateTo"})
+				}
+				filters.DateTo = &parsed
+			}
+			if filterInput.CanonicalOnly != nil {
+				filters.CanonicalOnly = *filterInput.CanonicalOnly
+			}
+			if filterInput.IncludeRepeats != nil {
+				filters.IncludeRepeats = *filterInput.IncludeRepeats
+			}
 		}
 		var err error
 		filters.ProductID, err = resolveProductFilter(c.Context(), h.db, productIDParam, productParam)
@@ -1037,19 +1153,47 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 		value := item.AssigneeID.UUID.String()
 		assigneeID = &value
 	}
+	var owner *OwnerResponse
+	if item.AssigneeID.Valid && item.AssigneeName.Valid {
+		owner = &OwnerResponse{
+			ID:   item.AssigneeID.UUID.String(),
+			Name: item.AssigneeName.String,
+		}
+	}
 	var importJobID *string
 	if item.ImportJobID.Valid {
 		value := item.ImportJobID.UUID.String()
 		importJobID = &value
 	}
+	var duplicateID *uuid.UUID
+	if item.DuplicateID.Valid {
+		duplicateID = &item.DuplicateID.UUID
+	}
+	var scannerType *string
+	if item.Scanner.Valid {
+		value := item.Scanner.String
+		scannerType = &value
+	}
+	var lastSeenAt *string
+	if item.LastSeenAt.Valid {
+		value := item.LastSeenAt.Time.Format(timeFormatRFC3339())
+		lastSeenAt = &value
+	}
+	repeatCount := item.RepeatCount
+	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
 	return FindingResponse{
 		ID:          item.ID.String(),
 		Title:       item.Title,
 		Severity:    item.Severity,
 		Status:      item.Status,
+		ScannerType: scannerType,
+		Occurrence:  &occurrence,
+		LastSeenAt:  lastSeenAt,
+		RepeatCount: &repeatCount,
 		ProductID:   productID,
 		ProductName: productName,
 		AssigneeID:  assigneeID,
+		Owner:       owner,
 		ImportJobID: importJobID,
 		CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339()),
 		UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339()),
@@ -1087,6 +1231,22 @@ func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 		value := item.Description.String
 		description = &value
 	}
+	var firstSeenAt *string
+	if item.FirstSeenAt.Valid {
+		value := item.FirstSeenAt.Time.Format(timeFormatRFC3339())
+		firstSeenAt = &value
+	}
+	var lastSeenAt *string
+	if item.LastSeenAt.Valid {
+		value := item.LastSeenAt.Time.Format(timeFormatRFC3339())
+		lastSeenAt = &value
+	}
+	repeatCount := item.RepeatCount
+	var duplicateID *uuid.UUID
+	if item.DuplicateID.Valid {
+		duplicateID = &item.DuplicateID.UUID
+	}
+	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
 	return FindingResponse{
 		ID:          item.ID.String(),
 		Title:       item.Title,
@@ -1094,6 +1254,10 @@ func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 		Fingerprint: &item.Fingerprint,
 		Severity:    item.Severity,
 		Status:      item.Status,
+		Occurrence:  &occurrence,
+		FirstSeenAt: firstSeenAt,
+		LastSeenAt:  lastSeenAt,
+		RepeatCount: &repeatCount,
 		ProductID:   productID,
 		ProductName: productName,
 		AssigneeID:  assigneeID,
@@ -1125,6 +1289,8 @@ func mapFindingModel(item models.Finding) FindingResponse {
 		value := item.DeletedAt.Format(timeFormatRFC3339())
 		deletedAt = &value
 	}
+	repeatCount := item.RepeatCount
+	occurrence := computeOccurrenceStatus(repeatCount, item.DuplicateID)
 	return FindingResponse{
 		ID:          item.ID.String(),
 		Title:       item.Title,
@@ -1132,6 +1298,10 @@ func mapFindingModel(item models.Finding) FindingResponse {
 		Fingerprint: &item.Fingerprint,
 		Severity:    item.Severity,
 		Status:      item.Status,
+		Occurrence:  &occurrence,
+		FirstSeenAt: stringPointer(item.FirstSeenAt.Format(timeFormatRFC3339())),
+		LastSeenAt:  stringPointer(item.LastSeenAt.Format(timeFormatRFC3339())),
+		RepeatCount: &repeatCount,
 		ProductID:   productID,
 		AssigneeID:  assigneeID,
 		ImportJobID: importJobID,
@@ -1250,6 +1420,66 @@ func mapFindingEvents(items []storage.FindingEventItem) []FindingEventResponse {
 	return events
 }
 
+func mapFindingOccurrences(items []storage.FindingOccurrenceItem) []FindingOccurrenceResponse {
+	response := make([]FindingOccurrenceResponse, 0, len(items))
+	for _, item := range items {
+		var importJobID *string
+		if item.ImportJobID.Valid {
+			value := item.ImportJobID.UUID.String()
+			importJobID = &value
+		}
+		var scannerType *string
+		if item.Scanner.Valid {
+			value := item.Scanner.String
+			scannerType = &value
+		}
+		var snippet *string
+		if item.Description.Valid {
+			value := item.Description.String
+			snippet = &value
+		}
+		response = append(response, FindingOccurrenceResponse{
+			ID:          item.ID.String(),
+			ImportJobID: importJobID,
+			SeenAt:      item.SeenAt.Format(timeFormatRFC3339()),
+			Status:      item.Status,
+			ScannerType: scannerType,
+			Snippet:     snippet,
+		})
+	}
+	return response
+}
+
+func computeOccurrenceStatus(repeatCount int, duplicateID *uuid.UUID) string {
+	if repeatCount > 0 || duplicateID != nil {
+		return "REPEAT"
+	}
+	return "NEW"
+}
+
+func parseBoolWithDefault(raw string, fallback bool) bool {
+	if raw == "" {
+		return fallback
+	}
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	switch normalized {
+	case "true", "1", "yes":
+		return true
+	case "false", "0", "no":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
 func mapDuplicateGroup(group *storage.DuplicateGroup) *DuplicateGroupResponse {
 	if group == nil {
 		return nil

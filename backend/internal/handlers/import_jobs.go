@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 	"time"
 
 	"lotus-warden/backend/internal/storage"
@@ -22,6 +23,7 @@ type ImportJobResponse struct {
 	CreatedAt         string  `json:"createdAt"`
 	StartedAt         *string `json:"startedAt,omitempty"`
 	FinishedAt        *string `json:"finishedAt,omitempty"`
+	ProductID         *string `json:"productId,omitempty"`
 	ProductName       *string `json:"productName,omitempty"`
 	ProductVersion    *string `json:"productVersion,omitempty"`
 	ProductIdentifier *string `json:"productIdentifier,omitempty"`
@@ -41,10 +43,32 @@ func (h *ImportJobsHandler) List(c *fiber.Ctx) error {
 	limit := parseIntWithDefault(c.Query("limit"), 20)
 	offset := parseIntWithDefault(c.Query("offset"), 0)
 	if limit < 1 || limit > 200 || offset < 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid pagination"})
+		page := parseIntWithDefault(c.Query("page"), 1)
+		pageSize := parseIntWithDefault(c.Query("pageSize"), 20)
+		if page < 1 || pageSize < 1 || pageSize > 200 {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid pagination"})
+		}
+		limit = pageSize
+		offset = (page - 1) * pageSize
 	}
 
-	items, total, err := storage.ListImportJobs(c.Context(), h.db, limit, offset)
+	var productID *uuid.UUID
+	if raw := strings.TrimSpace(c.Query("productId")); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid productId"})
+		}
+		productID = &parsed
+	}
+	filters := storage.ImportJobFilters{
+		ProductID: productID,
+		Scanner:   strings.TrimSpace(c.Query("scanner")),
+		Status:    strings.TrimSpace(c.Query("status")),
+		Limit:     limit,
+		Offset:    offset,
+	}
+
+	items, total, err := storage.ListImportJobs(c.Context(), h.db, filters)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch import jobs"})
 	}
@@ -86,6 +110,11 @@ func mapImportJobListItem(item storage.ImportJobListItem) ImportJobResponse {
 		value := item.FinishedAt.Time.Format(time.RFC3339)
 		finishedAt = &value
 	}
+	var productID *string
+	if item.ProductID.Valid {
+		value := item.ProductID.UUID.String()
+		productID = &value
+	}
 	var productName *string
 	if item.ProductName.Valid {
 		value := item.ProductName.String
@@ -117,6 +146,7 @@ func mapImportJobListItem(item storage.ImportJobListItem) ImportJobResponse {
 		CreatedAt:         item.CreatedAt.Format(time.RFC3339),
 		StartedAt:         startedAt,
 		FinishedAt:        finishedAt,
+		ProductID:         productID,
 		ProductName:       productName,
 		ProductVersion:    productVersion,
 		ProductIdentifier: productIdentifier,
