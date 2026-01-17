@@ -3,6 +3,10 @@ import {
   Chip,
   Link as MuiLink,
   IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Skeleton,
   Table,
   TableBody,
@@ -11,12 +15,19 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
+  Stack,
   Typography,
   Tooltip,
   Box,
+  Divider,
 } from "@mui/material";
+import { alpha, styled } from "@mui/material/styles";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { ReactNode, useMemo } from "react";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import LinkIcon from "@mui/icons-material/Link";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import { ReactNode, useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Finding,
@@ -32,13 +43,6 @@ const severityLabels: Record<FindingSeverity, string> = {
   critical: "Critical",
 };
 
-const severityChipSx: Record<FindingSeverity, any> = {
-  low: { borderColor: "success.main", color: "success.main" },
-  medium: { borderColor: "warning.main", color: "warning.main" },
-  high: { borderColor: "error.main", color: "error.main" },
-  critical: { borderColor: "secondary.main", color: "secondary.main" },
-};
-
 const statusLabels: Record<FindingStatus, string> = {
   new: "New",
   under_review: "Under review",
@@ -50,17 +54,6 @@ const statusLabels: Record<FindingStatus, string> = {
   duplicate: "Duplicate",
 };
 
-const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warning"> = {
-  new: "info",
-  under_review: "warning",
-  confirmed: "success",
-  false_positive: "default",
-  out_of_scope: "default",
-  risk_accepted: "warning",
-  mitigated: "success",
-  duplicate: "default",
-};
-
 const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
   NEW: "New",
   REPEAT: "Repeat",
@@ -70,6 +63,132 @@ const occurrenceColors: Record<FindingOccurrenceStatus, "default" | "info" | "wa
   NEW: "info",
   REPEAT: "warning",
 };
+
+const HiddenMdDownCell = styled(TableCell)(({ theme }) => ({
+  [theme.breakpoints.down("md")]: {
+    display: "none",
+  },
+}));
+
+const HiddenLgDownCell = styled(TableCell)(({ theme }) => ({
+  [theme.breakpoints.down("lg")]: {
+    display: "none",
+  },
+}));
+
+const ActionsCell = styled(TableCell)(({ theme }) => ({
+  width: 56,
+  paddingLeft: theme.spacing(0.5),
+  paddingRight: theme.spacing(0.5),
+}));
+
+const TableShell = styled(TableContainer)(({ theme }) => ({
+  borderRadius: theme.spacing(2),
+  border: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.paper,
+}));
+
+const StyledTable = styled(Table)(({ theme }) => ({
+  minWidth: 1080,
+  tableLayout: "fixed",
+  "& .MuiTableCell-head": {
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+    backgroundColor: theme.palette.background.paper,
+  },
+}));
+
+const IssueCell = styled(TableCell)(({ theme }) => ({
+  paddingTop: theme.spacing(1),
+  paddingBottom: theme.spacing(1),
+}));
+
+const IssueTitleRow = styled(Stack)(({ theme }) => ({
+  alignItems: "center",
+  gap: theme.spacing(1),
+  minWidth: 0,
+  flexWrap: "nowrap",
+}));
+
+const IssueStack = styled(Stack)(() => ({
+  minWidth: 0,
+}));
+
+const IssueTitleText = styled(Typography)(({ theme }) => ({
+  fontWeight: 600,
+  color: theme.palette.text.primary,
+}));
+
+const IssueMetaText = styled(Typography)(({ theme }) => ({
+  color: theme.palette.text.secondary,
+  fontSize: theme.typography.pxToRem(12),
+}));
+
+const MetaDivider = styled("span")(({ theme }) => ({
+  margin: `0 ${theme.spacing(1)}`,
+  color: theme.palette.text.disabled,
+}));
+
+const IssueLink = styled(MuiLink)(() => ({
+  display: "inline-block",
+  minWidth: 0,
+  maxWidth: "100%",
+  flex: "1 1 auto",
+}));
+
+const SeverityChip = styled(Chip, {
+  shouldForwardProp: (prop) => prop !== "severity",
+})<{ severity: FindingSeverity }>(({ theme, severity }) => {
+  const paletteMap: Record<FindingSeverity, keyof typeof theme.palette> = {
+    low: "success",
+    medium: "warning",
+    high: "error",
+    critical: "secondary",
+  };
+  const paletteKey = paletteMap[severity];
+  const palette = theme.palette[paletteKey];
+  return {
+    borderColor: palette.main,
+    color: palette.main,
+    backgroundColor: alpha(palette.main, 0.12),
+    fontWeight: 600,
+  };
+});
+
+const StatusChip = styled(Chip, {
+  shouldForwardProp: (prop) => prop !== "status",
+})<{ status: FindingStatus }>(({ theme, status }) => {
+  const paletteKey: Record<FindingStatus, keyof typeof theme.palette> = {
+    new: "info",
+    under_review: "warning",
+    confirmed: "success",
+    false_positive: "grey",
+    out_of_scope: "grey",
+    risk_accepted: "warning",
+    mitigated: "success",
+    duplicate: "grey",
+  };
+  const palette = theme.palette[paletteKey[status]];
+  const mainColor = "main" in palette ? palette.main : theme.palette.text.secondary;
+  return {
+    borderColor: mainColor,
+    color: mainColor,
+    backgroundColor: alpha(mainColor, 0.12),
+    textTransform: "none",
+    fontWeight: 500,
+  };
+});
+
+const RepeatBadge = styled(Chip)(({ theme }) => ({
+  borderColor: theme.palette.divider,
+  color: theme.palette.text.secondary,
+  fontWeight: 600,
+}));
+
+const DenseCell = styled(TableCell)(({ theme }) => ({
+  paddingTop: theme.spacing(1),
+  paddingBottom: theme.spacing(1),
+}));
 
 interface FindingsTableProps {
   data: Finding[];
@@ -165,6 +284,9 @@ const FindingsTable = ({
 
   const allSelected = safeData.length > 0 && selectedIds.length === safeData.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
+  const [actionAnchorEl, setActionAnchorEl] = useState<null | HTMLElement>(null);
+  const [actionFinding, setActionFinding] = useState<Finding | null>(null);
+  const actionsOpen = Boolean(actionAnchorEl);
 
   const dtf = useMemo(() => {
     try {
@@ -235,14 +357,75 @@ const FindingsTable = ({
     onOpenDetail(id);
   };
 
+  const handleOpenActions = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>, finding: Finding) => {
+      event.stopPropagation();
+      setActionAnchorEl(event.currentTarget);
+      setActionFinding(finding);
+    },
+    []
+  );
+
+  const handleCloseActions = useCallback(() => {
+    setActionAnchorEl(null);
+    setActionFinding(null);
+  }, []);
+
+  const copyToClipboard = useCallback(async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      try {
+        document.execCommand("copy");
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+  }, []);
+
+  const handleOpenFromMenu = useCallback(() => {
+    if (!actionFinding) return;
+    if (onOpenDetail && !batchMode && !loading && !errorMessage) {
+      onNavigateToDetail();
+      onOpenDetail(actionFinding.id);
+    } else {
+      window.location.assign(buildDetailLink(actionFinding.id));
+    }
+    handleCloseActions();
+  }, [
+    actionFinding,
+    batchMode,
+    errorMessage,
+    handleCloseActions,
+    loading,
+    onNavigateToDetail,
+    onOpenDetail,
+  ]);
+
+  const handleCopyPermalink = useCallback(async () => {
+    if (!actionFinding) return;
+    const url = `${window.location.origin}${buildDetailLink(actionFinding.id)}`;
+    await copyToClipboard(url);
+    handleCloseActions();
+  }, [actionFinding, copyToClipboard, handleCloseActions]);
+
+  const handleCopyId = useCallback(async () => {
+    if (!actionFinding) return;
+    await copyToClipboard(actionFinding.id);
+    handleCloseActions();
+  }, [actionFinding, copyToClipboard, handleCloseActions]);
+
   return (
-    <TableContainer
-      sx={{
-        borderRadius: 2,
-        "& .MuiTableCell-head": { fontWeight: 600, whiteSpace: "nowrap" },
-      }}
-    >
-      <Table stickyHeader size="small" sx={{ minWidth: 980 }}>
+    <TableShell>
+      <StyledTable stickyHeader size="small">
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox" sx={{ width: 44 }}>
@@ -255,23 +438,13 @@ const FindingsTable = ({
               />
             </TableCell>
 
-            <TableCell sx={{ width: "42%" }}>
+            <TableCell sx={{ width: "48%" }}>
               <TableSortLabel
                 active={sortField === "title"}
                 direction={sortField === "title" ? sortOrder : "asc"}
                 onClick={() => onSortChange("title")}
               >
-                Название
-              </TableSortLabel>
-            </TableCell>
-
-            <TableCell sx={{ width: 140 }}>
-              <TableSortLabel
-                active={sortField === "productName"}
-                direction={sortField === "productName" ? sortOrder : "asc"}
-                onClick={() => onSortChange("productName")}
-              >
-                Приложение
+                Issue details
               </TableSortLabel>
             </TableCell>
 
@@ -281,7 +454,7 @@ const FindingsTable = ({
                 direction={sortField === "severity" ? sortOrder : "asc"}
                 onClick={() => onSortChange("severity")}
               >
-                Критичность
+                Severity
               </TableSortLabel>
             </TableCell>
 
@@ -291,11 +464,11 @@ const FindingsTable = ({
                 direction={sortField === "status" ? sortOrder : "asc"}
                 onClick={() => onSortChange("status")}
               >
-                Статус
+                Status
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 190 }}>
+            <HiddenMdDownCell sx={{ width: 190 }}>
               <TableSortLabel
                 active={sortField === "lastSeenAt"}
                 direction={sortField === "lastSeenAt" ? sortOrder : "asc"}
@@ -303,23 +476,17 @@ const FindingsTable = ({
               >
                 Last seen
               </TableSortLabel>
-            </TableCell>
+            </HiddenMdDownCell>
 
-            <TableCell sx={{ width: 110, display: { xs: "none", md: "table-cell" } }}>
-              Scanner
-            </TableCell>
-            <TableCell sx={{ width: 120, display: { xs: "none", md: "table-cell" } }}>
+            <HiddenLgDownCell sx={{ width: 120 }}>
               Occurrence
-            </TableCell>
-            <TableCell
-              align="right"
-              sx={{ width: 90, display: { xs: "none", md: "table-cell" } }}
-            >
-              Repeats
-            </TableCell>
-            <TableCell sx={{ width: 160, display: { xs: "none", lg: "table-cell" } }}>
+            </HiddenLgDownCell>
+
+            <HiddenLgDownCell sx={{ width: 160 }}>
               Owner
-            </TableCell>
+            </HiddenLgDownCell>
+
+            <ActionsCell align="right">Actions</ActionsCell>
           </TableRow>
         </TableHead>
 
@@ -339,30 +506,24 @@ const FindingsTable = ({
                 <TableCell>
                   <Skeleton width={90} />
                 </TableCell>
-                <TableCell>
+                <HiddenMdDownCell>
                   <Skeleton width={110} />
-                </TableCell>
-                <TableCell>
-                  <Skeleton width={160} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
+                </HiddenMdDownCell>
+                <HiddenLgDownCell>
                   <Skeleton width={90} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={90} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={60} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", lg: "table-cell" } }}>
+                </HiddenLgDownCell>
+                <HiddenLgDownCell>
                   <Skeleton width={120} />
-                </TableCell>
+                </HiddenLgDownCell>
+                <ActionsCell>
+                  <Skeleton width={24} />
+                </ActionsCell>
               </TableRow>
             ))}
 
           {!loading && errorMessage && (
             <TableRow>
-              <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   {errorMessage}
                 </Typography>
@@ -375,7 +536,7 @@ const FindingsTable = ({
 
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   Ничего не найдено по фильтрам
                 </Typography>
@@ -405,6 +566,8 @@ const FindingsTable = ({
 
               const ownerLabel = f.owner?.name || f.assigneeId || "—";
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
+              const showRepeatBadge = occurrence === "REPEAT" || repeatCount > 1;
+              const repeatLabel = repeatCount > 1 ? `Repeat x${repeatCount}` : "Repeat";
 
               const isActive = Boolean(activeId) && f.id === activeId;
 
@@ -438,115 +601,160 @@ const FindingsTable = ({
                     />
                   </TableCell>
 
-                  <TableCell
-                    sx={{
-                      maxWidth: 520,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <IssueCell>
                     {batchMode ? (
                       <Tooltip title={f.title} placement="top-start">
-                        <Typography color="text.primary" noWrap>
-                          {renderHighlightedTitle(f.title)}
-                        </Typography>
+                        <IssueStack spacing={0.5}>
+                          <IssueTitleRow direction="row">
+                            <IssueTitleText noWrap>
+                              {renderHighlightedTitle(f.title)}
+                            </IssueTitleText>
+                            {showRepeatBadge && (
+                              <RepeatBadge
+                                size="small"
+                                variant="outlined"
+                                label={repeatLabel}
+                              />
+                            )}
+                          </IssueTitleRow>
+                          <IssueMetaText variant="caption" noWrap>
+                            App: {f.productName || "—"}
+                            <MetaDivider>•</MetaDivider>
+                            Scanner: {prettifyScanner(f.scannerType)}
+                            <MetaDivider>•</MetaDivider>
+                            Last seen: {formatDate(lastSeenAt)}
+                          </IssueMetaText>
+                        </IssueStack>
                       </Tooltip>
                     ) : (
-                      <Tooltip title={f.title} placement="top-start">
-                        <MuiLink
-                          component={Link}
-                          to={buildDetailLink(f.id)}
-                          underline="hover"
-                          sx={{ display: "inline-block", maxWidth: "100%" }}
-                          onClick={(e) => {
-                            // ✅ если включен Drawer-режим — открываем панель
-                            if (onOpenDetail && !isModifiedClick(e)) {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              onNavigateToDetail();
-                              onOpenDetail(f.id);
-                            } else {
-                              // обычная навигация на detail page
-                              onNavigateToDetail();
-                            }
-                          }}
-                        >
-                          <Typography component="span" noWrap>
-                            {renderHighlightedTitle(f.title)}
-                          </Typography>
-                        </MuiLink>
-                      </Tooltip>
+                      <IssueStack spacing={0.5}>
+                        <IssueTitleRow direction="row">
+                          <Tooltip title={f.title} placement="top-start">
+                            <IssueLink
+                              component={Link}
+                              to={buildDetailLink(f.id)}
+                              underline="hover"
+                              onClick={(e) => {
+                                // ✅ если включен Drawer-режим — открываем панель
+                                if (onOpenDetail && !isModifiedClick(e)) {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  onNavigateToDetail();
+                                  onOpenDetail(f.id);
+                                } else {
+                                  // обычная навигация на detail page
+                                  onNavigateToDetail();
+                                }
+                              }}
+                            >
+                              <IssueTitleText component="span" noWrap>
+                                {renderHighlightedTitle(f.title)}
+                              </IssueTitleText>
+                            </IssueLink>
+                          </Tooltip>
+                          {showRepeatBadge && (
+                            <RepeatBadge
+                              size="small"
+                              variant="outlined"
+                              label={repeatLabel}
+                            />
+                          )}
+                        </IssueTitleRow>
+                          <IssueMetaText variant="caption" noWrap>
+                            App: {f.productName || "—"}
+                            <MetaDivider>•</MetaDivider>
+                            Scanner: {prettifyScanner(f.scannerType)}
+                            <MetaDivider>•</MetaDivider>
+                            Last seen: {formatDate(lastSeenAt)}
+                          </IssueMetaText>
+                      </IssueStack>
                     )}
-                  </TableCell>
+                  </IssueCell>
 
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
-                    <Tooltip title={f.productName || "—"}>
-                      <Typography variant="body2" noWrap>
-                        {f.productName || "—"}
-                      </Typography>
-                    </Tooltip>
-                  </TableCell>
-
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
-                    <Chip
+                  <DenseCell sx={{ whiteSpace: "nowrap" }}>
+                    <SeverityChip
                       size="small"
                       variant="outlined"
+                      severity={f.severity}
                       label={severityLabels[f.severity]}
-                      sx={severityChipSx[f.severity]}
                     />
-                  </TableCell>
+                  </DenseCell>
 
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
-                    <Chip
+                  <DenseCell sx={{ whiteSpace: "nowrap" }}>
+                    <StatusChip
+                      status={f.status}
                       label={statusLabels[f.status] ?? f.status}
-                      color={statusColors[f.status]}
                       size="small"
-                      sx={{ textTransform: "none" }}
+                      variant="outlined"
                     />
-                  </TableCell>
+                  </DenseCell>
 
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  <HiddenMdDownCell sx={{ whiteSpace: "nowrap" }}>
                     <Typography variant="body2">{formatDate(lastSeenAt)}</Typography>
-                  </TableCell>
+                  </HiddenMdDownCell>
 
-                  <TableCell sx={{ display: { xs: "none", md: "table-cell" }, whiteSpace: "nowrap" }}>
-                    <Typography variant="body2">{prettifyScanner(f.scannerType)}</Typography>
-                  </TableCell>
-
-                  <TableCell sx={{ display: { xs: "none", md: "table-cell" }, whiteSpace: "nowrap" }}>
+                  <HiddenLgDownCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
                       label={occurrenceLabels[occurrence] ?? occurrence}
                       color={occurrenceColors[occurrence]}
                       size="small"
                       sx={{ textTransform: "none" }}
                     />
-                  </TableCell>
+                  </HiddenLgDownCell>
 
-                  <TableCell
-                    align="right"
-                    sx={{
-                      display: { xs: "none", md: "table-cell" },
-                      fontFamily: "monospace",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {repeatCount}
-                  </TableCell>
-
-                  <TableCell sx={{ display: { xs: "none", lg: "table-cell" }, maxWidth: 160 }}>
+                  <HiddenLgDownCell sx={{ maxWidth: 160 }}>
                     <Tooltip title={ownerLabel}>
                       <Typography variant="body2" noWrap>
                         {ownerLabel}
                       </Typography>
                     </Tooltip>
-                  </TableCell>
+                  </HiddenLgDownCell>
+
+                  <ActionsCell align="right">
+                    <Tooltip title="Действия">
+                      <IconButton
+                        size="small"
+                        aria-label={`Действия для ${f.title}`}
+                        onClick={(event) => handleOpenActions(event, f)}
+                      >
+                        <MoreVertIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </ActionsCell>
                 </TableRow>
               );
             })}
         </TableBody>
-      </Table>
-    </TableContainer>
+      </StyledTable>
+
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={actionsOpen}
+        onClose={handleCloseActions}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleOpenFromMenu}>
+          <ListItemIcon>
+            <OpenInNewIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Открыть деталь" />
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleCopyPermalink}>
+          <ListItemIcon>
+            <LinkIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Копировать permalink" />
+        </MenuItem>
+        <MenuItem onClick={handleCopyId}>
+          <ListItemIcon>
+            <ContentCopyIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Копировать ID" />
+        </MenuItem>
+      </Menu>
+    </TableShell>
   );
 };
 

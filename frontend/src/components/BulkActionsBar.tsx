@@ -1,9 +1,9 @@
 import {
-  Box,
   Button,
   FormControl,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Stack,
   TextField,
@@ -42,26 +42,17 @@ const BulkActionsBar = ({
   };
 
   return (
-    <Box
-      sx={{
-        p: 2,
-        borderRadius: 2,
-        border: "1px solid",
-        borderColor: "divider",
-        backgroundColor: "background.paper",
-        mb: 2,
-      }}
-    >
+    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, mb: 2 }}>
       <Stack
         direction={{ xs: "column", md: "row" }}
         spacing={2}
         alignItems={{ xs: "stretch", md: "center" }}
       >
-        <Typography variant="subtitle2">
+        <Typography variant="subtitle2" sx={{ whiteSpace: "nowrap" }}>
           Выбрано: {selectedCount}
         </Typography>
 
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel id="bulk-action-label">Действие</InputLabel>
           <Select
             labelId="bulk-action-label"
@@ -82,7 +73,7 @@ const BulkActionsBar = ({
         </FormControl>
 
         {(action === "set_status" || action === "dismiss") && (
-          <FormControl size="small" sx={{ minWidth: 220 }}>
+          <FormControl size="small" sx={{ minWidth: 200 }}>
             <InputLabel id="bulk-status-label">Статус</InputLabel>
             <Select
               labelId="bulk-status-label"
@@ -109,12 +100,13 @@ const BulkActionsBar = ({
             value={assigneeId}
             onChange={(event) => setAssigneeId(event.target.value)}
             placeholder="UUID пользователя"
-            sx={{ minWidth: 240 }}
+            sx={{ minWidth: 220 }}
           />
         )}
 
         <Button
           variant="contained"
+          size="small"
           onClick={handleApply}
           disabled={selectedCount === 0}
         >
@@ -124,11 +116,12 @@ const BulkActionsBar = ({
           variant="text"
           color="inherit"
           onClick={onClearSelection}
+          size="small"
         >
           Очистить выбор
         </Button>
       </Stack>
-    </Box>
+    </Paper>
   );
 };
 
