@@ -2,8 +2,11 @@ package handlers_test
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"lotus-warden/backend/internal/config"
@@ -149,6 +152,156 @@ func TestScanUploadEndpoint(t *testing.T) {
 	}
 	if response.Duplicates != 1 {
 		t.Fatalf("expected 1 duplicate, got %d", response.Duplicates)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet db expectations: %v", err)
+	}
+}
+
+func TestScanUploadReturnsExistingJob(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock setup failed: %v", err)
+	}
+	defer db.Close()
+
+	cfg := config.Config{JWTSecret: "test-secret"}
+	app := server.NewApp(cfg, db)
+
+	report := map[string]any{
+		"ArtifactName": "payments-api",
+		"Results":      []any{},
+	}
+	reportBytes, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report failed: %v", err)
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"scanner_type": "trivy",
+		"report":       json.RawMessage(reportBytes),
+	})
+	if err != nil {
+		t.Fatalf("marshal request failed: %v", err)
+	}
+
+	sum := sha256.Sum256(reportBytes)
+	checksum := fmt.Sprintf("%x", sum[:])
+	jobID := uuid.New()
+
+	mock.ExpectQuery("SELECT id, scanner, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_name, product_version, product_identifier, created_by, error_message FROM import_jobs WHERE checksum = \\$1 ORDER BY created_at DESC LIMIT 1").
+		WithArgs(checksum).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"scanner",
+			"status",
+			"findings_total",
+			"findings_new",
+			"duplicates_total",
+			"checksum",
+			"created_at",
+			"started_at",
+			"finished_at",
+			"product_name",
+			"product_version",
+			"product_identifier",
+			"created_by",
+			"error_message",
+		}).AddRow(
+			jobID,
+			"trivy",
+			"running",
+			10,
+			5,
+			2,
+			checksum,
+			sqlmock.AnyArg(),
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+		))
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
+		UserID: uuid.New().String(),
+		Roles:  []string{"analyst"},
+	})
+	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
+	if err != nil {
+		t.Fatalf("sign token failed: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/scans/upload", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200 status, got %d", resp.StatusCode)
+	}
+
+	var response struct {
+		ImportJobID string `json:"importJobId"`
+		Status      string `json:"status"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response failed: %v", err)
+	}
+	if response.ImportJobID != jobID.String() {
+		t.Fatalf("expected import job %s, got %s", jobID, response.ImportJobID)
+	}
+	if response.Status != "running" {
+		t.Fatalf("expected status running, got %s", response.Status)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet db expectations: %v", err)
+	}
+}
+
+func TestScanUploadRejectsOversizedReport(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock setup failed: %v", err)
+	}
+	defer db.Close()
+
+	cfg := config.Config{JWTSecret: "test-secret"}
+	app := server.NewApp(cfg, db)
+
+	largePayload := strings.Repeat("a", 11*1024*1024)
+	body, err := json.Marshal(map[string]any{
+		"scanner_type": "trivy",
+		"report":       largePayload,
+	})
+	if err != nil {
+		t.Fatalf("marshal request failed: %v", err)
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
+		UserID: uuid.New().String(),
+		Roles:  []string{"analyst"},
+	})
+	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
+	if err != nil {
+		t.Fatalf("sign token failed: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/scans/upload", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != 400 {
+		t.Fatalf("expected 400 status, got %d", resp.StatusCode)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

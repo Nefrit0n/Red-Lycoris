@@ -1,41 +1,50 @@
-package server
+package server_test
 
 import (
-	"database/sql"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"lotus-warden/backend/internal/config"
+	"lotus-warden/backend/internal/middleware"
+	"lotus-warden/backend/internal/server"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
-func TestHealthEndpoint(t *testing.T) {
-	app := fiber.New()
-	setupRoutes(app, config.Config{JWTSecret: "test"}, (*sql.DB)(nil))
+func TestFindingsUpdateRequiresRole(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock setup failed: %v", err)
+	}
+	defer db.Close()
 
-	req := httptest.NewRequest("GET", "/health", nil)
+	cfg := config.Config{JWTSecret: "test-secret"}
+	app := server.NewApp(cfg, db)
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
+		UserID: uuid.New().String(),
+		Roles:  []string{"user"},
+	})
+	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
+	if err != nil {
+		t.Fatalf("sign token failed: %v", err)
+	}
+
+	req := httptest.NewRequest("PATCH", "/api/v1/findings/"+uuid.New().String(), strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenString)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
-
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 status, got %d", resp.StatusCode)
-	}
-}
-
-func TestPingEndpoint(t *testing.T) {
-	app := fiber.New()
-	setupRoutes(app, config.Config{JWTSecret: "test"}, (*sql.DB)(nil))
-
-	req := httptest.NewRequest("GET", "/api/ping", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
+	if resp.StatusCode != 403 {
+		t.Fatalf("expected 403 status, got %d", resp.StatusCode)
 	}
 
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 status, got %d", resp.StatusCode)
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet db expectations: %v", err)
 	}
 }
