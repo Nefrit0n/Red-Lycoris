@@ -184,6 +184,7 @@ const FindingsList = () => {
     sortField,
     sortOrder,
     location.pathname,
+    location.search,
     navigate,
   ]);
 
