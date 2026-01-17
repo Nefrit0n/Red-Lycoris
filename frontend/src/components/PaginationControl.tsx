@@ -78,15 +78,6 @@ const PaginationControl = ({
         }}
         showFirstButton
         showLastButton
-        sx={{
-          "& .MuiTablePagination-toolbar": {
-            minHeight: 40,
-            px: { xs: 0, sm: 1 },
-          },
-          "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-            margin: 0,
-          },
-        }}
       />
     </Box>
   );
