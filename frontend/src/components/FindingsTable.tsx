@@ -88,6 +88,18 @@ interface FindingsTableProps {
   rowCount: number;
   returnTo: string;
   onNavigateToDetail: () => void;
+
+  /**
+   * ✅ Если передан — таблица НЕ уходит на роут,
+   * а открывает деталь через Drawer/side panel.
+   */
+  onOpenDetail?: (id: string) => void;
+
+  /**
+   * (опционально) подсветка “активной” строки,
+   * когда деталь открыта справа
+   */
+  activeId?: string | null;
 }
 
 const formatDateTimeRu = (value?: string | null) => {
@@ -116,6 +128,19 @@ const prettifyScanner = (v?: string | null) => {
   return s.length <= 4 ? s.toUpperCase() : s[0].toUpperCase() + s.slice(1);
 };
 
+const isModifiedClick = (e: React.MouseEvent) =>
+  e.metaKey || e.ctrlKey || e.shiftKey || (e as any).button === 1;
+
+const clickedInteractive = (target: EventTarget | null) => {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  return Boolean(
+    el.closest(
+      'a,button,input,textarea,select,label,[role="button"],[role="checkbox"]'
+    )
+  );
+};
+
 const FindingsTable = ({
   data,
   selectedIds,
@@ -133,6 +158,8 @@ const FindingsTable = ({
   rowCount,
   returnTo,
   onNavigateToDetail,
+  onOpenDetail,
+  activeId,
 }: FindingsTableProps) => {
   const safeData = Array.isArray(data) ? data : [];
 
@@ -162,9 +189,7 @@ const FindingsTable = ({
   };
 
   const buildDetailLink = (id: string) =>
-    returnTo
-      ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}`
-      : `/findings/${id}`;
+    returnTo ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}` : `/findings/${id}`;
 
   const renderHighlightedTitle = (title: string) => {
     const query = highlightQuery.trim();
@@ -178,9 +203,8 @@ const FindingsTable = ({
     let matchIndex = lowerTitle.indexOf(lowerQuery);
 
     while (matchIndex !== -1) {
-      if (matchIndex > startIndex) {
-        parts.push(title.slice(startIndex, matchIndex));
-      }
+      if (matchIndex > startIndex) parts.push(title.slice(startIndex, matchIndex));
+
       parts.push(
         <Box
           key={`${title}-${matchIndex}`}
@@ -195,25 +219,27 @@ const FindingsTable = ({
           {title.slice(matchIndex, matchIndex + lowerQuery.length)}
         </Box>
       );
+
       startIndex = matchIndex + lowerQuery.length;
       matchIndex = lowerTitle.indexOf(lowerQuery, startIndex);
     }
 
-    if (startIndex < title.length) {
-      parts.push(title.slice(startIndex));
-    }
-
+    if (startIndex < title.length) parts.push(title.slice(startIndex));
     return parts;
+  };
+
+  const canOpenDetail = Boolean(onOpenDetail) && !batchMode && !loading && !errorMessage;
+
+  const handleOpenDetail = (id: string) => {
+    if (!onOpenDetail) return;
+    onOpenDetail(id);
   };
 
   return (
     <TableContainer
       sx={{
         borderRadius: 2,
-        "& .MuiTableCell-head": {
-          fontWeight: 600,
-          whiteSpace: "nowrap",
-        },
+        "& .MuiTableCell-head": { fontWeight: 600, whiteSpace: "nowrap" },
       }}
     >
       <Table stickyHeader size="small" sx={{ minWidth: 980 }}>
@@ -279,7 +305,6 @@ const FindingsTable = ({
               </TableSortLabel>
             </TableCell>
 
-            {/* второстепенные колонки — прячем на маленьких экранах */}
             <TableCell sx={{ width: 110, display: { xs: "none", md: "table-cell" } }}>
               Scanner
             </TableCell>
@@ -375,16 +400,36 @@ const FindingsTable = ({
             safeData.map((f) => {
               const isSelected = selectedIds.includes(f.id);
 
-              const occurrence: FindingOccurrenceStatus = (f.occurrenceStatus ??
-                "NEW") as FindingOccurrenceStatus;
-
+              const occurrence: FindingOccurrenceStatus = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
               const repeatCount = f.repeatCount ?? 0;
 
               const ownerLabel = f.owner?.name || f.assigneeId || "—";
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
 
+              const isActive = Boolean(activeId) && f.id === activeId;
+
               return (
-                <TableRow key={f.id} hover selected={isSelected} sx={{ "& td": { verticalAlign: "middle" } }}>
+                <TableRow
+                  key={f.id}
+                  hover
+                  selected={isSelected || isActive}
+                  onClick={(e) => {
+                    if (!canOpenDetail) return;
+                    if (clickedInteractive(e.target)) return;
+                    handleOpenDetail(f.id);
+                  }}
+                  sx={{
+                    "& td": { verticalAlign: "middle" },
+                    cursor: canOpenDetail ? "pointer" : "default",
+                    ...(isActive
+                      ? {
+                        outline: "2px solid",
+                        outlineColor: "primary.main",
+                        outlineOffset: "-2px",
+                      }
+                      : null),
+                  }}
+                >
                   <TableCell padding="checkbox">
                     <Checkbox
                       checked={isSelected}
@@ -412,9 +457,20 @@ const FindingsTable = ({
                         <MuiLink
                           component={Link}
                           to={buildDetailLink(f.id)}
-                          onClick={onNavigateToDetail}
                           underline="hover"
                           sx={{ display: "inline-block", maxWidth: "100%" }}
+                          onClick={(e) => {
+                            // ✅ если включен Drawer-режим — открываем панель
+                            if (onOpenDetail && !isModifiedClick(e)) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onNavigateToDetail();
+                              onOpenDetail(f.id);
+                            } else {
+                              // обычная навигация на detail page
+                              onNavigateToDetail();
+                            }
+                          }}
                         >
                           <Typography component="span" noWrap>
                             {renderHighlightedTitle(f.title)}
