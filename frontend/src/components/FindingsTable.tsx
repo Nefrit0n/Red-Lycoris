@@ -13,21 +13,11 @@ import {
   TableRow,
   TableSortLabel,
   Tooltip,
-  Box,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Stack,
-  styled,
+  Typography,
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import LinkIcon from "@mui/icons-material/Link";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { ReactNode, useCallback, useMemo, useState } from "react";
+import { ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Finding,
@@ -87,57 +77,6 @@ const occurrenceColors: Record<
   NEW: "default",
   REPEAT: "warning",
 };
-
-const FindingsTableContainer = styled(TableContainer)(({ theme }) => ({
-  borderRadius: theme.shape.borderRadius * 1.5,
-  border: `1px solid ${theme.palette.divider}`,
-  backgroundColor: theme.palette.background.paper,
-  maxHeight: "70vh",
-  [theme.breakpoints.down("lg")]: {
-    maxHeight: "64vh",
-  },
-  [theme.breakpoints.down("sm")]: {
-    maxHeight: "58vh",
-  },
-  "& .MuiTableCell-head": {
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-    backgroundColor: theme.palette.background.default,
-  },
-}));
-
-const IssueTitle = styled(Typography)(({ theme }) => ({
-  fontWeight: 600,
-  color: theme.palette.text.primary,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-}));
-
-const IssueMeta = styled(Typography)(({ theme }) => ({
-  color: theme.palette.text.secondary,
-  fontSize: theme.typography.caption.fontSize,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-}));
-
-const TitleCell = styled(TableCell)(({ theme }) => ({
-  paddingTop: theme.spacing(1),
-  paddingBottom: theme.spacing(1),
-  paddingRight: theme.spacing(2),
-}));
-
-const CompactCell = styled(TableCell)(({ theme }) => ({
-  paddingTop: theme.spacing(1),
-  paddingBottom: theme.spacing(1),
-}));
-
-const ActionCell = styled(TableCell)(({ theme }) => ({
-  paddingTop: theme.spacing(0.5),
-  paddingBottom: theme.spacing(0.5),
-  width: 64,
-}));
 
 interface FindingsTableProps {
   data: Finding[];
@@ -214,10 +153,8 @@ export default function FindingsTable({
 }: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
 
-  const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
-  const [menuFindingId, setMenuFindingId] = useState<string | null>(null);
-
-  const allSelected = safeData.length > 0 && selectedIds.length === safeData.length;
+  const allSelected =
+    safeData.length > 0 && selectedIds.length === safeData.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
 
   const dtf = useMemo(() => {
@@ -283,79 +220,17 @@ export default function FindingsTable({
 
   const colCount = 5; // checkbox + issue + severity + status + actions
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>, id: string) => {
-    event.stopPropagation();
-    setMenuAnchorEl(event.currentTarget);
-    setMenuFindingId(id);
-  };
-
-  const handleMenuClose = () => {
-    setMenuAnchorEl(null);
-    setMenuFindingId(null);
-  };
-
-  const menuFinding = useMemo(
-    () => safeData.find((item) => item.id === menuFindingId) ?? null,
-    [safeData, menuFindingId]
-  );
-
-  const copyToClipboard = useCallback(async (value: string) => {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return;
-    }
-    const textarea = document.createElement("textarea");
-    textarea.value = value;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "absolute";
-    textarea.style.left = "-9999px";
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand("copy");
-    document.body.removeChild(textarea);
-  }, []);
-
-  const handleCopyPermalink = useCallback(async () => {
-    if (!menuFinding) return;
-    const detailPath = `/findings/${menuFinding.id}`;
-    const permalink = `${window.location.origin}${detailPath}`;
-    await copyToClipboard(permalink);
-    handleMenuClose();
-  }, [copyToClipboard, menuFinding]);
-
-  const handleCopyId = useCallback(async () => {
-    if (!menuFinding) return;
-    await copyToClipboard(menuFinding.id);
-    handleMenuClose();
-  }, [copyToClipboard, menuFinding]);
-
-  const handleOpenFromMenu = useCallback(
-    (event: React.MouseEvent<HTMLElement>) => {
-      if (!menuFinding) return;
-      if (onOpenDetail && !batchMode) {
-        event.preventDefault();
-        event.stopPropagation();
-        onNavigateToDetail();
-        onOpenDetail(menuFinding.id);
-      } else {
-        onNavigateToDetail();
-      }
-      handleMenuClose();
-    },
-    [menuFinding, onNavigateToDetail, onOpenDetail, batchMode]
-  );
-
   return (
-    <FindingsTableContainer>
-      <Table
-        stickyHeader
-        size="small"
-        sx={{ minWidth: 980, tableLayout: "fixed" }}
-        aria-label="Findings table"
-      >
+    <TableContainer
+      sx={{
+        borderRadius: 2,
+        "& .MuiTableCell-head": { fontWeight: 700, whiteSpace: "nowrap" },
+      }}
+    >
+      <Table stickyHeader size="small" sx={{ minWidth: 920 }}>
         <TableHead>
           <TableRow>
-            <CompactCell padding="checkbox" sx={{ width: 44 }}>
+            <TableCell padding="checkbox" sx={{ width: 44 }}>
               <Checkbox
                 checked={allSelected}
                 indeterminate={someSelected}
@@ -364,9 +239,9 @@ export default function FindingsTable({
                 inputProps={{ "aria-label": "Выбрать все" }}
                 onClick={(e) => e.stopPropagation()}
               />
-            </CompactCell>
+            </TableCell>
 
-            <TableCell sx={{ width: "46%" }}>
+            <TableCell>
               <TableSortLabel
                 active={sortField === "title"}
                 direction={sortField === "title" ? sortOrder : "asc"}
@@ -376,7 +251,7 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 140 }}>
+            <TableCell sx={{ width: 130 }}>
               <TableSortLabel
                 active={sortField === "severity"}
                 direction={sortField === "severity" ? sortOrder : "asc"}
@@ -396,20 +271,9 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 190, display: { xs: "none", md: "table-cell" } }}>
-              <TableSortLabel
-                active={sortField === "lastSeenAt"}
-                direction={sortField === "lastSeenAt" ? sortOrder : "asc"}
-                onClick={() => onSortChange("lastSeenAt")}
-              >
-                Last seen
-              </TableSortLabel>
+            <TableCell align="right" sx={{ width: 64 }}>
+              {/* actions */}
             </TableCell>
-
-            <TableCell sx={{ width: 120, display: { xs: "none", md: "table-cell" } }}>
-              Occurrence
-            </TableCell>
-            <ActionCell align="right">Actions</ActionCell>
           </TableRow>
         </TableHead>
 
@@ -417,33 +281,28 @@ export default function FindingsTable({
           {loading &&
             Array.from({ length: Math.max(rowCount, 8) }).map((_, index) => (
               <TableRow key={`skeleton-${index}`}>
-                <CompactCell padding="checkbox">
+                <TableCell padding="checkbox">
                   <Skeleton variant="rectangular" width={18} height={18} />
-                </CompactCell>
-                <TitleCell>
-                  <Skeleton width="85%" />
-                </TitleCell>
-                <CompactCell>
+                </TableCell>
+                <TableCell>
+                  <Skeleton width="70%" />
+                  <Skeleton width="45%" />
+                </TableCell>
+                <TableCell>
                   <Skeleton width={90} />
-                </CompactCell>
-                <CompactCell>
-                  <Skeleton width={110} />
-                </CompactCell>
-                <CompactCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={160} />
-                </CompactCell>
-                <CompactCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={90} />
-                </CompactCell>
-                <ActionCell align="right">
-                  <Skeleton variant="circular" width={28} height={28} />
-                </ActionCell>
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={120} />
+                </TableCell>
+                <TableCell align="right">
+                  <Skeleton width={28} height={28} />
+                </TableCell>
               </TableRow>
             ))}
 
           {!loading && errorMessage && (
             <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   {errorMessage}
                 </Typography>
@@ -456,7 +315,7 @@ export default function FindingsTable({
 
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   Ничего не найдено по фильтрам
                 </Typography>
@@ -476,22 +335,15 @@ export default function FindingsTable({
             !errorMessage &&
             safeData.map((f) => {
               const isSelected = selectedIds.includes(f.id);
-
-              const occurrence: FindingOccurrenceStatus = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
-              const repeatCount = f.repeatCount ?? 0;
-
+              const isActive = Boolean(activeFindingId) && activeFindingId === f.id;
+              const occurrence = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
+              const repeats = f.repeatCount ?? 0;
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
                 else onOpenDetails(f.id);
               };
-
-              const metaLine = `App: ${f.productName || "—"}  •  Scanner: ${
-                prettifyScanner(f.scannerType)
-              }  •  Last seen: ${formatDate(lastSeenAt)}`;
-
-              const showRepeatBadge = repeatCount > 1 || occurrence === "REPEAT";
 
               return (
                 <TableRow
@@ -519,143 +371,118 @@ export default function FindingsTable({
                       : null),
                   }}
                 >
-                  <CompactCell padding="checkbox">
+                  <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={isSelected}
                       onChange={() => onToggleOne(f.id)}
                       inputProps={{ "aria-label": `Выбрать ${f.title}` }}
                     />
-                  </CompactCell>
+                  </TableCell>
 
-                  <TitleCell>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      {batchMode ? (
+                  {/* Issue details (2 строки) */}
+                  <TableCell sx={{ minWidth: 420 }}>
+                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={1}
+                        sx={{ minWidth: 0 }}
+                      >
                         <Tooltip title={f.title} placement="top-start">
-                          <IssueTitle>{renderHighlightedTitle(f.title)}</IssueTitle>
-                        </Tooltip>
-                      ) : (
-                        <Tooltip title={f.title} placement="top-start">
-                          <MuiLink
-                            component={Link}
-                            to={buildDetailLink(f.id)}
-                            underline="hover"
-                            sx={{ display: "inline-block", maxWidth: "100%" }}
-                            onClick={(e) => {
-                              if (onOpenDetail && !isModifiedClick(e)) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                onNavigateToDetail();
-                                onOpenDetail(f.id);
-                              } else {
-                                onNavigateToDetail();
-                              }
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 700,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              minWidth: 0,
+                              flex: 1,
                             }}
                           >
-                            <IssueTitle component="span">
-                              {renderHighlightedTitle(f.title)}
-                            </IssueTitle>
-                          </MuiLink>
+                            {renderHighlightedTitle(f.title)}
+                          </Typography>
                         </Tooltip>
-                      )}
 
-                      {showRepeatBadge && (
-                        <Chip
-                          size="small"
-                          label={`Repeat ×${repeatCount || 1}`}
-                          variant="outlined"
-                          color="warning"
-                          sx={{ height: 20 }}
-                        />
-                      )}
+                        {/* маленькие “бейджи” справа от заголовка */}
+                        {occurrence === "REPEAT" && (
+                          <Chip
+                            size="small"
+                            label={occurrenceLabels[occurrence]}
+                            color={occurrenceColors[occurrence]}
+                            sx={{ height: 22 }}
+                          />
+                        )}
+                        {repeats > 0 && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={`x${repeats}`}
+                            sx={{ height: 22 }}
+                          />
+                        )}
+                      </Stack>
+
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        flexWrap="wrap"
+                        useFlexGap
+                        sx={{ color: "text.secondary" }}
+                      >
+                        <Typography variant="caption">
+                          App: <b>{f.productName || "—"}</b>
+                        </Typography>
+                        <Typography variant="caption">
+                          Scanner: <b>{prettifyScanner(f.scannerType)}</b>
+                        </Typography>
+                        <Typography variant="caption">
+                          Last seen: <b>{formatDate(lastSeenAt)}</b>
+                        </Typography>
+                      </Stack>
                     </Stack>
+                  </TableCell>
 
-                    <Tooltip title={metaLine} placement="top-start">
-                      <IssueMeta>{metaLine}</IssueMeta>
-                    </Tooltip>
-                  </TitleCell>
-
-                  <CompactCell sx={{ whiteSpace: "nowrap" }}>
+                  {/* Severity */}
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
                       size="small"
                       variant="outlined"
                       label={severityLabels[f.severity]}
                       sx={severityChipSx[f.severity]}
                     />
-                  </CompactCell>
+                  </TableCell>
 
-                  <CompactCell sx={{ whiteSpace: "nowrap" }}>
+                  {/* Status */}
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
                       label={statusLabels[f.status] ?? f.status}
                       color={statusColors[f.status]}
                       size="small"
                       sx={{ textTransform: "none" }}
                     />
-                  </CompactCell>
+                  </TableCell>
 
-                  <CompactCell
-                    sx={{ whiteSpace: "nowrap", display: { xs: "none", md: "table-cell" } }}
-                  >
-                    <Typography variant="body2">{formatDate(lastSeenAt)}</Typography>
-                  </CompactCell>
-
-                  <CompactCell
-                    sx={{ display: { xs: "none", md: "table-cell" }, whiteSpace: "nowrap" }}
-                  >
-                    <Chip
-                      label={occurrenceLabels[occurrence] ?? occurrence}
-                      color={occurrenceColors[occurrence]}
-                      size="small"
-                      sx={{ textTransform: "none" }}
-                    />
-                  </CompactCell>
-
-                  <ActionCell align="right">
-                    <Tooltip title="Действия">
+                  {/* Actions */}
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                    <Tooltip title="Открыть на отдельной странице">
                       <IconButton
                         size="small"
-                        aria-label="Действия"
-                        onClick={(event) => handleMenuOpen(event, f.id)}
+                        component={Link}
+                        to={buildDetailLink(f.id)}
+                        onClick={() => onNavigateToDetail()}
+                        aria-label="Открыть на отдельной странице"
                       >
-                        <MoreVertIcon fontSize="small" />
+                        <OpenInNewIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                  </ActionCell>
+                  </TableCell>
                 </TableRow>
               );
             })}
         </TableBody>
       </Table>
-
-      <Menu
-        anchorEl={menuAnchorEl}
-        open={Boolean(menuAnchorEl)}
-        onClose={handleMenuClose}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <MenuItem
-          component={Link}
-          to={menuFinding ? buildDetailLink(menuFinding.id) : "#"}
-          onClick={handleOpenFromMenu}
-          disabled={!menuFinding}
-        >
-          <ListItemIcon>
-            <OpenInNewIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Открыть</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleCopyPermalink} disabled={!menuFinding}>
-          <ListItemIcon>
-            <LinkIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Копировать ссылку</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleCopyId} disabled={!menuFinding}>
-          <ListItemIcon>
-            <ContentCopyIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Копировать ID</ListItemText>
-        </MenuItem>
-      </Menu>
-    </FindingsTableContainer>
+    </TableContainer>
   );
 }
