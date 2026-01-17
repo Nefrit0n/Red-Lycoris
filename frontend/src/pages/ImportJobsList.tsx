@@ -4,6 +4,7 @@ import {
   CircularProgress,
   Container,
   Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -11,6 +12,8 @@ import {
   TableRow,
   Typography,
   Link as MuiLink,
+  TextField,
+  MenuItem,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -25,13 +28,25 @@ const ImportJobsList = () => {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
+  const [productId, setProductId] = useState("");
+  const [scanner, setScanner] = useState("");
+  const [status, setStatus] = useState("");
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetchImportJobs(pageSize, page * pageSize, signal);
+        const response = await fetchImportJobs(
+          {
+            limit: pageSize,
+            offset: page * pageSize,
+            productId,
+            scanner,
+            status,
+          },
+          signal
+        );
         setData(response.data);
         setTotal(response.total);
       } catch (err) {
@@ -42,7 +57,7 @@ const ImportJobsList = () => {
         setLoading(false);
       }
     },
-    [page, pageSize]
+    [page, pageSize, productId, scanner, status]
   );
 
   useEffect(() => {
@@ -65,6 +80,61 @@ const ImportJobsList = () => {
           {error}
         </Alert>
       )}
+
+      <Paper
+        elevation={0}
+        sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", p: 2, mb: 3 }}
+      >
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <TextField
+            label="Product ID"
+            value={productId}
+            onChange={(event) => {
+              setProductId(event.target.value);
+              setPage(0);
+            }}
+            size="small"
+            sx={{ minWidth: 240 }}
+          />
+          <TextField
+            label="Scanner"
+            value={scanner}
+            onChange={(event) => {
+              setScanner(event.target.value);
+              setPage(0);
+            }}
+            select
+            size="small"
+            sx={{ minWidth: 180 }}
+          >
+            <MenuItem value="">
+              <em>All scanners</em>
+            </MenuItem>
+            <MenuItem value="trivy">Trivy</MenuItem>
+            <MenuItem value="zap">ZAP</MenuItem>
+            <MenuItem value="semgrep">Semgrep</MenuItem>
+          </TextField>
+          <TextField
+            label="Status"
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setPage(0);
+            }}
+            select
+            size="small"
+            sx={{ minWidth: 180 }}
+          >
+            <MenuItem value="">
+              <em>All statuses</em>
+            </MenuItem>
+            <MenuItem value="queued">Queued</MenuItem>
+            <MenuItem value="running">Running</MenuItem>
+            <MenuItem value="succeeded">Succeeded</MenuItem>
+            <MenuItem value="failed">Failed</MenuItem>
+          </TextField>
+        </Stack>
+      </Paper>
 
       <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
         {loading ? (

@@ -41,7 +41,7 @@ func GetFindingDuplicateGroup(ctx context.Context, db *sql.DB, findingID uuid.UU
 
 	rows, err := db.QueryContext(
 		ctx,
-		`SELECT f.id, f.title, f.description, f.fingerprint, f.severity, f.status, f.product_id, p.name, f.assignee_id, f.import_job_id, f.created_at, f.updated_at, f.deleted_at
+		`SELECT f.id, f.title, f.description, f.fingerprint, f.severity, f.status, f.product_id, p.name, f.assignee_id, f.import_job_id, f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id, f.created_at, f.updated_at, f.deleted_at
 		 FROM findings f
 		 LEFT JOIN products p ON p.id = f.product_id
 		 WHERE f.duplicate_id = $1 AND f.deleted_at IS NULL
@@ -67,6 +67,10 @@ func GetFindingDuplicateGroup(ctx context.Context, db *sql.DB, findingID uuid.UU
 			&detail.ProductName,
 			&detail.AssigneeID,
 			&detail.ImportJobID,
+			&detail.FirstSeenAt,
+			&detail.LastSeenAt,
+			&detail.RepeatCount,
+			&detail.DuplicateID,
 			&detail.CreatedAt,
 			&detail.UpdatedAt,
 			&detail.DeletedAt,
