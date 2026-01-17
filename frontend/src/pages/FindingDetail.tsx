@@ -105,10 +105,12 @@ const TabPanel = ({ value, index, children }: { value: number; index: number; ch
 type FindingDetailContentProps = {
   id: string;
   compact?: boolean;
+  /** путь списка (для navigation/copy link/prev-next). Если не передан, берём из query ?returnTo= */
+  returnTo?: string | null;
   onClose?: () => void; // удобно для Drawer
 };
 
-export const FindingDetailContent = ({ id, compact = false, onClose }: FindingDetailContentProps) => {
+export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: returnToProp }: FindingDetailContentProps) => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -137,6 +139,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose }: FindingDe
   const canEdit = user?.roles?.includes("admin") || user?.roles?.includes("analyst");
 
   const returnTo = useMemo(() => {
+    if (returnToProp) return returnToProp;
     const params = new URLSearchParams(location.search);
     const raw = params.get("returnTo");
     if (!raw) return null;
@@ -145,7 +148,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose }: FindingDe
     } catch {
       return raw;
     }
-  }, [location.search]);
+  }, [location.search, returnToProp]);
 
   const returnToUrl = useMemo(() => {
     if (!returnTo) return null;
@@ -435,7 +438,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose }: FindingDe
           title="Описание"
           dense={compact}
           right={
-            <Button size="small" startIcon={<LinkIcon fontSize="small" />} onClick={() => handleCopyValue(window.location.href)}>
+            <Button size="small" startIcon={<LinkIcon fontSize="small" />} onClick={() => handleCopyValue(new URL(buildFindingLink(id), window.location.origin).toString())}>
               Copy link
             </Button>
           }
