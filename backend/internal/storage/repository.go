@@ -28,6 +28,13 @@ func anyUUIDPtr(id *uuid.UUID) any {
 	return *id
 }
 
+func anyStringPtr(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
 func anyRawJSON(b []byte) any {
 	if len(b) == 0 {
 		return nil

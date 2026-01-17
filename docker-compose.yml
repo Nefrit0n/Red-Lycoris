@@ -12,6 +12,21 @@ services:
       - DB_NAME=${DB_NAME:-lotus_warden}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - OBJECT_STORE_ENDPOINT=${OBJECT_STORE_ENDPOINT:-minio:9000}
+      - OBJECT_STORE_ACCESS_KEY=${OBJECT_STORE_ACCESS_KEY:-minioadmin}
+      - OBJECT_STORE_SECRET_KEY=${OBJECT_STORE_SECRET_KEY:-minioadmin}
+      - OBJECT_STORE_BUCKET=${OBJECT_STORE_BUCKET:-lotus-warden}
+      - OBJECT_STORE_USE_SSL=${OBJECT_STORE_USE_SSL:-false}
+      - ANALYSIS_MAX_ARCHIVE_BYTES=${ANALYSIS_MAX_ARCHIVE_BYTES:-104857600}
+      - ANALYSIS_MAX_EXTRACT_BYTES=${ANALYSIS_MAX_EXTRACT_BYTES:-524288000}
+      - ANALYSIS_TEMP_DIR=${ANALYSIS_TEMP_DIR:-/tmp/lotus-warden-analysis}
+      - ANALYSIS_SCANNER_TIMEOUT=${ANALYSIS_SCANNER_TIMEOUT:-20m}
+      - ANALYSIS_CLEANUP_INTERVAL=${ANALYSIS_CLEANUP_INTERVAL:-1h}
+      - ANALYSIS_CLEANUP_TTL=${ANALYSIS_CLEANUP_TTL:-24h}
+      - ANALYSIS_SEMGREP_IMAGE=${ANALYSIS_SEMGREP_IMAGE:-semgrep/semgrep:latest}
+      - ANALYSIS_TRIVY_IMAGE=${ANALYSIS_TRIVY_IMAGE:-aquasec/trivy:latest}
+      - ANALYSIS_CONTAINER_NETWORK=${ANALYSIS_CONTAINER_NETWORK:-none}
       - MIGRATIONS_PATH=/app/migrations
     ports:
       - "${BACKEND_PORT:-8080}:8080"
@@ -20,6 +35,42 @@ services:
     depends_on:
       - postgres
       - redis
+      - nats
+      - minio
+
+  analysis-worker:
+    build:
+      context: ./backend
+      target: dev
+    command: ["go", "run", "./cmd/analysis_worker"]
+    environment:
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-lotus_warden}
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - OBJECT_STORE_ENDPOINT=${OBJECT_STORE_ENDPOINT:-minio:9000}
+      - OBJECT_STORE_ACCESS_KEY=${OBJECT_STORE_ACCESS_KEY:-minioadmin}
+      - OBJECT_STORE_SECRET_KEY=${OBJECT_STORE_SECRET_KEY:-minioadmin}
+      - OBJECT_STORE_BUCKET=${OBJECT_STORE_BUCKET:-lotus-warden}
+      - OBJECT_STORE_USE_SSL=${OBJECT_STORE_USE_SSL:-false}
+      - ANALYSIS_MAX_ARCHIVE_BYTES=${ANALYSIS_MAX_ARCHIVE_BYTES:-104857600}
+      - ANALYSIS_MAX_EXTRACT_BYTES=${ANALYSIS_MAX_EXTRACT_BYTES:-524288000}
+      - ANALYSIS_TEMP_DIR=${ANALYSIS_TEMP_DIR:-/tmp/lotus-warden-analysis}
+      - ANALYSIS_SCANNER_TIMEOUT=${ANALYSIS_SCANNER_TIMEOUT:-20m}
+      - ANALYSIS_CLEANUP_INTERVAL=${ANALYSIS_CLEANUP_INTERVAL:-1h}
+      - ANALYSIS_CLEANUP_TTL=${ANALYSIS_CLEANUP_TTL:-24h}
+      - ANALYSIS_SEMGREP_IMAGE=${ANALYSIS_SEMGREP_IMAGE:-semgrep/semgrep:latest}
+      - ANALYSIS_TRIVY_IMAGE=${ANALYSIS_TRIVY_IMAGE:-aquasec/trivy:latest}
+      - ANALYSIS_CONTAINER_NETWORK=${ANALYSIS_CONTAINER_NETWORK:-none}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+      - nats
+      - minio
 
   python-api:
     build:
@@ -74,5 +125,24 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
 
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js"]
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      - MINIO_ROOT_USER=${OBJECT_STORE_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${OBJECT_STORE_SECRET_KEY:-minioadmin}
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+
 volumes:
   postgres_data:
+  minio_data:
