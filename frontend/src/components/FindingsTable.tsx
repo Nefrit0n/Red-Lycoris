@@ -1,9 +1,10 @@
 import {
+  Box,
   Checkbox,
   Chip,
-  Link as MuiLink,
   IconButton,
   Skeleton,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -11,10 +12,10 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
-  Typography,
   Tooltip,
-  Box,
+  Typography,
 } from "@mui/material";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -50,7 +51,10 @@ const statusLabels: Record<FindingStatus, string> = {
   duplicate: "Duplicate",
 };
 
-const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warning"> = {
+const statusColors: Record<
+  FindingStatus,
+  "default" | "info" | "success" | "warning"
+> = {
   new: "info",
   under_review: "warning",
   confirmed: "success",
@@ -63,11 +67,14 @@ const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warn
 
 const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
   NEW: "New",
-  REPEAT: "Repeat",
+  REPEAT: "Repeated",
 };
 
-const occurrenceColors: Record<FindingOccurrenceStatus, "default" | "info" | "warning"> = {
-  NEW: "info",
+const occurrenceColors: Record<
+  FindingOccurrenceStatus,
+  "default" | "info" | "warning"
+> = {
+  NEW: "default",
   REPEAT: "warning",
 };
 
@@ -86,35 +93,31 @@ interface FindingsTableProps {
   batchMode: boolean;
   highlightQuery: string;
   rowCount: number;
+
+  /** путь списка (для открытия полной страницы детали) */
   returnTo: string;
+
+  /** сохранить scroll / состояние списка */
   onNavigateToDetail: () => void;
 
-  /**
-   * ✅ Если передан — таблица НЕ уходит на роут,
-   * а открывает деталь через Drawer/side panel.
-   */
-  onOpenDetail?: (id: string) => void;
+  /** открыть Drawer справа */
+  onOpenDetails: (id: string) => void;
 
-  /**
-   * (опционально) подсветка “активной” строки,
-   * когда деталь открыта справа
-   */
-  activeId?: string | null;
+  /** id находки, которая сейчас открыта в Drawer (для подсветки строки) */
+  activeFindingId?: string | null;
 }
 
-const formatDateTimeRu = (value?: string | null) => {
+const formatDateTimeRuCompact = (value?: string | null) => {
   if (!value) return "—";
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return "—";
-
   try {
     return new Intl.DateTimeFormat("ru-RU", {
-      year: "numeric",
+      year: "2-digit",
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit",
     }).format(dt);
   } catch {
     return dt.toLocaleString("ru-RU");
@@ -128,20 +131,7 @@ const prettifyScanner = (v?: string | null) => {
   return s.length <= 4 ? s.toUpperCase() : s[0].toUpperCase() + s.slice(1);
 };
 
-const isModifiedClick = (e: React.MouseEvent) =>
-  e.metaKey || e.ctrlKey || e.shiftKey || (e as any).button === 1;
-
-const clickedInteractive = (target: EventTarget | null) => {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  return Boolean(
-    el.closest(
-      'a,button,input,textarea,select,label,[role="button"],[role="checkbox"]'
-    )
-  );
-};
-
-const FindingsTable = ({
+export default function FindingsTable({
   data,
   selectedIds,
   sortField,
@@ -158,23 +148,23 @@ const FindingsTable = ({
   rowCount,
   returnTo,
   onNavigateToDetail,
-  onOpenDetail,
-  activeId,
-}: FindingsTableProps) => {
+  onOpenDetails,
+  activeFindingId,
+}: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
 
-  const allSelected = safeData.length > 0 && selectedIds.length === safeData.length;
+  const allSelected =
+    safeData.length > 0 && selectedIds.length === safeData.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
 
   const dtf = useMemo(() => {
     try {
       return new Intl.DateTimeFormat("ru-RU", {
-        year: "numeric",
+        year: "2-digit",
         month: "2-digit",
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
-        second: "2-digit",
       });
     } catch {
       return null;
@@ -185,11 +175,13 @@ const FindingsTable = ({
     if (!value) return "—";
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return "—";
-    return dtf ? dtf.format(dt) : formatDateTimeRu(value);
+    return dtf ? dtf.format(dt) : formatDateTimeRuCompact(value);
   };
 
   const buildDetailLink = (id: string) =>
-    returnTo ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}` : `/findings/${id}`;
+    returnTo
+      ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}`
+      : `/findings/${id}`;
 
   const renderHighlightedTitle = (title: string) => {
     const query = highlightQuery.trim();
@@ -204,22 +196,20 @@ const FindingsTable = ({
 
     while (matchIndex !== -1) {
       if (matchIndex > startIndex) parts.push(title.slice(startIndex, matchIndex));
-
       parts.push(
         <Box
           key={`${title}-${matchIndex}`}
           component="span"
           sx={{
             backgroundColor: "rgba(255, 193, 7, 0.22)",
-            fontWeight: 600,
+            fontWeight: 700,
             px: 0.5,
-            borderRadius: 0.5,
+            borderRadius: 0.75,
           }}
         >
           {title.slice(matchIndex, matchIndex + lowerQuery.length)}
         </Box>
       );
-
       startIndex = matchIndex + lowerQuery.length;
       matchIndex = lowerTitle.indexOf(lowerQuery, startIndex);
     }
@@ -228,21 +218,16 @@ const FindingsTable = ({
     return parts;
   };
 
-  const canOpenDetail = Boolean(onOpenDetail) && !batchMode && !loading && !errorMessage;
-
-  const handleOpenDetail = (id: string) => {
-    if (!onOpenDetail) return;
-    onOpenDetail(id);
-  };
+  const colCount = 5; // checkbox + issue + severity + status + actions
 
   return (
     <TableContainer
       sx={{
         borderRadius: 2,
-        "& .MuiTableCell-head": { fontWeight: 600, whiteSpace: "nowrap" },
+        "& .MuiTableCell-head": { fontWeight: 700, whiteSpace: "nowrap" },
       }}
     >
-      <Table stickyHeader size="small" sx={{ minWidth: 980 }}>
+      <Table stickyHeader size="small" sx={{ minWidth: 920 }}>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox" sx={{ width: 44 }}>
@@ -252,26 +237,17 @@ const FindingsTable = ({
                 onChange={(e) => onToggleAll(e.target.checked)}
                 disabled={loading || Boolean(errorMessage)}
                 inputProps={{ "aria-label": "Выбрать все" }}
+                onClick={(e) => e.stopPropagation()}
               />
             </TableCell>
 
-            <TableCell sx={{ width: "42%" }}>
+            <TableCell>
               <TableSortLabel
                 active={sortField === "title"}
                 direction={sortField === "title" ? sortOrder : "asc"}
                 onClick={() => onSortChange("title")}
               >
-                Название
-              </TableSortLabel>
-            </TableCell>
-
-            <TableCell sx={{ width: 140 }}>
-              <TableSortLabel
-                active={sortField === "productName"}
-                direction={sortField === "productName" ? sortOrder : "asc"}
-                onClick={() => onSortChange("productName")}
-              >
-                Приложение
+                Issue details
               </TableSortLabel>
             </TableCell>
 
@@ -281,88 +257,52 @@ const FindingsTable = ({
                 direction={sortField === "severity" ? sortOrder : "asc"}
                 onClick={() => onSortChange("severity")}
               >
-                Критичность
+                Severity
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 140 }}>
+            <TableCell sx={{ width: 170 }}>
               <TableSortLabel
                 active={sortField === "status"}
                 direction={sortField === "status" ? sortOrder : "asc"}
                 onClick={() => onSortChange("status")}
               >
-                Статус
+                Status
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 190 }}>
-              <TableSortLabel
-                active={sortField === "lastSeenAt"}
-                direction={sortField === "lastSeenAt" ? sortOrder : "asc"}
-                onClick={() => onSortChange("lastSeenAt")}
-              >
-                Last seen
-              </TableSortLabel>
-            </TableCell>
-
-            <TableCell sx={{ width: 110, display: { xs: "none", md: "table-cell" } }}>
-              Scanner
-            </TableCell>
-            <TableCell sx={{ width: 120, display: { xs: "none", md: "table-cell" } }}>
-              Occurrence
-            </TableCell>
-            <TableCell
-              align="right"
-              sx={{ width: 90, display: { xs: "none", md: "table-cell" } }}
-            >
-              Repeats
-            </TableCell>
-            <TableCell sx={{ width: 160, display: { xs: "none", lg: "table-cell" } }}>
-              Owner
+            <TableCell align="right" sx={{ width: 64 }}>
+              {/* actions */}
             </TableCell>
           </TableRow>
         </TableHead>
 
         <TableBody>
           {loading &&
-            Array.from({ length: Math.max(rowCount, 6) }).map((_, index) => (
+            Array.from({ length: Math.max(rowCount, 8) }).map((_, index) => (
               <TableRow key={`skeleton-${index}`}>
                 <TableCell padding="checkbox">
                   <Skeleton variant="rectangular" width={18} height={18} />
                 </TableCell>
                 <TableCell>
-                  <Skeleton width="85%" />
+                  <Skeleton width="70%" />
+                  <Skeleton width="45%" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton width={90} />
                 </TableCell>
                 <TableCell>
                   <Skeleton width={120} />
                 </TableCell>
-                <TableCell>
-                  <Skeleton width={90} />
-                </TableCell>
-                <TableCell>
-                  <Skeleton width={110} />
-                </TableCell>
-                <TableCell>
-                  <Skeleton width={160} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={90} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={90} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
-                  <Skeleton width={60} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: "none", lg: "table-cell" } }}>
-                  <Skeleton width={120} />
+                <TableCell align="right">
+                  <Skeleton width={28} height={28} />
                 </TableCell>
               </TableRow>
             ))}
 
           {!loading && errorMessage && (
             <TableRow>
-              <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   {errorMessage}
                 </Typography>
@@ -375,12 +315,9 @@ const FindingsTable = ({
 
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
                 <Typography color="text.secondary" gutterBottom>
                   Ничего не найдено по фильтрам
-                </Typography>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Попробуйте изменить условия поиска.
                 </Typography>
                 <Typography
                   variant="body2"
@@ -396,41 +333,45 @@ const FindingsTable = ({
 
           {!loading &&
             !errorMessage &&
-            safeData.length > 0 &&
             safeData.map((f) => {
               const isSelected = selectedIds.includes(f.id);
-
-              const occurrence: FindingOccurrenceStatus = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
-              const repeatCount = f.repeatCount ?? 0;
-
-              const ownerLabel = f.owner?.name || f.assigneeId || "—";
+              const isActive = Boolean(activeFindingId) && activeFindingId === f.id;
+              const occurrence = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
+              const repeats = f.repeatCount ?? 0;
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
 
-              const isActive = Boolean(activeId) && f.id === activeId;
+              const handleRowClick = () => {
+                if (batchMode) onToggleOne(f.id);
+                else onOpenDetails(f.id);
+              };
 
               return (
                 <TableRow
                   key={f.id}
                   hover
-                  selected={isSelected || isActive}
-                  onClick={(e) => {
-                    if (!canOpenDetail) return;
-                    if (clickedInteractive(e.target)) return;
-                    handleOpenDetail(f.id);
+                  selected={isSelected}
+                  onClick={handleRowClick}
+                  role="button"
+                  aria-current={isActive ? "true" : undefined}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleRowClick();
+                    }
                   }}
                   sx={{
+                    cursor: "pointer",
                     "& td": { verticalAlign: "middle" },
-                    cursor: canOpenDetail ? "pointer" : "default",
-                    ...(isActive
+                    ...(isActive && !isSelected
                       ? {
-                        outline: "2px solid",
-                        outlineColor: "primary.main",
-                        outlineOffset: "-2px",
-                      }
+                          bgcolor: "action.selected",
+                          "&:hover": { bgcolor: "action.selected" },
+                        }
                       : null),
                   }}
                 >
-                  <TableCell padding="checkbox">
+                  <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={isSelected}
                       onChange={() => onToggleOne(f.id)}
@@ -438,56 +379,72 @@ const FindingsTable = ({
                     />
                   </TableCell>
 
-                  <TableCell
-                    sx={{
-                      maxWidth: 520,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {batchMode ? (
-                      <Tooltip title={f.title} placement="top-start">
-                        <Typography color="text.primary" noWrap>
-                          {renderHighlightedTitle(f.title)}
-                        </Typography>
-                      </Tooltip>
-                    ) : (
-                      <Tooltip title={f.title} placement="top-start">
-                        <MuiLink
-                          component={Link}
-                          to={buildDetailLink(f.id)}
-                          underline="hover"
-                          sx={{ display: "inline-block", maxWidth: "100%" }}
-                          onClick={(e) => {
-                            // ✅ если включен Drawer-режим — открываем панель
-                            if (onOpenDetail && !isModifiedClick(e)) {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              onNavigateToDetail();
-                              onOpenDetail(f.id);
-                            } else {
-                              // обычная навигация на detail page
-                              onNavigateToDetail();
-                            }
-                          }}
-                        >
-                          <Typography component="span" noWrap>
+                  {/* Issue details (2 строки) */}
+                  <TableCell sx={{ minWidth: 420 }}>
+                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={1}
+                        sx={{ minWidth: 0 }}
+                      >
+                        <Tooltip title={f.title} placement="top-start">
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 700,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              minWidth: 0,
+                              flex: 1,
+                            }}
+                          >
                             {renderHighlightedTitle(f.title)}
                           </Typography>
-                        </MuiLink>
-                      </Tooltip>
-                    )}
+                        </Tooltip>
+
+                        {/* маленькие “бейджи” справа от заголовка */}
+                        {occurrence === "REPEAT" && (
+                          <Chip
+                            size="small"
+                            label={occurrenceLabels[occurrence]}
+                            color={occurrenceColors[occurrence]}
+                            sx={{ height: 22 }}
+                          />
+                        )}
+                        {repeats > 0 && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={`x${repeats}`}
+                            sx={{ height: 22 }}
+                          />
+                        )}
+                      </Stack>
+
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        flexWrap="wrap"
+                        useFlexGap
+                        sx={{ color: "text.secondary" }}
+                      >
+                        <Typography variant="caption">
+                          App: <b>{f.productName || "—"}</b>
+                        </Typography>
+                        <Typography variant="caption">
+                          Scanner: <b>{prettifyScanner(f.scannerType)}</b>
+                        </Typography>
+                        <Typography variant="caption">
+                          Last seen: <b>{formatDate(lastSeenAt)}</b>
+                        </Typography>
+                      </Stack>
+                    </Stack>
                   </TableCell>
 
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
-                    <Tooltip title={f.productName || "—"}>
-                      <Typography variant="body2" noWrap>
-                        {f.productName || "—"}
-                      </Typography>
-                    </Tooltip>
-                  </TableCell>
-
+                  {/* Severity */}
                   <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
                       size="small"
@@ -497,6 +454,7 @@ const FindingsTable = ({
                     />
                   </TableCell>
 
+                  {/* Status */}
                   <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
                       label={statusLabels[f.status] ?? f.status}
@@ -506,39 +464,18 @@ const FindingsTable = ({
                     />
                   </TableCell>
 
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
-                    <Typography variant="body2">{formatDate(lastSeenAt)}</Typography>
-                  </TableCell>
-
-                  <TableCell sx={{ display: { xs: "none", md: "table-cell" }, whiteSpace: "nowrap" }}>
-                    <Typography variant="body2">{prettifyScanner(f.scannerType)}</Typography>
-                  </TableCell>
-
-                  <TableCell sx={{ display: { xs: "none", md: "table-cell" }, whiteSpace: "nowrap" }}>
-                    <Chip
-                      label={occurrenceLabels[occurrence] ?? occurrence}
-                      color={occurrenceColors[occurrence]}
-                      size="small"
-                      sx={{ textTransform: "none" }}
-                    />
-                  </TableCell>
-
-                  <TableCell
-                    align="right"
-                    sx={{
-                      display: { xs: "none", md: "table-cell" },
-                      fontFamily: "monospace",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {repeatCount}
-                  </TableCell>
-
-                  <TableCell sx={{ display: { xs: "none", lg: "table-cell" }, maxWidth: 160 }}>
-                    <Tooltip title={ownerLabel}>
-                      <Typography variant="body2" noWrap>
-                        {ownerLabel}
-                      </Typography>
+                  {/* Actions */}
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                    <Tooltip title="Открыть на отдельной странице">
+                      <IconButton
+                        size="small"
+                        component={Link}
+                        to={buildDetailLink(f.id)}
+                        onClick={() => onNavigateToDetail()}
+                        aria-label="Открыть на отдельной странице"
+                      >
+                        <OpenInNewIcon fontSize="small" />
+                      </IconButton>
                     </Tooltip>
                   </TableCell>
                 </TableRow>
@@ -548,6 +485,4 @@ const FindingsTable = ({
       </Table>
     </TableContainer>
   );
-};
-
-export default FindingsTable;
+}
