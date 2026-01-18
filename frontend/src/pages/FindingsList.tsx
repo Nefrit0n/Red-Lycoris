@@ -18,141 +18,169 @@ import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import ViewCompactIcon from "@mui/icons-material/ViewCompact";
 import ViewStreamIcon from "@mui/icons-material/ViewStream";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { bulkUpdateFindings, fetchFindings } from "../api/findings";
+import { useCallback, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+
 import { getCurrentUser } from "../api/auth";
 import BulkActionsBar from "../components/BulkActionsBar";
 import FiltersPanel from "../components/FiltersPanel";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
+
 import { useUrlFiltersSync } from "../hooks/useUrlFiltersSync";
 import { useFindingsData } from "../hooks/useFindingsData";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
-import { Finding } from "../types/findings";
 
-// 👇 важно: нужен экспорт FindingDetailContent из FindingDetail.tsx
+import { Finding } from "../types/findings";
 import { FindingDetailContent } from "./FindingDetail";
+
+type FindingsFilters = {
+  page: number;
+  pageSize: number;
+  productId: string;
+  searchInput: string;
+  filterSeverity: string;
+  filterStatus: string;
+  filterOccurrence: string;
+  filterScannerType: string;
+  dateFrom: string;
+  dateTo: string;
+  showRepeats: boolean;
+  sortField: keyof Finding;
+  sortOrder: "asc" | "desc";
+  selectedFindingId: string | null;
+};
+
+const DEFAULT_FILTERS: FindingsFilters = {
+  page: 0,
+  pageSize: 20,
+  productId: "",
+  searchInput: "",
+  filterSeverity: "",
+  filterStatus: "",
+  filterOccurrence: "",
+  filterScannerType: "",
+  dateFrom: "",
+  dateTo: "",
+  showRepeats: false,
+  sortField: "lastSeenAt",
+  sortOrder: "desc",
+  selectedFindingId: null,
+};
+
+function makeActions(
+  setFilters: React.Dispatch<React.SetStateAction<any>>
+) {
+  return {
+    setPage: (page: number) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, page })),
+
+    setPageSize: (pageSize: number) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, pageSize })),
+
+    setProductId: (productId: string) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, productId, page: 0 })),
+
+    setSearchInput: (searchInput: string) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, searchInput, page: 0 })),
+
+    setFilterSeverity: (filterSeverity: string) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, filterSeverity, page: 0 })),
+
+    setFilterStatus: (filterStatus: string) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, filterStatus, page: 0 })),
+
+    setFilterOccurrence: (filterOccurrence: string) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, filterOccurrence, page: 0 })),
+
+    setFilterScannerType: (filterScannerType: string) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, filterScannerType, page: 0 })),
+
+    setDateFrom: (dateFrom: string) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, dateFrom, page: 0 })),
+
+    setDateTo: (dateTo: string) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, dateTo, page: 0 })),
+
+    setShowRepeats: (showRepeats: boolean) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, showRepeats, page: 0 })),
+
+    setSortField: (sortField: keyof Finding) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, sortField })),
+
+    setSortOrder: (sortOrder: "asc" | "desc") =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, sortOrder })),
+
+    setSelectedFindingId: (selectedFindingId: string | null) =>
+      setFilters((prev: any) => ({ ...DEFAULT_FILTERS, ...prev, selectedFindingId })),
+
+    resetFilters: () => setFilters(() => ({ ...DEFAULT_FILTERS })),
+  };
+}
+
+function makeNoopActions() {
+  const noop = () => { };
+  return {
+    setPage: noop,
+    setPageSize: noop,
+    setProductId: noop,
+    setSearchInput: noop,
+    setFilterSeverity: noop,
+    setFilterStatus: noop,
+    setFilterOccurrence: noop,
+    setFilterScannerType: noop,
+    setDateFrom: noop,
+    setDateTo: noop,
+    setShowRepeats: noop,
+    setSortField: noop,
+    setSortOrder: noop,
+    setSelectedFindingId: noop,
+    resetFilters: noop,
+  };
+}
 
 const FindingsList = () => {
   const location = useLocation();
   const isMdUp = useMediaQuery("(min-width:900px)");
+  const drawerWidth = isMdUp ? 620 : "100vw";
 
-  // ✅ ВАЖНО: не даём эффекту "state -> URL" работать, пока не распарсили URL -> state
-  const [hydrated, setHydrated] = useState(false);
+  const listStateKey = "lotus_warden:findings_list_state";
 
-  const [data, setData] = useState<Finding[]>([]);
-  const [total, setTotal] = useState<number>(0);
+  // ======= Получаем то, что реально возвращает useUrlFiltersSync (любой формы) =======
+  const urlSync: any = useUrlFiltersSync();
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const rawFilters = urlSync?.filters ?? urlSync?.state ?? urlSync?.[0];
+  const setRawFilters = urlSync?.setFilters ?? urlSync?.setState ?? urlSync?.[1];
+  const hydrated = urlSync?.hydrated ?? urlSync?.[2] ?? true;
 
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(20);
+  const filters: FindingsFilters = useMemo(() => {
+    return { ...DEFAULT_FILTERS, ...(rawFilters ?? {}) };
+  }, [rawFilters]);
 
-  const [productId, setProductId] = useState("");
-  const [searchInput, setSearchInput] = useState("");
-  const debouncedSearch = useDebouncedValue(searchInput, 400);
-  const [importJobId, setImportJobId] = useState("");
-  const [filterSeverity, setFilterSeverity] = useState<FindingSeverity | "">("");
-  const [filterStatus, setFilterStatus] = useState<FindingStatus | "">("");
-  const [filterOccurrence, setFilterOccurrence] = useState<FindingOccurrenceStatus | "">("");
-  const [filterScannerType, setFilterScannerType] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [showRepeats, setShowRepeats] = useState(false);
+  const actions = useMemo(() => {
+    // если хук уже отдаёт actions — используем их
+    if (urlSync?.actions) return urlSync.actions;
 
-  const [sortField, setSortField] = useState<keyof Finding>("lastSeenAt");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+    // если есть setter — собираем actions сами
+    if (typeof setRawFilters === "function") return makeActions(setRawFilters);
 
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [selectAllMatching, setSelectAllMatching] = useState(false);
-  const [bulkUndoItems, setBulkUndoItems] = useState<BulkUndoItem[]>([]);
-  const [bulkToast, setBulkToast] = useState<string | null>(null);
-  const [undoToastOpen, setUndoToastOpen] = useState(false);
+    // иначе чтобы не падало — заглушки
+    return makeNoopActions();
+  }, [urlSync, setRawFilters]);
 
-  // ✅ Drawer: выбранная находка
-  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
-
-  // Компактный режим таблицы
-  const [compactMode, setCompactMode] = useState(false);
-
-  // base returnTo без selected (чтобы если открыть в новой вкладке — назад не открывал Drawer снова)
-  const listReturnTo = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    params.delete("selected");
-    const qs = params.toString();
-    return `${location.pathname}${qs ? `?${qs}` : ""}`;
-  }, [location.pathname, location.search]);
-
-  const openDrawer = useCallback((id: string) => {
-    const listPath = `${location.pathname}${location.search}`;
-    sessionStorage.setItem(
-      listStateKey,
-      JSON.stringify({ path: listPath, scrollY: window.scrollY })
-    );
-    setSelectedFindingId(id);
-  }, [location.pathname, location.search, listStateKey]);
-
-  const closeDrawer = useCallback(() => {
-    setSelectedFindingId(null);
-  }, []);
-
-  // 1) URL -> state
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const queryProduct = params.get("product");
-    const queryProductId = params.get("productId");
-    const queryImportJobId = params.get("import_job_id");
-    const querySeverity = params.get("severity");
-    const queryStatus = params.get("status");
-    const querySearch = params.get("search") ?? params.get("q") ?? "";
-    const queryPage = Number(params.get("page") ?? "1");
-    const queryLimit = Number(params.get("limit") ?? "20");
-    const querySortField = params.get("sortField");
-    const querySortOrder = params.get("sortOrder");
-    const queryOccurrence = params.get("occurrenceStatus");
-    const queryScanner = params.get("scannerType") ?? "";
-    const queryDateFrom = params.get("dateFrom") ?? "";
-    const queryDateTo = params.get("dateTo") ?? "";
-    const queryIncludeRepeats = params.get("includeRepeats");
-    const queryCanonicalOnly = params.get("canonicalOnly");
-
-    // ✅ Drawer param
-    const querySelected = params.get("selected");
-
-    const nextPage =
-      Number.isFinite(queryPage) && queryPage > 0 ? queryPage - 1 : 0;
-    const nextPageSize =
-      Number.isFinite(queryLimit) && queryLimit > 0 ? queryLimit : 20;
-
-    setPage((prev) => (prev !== nextPage ? nextPage : prev));
-    setPageSize((prev) => (prev !== nextPageSize ? nextPageSize : prev));
-
-    const nextProduct = queryProduct || queryProductId || "";
-    setProductId((prev) => (prev !== nextProduct ? nextProduct : prev));
-
-    const nextSeverity = severityOptions.includes(querySeverity as FindingSeverity)
-      ? (querySeverity as FindingSeverity)
-      : "";
-    setFilterSeverity((prev) => (prev !== nextSeverity ? nextSeverity : prev));
-
-  // Auto-redirect after upload
+  // ======= Остальная логика =======
   useUploadRedirect(filters.pageSize);
 
-  // Fetch findings data
   const { data, total, loading, error, fetchData, handleRetry } = useFindingsData({
     filters,
     hydrated,
   });
 
-  // Debounced search for bulk actions
   const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
 
-  // Bulk selection and actions
   const bulk = useBulkSelection({
     data,
     total,
@@ -161,18 +189,31 @@ const FindingsList = () => {
     onSuccess: fetchData,
   });
 
-  // Drawer state
+  // Drawer state (важно: setSelectedFindingId теперь точно есть, хотя бы noop)
   const drawer = useDrawerState({
     selectedFindingId: filters.selectedFindingId,
     setSelectedFindingId: actions.setSelectedFindingId,
     selectionCount: bulk.selectionCount,
   });
 
-  // User permissions
   const user = getCurrentUser();
-  const canBulk = user?.roles?.includes("admin") || user?.roles?.includes("analyst");
+  const canBulk =
+    user?.roles?.includes("admin") || user?.roles?.includes("analyst");
 
-  // Handle sort change
+  const [compactMode, setCompactMode] = useState(false);
+
+  const openDrawer = useCallback(
+    (id: string) => {
+      const listPath = `${location.pathname}${location.search}`;
+      sessionStorage.setItem(
+        listStateKey,
+        JSON.stringify({ path: listPath, scrollY: window.scrollY })
+      );
+      actions.setSelectedFindingId(id);
+    },
+    [actions, location.pathname, location.search]
+  );
+
   const handleSortChange = useCallback(
     (field: keyof Finding) => {
       if (filters.sortField === field) {
@@ -183,10 +224,8 @@ const FindingsList = () => {
       }
       actions.setPage(0);
     },
-    [filters.sortField, filters.sortOrder, actions]
+    [actions, filters.sortField, filters.sortOrder]
   );
-
-  const drawerWidth = isMdUp ? 620 : "100vw";
 
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 2, md: 3 } }}>
@@ -223,9 +262,9 @@ const FindingsList = () => {
       <FiltersPanel
         productId={filters.productId}
         search={filters.searchInput}
-        filterSeverity={filters.filterSeverity}
-        filterStatus={filters.filterStatus}
-        filterOccurrence={filters.filterOccurrence}
+        filterSeverity={filters.filterSeverity as any}
+        filterStatus={filters.filterStatus as any}
+        filterOccurrence={filters.filterOccurrence as any}
         filterScannerType={filters.filterScannerType}
         dateFrom={filters.dateFrom}
         dateTo={filters.dateTo}
@@ -273,12 +312,11 @@ const FindingsList = () => {
             onResetFilters={actions.resetFilters}
             batchMode={bulk.selectionCount > 0}
             highlightQuery={debouncedSearch}
-            rowCount={pageSize}
-            onOpenDetails={(id) => openDrawer(id)}
-            activeFindingId={selectedFindingId}
+            rowCount={filters.pageSize}
+            onOpenDetails={openDrawer}
+            activeFindingId={filters.selectedFindingId}
             returnTo={`${location.pathname}${location.search}`}
             onNavigateToDetail={() => {
-              // оставляем как было (на всякий), но теперь в основном открываем Drawer
               const listPath = `${location.pathname}${location.search}`;
               sessionStorage.setItem(
                 listStateKey,
@@ -294,7 +332,11 @@ const FindingsList = () => {
             <Alert
               severity="info"
               action={
-                <Button color="inherit" size="small" onClick={bulk.handleSelectAllResults}>
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={bulk.handleSelectAllResults}
+                >
                   Выбрать все {total} результатов
                 </Button>
               }
@@ -309,7 +351,11 @@ const FindingsList = () => {
             <Alert
               severity="info"
               action={
-                <Button color="inherit" size="small" onClick={bulk.handleClearSelection}>
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={bulk.handleClearSelection}
+                >
                   Снять выбор
                 </Button>
               }
@@ -355,7 +401,6 @@ const FindingsList = () => {
         </Alert>
       </Snackbar>
 
-      {/* ✅ Right Drawer */}
       <Drawer
         anchor="right"
         open={Boolean(filters.selectedFindingId)}
@@ -400,12 +445,16 @@ const FindingsList = () => {
 
         <Box sx={{ p: 2, height: "100%", overflow: "auto" }}>
           {filters.selectedFindingId ? (
-            <FindingDetailContent id={filters.selectedFindingId} compact onClose={drawer.closeDrawer} />
+            <FindingDetailContent
+              id={filters.selectedFindingId}
+              compact
+              onClose={drawer.closeDrawer}
+            />
           ) : null}
         </Box>
       </Drawer>
     </Container>
   );
-});
+};
 
 export default FindingsList;
