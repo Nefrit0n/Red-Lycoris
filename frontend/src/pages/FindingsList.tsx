@@ -8,11 +8,16 @@ import {
   Paper,
   Snackbar,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
   useMediaQuery,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import ViewCompactIcon from "@mui/icons-material/ViewCompact";
+import ViewStreamIcon from "@mui/icons-material/ViewStream";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { bulkUpdateFindings, fetchFindings } from "../api/findings";
@@ -94,6 +99,9 @@ const FindingsList = () => {
 
   // ✅ Drawer: выбранная находка
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
+
+  // Компактный режим таблицы
+  const [compactMode, setCompactMode] = useState(false);
 
   // base returnTo без selected (чтобы если открыть в новой вкладке — назад не открывал Drawer снова)
   const listReturnTo = useMemo(() => {
@@ -599,9 +607,35 @@ const FindingsList = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 2, md: 3 } }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Список находок
-      </Typography>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        sx={{ mb: 2 }}
+      >
+        <Typography variant="h4" component="h1">
+          Список находок
+        </Typography>
+
+        <Tooltip title="Переключить режим отображения">
+          <ToggleButtonGroup
+            value={compactMode ? "compact" : "normal"}
+            exclusive
+            onChange={(_, value) => {
+              if (value !== null) setCompactMode(value === "compact");
+            }}
+            size="small"
+            aria-label="Режим отображения"
+          >
+            <ToggleButton value="normal" aria-label="Нормальный режим">
+              <ViewStreamIcon fontSize="small" />
+            </ToggleButton>
+            <ToggleButton value="compact" aria-label="Компактный режим">
+              <ViewCompactIcon fontSize="small" />
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Tooltip>
+      </Stack>
 
       <FiltersPanel
         productId={productId}
@@ -684,8 +718,8 @@ const FindingsList = () => {
             batchMode={selectionCount > 0}
             highlightQuery={debouncedSearch}
             rowCount={pageSize}
-            onOpenDetail={(id) => openDrawer(id)}
-            activeId={selectedFindingId}
+            onOpenDetails={(id) => openDrawer(id)}
+            activeFindingId={selectedFindingId}
             returnTo={`${location.pathname}${location.search}`}
             onNavigateToDetail={() => {
               // оставляем как было (на всякий), но теперь в основном открываем Drawer
@@ -695,6 +729,7 @@ const FindingsList = () => {
                 JSON.stringify({ path: listPath, scrollY: window.scrollY })
               );
             }}
+            compactMode={compactMode}
           />
         </Box>
 
