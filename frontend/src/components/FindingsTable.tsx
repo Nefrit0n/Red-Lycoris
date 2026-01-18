@@ -211,11 +211,6 @@ export default function FindingsTable({
     return dtf ? dtf.format(dt) : formatDateTimeRuCompact(value);
   };
 
-  const buildDetailLink = (id: string) =>
-    returnTo
-      ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}`
-      : `/findings/${id}`;
-
   const renderHighlightedTitle = (title: string) => {
     const query = highlightQuery.trim();
     if (!query) return title;
@@ -489,8 +484,8 @@ export default function FindingsTable({
                         {occurrence === "REPEAT" && !repeats && (
                           <Chip
                             size="small"
-                            label={occurrenceLabels[occurrence]}
-                            color={occurrenceColors[occurrence]}
+                            label={OCCURRENCE_LABELS[occurrence]}
+                            color={OCCURRENCE_COLORS[occurrence]}
                             sx={{ height: 22 }}
                           />
                         )}
@@ -564,16 +559,16 @@ export default function FindingsTable({
                     <Chip
                       size="small"
                       variant="outlined"
-                      label={severityLabels[f.severity]}
-                      sx={severityChipSx[f.severity]}
+                      label={SEVERITY_STYLES[f.severity].label}
+                      sx={SEVERITY_CHIP_STYLES[f.severity]}
                     />
                   </TableCell>
 
                   {/* Status */}
                   <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
-                      label={statusLabels[f.status] ?? f.status}
-                      color={statusColors[f.status]}
+                      label={STATUS_LABELS[f.status] ?? f.status}
+                      color={STATUS_COLORS[f.status]}
                       size="small"
                       sx={{ textTransform: "none" }}
                     />
@@ -585,7 +580,7 @@ export default function FindingsTable({
                       <IconButton
                         size="small"
                         component={Link}
-                        to={buildDetailLink(f.id)}
+                        to={buildFindingLink(f.id, returnTo)}
                         onClick={() => onNavigateToDetail()}
                         aria-label="Открыть на отдельной странице"
                       >
