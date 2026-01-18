@@ -9,7 +9,6 @@ import {
   Divider,
   IconButton,
   MenuItem,
-  Paper,
   Stack,
   Tab,
   Tabs,
@@ -22,146 +21,79 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import LinkIcon from "@mui/icons-material/Link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  addFindingComment,
-  fetchFindingDetail,
-  fetchFindingNeighbors,
-  updateFindingStatus,
-} from "../api/findings";
+import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { getCurrentUser } from "../api/auth";
+import { Section } from "../components/Section";
+import { TabPanel } from "../components/TabPanel";
+import { useFindingDetail } from "../hooks/useFindingDetail";
+import { useFindingStatus } from "../hooks/useFindingStatus";
+import { useFindingComments } from "../hooks/useFindingComments";
+import { useFindingNeighbors } from "../hooks/useFindingNeighbors";
 import {
-  FindingComment,
-  FindingDetail,
-  FindingEvent,
-  FindingNeighbors,
-  FindingSeverity,
-  FindingStatus,
-} from "../types/findings";
-
-const severityStyles: Record<FindingSeverity, { label: string; color: string }> = {
-  low: { label: "Low", color: "#2e7d32" },
-  medium: { label: "Medium", color: "#ed6c02" },
-  high: { label: "High", color: "#d32f2f" },
-  critical: { label: "Critical", color: "#7b1fa2" },
-};
-
-const statusColors: Record<FindingStatus, "default" | "info" | "success" | "warning"> = {
-  new: "info",
-  under_review: "warning",
-  confirmed: "success",
-  false_positive: "default",
-  out_of_scope: "default",
-  risk_accepted: "warning",
-  mitigated: "success",
-  duplicate: "default",
-};
-
-const statusLabels: Record<FindingStatus, string> = {
-  new: "New",
-  under_review: "Under review",
-  confirmed: "Confirmed",
-  false_positive: "False positive",
-  out_of_scope: "Out of scope",
-  risk_accepted: "Risk accepted",
-  mitigated: "Mitigated",
-  duplicate: "Duplicate",
-};
-
-const Section = ({
-  title,
-  right,
-  children,
-  dense,
-}: {
-  title: string;
-  right?: React.ReactNode;
-  children: React.ReactNode;
-  dense?: boolean;
-}) => (
-  <Paper
-    variant="outlined"
-    sx={{
-      p: dense ? 2 : 3,
-      borderRadius: 2.5,
-    }}
-  >
-    <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-      <Typography variant="subtitle2" color="text.secondary">
-        {title}
-      </Typography>
-      {right}
-    </Stack>
-    <Box sx={{ mt: dense ? 1 : 1.5 }}>{children}</Box>
-  </Paper>
-);
-
-const TabPanel = ({ value, index, children }: { value: number; index: number; children: React.ReactNode }) => {
-  if (value !== index) return null;
-  return <Box sx={{ mt: 2 }}>{children}</Box>;
-};
+  SEVERITY_STYLES,
+  STATUS_COLORS,
+  STATUS_LABELS,
+  ALL_STATUSES,
+} from "../utils/findingConstants";
+import {
+  formatEventSummary,
+  getEventCategory,
+  formatDateRu,
+  EventCategory,
+} from "../utils/findingFormatters";
+import { FindingComment, FindingEvent } from "../types/findings";
 
 type FindingDetailContentProps = {
   id: string;
   compact?: boolean;
-  /** путь списка (для navigation/copy link/prev-next). Если не передан, берём из query ?returnTo= */
   returnTo?: string | null;
-  onClose?: () => void; // удобно для Drawer
+  onClose?: () => void;
 };
 
-export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: returnToProp }: FindingDetailContentProps) => {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const [data, setData] = useState<FindingDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+export const FindingDetailContent = ({
+  id,
+  compact = false,
+  onClose,
+  returnTo: returnToProp,
+}: FindingDetailContentProps) => {
+  // Tabs and filters
   const [tab, setTab] = useState(0);
-
-  const [status, setStatus] = useState<FindingStatus | "">("");
-  const [statusState, setStatusState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [statusError, setStatusError] = useState<string | null>(null);
-
-  const [comment, setComment] = useState("");
-  const [commentState, setCommentState] = useState<"idle" | "saving" | "error">("idle");
-  const [commentError, setCommentError] = useState<string | null>(null);
-
-  const [neighbors, setNeighbors] = useState<FindingNeighbors | null>(null);
-  const [neighborsLoading, setNeighborsLoading] = useState(false);
-  const [neighborsError, setNeighborsError] = useState<string | null>(null);
-
-  const [eventFilter, setEventFilter] = useState<"all" | "status" | "comment" | "dedup" | "other">("all");
+  const [eventFilter, setEventFilter] = useState<EventCategory>("all");
   const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
 
+  // User permissions
   const user = getCurrentUser();
   const canEdit = user?.roles?.includes("admin") || user?.roles?.includes("analyst");
 
-  const returnTo = useMemo(() => {
-    if (returnToProp) return returnToProp;
-    const params = new URLSearchParams(location.search);
-    const raw = params.get("returnTo");
-    if (!raw) return null;
-    try {
-      return decodeURIComponent(raw);
-    } catch {
-      return raw;
-    }
-  }, [location.search, returnToProp]);
+  // Fetch finding detail
+  const { data, loading, error, refetch } = useFindingDetail(id);
 
-  const returnToUrl = useMemo(() => {
-    if (!returnTo) return null;
-    try {
-      return new URL(returnTo, window.location.origin);
-    } catch {
-      return null;
-    }
-  }, [returnTo]);
+  // Manage finding status
+  const statusManager = useFindingStatus({
+    initialStatus: data?.status || "new",
+    findingId: id,
+    onSuccess: (updated) => {
+      // Update local data with the response
+      if (updated) {
+        refetch();
+      }
+    },
+  });
 
-  const returnToParam = returnToUrl ? encodeURIComponent(`${returnToUrl.pathname}${returnToUrl.search}`) : "";
-  const returnToQuery = returnToUrl?.search.replace(/^\?/, "") ?? "";
+  // Manage comments
+  const commentsManager = useFindingComments({
+    findingId: id,
+    onSuccess: refetch,
+  });
 
+  // Manage navigation
+  const navigation = useFindingNeighbors({
+    findingId: id,
+    returnToProp,
+  });
+
+  // Handle copy to clipboard
   const handleCopyValue = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -170,126 +102,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
     }
   };
 
-  const fetchDetail = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetchFindingDetail(id, signal);
-      setData(response);
-      setStatus(response.status);
-    } catch (e) {
-      if (!(e instanceof DOMException && e.name === "AbortError")) {
-        setError("Не удалось загрузить детали находки.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchDetail(controller.signal);
-    return () => controller.abort();
-  }, [fetchDetail]);
-
-  useEffect(() => {
-    if (!returnToUrl) {
-      setNeighbors(null);
-      return;
-    }
-    const load = async () => {
-      setNeighborsLoading(true);
-      setNeighborsError(null);
-      try {
-        const response = await fetchFindingNeighbors(id, returnToQuery);
-        setNeighbors(response);
-      } catch (e) {
-        if (!(e instanceof DOMException && e.name === "AbortError")) {
-          setNeighborsError("Не удалось загрузить соседние находки");
-        }
-      } finally {
-        setNeighborsLoading(false);
-      }
-    };
-    load();
-  }, [id, returnToQuery, returnToUrl]);
-
-  useEffect(() => {
-    if (statusState !== "saved") return;
-    const t = window.setTimeout(() => setStatusState("idle"), 1500);
-    return () => window.clearTimeout(t);
-  }, [statusState]);
-
-  const handleStatusUpdate = async () => {
-    if (!status) return;
-    setStatusState("saving");
-    setStatusError(null);
-    try {
-      const updated = await updateFindingStatus(id, status);
-      setData(updated);
-      setStatusState("saved");
-    } catch (e) {
-      const msg = e instanceof Error && e.message ? e.message : "Не удалось сохранить";
-      setStatusError(msg);
-      setStatusState("error");
-    }
-  };
-
-  const handleAddComment = async () => {
-    if (!comment.trim()) return;
-    setCommentState("saving");
-    setCommentError(null);
-    try {
-      await addFindingComment(id, comment.trim());
-      setComment("");
-      await fetchDetail();
-      setCommentState("idle");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Не удалось добавить комментарий";
-      setCommentError(msg);
-      setCommentState("error");
-    }
-  };
-
-  const getEventCategory = (event: FindingEvent) => {
-    if (event.eventType.startsWith("status")) return "status";
-    if (event.eventType.startsWith("comment")) return "comment";
-    if (event.eventType.startsWith("duplicate")) return "dedup";
-    return "other";
-  };
-
-  const formatEventSummary = (event: FindingEvent) => {
-    switch (event.eventType) {
-      case "status_changed": {
-        const fromValue = typeof event.payload.from === "string" ? event.payload.from : "";
-        const toValue = typeof event.payload.to === "string" ? event.payload.to : "";
-        const fromLabel = (statusLabels[fromValue as FindingStatus] ?? fromValue) || "—";
-        const toLabel = (statusLabels[toValue as FindingStatus] ?? toValue) || "—";
-        return `Статус: ${fromLabel} → ${toLabel}`;
-      }
-      case "comment_added":
-        return "Комментарий добавлен";
-      case "assignee_changed": {
-        const fromValue = typeof event.payload.from === "string" ? event.payload.from : "";
-        const toValue = typeof event.payload.to === "string" ? event.payload.to : "";
-        return `Assignee: ${fromValue || "—"} → ${toValue || "—"}`;
-      }
-      case "duplicate_promoted":
-        return "Дубликат: назначен master";
-      case "duplicate_unlinked":
-        return "Дубликат: отвязан от master";
-      case "deleted":
-        return "Находка удалена";
-      default:
-        return event.eventType;
-    }
-  };
-
-  const filteredEvents = useMemo(() => {
-    if (!data?.events) return [];
-    return data.events.filter((e) => (eventFilter === "all" ? true : getEventCategory(e) === eventFilter));
-  }, [data?.events, eventFilter]);
-
+  // Toggle event payload visibility
   const toggleEventPayload = (eventId: string) => {
     setExpandedEventIds((prev) => {
       const next = new Set(prev);
@@ -298,22 +111,21 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
     });
   };
 
-  const handleBackToResults = () => {
-    if (!returnToUrl) return;
-    navigate(`${returnToUrl.pathname}${returnToUrl.search}`);
-  };
+  // Filter events
+  const filteredEvents = useMemo(() => {
+    if (!data?.events) return [];
+    return data.events.filter((e) =>
+      eventFilter === "all" ? true : getEventCategory(e) === eventFilter
+    );
+  }, [data?.events, eventFilter]);
 
-  const handleNavigateNeighbor = (neighborId: string) => {
-    if (!neighborId) return;
-    const query = returnToParam ? `?returnTo=${returnToParam}` : "";
-    navigate(`/findings/${neighborId}${query}`);
-  };
+  // Extract occurrences
+  const occurrences: any[] = Array.isArray((data as any)?.occurrences)
+    ? (data as any).occurrences
+    : [];
+  const hasOccurrences = occurrences.length > 0;
 
-  const buildFindingLink = (findingId: string) => {
-    const query = returnToParam ? `?returnTo=${returnToParam}` : "";
-    return `/findings/${findingId}${query}`;
-  };
-
+  // Loading state
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" py={compact ? 3 : 8}>
@@ -322,36 +134,52 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
     );
   }
 
+  // Error state
   if (error || !data) {
     return <Alert severity="error">{error || "Данные не найдены"}</Alert>;
   }
 
-  const statusChanged = status !== "" && status !== data.status;
-
-  // occurrences (чтобы не упасть, даже если типы отличаются)
-  const occurrences: any[] = Array.isArray((data as any).occurrences) ? (data as any).occurrences : [];
-  const hasOccurrences = occurrences.length > 0;
-
+  // Build chips for header
   const chips = [
     <Chip
       key="sev"
-      label={severityStyles[data.severity].label}
+      label={SEVERITY_STYLES[data.severity].label}
       size="small"
       variant="outlined"
-      sx={{ color: severityStyles[data.severity].color, borderColor: severityStyles[data.severity].color }}
+      sx={{
+        color: SEVERITY_STYLES[data.severity].color,
+        borderColor: SEVERITY_STYLES[data.severity].color,
+      }}
     />,
-    <Chip key="st" label={statusLabels[data.status] ?? data.status} size="small" color={statusColors[data.status]} />,
-    data.productName ? <Chip key="prod" label={`Продукт: ${data.productName}`} size="small" variant="outlined" /> : null,
+    <Chip
+      key="st"
+      label={STATUS_LABELS[data.status] ?? data.status}
+      size="small"
+      color={STATUS_COLORS[data.status]}
+    />,
+    data.productName ? (
+      <Chip key="prod" label={`Продукт: ${data.productName}`} size="small" variant="outlined" />
+    ) : null,
     (data as any).occurrenceStatus ? (
-      <Chip key="occ" label={`Occurrence: ${(data as any).occurrenceStatus}`} size="small" variant="outlined" />
+      <Chip
+        key="occ"
+        label={`Occurrence: ${(data as any).occurrenceStatus}`}
+        size="small"
+        variant="outlined"
+      />
     ) : null,
     typeof (data as any).repeatCount === "number" ? (
-      <Chip key="rep" label={`Repeats: ${(data as any).repeatCount}`} size="small" variant="outlined" />
+      <Chip
+        key="rep"
+        label={`Repeats: ${(data as any).repeatCount}`}
+        size="small"
+        variant="outlined"
+      />
     ) : null,
     (data as any).lastSeenAt ? (
       <Chip
         key="last"
-        label={`Last seen: ${new Date((data as any).lastSeenAt).toLocaleString("ru-RU")}`}
+        label={`Last seen: ${formatDateRu((data as any).lastSeenAt)}`}
         size="small"
         variant="outlined"
       />
@@ -363,8 +191,8 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
       {/* Header */}
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={2}>
         <Box sx={{ minWidth: 0 }}>
-          {returnToUrl && !compact && (
-            <Button variant="text" onClick={handleBackToResults} sx={{ px: 0, mb: 0.5 }}>
+          {navigation.returnToUrl && !compact && (
+            <Button variant="text" onClick={navigation.handleBackToResults} sx={{ px: 0, mb: 0.5 }}>
               ← К результатам
             </Button>
           )}
@@ -381,27 +209,33 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
         </Box>
 
         <Stack direction="row" alignItems="center" gap={1}>
-          {returnToUrl && (
+          {navigation.returnToUrl && (
             <Stack direction="row" gap={1} alignItems="center">
               <Button
                 variant="outlined"
                 size="small"
-                disabled={neighborsLoading || !neighbors?.prevId}
-                onClick={() => neighbors?.prevId && handleNavigateNeighbor(neighbors.prevId)}
+                disabled={navigation.neighborsLoading || !navigation.neighbors?.prevId}
+                onClick={() =>
+                  navigation.neighbors?.prevId &&
+                  navigation.handleNavigateNeighbor(navigation.neighbors.prevId)
+                }
               >
                 Предыдущая
               </Button>
               <Button
                 variant="outlined"
                 size="small"
-                disabled={neighborsLoading || !neighbors?.nextId}
-                onClick={() => neighbors?.nextId && handleNavigateNeighbor(neighbors.nextId)}
+                disabled={navigation.neighborsLoading || !navigation.neighbors?.nextId}
+                onClick={() =>
+                  navigation.neighbors?.nextId &&
+                  navigation.handleNavigateNeighbor(navigation.neighbors.nextId)
+                }
               >
                 Следующая
               </Button>
-              {neighbors && !neighborsError && (
+              {navigation.neighbors && !navigation.neighborsError && (
                 <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-                  {neighbors.position} из {neighbors.total}
+                  {navigation.neighbors.position} из {navigation.neighbors.total}
                 </Typography>
               )}
             </Stack>
@@ -433,12 +267,21 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
         {data.duplicates ? <Tab label="Дубликаты" /> : null}
       </Tabs>
 
+      {/* Tab: Description */}
       <TabPanel value={tab} index={0}>
         <Section
           title="Описание"
           dense={compact}
           right={
-            <Button size="small" startIcon={<LinkIcon fontSize="small" />} onClick={() => handleCopyValue(new URL(buildFindingLink(id), window.location.origin).toString())}>
+            <Button
+              size="small"
+              startIcon={<LinkIcon fontSize="small" />}
+              onClick={() =>
+                handleCopyValue(
+                  new URL(navigation.buildFindingLinkWithReturn(id), window.location.origin).toString()
+                )
+              }
+            >
               Copy link
             </Button>
           }
@@ -452,7 +295,9 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
               <Typography variant="caption" color="text.secondary" sx={{ minWidth: 92 }}>
                 Finding ID
               </Typography>
-              <Typography variant="body2" sx={{ wordBreak: "break-all" }}>{data.id}</Typography>
+              <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+                {data.id}
+              </Typography>
               <Tooltip title="Скопировать">
                 <IconButton size="small" onClick={() => handleCopyValue(data.id)}>
                   <ContentCopyIcon fontSize="inherit" />
@@ -494,17 +339,15 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
                 select
                 fullWidth
                 label="Статус"
-                value={status}
+                value={statusManager.status}
                 onChange={(event) => {
-                  setStatus(event.target.value as FindingStatus);
-                  setStatusState("idle");
-                  setStatusError(null);
+                  statusManager.setStatus(event.target.value as any);
                 }}
                 size="small"
               >
-                {Object.keys(statusLabels).map((k) => (
+                {ALL_STATUSES.map((k) => (
                   <MenuItem key={k} value={k}>
-                    {statusLabels[k as FindingStatus]}
+                    {STATUS_LABELS[k]}
                   </MenuItem>
                 ))}
               </TextField>
@@ -513,19 +356,28 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
                 variant="contained"
                 fullWidth
                 sx={{ mt: 1.5 }}
-                onClick={handleStatusUpdate}
-                disabled={statusState === "saving" || !statusChanged}
+                onClick={statusManager.handleStatusUpdate}
+                disabled={statusManager.statusState === "saving" || !statusManager.statusChanged}
               >
-                {statusState === "saving" ? "Сохраняем..." : "Сохранить"}
+                {statusManager.statusState === "saving" ? "Сохраняем..." : "Сохранить"}
               </Button>
 
-              {statusState === "saved" && <Alert severity="success" sx={{ mt: 1.5 }}>Сохранено</Alert>}
-              {statusState === "error" && statusError && <Alert severity="error" sx={{ mt: 1.5 }}>{statusError}</Alert>}
+              {statusManager.statusState === "saved" && (
+                <Alert severity="success" sx={{ mt: 1.5 }}>
+                  Сохранено
+                </Alert>
+              )}
+              {statusManager.statusState === "error" && statusManager.statusError && (
+                <Alert severity="error" sx={{ mt: 1.5 }}>
+                  {statusManager.statusError}
+                </Alert>
+              )}
             </Section>
           </Box>
         )}
       </TabPanel>
 
+      {/* Tab: Occurrences */}
       <TabPanel value={tab} index={1}>
         <Section title="Occurrences / Repeats" dense={compact}>
           {!hasOccurrences ? (
@@ -541,7 +393,12 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
                       <Box
                         key={h}
                         component="th"
-                        style={{ fontWeight: 600, fontSize: 12, padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.08)" }}
+                        style={{
+                          fontWeight: 600,
+                          fontSize: 12,
+                          padding: "10px 8px",
+                          borderBottom: "1px solid rgba(0,0,0,0.08)",
+                        }}
                       >
                         {h}
                       </Box>
@@ -551,24 +408,63 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
                 <Box component="tbody">
                   {occurrences.map((o, idx) => (
                     <Box key={o?.id ?? idx} component="tr">
-                      <Box component="td" style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)", fontSize: 13 }}>
-                        {o?.seenAt ? new Date(o.seenAt).toLocaleString("ru-RU") : "—"}
+                      <Box
+                        component="td"
+                        style={{
+                          padding: "10px 8px",
+                          borderBottom: "1px solid rgba(0,0,0,0.06)",
+                          fontSize: 13,
+                        }}
+                      >
+                        {o?.seenAt ? formatDateRu(o.seenAt) : "—"}
                       </Box>
-                      <Box component="td" style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)", fontSize: 13 }}>
-                        {o?.importJobId ? (
-                          <Link to={`/imports/${o.importJobId}`}>{o.importJobId}</Link>
-                        ) : (
-                          "—"
-                        )}
+                      <Box
+                        component="td"
+                        style={{
+                          padding: "10px 8px",
+                          borderBottom: "1px solid rgba(0,0,0,0.06)",
+                          fontSize: 13,
+                        }}
+                      >
+                        {o?.importJobId ? <Link to={`/imports/${o.importJobId}`}>{o.importJobId}</Link> : "—"}
                       </Box>
-                      <Box component="td" style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)", fontSize: 13 }}>
+                      <Box
+                        component="td"
+                        style={{
+                          padding: "10px 8px",
+                          borderBottom: "1px solid rgba(0,0,0,0.06)",
+                          fontSize: 13,
+                        }}
+                      >
                         {o?.scannerType ?? "—"}
                       </Box>
-                      <Box component="td" style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)", fontSize: 13 }}>
+                      <Box
+                        component="td"
+                        style={{
+                          padding: "10px 8px",
+                          borderBottom: "1px solid rgba(0,0,0,0.06)",
+                          fontSize: 13,
+                        }}
+                      >
                         {o?.status ?? "—"}
                       </Box>
-                      <Box component="td" style={{ padding: "10px 8px", borderBottom: "1px solid rgba(0,0,0,0.06)", fontSize: 13 }}>
-                        <Typography variant="body2" sx={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                      <Box
+                        component="td"
+                        style={{
+                          padding: "10px 8px",
+                          borderBottom: "1px solid rgba(0,0,0,0.06)",
+                          fontSize: 13,
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
                           {o?.snippet ?? "—"}
                         </Typography>
                       </Box>
@@ -581,6 +477,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
         </Section>
       </TabPanel>
 
+      {/* Tab: Comments */}
       <TabPanel value={tab} index={2}>
         <Section title="Комментарии" dense={compact}>
           <Stack spacing={1.2}>
@@ -593,7 +490,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
             {(data.comments ?? []).map((c: FindingComment) => (
               <Box key={c.id} sx={{ p: 1.5, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
                 <Typography variant="caption" color="text.secondary">
-                  {c.author || "Пользователь"} · {new Date(c.createdAt).toLocaleString("ru-RU")}
+                  {c.author || "Пользователь"} · {formatDateRu(c.createdAt)}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-line" }}>
                   {c.body}
@@ -601,21 +498,17 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
               </Box>
             ))}
 
-            {commentError && <Alert severity="error">{commentError}</Alert>}
+            {commentsManager.commentError && <Alert severity="error">{commentsManager.commentError}</Alert>}
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 1 }}>
               <TextField
                 label="Добавить комментарий"
-                value={comment}
-                onChange={(e) => {
-                  setComment(e.target.value);
-                  if (commentError) setCommentError(null);
-                  if (commentState === "error") setCommentState("idle");
-                }}
+                value={commentsManager.comment}
+                onChange={(e) => commentsManager.setComment(e.target.value)}
                 onKeyDown={(e) => {
                   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                     e.preventDefault();
-                    handleAddComment();
+                    commentsManager.handleAddComment();
                   }
                 }}
                 multiline
@@ -626,17 +519,20 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
               />
               <Button
                 variant="contained"
-                onClick={handleAddComment}
-                disabled={commentState === "saving" || !comment.trim()}
+                onClick={commentsManager.handleAddComment}
+                disabled={
+                  commentsManager.commentState === "saving" || !commentsManager.comment.trim()
+                }
                 sx={{ minWidth: 140 }}
               >
-                {commentState === "saving" ? "..." : "Добавить"}
+                {commentsManager.commentState === "saving" ? "..." : "Добавить"}
               </Button>
             </Stack>
           </Stack>
         </Section>
       </TabPanel>
 
+      {/* Tab: Events History */}
       <TabPanel value={tab} index={3}>
         <Section title="История изменений" dense={compact}>
           <ToggleButtonGroup
@@ -667,7 +563,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
                     {formatEventSummary(e)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-                    {e.actor || "system"} · {new Date(e.createdAt).toLocaleString("ru-RU")}
+                    {e.actor || "system"} · {formatDateRu(e.createdAt)}
                   </Typography>
                 </Stack>
 
@@ -702,6 +598,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
         </Section>
       </TabPanel>
 
+      {/* Tab: Duplicates */}
       {data.duplicates && (
         <TabPanel value={tab} index={4}>
           <Section title="Дубликаты" dense={compact}>
@@ -709,7 +606,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
               <Stack spacing={1}>
                 <Typography variant="body2">
                   Master:{" "}
-                  <Link to={buildFindingLink(data.duplicates.master.id)}>
+                  <Link to={navigation.buildFindingLinkWithReturn(data.duplicates.master.id)}>
                     {data.duplicates.master.title}
                   </Link>
                 </Typography>
@@ -726,7 +623,7 @@ export const FindingDetailContent = ({ id, compact = false, onClose, returnTo: r
                 ) : (
                   data.duplicates.duplicates.map((dup) => (
                     <Typography key={dup.id} variant="body2">
-                      <Link to={buildFindingLink(dup.id)}>{dup.title}</Link>{" "}
+                      <Link to={navigation.buildFindingLinkWithReturn(dup.id)}>{dup.title}</Link>{" "}
                       <Typography component="span" variant="caption" color="text.secondary">
                         · {dup.id}
                       </Typography>
@@ -752,7 +649,6 @@ const FindingDetailPage = () => {
     );
   }
 
-  // ✅ более компактная “страница”, без гигантских отступов
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
       <FindingDetailContent id={id} compact={false} />
