@@ -23,13 +23,21 @@ import AppsIcon from "@mui/icons-material/Apps";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import { ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
-
 import {
   Finding,
   FindingOccurrenceStatus,
   FindingSeverity,
   FindingStatus,
 } from "../types/findings";
+
+/**
+ * Ширины колонок.
+ * Issue details занимает всё оставшееся место (flex-col).
+ */
+const COL_CHECKBOX = 44;
+const COL_SEVERITY = 120;
+const COL_STATUS = 140;
+const COL_ACTIONS = 56;
 
 const severityLabels: Record<FindingSeverity, string> = {
   low: "Low",
@@ -165,9 +173,9 @@ const getAgeLabel = (days: number): string => {
 };
 
 const buildFindingLink = (id: string, returnTo: string) => {
-  const p = new URLSearchParams();
-  if (returnTo) p.set("returnTo", returnTo);
-  const qs = p.toString();
+  const params = new URLSearchParams();
+  if (returnTo) params.set("returnTo", returnTo);
+  const qs = params.toString();
   return `/findings/${id}${qs ? `?${qs}` : ""}`;
 };
 
@@ -231,9 +239,7 @@ export default function FindingsTable({
     let matchIndex = lowerTitle.indexOf(lowerQuery);
 
     while (matchIndex !== -1) {
-      if (matchIndex > startIndex) {
-        parts.push(title.slice(startIndex, matchIndex));
-      }
+      if (matchIndex > startIndex) parts.push(title.slice(startIndex, matchIndex));
       parts.push(
         <Box
           key={`${title}-${matchIndex}`}
@@ -265,10 +271,30 @@ export default function FindingsTable({
         "& .MuiTableCell-head": { fontWeight: 700, whiteSpace: "nowrap" },
       }}
     >
-      <Table stickyHeader size="small" sx={{ minWidth: 920 }}>
+      <Table
+        stickyHeader
+        size="small"
+        sx={{
+          width: "100%",
+          minWidth: 920,
+          tableLayout: "fixed", // чтобы ширины колонок не прыгали :contentReference[oaicite:2]{index=2}
+        }}
+      >
+        {/* ВАЖНО: colgroup должен быть первым ребёнком table */}
+        <colgroup>
+          <col style={{ width: COL_CHECKBOX }} />
+          <col /> {/* issue details (auto) */}
+          <col style={{ width: COL_SEVERITY }} />
+          <col style={{ width: COL_STATUS }} />
+          <col style={{ width: COL_ACTIONS }} />
+        </colgroup>
+
         <TableHead>
           <TableRow>
-            <TableCell padding="checkbox" sx={{ width: 44 }}>
+            <TableCell
+              padding="checkbox"
+              sx={{ width: COL_CHECKBOX, maxWidth: COL_CHECKBOX }}
+            >
               <Checkbox
                 checked={allSelected}
                 indeterminate={someSelected}
@@ -279,8 +305,9 @@ export default function FindingsTable({
               />
             </TableCell>
 
-            <TableCell>
+            <TableCell sx={{ minWidth: 0 }}>
               <TableSortLabel
+                hideSortIcon={false}
                 active={sortField === "title"}
                 direction={sortField === "title" ? sortOrder : "asc"}
                 onClick={() => onSortChange("title")}
@@ -289,8 +316,12 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 130 }}>
+            <TableCell
+              align="center"
+              sx={{ width: COL_SEVERITY, maxWidth: COL_SEVERITY }}
+            >
               <TableSortLabel
+                hideSortIcon={false}
                 active={sortField === "severity"}
                 direction={sortField === "severity" ? sortOrder : "asc"}
                 onClick={() => onSortChange("severity")}
@@ -299,8 +330,12 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
-            <TableCell sx={{ width: 170 }}>
+            <TableCell
+              align="center"
+              sx={{ width: COL_STATUS, maxWidth: COL_STATUS }}
+            >
               <TableSortLabel
+                hideSortIcon={false}
                 active={sortField === "status"}
                 direction={sortField === "status" ? sortOrder : "asc"}
                 onClick={() => onSortChange("status")}
@@ -309,9 +344,10 @@ export default function FindingsTable({
               </TableSortLabel>
             </TableCell>
 
-            <TableCell align="right" sx={{ width: 64 }}>
-              {/* actions */}
-            </TableCell>
+            <TableCell
+              align="right"
+              sx={{ width: COL_ACTIONS, maxWidth: COL_ACTIONS }}
+            />
           </TableRow>
         </TableHead>
 
@@ -319,20 +355,20 @@ export default function FindingsTable({
           {loading &&
             Array.from({ length: Math.max(rowCount, 8) }).map((_, index) => (
               <TableRow key={`skeleton-${index}`}>
-                <TableCell padding="checkbox">
+                <TableCell padding="checkbox" sx={{ width: COL_CHECKBOX }}>
                   <Skeleton variant="rectangular" width={18} height={18} />
                 </TableCell>
                 <TableCell>
                   <Skeleton width="70%" />
-                  <Skeleton width="45%" />
+                  {!compactMode && <Skeleton width="45%" />}
                 </TableCell>
-                <TableCell>
+                <TableCell align="center" sx={{ width: COL_SEVERITY }}>
                   <Skeleton width={90} />
                 </TableCell>
-                <TableCell>
-                  <Skeleton width={120} />
+                <TableCell align="center" sx={{ width: COL_STATUS }}>
+                  <Skeleton width={110} />
                 </TableCell>
-                <TableCell align="right">
+                <TableCell align="right" sx={{ width: COL_ACTIONS }}>
                   <Skeleton width={28} height={28} />
                 </TableCell>
               </TableRow>
@@ -404,6 +440,7 @@ export default function FindingsTable({
                     cursor: "pointer",
                     position: "relative",
                     "& td": { verticalAlign: "middle" },
+
                     "&::before": {
                       content: '""',
                       position: "absolute",
@@ -417,14 +454,17 @@ export default function FindingsTable({
                     },
                     "&:hover::before": { width: 4, opacity: 1 },
                     ...(isActive && !isSelected
-                      ? { bgcolor: "action.selected", "&:hover": { bgcolor: "action.selected" } }
+                      ? {
+                        bgcolor: "action.selected",
+                        "&:hover": { bgcolor: "action.selected" },
+                      }
                       : null),
                   }}
                 >
                   <TableCell
                     padding="checkbox"
                     onClick={(e) => e.stopPropagation()}
-                    sx={{ pl: 1.5 }}
+                    sx={{ width: COL_CHECKBOX, maxWidth: COL_CHECKBOX, pl: 1.5 }}
                   >
                     <Checkbox
                       checked={isSelected}
@@ -433,7 +473,8 @@ export default function FindingsTable({
                     />
                   </TableCell>
 
-                  <TableCell sx={{ minWidth: 420 }}>
+                  {/* Issue details */}
+                  <TableCell sx={{ minWidth: 0 }}>
                     <Stack spacing={compactMode ? 0 : 0.5} sx={{ minWidth: 0 }}>
                       <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
                         <Tooltip title={f.title} placement="top-start">
@@ -452,6 +493,7 @@ export default function FindingsTable({
                           </Typography>
                         </Tooltip>
 
+                        {/* повторяемость */}
                         {occurrence === "REPEAT" && repeats > 0 && (
                           <Tooltip title={`Найдено повторно ${repeats} раз`} placement="top">
                             <Chip
@@ -459,9 +501,10 @@ export default function FindingsTable({
                               icon={<RepeatIcon sx={{ fontSize: 14 }} />}
                               label={`${repeats}x`}
                               sx={{
-                                height: 24,
+                                flexShrink: 0,
+                                height: 22,
                                 fontWeight: 700,
-                                fontSize: "0.75rem",
+                                fontSize: "0.72rem",
                                 bgcolor: "warning.light",
                                 color: "warning.dark",
                                 border: "1.5px solid",
@@ -477,10 +520,11 @@ export default function FindingsTable({
                             size="small"
                             label={occurrenceLabels[occurrence]}
                             color={occurrenceColors[occurrence]}
-                            sx={{ height: 22 }}
+                            sx={{ flexShrink: 0, height: 22 }}
                           />
                         )}
 
+                        {/* возраст */}
                         {showAgeWarning && (
                           <Tooltip title={`Найдена ${ageDays} дн. назад`} placement="top">
                             <Chip
@@ -488,6 +532,7 @@ export default function FindingsTable({
                               icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
                               label={getAgeLabel(ageDays)}
                               sx={{
+                                flexShrink: 0,
                                 height: 22,
                                 fontSize: "0.7rem",
                                 bgcolor: ageDays >= 90 ? "error.light" : "grey.300",
@@ -502,34 +547,49 @@ export default function FindingsTable({
                         )}
                       </Stack>
 
+                      {/* метаданные (только НЕ compact) */}
                       {!compactMode && (
                         <Stack
                           direction="row"
-                          spacing={1.5}
+                          spacing={1.25}
                           alignItems="center"
-                          flexWrap="wrap"
-                          useFlexGap
-                          sx={{ color: "text.secondary", fontSize: "0.75rem" }}
+                          sx={{
+                            color: "text.secondary",
+                            fontSize: "0.75rem",
+                            overflow: "hidden",
+                            minWidth: 0,
+                            whiteSpace: "nowrap",
+                          }}
                         >
-                          <Stack direction="row" spacing={0.5} alignItems="center">
+                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minWidth: 0 }}>
                             <AppsIcon sx={{ fontSize: 14, color: "text.disabled" }} />
-                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: 600,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                                maxWidth: 220,
+                              }}
+                            >
                               {f.productName || "—"}
                             </Typography>
                           </Stack>
 
-                          <Box sx={{ width: 1, height: 12, bgcolor: "divider" }} />
+                          <Box sx={{ width: 1, height: 12, bgcolor: "divider", flexShrink: 0 }} />
 
-                          <Stack direction="row" spacing={0.5} alignItems="center">
+                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minWidth: 0 }}>
                             <QrCodeScannerIcon sx={{ fontSize: 14, color: "text.disabled" }} />
                             <Typography variant="caption" sx={{ fontWeight: 600 }}>
                               {prettifyScanner(f.scannerType)}
                             </Typography>
                           </Stack>
 
-                          <Box sx={{ width: 1, height: 12, bgcolor: "divider" }} />
+                          <Box sx={{ width: 1, height: 12, bgcolor: "divider", flexShrink: 0 }} />
 
-                          <Stack direction="row" spacing={0.5} alignItems="center">
+                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minWidth: 0 }}>
                             <ScheduleIcon sx={{ fontSize: 13, color: "text.disabled" }} />
                             <Typography variant="caption" sx={{ fontWeight: 500 }}>
                               {formatDate(lastSeenAt)}
@@ -540,25 +600,58 @@ export default function FindingsTable({
                     </Stack>
                   </TableCell>
 
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  {/* Severity */}
+                  <TableCell
+                    align="center"
+                    sx={{ width: COL_SEVERITY, maxWidth: COL_SEVERITY, whiteSpace: "nowrap" }}
+                  >
                     <Chip
                       size="small"
                       variant="outlined"
-                      label={severityLabels[f.severity] ?? f.severity}
-                      sx={severityChipSx[f.severity]}
+                      label={severityLabels[f.severity]}
+                      sx={{
+                        ...severityChipSx[f.severity],
+                        height: 22,
+                        maxWidth: "100%",
+                        "& .MuiChip-label": {
+                          px: 1,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        },
+                      }}
                     />
                   </TableCell>
 
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  {/* Status */}
+                  <TableCell
+                    align="center"
+                    sx={{ width: COL_STATUS, maxWidth: COL_STATUS, whiteSpace: "nowrap" }}
+                  >
                     <Chip
                       label={statusLabels[f.status] ?? f.status}
                       color={statusColors[f.status]}
                       size="small"
-                      sx={{ textTransform: "none" }}
+                      sx={{
+                        height: 22,
+                        maxWidth: "100%",
+                        textTransform: "none",
+                        "& .MuiChip-label": {
+                          px: 1,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        },
+                      }}
                     />
                   </TableCell>
 
-                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                  {/* Actions */}
+                  <TableCell
+                    align="right"
+                    sx={{ width: COL_ACTIONS, maxWidth: COL_ACTIONS }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Tooltip title="Открыть на отдельной странице">
                       <IconButton
                         size="small"
