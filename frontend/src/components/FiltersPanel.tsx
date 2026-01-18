@@ -1,9 +1,6 @@
 import {
-  Autocomplete,
   Box,
   Button,
-  Chip,
-  CircularProgress,
   FormControl,
   FormControlLabel,
   Grid,
@@ -18,14 +15,11 @@ import {
   Typography,
 } from "@mui/material";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
-import { useEffect, useMemo, useState } from "react";
-import { fetchProducts } from "../api/products";
-import {
-  FindingOccurrenceStatus,
-  FindingSeverity,
-  FindingStatus,
-} from "../types/findings";
-import { Product } from "../types/products";
+import { useMemo } from "react";
+import { FindingOccurrenceStatus, FindingSeverity, FindingStatus } from "../types/findings";
+import { ProductAutocomplete } from "./ProductAutocomplete";
+import { FilterChips } from "./FilterChips";
+import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS } from "../utils/findingConstants";
 
 interface FiltersPanelProps {
   productId: string;
@@ -70,53 +64,6 @@ const FiltersPanel = ({
   onShowRepeatsChange,
   onReset,
 }: FiltersPanelProps) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(false);
-  const [productInput, setProductInput] = useState("");
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    const loadProducts = async () => {
-      setProductsLoading(true);
-      try {
-        const response = await fetchProducts(200, 0, controller.signal);
-        setProducts(Array.isArray(response?.data) ? response.data : []);
-      } catch {
-        setProducts([]);
-      } finally {
-        setProductsLoading(false);
-      }
-    };
-
-    loadProducts();
-    return () => controller.abort();
-  }, []);
-
-  const selectedProduct = useMemo(() => {
-    if (!productId) return null;
-    return (
-      products.find((p) => p.id === productId) ||
-      products.find((p) => p.identifier === productId) ||
-      null
-    );
-  }, [productId, products]);
-
-  const productLabel = useMemo(() => {
-    if (!productId) return "";
-    if (!selectedProduct) return productId;
-
-    const identifierSuffix = selectedProduct.identifier
-      ? ` · ${selectedProduct.identifier}`
-      : "";
-    return `${selectedProduct.name}${identifierSuffix}`;
-  }, [productId, selectedProduct]);
-
-  // держим inputValue синхронно с выбранным продуктом
-  useEffect(() => {
-    setProductInput(productLabel);
-  }, [productLabel]);
-
   const handleSeverityChange = (event: SelectChangeEvent) => {
     onSeverityChange(event.target.value as FindingSeverity | "");
   };
@@ -133,29 +80,8 @@ const FiltersPanel = ({
     onScannerTypeChange(event.target.value);
   };
 
-  const severityLabel =
-    filterSeverity === ""
-      ? ""
-      : { low: "Low", medium: "Medium", high: "High", critical: "Critical" }[
-      filterSeverity
-      ];
-
-  const statusLabel =
-    filterStatus === ""
-      ? ""
-      : {
-        new: "New",
-        under_review: "Under review",
-        confirmed: "Confirmed",
-        false_positive: "False positive",
-        out_of_scope: "Out of scope",
-        risk_accepted: "Risk accepted",
-        mitigated: "Mitigated",
-        duplicate: "Duplicate",
-      }[filterStatus];
-
-  const occurrenceLabel =
-    filterOccurrence === "" ? "" : { NEW: "New", REPEAT: "Repeat" }[filterOccurrence];
+  // Derive product label for chips
+  const productLabel = productId; // Simplified, full label comes from FilterChips
 
   const hasActiveFilters =
     Boolean(productId) ||
@@ -179,13 +105,8 @@ const FiltersPanel = ({
       }}
     >
       <Stack spacing={1.5}>
-        <Box
-          display="flex"
-          alignItems="center"
-          justifyContent="space-between"
-          gap={2}
-          flexWrap="wrap"
-        >
+        {/* Header */}
+        <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
             Фильтры
           </Typography>
@@ -202,65 +123,10 @@ const FiltersPanel = ({
           </Button>
         </Box>
 
+        {/* Filter inputs */}
         <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} md={4}>
-            <Autocomplete<Product, false, true, true>
-              options={products}
-              value={selectedProduct}
-              inputValue={productInput}
-              loading={productsLoading}
-              freeSolo
-              isOptionEqualToValue={(option, value) => option.id === value.id}
-              onInputChange={(_, value) => {
-                setProductInput(value);
-              }}
-              onChange={(_, value) => {
-                if (typeof value === "string") {
-                  onProductIdChange(value.trim());
-                  return;
-                }
-                if (value) {
-                  onProductIdChange(value.identifier || value.id);
-                  return;
-                }
-                onProductIdChange("");
-              }}
-              getOptionLabel={(option) => {
-                if (typeof option === "string") return option;
-                return `${option.name}${option.identifier ? ` · ${option.identifier}` : ""}`;
-              }}
-              filterOptions={(options, state) => {
-                const input = state.inputValue.toLowerCase();
-                if (!input) return options;
-                return options.filter((option) => {
-                  const identifier = option.identifier?.toLowerCase() ?? "";
-                  return (
-                    option.name.toLowerCase().includes(input) ||
-                    identifier.includes(input) ||
-                    option.id.toLowerCase().includes(input)
-                  );
-                });
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Продукт"
-                  placeholder="Название / ID / Identifier"
-                  size="small"
-                  InputProps={{
-                    ...params.InputProps,
-                    endAdornment: (
-                      <>
-                        {productsLoading ? (
-                          <CircularProgress color="inherit" size={18} />
-                        ) : null}
-                        {params.InputProps.endAdornment}
-                      </>
-                    ),
-                  }}
-                />
-              )}
-            />
+            <ProductAutocomplete value={productId} onChange={onProductIdChange} />
           </Grid>
 
           <Grid item xs={12} md={4}>
@@ -287,10 +153,10 @@ const FiltersPanel = ({
                 <MenuItem value="">
                   <em>Все</em>
                 </MenuItem>
-                <MenuItem value="low">Low</MenuItem>
-                <MenuItem value="medium">Medium</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="critical">Critical</MenuItem>
+                <MenuItem value="low">{SEVERITY_STYLES.low.label}</MenuItem>
+                <MenuItem value="medium">{SEVERITY_STYLES.medium.label}</MenuItem>
+                <MenuItem value="high">{SEVERITY_STYLES.high.label}</MenuItem>
+                <MenuItem value="critical">{SEVERITY_STYLES.critical.label}</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -307,14 +173,14 @@ const FiltersPanel = ({
                 <MenuItem value="">
                   <em>Все</em>
                 </MenuItem>
-                <MenuItem value="new">New</MenuItem>
-                <MenuItem value="under_review">Under review</MenuItem>
-                <MenuItem value="confirmed">Confirmed</MenuItem>
-                <MenuItem value="false_positive">False positive</MenuItem>
-                <MenuItem value="out_of_scope">Out of scope</MenuItem>
-                <MenuItem value="risk_accepted">Risk accepted</MenuItem>
-                <MenuItem value="mitigated">Mitigated</MenuItem>
-                <MenuItem value="duplicate">Duplicate</MenuItem>
+                <MenuItem value="new">{STATUS_LABELS.new}</MenuItem>
+                <MenuItem value="under_review">{STATUS_LABELS.under_review}</MenuItem>
+                <MenuItem value="confirmed">{STATUS_LABELS.confirmed}</MenuItem>
+                <MenuItem value="false_positive">{STATUS_LABELS.false_positive}</MenuItem>
+                <MenuItem value="out_of_scope">{STATUS_LABELS.out_of_scope}</MenuItem>
+                <MenuItem value="risk_accepted">{STATUS_LABELS.risk_accepted}</MenuItem>
+                <MenuItem value="mitigated">{STATUS_LABELS.mitigated}</MenuItem>
+                <MenuItem value="duplicate">{STATUS_LABELS.duplicate}</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -331,8 +197,8 @@ const FiltersPanel = ({
                 <MenuItem value="">
                   <em>Все</em>
                 </MenuItem>
-                <MenuItem value="NEW">New</MenuItem>
-                <MenuItem value="REPEAT">Repeat</MenuItem>
+                <MenuItem value="NEW">{OCCURRENCE_LABELS.NEW}</MenuItem>
+                <MenuItem value="REPEAT">{OCCURRENCE_LABELS.REPEAT}</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -395,81 +261,29 @@ const FiltersPanel = ({
           </Grid>
         </Grid>
 
+        {/* Active filters chips */}
         {hasActiveFilters ? (
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {productId && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Продукт: ${productLabel || productId}`}
-                onDelete={() => onProductIdChange("")}
-              />
-            )}
-            {filterSeverity !== "" && severityLabel && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Критичность: ${severityLabel}`}
-                onDelete={() => onSeverityChange("")}
-              />
-            )}
-            {filterStatus !== "" && statusLabel && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Статус: ${statusLabel}`}
-                onDelete={() => onStatusChange("")}
-              />
-            )}
-            {filterOccurrence !== "" && occurrenceLabel && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Повторяемость: ${occurrenceLabel}`}
-                onDelete={() => onOccurrenceChange("")}
-              />
-            )}
-            {filterScannerType && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Сканер: ${filterScannerType}`}
-                onDelete={() => onScannerTypeChange("")}
-              />
-            )}
-            {dateFrom && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Last seen ≥ ${dateFrom}`}
-                onDelete={() => onDateFromChange("")}
-              />
-            )}
-            {dateTo && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Last seen ≤ ${dateTo}`}
-                onDelete={() => onDateToChange("")}
-              />
-            )}
-            {showRepeats && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label="Повторы включены"
-                onDelete={() => onShowRepeatsChange(false)}
-              />
-            )}
-            {search && (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Поиск: ${search}`}
-                onDelete={() => onSearchChange("")}
-              />
-            )}
-          </Stack>
+          <FilterChips
+            productId={productId}
+            productLabel={productLabel}
+            search={search}
+            filterSeverity={filterSeverity}
+            filterStatus={filterStatus}
+            filterOccurrence={filterOccurrence}
+            filterScannerType={filterScannerType}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            showRepeats={showRepeats}
+            onProductIdChange={onProductIdChange}
+            onSearchChange={onSearchChange}
+            onSeverityChange={onSeverityChange}
+            onStatusChange={onStatusChange}
+            onOccurrenceChange={onOccurrenceChange}
+            onScannerTypeChange={onScannerTypeChange}
+            onDateFromChange={onDateFromChange}
+            onDateToChange={onDateToChange}
+            onShowRepeatsChange={onShowRepeatsChange}
+          />
         ) : (
           <Typography variant="body2" color="text.secondary">
             Выберите фильтры, чтобы сузить список находок.
