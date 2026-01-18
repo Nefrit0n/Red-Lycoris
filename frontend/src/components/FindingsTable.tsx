@@ -17,6 +17,10 @@ import {
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import RepeatIcon from "@mui/icons-material/Repeat";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import AppsIcon from "@mui/icons-material/Apps";
+import ScannerIcon from "@mui/icons-material/Scanner";
 import { ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -25,19 +29,66 @@ import {
   FindingSeverity,
   FindingStatus,
 } from "../types/findings";
-import {
-  SEVERITY_STYLES,
-  SEVERITY_CHIP_STYLES,
-  STATUS_LABELS,
-  STATUS_COLORS,
-  OCCURRENCE_LABELS,
-  OCCURRENCE_COLORS,
-} from "../utils/findingConstants";
-import {
-  formatDateTimeRuCompact,
-  prettifyScanner,
-  buildFindingLink,
-} from "../utils/findingFormatters";
+
+const severityLabels: Record<FindingSeverity, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
+
+const severityChipSx: Record<FindingSeverity, any> = {
+  low: { borderColor: "success.main", color: "success.main" },
+  medium: { borderColor: "warning.main", color: "warning.main" },
+  high: { borderColor: "error.main", color: "error.main" },
+  critical: { borderColor: "secondary.main", color: "secondary.main" },
+};
+
+// Цвета для левой индикационной полосы
+const severityBorderColors: Record<FindingSeverity, string> = {
+  low: "#4caf50",
+  medium: "#ff9800",
+  high: "#f44336",
+  critical: "#9c27b0",
+};
+
+const statusLabels: Record<FindingStatus, string> = {
+  new: "New",
+  under_review: "Under review",
+  confirmed: "Confirmed",
+  false_positive: "False positive",
+  out_of_scope: "Out of scope",
+  risk_accepted: "Risk accepted",
+  mitigated: "Mitigated",
+  duplicate: "Duplicate",
+};
+
+const statusColors: Record<
+  FindingStatus,
+  "default" | "info" | "success" | "warning"
+> = {
+  new: "info",
+  under_review: "warning",
+  confirmed: "success",
+  false_positive: "default",
+  out_of_scope: "default",
+  risk_accepted: "warning",
+  mitigated: "success",
+  duplicate: "default",
+};
+
+const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
+  NEW: "New",
+  REPEAT: "Repeated",
+};
+
+const occurrenceColors: Record<
+  FindingOccurrenceStatus,
+  "default" | "info" | "warning"
+> = {
+  NEW: "default",
+  REPEAT: "warning",
+};
 
 interface FindingsTableProps {
   data: Finding[];
@@ -66,7 +117,51 @@ interface FindingsTableProps {
 
   /** id находки, которая сейчас открыта в Drawer (для подсветки строки) */
   activeFindingId?: string | null;
+
+  /** компактный режим отображения (без метаданных) */
+  compactMode?: boolean;
 }
+
+const formatDateTimeRuCompact = (value?: string | null) => {
+  if (!value) return "—";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "—";
+  try {
+    return new Intl.DateTimeFormat("ru-RU", {
+      year: "2-digit",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(dt);
+  } catch {
+    return dt.toLocaleString("ru-RU");
+  }
+};
+
+const prettifyScanner = (v?: string | null) => {
+  if (!v) return "—";
+  const s = v.trim();
+  if (!s) return "—";
+  return s.length <= 4 ? s.toUpperCase() : s[0].toUpperCase() + s.slice(1);
+};
+
+// Вычисление возраста находки в днях
+const getAgeDays = (dateStr?: string | null): number => {
+  if (!dateStr) return 0;
+  const dt = new Date(dateStr);
+  if (Number.isNaN(dt.getTime())) return 0;
+  const now = new Date();
+  const diffMs = now.getTime() - dt.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+};
+
+const getAgeLabel = (days: number): string => {
+  if (days < 7) return `${days}д`;
+  if (days < 30) return `${Math.floor(days / 7)}н`;
+  if (days < 365) return `${Math.floor(days / 30)}мес`;
+  return `${Math.floor(days / 365)}г`;
+};
 
 export default function FindingsTable({
   data,
@@ -87,6 +182,7 @@ export default function FindingsTable({
   onNavigateToDetail,
   onOpenDetails,
   activeFindingId,
+  compactMode = false,
 }: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
 
@@ -271,6 +367,8 @@ export default function FindingsTable({
               const occurrence = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
               const repeats = f.repeatCount ?? 0;
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
+              const ageDays = getAgeDays(f.firstSeenAt || f.createdAt);
+              const showAgeWarning = ageDays >= 30; // показываем предупреждение для находок старше 30 дней
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
@@ -294,7 +392,24 @@ export default function FindingsTable({
                   }}
                   sx={{
                     cursor: "pointer",
+                    position: "relative",
                     "& td": { verticalAlign: "middle" },
+                    // Левая цветная полоса для индикации критичности
+                    "&::before": {
+                      content: '""',
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: f.severity === "critical" || f.severity === "high" ? 4 : 3,
+                      backgroundColor: severityBorderColors[f.severity],
+                      opacity: f.severity === "critical" || f.severity === "high" ? 1 : 0.5,
+                      transition: "all 0.2s ease",
+                    },
+                    "&:hover::before": {
+                      width: 4,
+                      opacity: 1,
+                    },
                     ...(isActive && !isSelected
                       ? {
                           bgcolor: "action.selected",
@@ -303,7 +418,11 @@ export default function FindingsTable({
                       : null),
                   }}
                 >
-                  <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                  <TableCell
+                    padding="checkbox"
+                    onClick={(e) => e.stopPropagation()}
+                    sx={{ pl: 1.5 }}
+                  >
                     <Checkbox
                       checked={isSelected}
                       onChange={() => onToggleOne(f.id)}
@@ -311,9 +430,9 @@ export default function FindingsTable({
                     />
                   </TableCell>
 
-                  {/* Issue details (2 строки) */}
+                  {/* Issue details (1-2 строки в зависимости от режима) */}
                   <TableCell sx={{ minWidth: 420 }}>
-                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                    <Stack spacing={compactMode ? 0 : 0.5} sx={{ minWidth: 0 }}>
                       <Stack
                         direction="row"
                         alignItems="center"
@@ -336,8 +455,33 @@ export default function FindingsTable({
                           </Typography>
                         </Tooltip>
 
-                        {/* маленькие "бейджи" справа от заголовка */}
-                        {occurrence === "REPEAT" && (
+                        {/* улучшенные badges для повторяющихся находок */}
+                        {occurrence === "REPEAT" && repeats > 0 && (
+                          <Tooltip
+                            title={`Найдено повторно ${repeats} раз${repeats > 1 ? "а" : ""}`}
+                            placement="top"
+                          >
+                            <Chip
+                              size="small"
+                              icon={<RepeatIcon sx={{ fontSize: 14 }} />}
+                              label={`${repeats}x`}
+                              sx={{
+                                height: 24,
+                                fontWeight: 700,
+                                fontSize: "0.75rem",
+                                bgcolor: "warning.light",
+                                color: "warning.dark",
+                                border: "1.5px solid",
+                                borderColor: "warning.main",
+                                "& .MuiChip-icon": {
+                                  color: "warning.dark",
+                                  ml: 0.5,
+                                },
+                              }}
+                            />
+                          </Tooltip>
+                        )}
+                        {occurrence === "REPEAT" && !repeats && (
                           <Chip
                             size="small"
                             label={OCCURRENCE_LABELS[occurrence]}
@@ -345,34 +489,68 @@ export default function FindingsTable({
                             sx={{ height: 22 }}
                           />
                         )}
-                        {repeats > 0 && (
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            label={`x${repeats}`}
-                            sx={{ height: 22 }}
-                          />
+
+                        {/* индикатор возраста для старых находок */}
+                        {showAgeWarning && (
+                          <Tooltip
+                            title={`Найдена ${ageDays} дн. назад`}
+                            placement="top"
+                          >
+                            <Chip
+                              size="small"
+                              icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
+                              label={getAgeLabel(ageDays)}
+                              sx={{
+                                height: 22,
+                                fontSize: "0.7rem",
+                                bgcolor: ageDays >= 90 ? "error.light" : "grey.300",
+                                color: ageDays >= 90 ? "error.dark" : "text.secondary",
+                                "& .MuiChip-icon": {
+                                  color: ageDays >= 90 ? "error.dark" : "text.secondary",
+                                  ml: 0.5,
+                                },
+                              }}
+                            />
+                          </Tooltip>
                         )}
                       </Stack>
 
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        alignItems="center"
-                        flexWrap="wrap"
-                        useFlexGap
-                        sx={{ color: "text.secondary" }}
-                      >
-                        <Typography variant="caption">
-                          App: <b>{f.productName || "—"}</b>
-                        </Typography>
-                        <Typography variant="caption">
-                          Scanner: <b>{prettifyScanner(f.scannerType)}</b>
-                        </Typography>
-                        <Typography variant="caption">
-                          Last seen: <b>{formatDate(lastSeenAt)}</b>
-                        </Typography>
-                      </Stack>
+                      {/* метаданные: скрываем в компактном режиме */}
+                      {!compactMode && (
+                        <Stack
+                          direction="row"
+                          spacing={1.5}
+                          alignItems="center"
+                          flexWrap="wrap"
+                          useFlexGap
+                          sx={{ color: "text.secondary", fontSize: "0.75rem" }}
+                        >
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <AppsIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                              {f.productName || "—"}
+                            </Typography>
+                          </Stack>
+
+                          <Box sx={{ width: 1, height: 12, bgcolor: "divider" }} />
+
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <ScannerIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                              {prettifyScanner(f.scannerType)}
+                            </Typography>
+                          </Stack>
+
+                          <Box sx={{ width: 1, height: 12, bgcolor: "divider" }} />
+
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <ScheduleIcon sx={{ fontSize: 13, color: "text.disabled" }} />
+                            <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                              {formatDate(lastSeenAt)}
+                            </Typography>
+                          </Stack>
+                        </Stack>
+                      )}
                     </Stack>
                   </TableCell>
 
