@@ -406,6 +406,6 @@ const FindingsList = () => {
       </Drawer>
     </Container>
   );
-};
+});
 
 export default FindingsList;
