@@ -564,7 +564,7 @@ const FindingsList = () => {
   // ✅ Перехват клика по ссылкам /findings/:id, чтобы открыть Drawer вместо перехода
   const handleTableLinkClickCapture = (e: React.MouseEvent) => {
     // уважим открытия в новой вкладке/окне
-    if ((e as any).metaKey || (e as any).ctrlKey || (e as any).shiftKey || (e as any).button === 1) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
 
     const target = e.target as HTMLElement | null;
     const a = target?.closest("a") as HTMLAnchorElement | null;
