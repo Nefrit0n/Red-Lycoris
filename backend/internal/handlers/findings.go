@@ -728,6 +728,7 @@ func (h *FindingsHandler) AddComment(c *fiber.Ctx) error {
 }
 
 func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
+	// Parse and validate request
 	var req BulkActionRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid request body"})
@@ -741,6 +742,7 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 		}
 	}
 
+	// Check authorization
 	isAdmin := middleware.HasRole(c, "admin")
 	isAnalyst := middleware.HasRole(c, "analyst")
 	if !isAdmin && !isAnalyst {
@@ -754,244 +756,54 @@ func (h *FindingsHandler) Bulk(c *fiber.Ctx) error {
 	const maxUndoSnapshots = 500
 	const sampleSnapshotLimit = 25
 
-	ids := []uuid.UUID{}
+	// Parse IDs if provided
+	var ids []uuid.UUID
 	if len(req.IDs) > 0 {
-		for _, raw := range req.IDs {
-			parsed, err := uuid.Parse(raw)
-			if err != nil {
-				return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid id in ids"})
-			}
-			ids = append(ids, parsed)
-		}
-	}
-
-	var snapshots []storage.FindingSnapshot
-	filters := storage.FindingFilters{
-		CanonicalOnly:  true,
-		IncludeRepeats: false,
-	}
-	var totalMatches int
-
-	if req.SelectAll {
-		filterInput := req.Filters
-		var productIDParam string
-		var productParam string
-		if filterInput != nil {
-			if filterInput.ProductID != nil {
-				productIDParam = strings.TrimSpace(*filterInput.ProductID)
-			}
-			if filterInput.Product != nil {
-				productParam = strings.TrimSpace(*filterInput.Product)
-			}
-			filters.Severity = strings.TrimSpace(filterInput.Severity)
-			filters.Status = strings.TrimSpace(filterInput.Status)
-			filters.OccurrenceStatus = strings.TrimSpace(filterInput.OccurrenceStatus)
-			filters.ScannerType = strings.TrimSpace(filterInput.ScannerType)
-			filters.Query = strings.TrimSpace(filterInput.Query)
-			if filterInput.DateFrom != nil && strings.TrimSpace(*filterInput.DateFrom) != "" {
-				parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*filterInput.DateFrom))
-				if err != nil {
-					return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dateFrom"})
-				}
-				filters.DateFrom = &parsed
-			}
-			if filterInput.DateTo != nil && strings.TrimSpace(*filterInput.DateTo) != "" {
-				parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*filterInput.DateTo))
-				if err != nil {
-					return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dateTo"})
-				}
-				filters.DateTo = &parsed
-			}
-			if filterInput.CanonicalOnly != nil {
-				filters.CanonicalOnly = *filterInput.CanonicalOnly
-			}
-			if filterInput.IncludeRepeats != nil {
-				filters.IncludeRepeats = *filterInput.IncludeRepeats
-			}
-		}
 		var err error
-		filters.ProductID, err = resolveProductFilter(c.Context(), h.db, productIDParam, productParam)
+		ids, err = parseIDs(req.IDs)
 		if err != nil {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 		}
-		if filterInput != nil && filterInput.ImportJobID != nil && strings.TrimSpace(*filterInput.ImportJobID) != "" {
-			parsed, err := uuid.Parse(strings.TrimSpace(*filterInput.ImportJobID))
-			if err != nil {
-				return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid import_job_id"})
-			}
-			filters.ImportJobID = &parsed
-		}
-
-		count, err := storage.CountFindingsByFilters(c.Context(), h.db, filters)
-		if err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to count findings"})
-		}
-		totalMatches = count
-		if totalMatches > 0 {
-			limit := sampleSnapshotLimit
-			if totalMatches <= maxUndoSnapshots {
-				limit = totalMatches
-			}
-			snapshots, err = storage.ListFindingsByFilters(c.Context(), h.db, filters, limit)
-			if err != nil {
-				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
-			}
-		}
-	} else {
-		var err error
-		snapshots, err = storage.ListFindingsByIDs(c.Context(), h.db, ids)
-		if err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
-		}
-		totalMatches = len(snapshots)
 	}
 
+	// Parse filters for select_all mode
+	filters, err := parseBulkFilters(c, h.db, req.Filters)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+
+	// Fetch snapshots for event/audit logging
+	snapshots, totalMatches, err := fetchBulkSnapshots(
+		c.Context(),
+		h.db,
+		req,
+		filters,
+		ids,
+		maxUndoSnapshots,
+		sampleSnapshotLimit,
+	)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+
+	// Execute the bulk action
 	var affectedCount int64
 	switch req.Action {
 	case "set_status":
-		statusValue, _ := req.Payload["status"].(string)
-		statusValue = strings.TrimSpace(statusValue)
-		if err := validateFindingStatus(statusValue); err != nil {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid status"})
-		}
-		var err error
-		if req.SelectAll {
-			affectedCount, err = storage.BulkUpdateFindingStatusByFilters(c.Context(), h.db, filters, statusValue)
-		} else {
-			affectedCount, err = storage.BulkUpdateFindingStatus(c.Context(), h.db, ids, statusValue)
-		}
-		if err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update findings"})
-		}
-		for _, snapshot := range snapshots {
-			if snapshot.Status != statusValue {
-				_ = createFindingEvent(c, h.db, snapshot.ID, "status_changed", fiber.Map{
-					"from": snapshot.Status,
-					"to":   statusValue,
-					"bulk": true,
-				})
-				_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
-					ActorID:    userIDFromContext(c),
-					ActorType:  "user",
-					Action:     "finding.updated",
-					TargetType: "finding",
-					TargetID:   stringPointer(snapshot.ID.String()),
-					Scope:      "product",
-					ScopeID:    nil,
-				}, map[string]interface{}{
-					"changes": map[string]interface{}{
-						"status": map[string]interface{}{
-							"from": snapshot.Status,
-							"to":   statusValue,
-						},
-					},
-					"bulk": true,
-					"meta": auditMetadataFromContext(c),
-				})
-			}
-		}
+		affectedCount, err = executeBulkSetStatus(c, h.db, req, filters, ids, snapshots)
 	case "assign":
-		var assigneeID *uuid.UUID
-		if value, ok := req.Payload["userId"].(string); ok && strings.TrimSpace(value) != "" {
-			parsed, err := uuid.Parse(value)
-			if err != nil {
-				return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid userId"})
-			}
-			assigneeID = &parsed
-		}
-		var err error
-		if req.SelectAll {
-			affectedCount, err = storage.BulkUpdateFindingAssigneeByFilters(c.Context(), h.db, filters, assigneeID)
-		} else {
-			affectedCount, err = storage.BulkUpdateFindingAssignee(c.Context(), h.db, ids, assigneeID)
-		}
-		if err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update assignee"})
-		}
-		for _, snapshot := range snapshots {
-			prevAssignee := ""
-			if snapshot.AssigneeID.Valid {
-				prevAssignee = snapshot.AssigneeID.UUID.String()
-			}
-			nextAssignee := ""
-			if assigneeID != nil {
-				nextAssignee = assigneeID.String()
-			}
-			if prevAssignee != nextAssignee {
-				_ = createFindingEvent(c, h.db, snapshot.ID, "assignee_changed", fiber.Map{
-					"from": prevAssignee,
-					"to":   nextAssignee,
-					"bulk": true,
-				})
-				_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
-					ActorID:    userIDFromContext(c),
-					ActorType:  "user",
-					Action:     "finding.updated",
-					TargetType: "finding",
-					TargetID:   stringPointer(snapshot.ID.String()),
-					Scope:      "product",
-					ScopeID:    nil,
-				}, map[string]interface{}{
-					"changes": map[string]interface{}{
-						"assignee_id": map[string]interface{}{
-							"from": prevAssignee,
-							"to":   nextAssignee,
-						},
-					},
-					"bulk": true,
-					"meta": auditMetadataFromContext(c),
-				})
-			}
-		}
+		affectedCount, err = executeBulkAssign(c, h.db, req, filters, ids, snapshots)
 	case "dismiss":
-		statusValue, _ := req.Payload["status"].(string)
-		statusValue = strings.TrimSpace(statusValue)
-		if statusValue == "" {
-			statusValue = models.StatusFalsePositive
-		}
-		if statusValue != models.StatusFalsePositive && statusValue != models.StatusOutOfScope {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid dismiss status"})
-		}
-		var err error
-		if req.SelectAll {
-			affectedCount, err = storage.BulkUpdateFindingStatusByFilters(c.Context(), h.db, filters, statusValue)
-		} else {
-			affectedCount, err = storage.BulkUpdateFindingStatus(c.Context(), h.db, ids, statusValue)
-		}
-		if err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update findings"})
-		}
-		for _, snapshot := range snapshots {
-			if snapshot.Status != statusValue {
-				_ = createFindingEvent(c, h.db, snapshot.ID, "status_changed", fiber.Map{
-					"from": snapshot.Status,
-					"to":   statusValue,
-					"bulk": true,
-				})
-				_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
-					ActorID:    userIDFromContext(c),
-					ActorType:  "user",
-					Action:     "finding.updated",
-					TargetType: "finding",
-					TargetID:   stringPointer(snapshot.ID.String()),
-					Scope:      "product",
-					ScopeID:    nil,
-				}, map[string]interface{}{
-					"changes": map[string]interface{}{
-						"status": map[string]interface{}{
-							"from": snapshot.Status,
-							"to":   statusValue,
-						},
-					},
-					"bulk": true,
-					"meta": auditMetadataFromContext(c),
-				})
-			}
-		}
+		affectedCount, err = executeBulkDismiss(c, h.db, req, filters, ids, snapshots)
 	default:
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "unsupported action"})
 	}
 
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+
+	// Build response
 	response := BulkActionResponse{
 		AffectedCount: affectedCount,
 	}
@@ -1567,4 +1379,306 @@ func buildFindingAuditChanges(current *storage.FindingDetail, req UpdateFindingR
 
 func timeFormatRFC3339() string {
 	return time.RFC3339
+}
+
+// parseBulkFilters converts BulkActionFilters to storage.FindingFilters with validation
+func parseBulkFilters(c *fiber.Ctx, db *sql.DB, filterInput *BulkActionFilters) (storage.FindingFilters, error) {
+	filters := storage.FindingFilters{
+		CanonicalOnly:  true,
+		IncludeRepeats: false,
+	}
+
+	if filterInput == nil {
+		return filters, nil
+	}
+
+	var productIDParam string
+	var productParam string
+	if filterInput.ProductID != nil {
+		productIDParam = strings.TrimSpace(*filterInput.ProductID)
+	}
+	if filterInput.Product != nil {
+		productParam = strings.TrimSpace(*filterInput.Product)
+	}
+
+	filters.Severity = strings.TrimSpace(filterInput.Severity)
+	filters.Status = strings.TrimSpace(filterInput.Status)
+	filters.OccurrenceStatus = strings.TrimSpace(filterInput.OccurrenceStatus)
+	filters.ScannerType = strings.TrimSpace(filterInput.ScannerType)
+	filters.Query = strings.TrimSpace(filterInput.Query)
+
+	if filterInput.DateFrom != nil && strings.TrimSpace(*filterInput.DateFrom) != "" {
+		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*filterInput.DateFrom))
+		if err != nil {
+			return filters, fmt.Errorf("invalid dateFrom")
+		}
+		filters.DateFrom = &parsed
+	}
+
+	if filterInput.DateTo != nil && strings.TrimSpace(*filterInput.DateTo) != "" {
+		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*filterInput.DateTo))
+		if err != nil {
+			return filters, fmt.Errorf("invalid dateTo")
+		}
+		filters.DateTo = &parsed
+	}
+
+	if filterInput.CanonicalOnly != nil {
+		filters.CanonicalOnly = *filterInput.CanonicalOnly
+	}
+	if filterInput.IncludeRepeats != nil {
+		filters.IncludeRepeats = *filterInput.IncludeRepeats
+	}
+
+	productID, err := resolveProductFilter(c.Context(), db, productIDParam, productParam)
+	if err != nil {
+		return filters, err
+	}
+	filters.ProductID = productID
+
+	if filterInput.ImportJobID != nil && strings.TrimSpace(*filterInput.ImportJobID) != "" {
+		parsed, err := uuid.Parse(strings.TrimSpace(*filterInput.ImportJobID))
+		if err != nil {
+			return filters, fmt.Errorf("invalid import_job_id")
+		}
+		filters.ImportJobID = &parsed
+	}
+
+	return filters, nil
+}
+
+// parseIDs converts string IDs to UUIDs with validation
+func parseIDs(rawIDs []string) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, 0, len(rawIDs))
+	for _, raw := range rawIDs {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid id in ids")
+		}
+		ids = append(ids, parsed)
+	}
+	return ids, nil
+}
+
+// fetchBulkSnapshots retrieves snapshots for bulk operations based on request parameters
+func fetchBulkSnapshots(
+	ctx context.Context,
+	db *sql.DB,
+	req BulkActionRequest,
+	filters storage.FindingFilters,
+	ids []uuid.UUID,
+	maxUndoSnapshots int,
+	sampleSnapshotLimit int,
+) ([]storage.FindingSnapshot, int, error) {
+	var snapshots []storage.FindingSnapshot
+	var totalMatches int
+
+	if req.SelectAll {
+		count, err := storage.CountFindingsByFilters(ctx, db, filters)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to count findings")
+		}
+		totalMatches = count
+
+		if totalMatches > 0 {
+			limit := sampleSnapshotLimit
+			if totalMatches <= maxUndoSnapshots {
+				limit = totalMatches
+			}
+			snapshots, err = storage.ListFindingsByFilters(ctx, db, filters, limit)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to fetch findings")
+			}
+		}
+	} else {
+		var err error
+		snapshots, err = storage.ListFindingsByIDs(ctx, db, ids)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to fetch findings")
+		}
+		totalMatches = len(snapshots)
+	}
+
+	return snapshots, totalMatches, nil
+}
+
+// recordStatusChange creates event and audit log for status changes
+func recordStatusChange(c *fiber.Ctx, db *sql.DB, snapshot storage.FindingSnapshot, newStatus string) {
+	if snapshot.Status == newStatus {
+		return
+	}
+
+	_ = createFindingEvent(c, db, snapshot.ID, "status_changed", fiber.Map{
+		"from": snapshot.Status,
+		"to":   newStatus,
+		"bulk": true,
+	})
+
+	_ = createAuditLog(c.Context(), db, &models.AuditLog{
+		ActorID:    userIDFromContext(c),
+		ActorType:  "user",
+		Action:     "finding.updated",
+		TargetType: "finding",
+		TargetID:   stringPointer(snapshot.ID.String()),
+		Scope:      "product",
+		ScopeID:    nil,
+	}, map[string]interface{}{
+		"changes": map[string]interface{}{
+			"status": map[string]interface{}{
+				"from": snapshot.Status,
+				"to":   newStatus,
+			},
+		},
+		"bulk": true,
+		"meta": auditMetadataFromContext(c),
+	})
+}
+
+// recordAssigneeChange creates event and audit log for assignee changes
+func recordAssigneeChange(c *fiber.Ctx, db *sql.DB, snapshot storage.FindingSnapshot, newAssigneeID *uuid.UUID) {
+	prevAssignee := ""
+	if snapshot.AssigneeID.Valid {
+		prevAssignee = snapshot.AssigneeID.UUID.String()
+	}
+
+	nextAssignee := ""
+	if newAssigneeID != nil {
+		nextAssignee = newAssigneeID.String()
+	}
+
+	if prevAssignee == nextAssignee {
+		return
+	}
+
+	_ = createFindingEvent(c, db, snapshot.ID, "assignee_changed", fiber.Map{
+		"from": prevAssignee,
+		"to":   nextAssignee,
+		"bulk": true,
+	})
+
+	_ = createAuditLog(c.Context(), db, &models.AuditLog{
+		ActorID:    userIDFromContext(c),
+		ActorType:  "user",
+		Action:     "finding.updated",
+		TargetType: "finding",
+		TargetID:   stringPointer(snapshot.ID.String()),
+		Scope:      "product",
+		ScopeID:    nil,
+	}, map[string]interface{}{
+		"changes": map[string]interface{}{
+			"assignee_id": map[string]interface{}{
+				"from": prevAssignee,
+				"to":   nextAssignee,
+			},
+		},
+		"bulk": true,
+		"meta": auditMetadataFromContext(c),
+	})
+}
+
+// executeBulkSetStatus handles the set_status bulk action
+func executeBulkSetStatus(
+	c *fiber.Ctx,
+	db *sql.DB,
+	req BulkActionRequest,
+	filters storage.FindingFilters,
+	ids []uuid.UUID,
+	snapshots []storage.FindingSnapshot,
+) (int64, error) {
+	statusValue, _ := req.Payload["status"].(string)
+	statusValue = strings.TrimSpace(statusValue)
+
+	if err := validateFindingStatus(statusValue); err != nil {
+		return 0, fmt.Errorf("invalid status")
+	}
+
+	var affectedCount int64
+	var err error
+	if req.SelectAll {
+		affectedCount, err = storage.BulkUpdateFindingStatusByFilters(c.Context(), db, filters, statusValue)
+	} else {
+		affectedCount, err = storage.BulkUpdateFindingStatus(c.Context(), db, ids, statusValue)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to update findings")
+	}
+
+	for _, snapshot := range snapshots {
+		recordStatusChange(c, db, snapshot, statusValue)
+	}
+
+	return affectedCount, nil
+}
+
+// executeBulkAssign handles the assign bulk action
+func executeBulkAssign(
+	c *fiber.Ctx,
+	db *sql.DB,
+	req BulkActionRequest,
+	filters storage.FindingFilters,
+	ids []uuid.UUID,
+	snapshots []storage.FindingSnapshot,
+) (int64, error) {
+	var assigneeID *uuid.UUID
+	if value, ok := req.Payload["userId"].(string); ok && strings.TrimSpace(value) != "" {
+		parsed, err := uuid.Parse(value)
+		if err != nil {
+			return 0, fmt.Errorf("invalid userId")
+		}
+		assigneeID = &parsed
+	}
+
+	var affectedCount int64
+	var err error
+	if req.SelectAll {
+		affectedCount, err = storage.BulkUpdateFindingAssigneeByFilters(c.Context(), db, filters, assigneeID)
+	} else {
+		affectedCount, err = storage.BulkUpdateFindingAssignee(c.Context(), db, ids, assigneeID)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to update assignee")
+	}
+
+	for _, snapshot := range snapshots {
+		recordAssigneeChange(c, db, snapshot, assigneeID)
+	}
+
+	return affectedCount, nil
+}
+
+// executeBulkDismiss handles the dismiss bulk action
+func executeBulkDismiss(
+	c *fiber.Ctx,
+	db *sql.DB,
+	req BulkActionRequest,
+	filters storage.FindingFilters,
+	ids []uuid.UUID,
+	snapshots []storage.FindingSnapshot,
+) (int64, error) {
+	statusValue, _ := req.Payload["status"].(string)
+	statusValue = strings.TrimSpace(statusValue)
+	if statusValue == "" {
+		statusValue = models.StatusFalsePositive
+	}
+
+	if statusValue != models.StatusFalsePositive && statusValue != models.StatusOutOfScope {
+		return 0, fmt.Errorf("invalid dismiss status")
+	}
+
+	var affectedCount int64
+	var err error
+	if req.SelectAll {
+		affectedCount, err = storage.BulkUpdateFindingStatusByFilters(c.Context(), db, filters, statusValue)
+	} else {
+		affectedCount, err = storage.BulkUpdateFindingStatus(c.Context(), db, ids, statusValue)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to update findings")
+	}
+
+	for _, snapshot := range snapshots {
+		recordStatusChange(c, db, snapshot, statusValue)
+	}
+
+	return affectedCount, nil
 }
