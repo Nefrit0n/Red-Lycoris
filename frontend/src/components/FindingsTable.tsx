@@ -194,9 +194,11 @@ export default function FindingsTable({
 }: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
 
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelected =
-    safeData.length > 0 && selectedIds.length === safeData.length;
-  const someSelected = selectedIds.length > 0 && !allSelected;
+    safeData.length > 0 && safeData.every((item) => selectedSet.has(item.id));
+  const someSelected =
+    safeData.some((item) => selectedSet.has(item.id)) && !allSelected;
 
   const dtf = useMemo(() => {
     try {
@@ -262,10 +264,11 @@ export default function FindingsTable({
     <TableContainer
       sx={{
         borderRadius: 2,
+        overflowX: "auto",
         "& .MuiTableCell-head": { fontWeight: 700, whiteSpace: "nowrap" },
       }}
     >
-      <Table stickyHeader size="small" sx={{ minWidth: 920 }}>
+      <Table stickyHeader size="small" sx={{ minWidth: 920, tableLayout: "fixed" }}>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox" sx={{ width: 44 }}>
@@ -279,7 +282,7 @@ export default function FindingsTable({
               />
             </TableCell>
 
-            <TableCell>
+            <TableCell sx={{ width: "100%" }}>
               <TableSortLabel
                 active={sortField === "title"}
                 direction={sortField === "title" ? sortOrder : "asc"}
@@ -369,10 +372,10 @@ export default function FindingsTable({
             </TableRow>
           )}
 
-          {!loading &&
+            {!loading &&
             !errorMessage &&
             safeData.map((f) => {
-              const isSelected = selectedIds.includes(f.id);
+              const isSelected = selectedSet.has(f.id);
               const isActive = Boolean(activeFindingId) && activeFindingId === f.id;
               const occurrence = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
               const repeats = f.repeatCount ?? 0;
@@ -433,19 +436,27 @@ export default function FindingsTable({
                     />
                   </TableCell>
 
-                  <TableCell sx={{ minWidth: 420 }}>
+                  <TableCell sx={{ minWidth: 360, pr: 2 }}>
                     <Stack spacing={compactMode ? 0 : 0.5} sx={{ minWidth: 0 }}>
-                      <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={1}
+                        flexWrap="wrap"
+                        useFlexGap
+                        sx={{ minWidth: 0, rowGap: 0.5 }}
+                      >
                         <Tooltip title={f.title} placement="top-start">
                           <Typography
                             variant="body2"
                             sx={{
                               fontWeight: 700,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
                               minWidth: 0,
-                              flex: 1,
+                              flex: "1 1 240px",
+                              display: "-webkit-box",
+                              WebkitLineClamp: compactMode ? 1 : 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
                             }}
                           >
                             {renderHighlightedTitle(f.title)}
@@ -505,11 +516,11 @@ export default function FindingsTable({
                       {!compactMode && (
                         <Stack
                           direction="row"
-                          spacing={1.5}
+                          spacing={1}
                           alignItems="center"
                           flexWrap="wrap"
                           useFlexGap
-                          sx={{ color: "text.secondary", fontSize: "0.75rem" }}
+                          sx={{ color: "text.secondary", fontSize: "0.75rem", rowGap: 0.5 }}
                         >
                           <Stack direction="row" spacing={0.5} alignItems="center">
                             <AppsIcon sx={{ fontSize: 14, color: "text.disabled" }} />
