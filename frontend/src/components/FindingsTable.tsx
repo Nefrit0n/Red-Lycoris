@@ -20,9 +20,10 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import RepeatIcon from "@mui/icons-material/Repeat";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import AppsIcon from "@mui/icons-material/Apps";
-import ScannerIcon from "@mui/icons-material/Scanner";
+import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import { ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
+
 import {
   Finding,
   FindingOccurrenceStatus,
@@ -163,6 +164,13 @@ const getAgeLabel = (days: number): string => {
   return `${Math.floor(days / 365)}г`;
 };
 
+const buildFindingLink = (id: string, returnTo: string) => {
+  const p = new URLSearchParams();
+  if (returnTo) p.set("returnTo", returnTo);
+  const qs = p.toString();
+  return `/findings/${id}${qs ? `?${qs}` : ""}`;
+};
+
 export default function FindingsTable({
   data,
   selectedIds,
@@ -223,7 +231,9 @@ export default function FindingsTable({
     let matchIndex = lowerTitle.indexOf(lowerQuery);
 
     while (matchIndex !== -1) {
-      if (matchIndex > startIndex) parts.push(title.slice(startIndex, matchIndex));
+      if (matchIndex > startIndex) {
+        parts.push(title.slice(startIndex, matchIndex));
+      }
       parts.push(
         <Box
           key={`${title}-${matchIndex}`}
@@ -368,7 +378,7 @@ export default function FindingsTable({
               const repeats = f.repeatCount ?? 0;
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
               const ageDays = getAgeDays(f.firstSeenAt || f.createdAt);
-              const showAgeWarning = ageDays >= 30; // показываем предупреждение для находок старше 30 дней
+              const showAgeWarning = ageDays >= 30;
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
@@ -394,7 +404,6 @@ export default function FindingsTable({
                     cursor: "pointer",
                     position: "relative",
                     "& td": { verticalAlign: "middle" },
-                    // Левая цветная полоса для индикации критичности
                     "&::before": {
                       content: '""',
                       position: "absolute",
@@ -406,15 +415,9 @@ export default function FindingsTable({
                       opacity: f.severity === "critical" || f.severity === "high" ? 1 : 0.5,
                       transition: "all 0.2s ease",
                     },
-                    "&:hover::before": {
-                      width: 4,
-                      opacity: 1,
-                    },
+                    "&:hover::before": { width: 4, opacity: 1 },
                     ...(isActive && !isSelected
-                      ? {
-                          bgcolor: "action.selected",
-                          "&:hover": { bgcolor: "action.selected" },
-                        }
+                      ? { bgcolor: "action.selected", "&:hover": { bgcolor: "action.selected" } }
                       : null),
                   }}
                 >
@@ -430,15 +433,9 @@ export default function FindingsTable({
                     />
                   </TableCell>
 
-                  {/* Issue details (1-2 строки в зависимости от режима) */}
                   <TableCell sx={{ minWidth: 420 }}>
                     <Stack spacing={compactMode ? 0 : 0.5} sx={{ minWidth: 0 }}>
-                      <Stack
-                        direction="row"
-                        alignItems="center"
-                        spacing={1}
-                        sx={{ minWidth: 0 }}
-                      >
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
                         <Tooltip title={f.title} placement="top-start">
                           <Typography
                             variant="body2"
@@ -455,12 +452,8 @@ export default function FindingsTable({
                           </Typography>
                         </Tooltip>
 
-                        {/* улучшенные badges для повторяющихся находок */}
                         {occurrence === "REPEAT" && repeats > 0 && (
-                          <Tooltip
-                            title={`Найдено повторно ${repeats} раз${repeats > 1 ? "а" : ""}`}
-                            placement="top"
-                          >
+                          <Tooltip title={`Найдено повторно ${repeats} раз`} placement="top">
                             <Chip
                               size="small"
                               icon={<RepeatIcon sx={{ fontSize: 14 }} />}
@@ -473,29 +466,23 @@ export default function FindingsTable({
                                 color: "warning.dark",
                                 border: "1.5px solid",
                                 borderColor: "warning.main",
-                                "& .MuiChip-icon": {
-                                  color: "warning.dark",
-                                  ml: 0.5,
-                                },
+                                "& .MuiChip-icon": { color: "warning.dark", ml: 0.5 },
                               }}
                             />
                           </Tooltip>
                         )}
+
                         {occurrence === "REPEAT" && !repeats && (
                           <Chip
                             size="small"
-                            label={OCCURRENCE_LABELS[occurrence]}
-                            color={OCCURRENCE_COLORS[occurrence]}
+                            label={occurrenceLabels[occurrence]}
+                            color={occurrenceColors[occurrence]}
                             sx={{ height: 22 }}
                           />
                         )}
 
-                        {/* индикатор возраста для старых находок */}
                         {showAgeWarning && (
-                          <Tooltip
-                            title={`Найдена ${ageDays} дн. назад`}
-                            placement="top"
-                          >
+                          <Tooltip title={`Найдена ${ageDays} дн. назад`} placement="top">
                             <Chip
                               size="small"
                               icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
@@ -515,7 +502,6 @@ export default function FindingsTable({
                         )}
                       </Stack>
 
-                      {/* метаданные: скрываем в компактном режиме */}
                       {!compactMode && (
                         <Stack
                           direction="row"
@@ -535,7 +521,7 @@ export default function FindingsTable({
                           <Box sx={{ width: 1, height: 12, bgcolor: "divider" }} />
 
                           <Stack direction="row" spacing={0.5} alignItems="center">
-                            <ScannerIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+                            <QrCodeScannerIcon sx={{ fontSize: 14, color: "text.disabled" }} />
                             <Typography variant="caption" sx={{ fontWeight: 600 }}>
                               {prettifyScanner(f.scannerType)}
                             </Typography>
@@ -554,27 +540,24 @@ export default function FindingsTable({
                     </Stack>
                   </TableCell>
 
-                  {/* Severity */}
                   <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
                       size="small"
                       variant="outlined"
-                      label={SEVERITY_STYLES[f.severity].label}
-                      sx={SEVERITY_CHIP_STYLES[f.severity]}
+                      label={severityLabels[f.severity] ?? f.severity}
+                      sx={severityChipSx[f.severity]}
                     />
                   </TableCell>
 
-                  {/* Status */}
                   <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
-                      label={STATUS_LABELS[f.status] ?? f.status}
-                      color={STATUS_COLORS[f.status]}
+                      label={statusLabels[f.status] ?? f.status}
+                      color={statusColors[f.status]}
                       size="small"
                       sx={{ textTransform: "none" }}
                     />
                   </TableCell>
 
-                  {/* Actions */}
                   <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <Tooltip title="Открыть на отдельной странице">
                       <IconButton
