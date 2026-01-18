@@ -56,6 +56,36 @@ export function formatDateRu(date: string | Date): string {
 }
 
 /**
+ * Format date/time in Russian locale (compact format: DD.MM.YY HH:mm)
+ */
+export function formatDateTimeRuCompact(value?: string | null): string {
+  if (!value) return "—";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "—";
+  try {
+    return new Intl.DateTimeFormat("ru-RU", {
+      year: "2-digit",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(dt);
+  } catch {
+    return dt.toLocaleString("ru-RU");
+  }
+}
+
+/**
+ * Prettify scanner name (uppercase if <=4 chars, capitalize otherwise)
+ */
+export function prettifyScanner(value?: string | null): string {
+  if (!value) return "—";
+  const s = value.trim();
+  if (!s) return "—";
+  return s.length <= 4 ? s.toUpperCase() : s[0].toUpperCase() + s.slice(1);
+}
+
+/**
  * Build finding link with optional returnTo parameter
  */
 export function buildFindingLink(findingId: string, returnToParam?: string): string {

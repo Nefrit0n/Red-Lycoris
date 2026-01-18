@@ -12,6 +12,14 @@ export const SEVERITY_STYLES: Record<FindingSeverity, { label: string; color: st
   critical: { label: "Critical", color: "#7b1fa2" },
 };
 
+// Severity chip styles for MUI Chip component
+export const SEVERITY_CHIP_STYLES: Record<FindingSeverity, any> = {
+  low: { borderColor: "success.main", color: "success.main" },
+  medium: { borderColor: "warning.main", color: "warning.main" },
+  high: { borderColor: "error.main", color: "error.main" },
+  critical: { borderColor: "secondary.main", color: "secondary.main" },
+};
+
 // Status colors for Chip component
 export const STATUS_COLORS: Record<FindingStatus, "default" | "info" | "success" | "warning"> = {
   new: "info",
@@ -39,7 +47,13 @@ export const STATUS_LABELS: Record<FindingStatus, string> = {
 // Occurrence status labels
 export const OCCURRENCE_LABELS: Record<FindingOccurrenceStatus, string> = {
   NEW: "New",
-  REPEAT: "Repeat",
+  REPEAT: "Repeated",
+};
+
+// Occurrence status colors for Chip component
+export const OCCURRENCE_COLORS: Record<FindingOccurrenceStatus, "default" | "info" | "warning"> = {
+  NEW: "default",
+  REPEAT: "warning",
 };
 
 // All available statuses
