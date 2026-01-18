@@ -25,58 +25,19 @@ import {
   FindingSeverity,
   FindingStatus,
 } from "../types/findings";
-
-const severityLabels: Record<FindingSeverity, string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  critical: "Critical",
-};
-
-const severityChipSx: Record<FindingSeverity, any> = {
-  low: { borderColor: "success.main", color: "success.main" },
-  medium: { borderColor: "warning.main", color: "warning.main" },
-  high: { borderColor: "error.main", color: "error.main" },
-  critical: { borderColor: "secondary.main", color: "secondary.main" },
-};
-
-const statusLabels: Record<FindingStatus, string> = {
-  new: "New",
-  under_review: "Under review",
-  confirmed: "Confirmed",
-  false_positive: "False positive",
-  out_of_scope: "Out of scope",
-  risk_accepted: "Risk accepted",
-  mitigated: "Mitigated",
-  duplicate: "Duplicate",
-};
-
-const statusColors: Record<
-  FindingStatus,
-  "default" | "info" | "success" | "warning"
-> = {
-  new: "info",
-  under_review: "warning",
-  confirmed: "success",
-  false_positive: "default",
-  out_of_scope: "default",
-  risk_accepted: "warning",
-  mitigated: "success",
-  duplicate: "default",
-};
-
-const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
-  NEW: "New",
-  REPEAT: "Repeated",
-};
-
-const occurrenceColors: Record<
-  FindingOccurrenceStatus,
-  "default" | "info" | "warning"
-> = {
-  NEW: "default",
-  REPEAT: "warning",
-};
+import {
+  SEVERITY_STYLES,
+  SEVERITY_CHIP_STYLES,
+  STATUS_LABELS,
+  STATUS_COLORS,
+  OCCURRENCE_LABELS,
+  OCCURRENCE_COLORS,
+} from "../utils/findingConstants";
+import {
+  formatDateTimeRuCompact,
+  prettifyScanner,
+  buildFindingLink,
+} from "../utils/findingFormatters";
 
 interface FindingsTableProps {
   data: Finding[];
@@ -106,30 +67,6 @@ interface FindingsTableProps {
   /** id находки, которая сейчас открыта в Drawer (для подсветки строки) */
   activeFindingId?: string | null;
 }
-
-const formatDateTimeRuCompact = (value?: string | null) => {
-  if (!value) return "—";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return "—";
-  try {
-    return new Intl.DateTimeFormat("ru-RU", {
-      year: "2-digit",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(dt);
-  } catch {
-    return dt.toLocaleString("ru-RU");
-  }
-};
-
-const prettifyScanner = (v?: string | null) => {
-  if (!v) return "—";
-  const s = v.trim();
-  if (!s) return "—";
-  return s.length <= 4 ? s.toUpperCase() : s[0].toUpperCase() + s.slice(1);
-};
 
 export default function FindingsTable({
   data,
@@ -177,11 +114,6 @@ export default function FindingsTable({
     if (Number.isNaN(dt.getTime())) return "—";
     return dtf ? dtf.format(dt) : formatDateTimeRuCompact(value);
   };
-
-  const buildDetailLink = (id: string) =>
-    returnTo
-      ? `/findings/${id}?returnTo=${encodeURIComponent(returnTo)}`
-      : `/findings/${id}`;
 
   const renderHighlightedTitle = (title: string) => {
     const query = highlightQuery.trim();
@@ -404,12 +336,12 @@ export default function FindingsTable({
                           </Typography>
                         </Tooltip>
 
-                        {/* маленькие “бейджи” справа от заголовка */}
+                        {/* маленькие "бейджи" справа от заголовка */}
                         {occurrence === "REPEAT" && (
                           <Chip
                             size="small"
-                            label={occurrenceLabels[occurrence]}
-                            color={occurrenceColors[occurrence]}
+                            label={OCCURRENCE_LABELS[occurrence]}
+                            color={OCCURRENCE_COLORS[occurrence]}
                             sx={{ height: 22 }}
                           />
                         )}
@@ -449,16 +381,16 @@ export default function FindingsTable({
                     <Chip
                       size="small"
                       variant="outlined"
-                      label={severityLabels[f.severity]}
-                      sx={severityChipSx[f.severity]}
+                      label={SEVERITY_STYLES[f.severity].label}
+                      sx={SEVERITY_CHIP_STYLES[f.severity]}
                     />
                   </TableCell>
 
                   {/* Status */}
                   <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Chip
-                      label={statusLabels[f.status] ?? f.status}
-                      color={statusColors[f.status]}
+                      label={STATUS_LABELS[f.status] ?? f.status}
+                      color={STATUS_COLORS[f.status]}
                       size="small"
                       sx={{ textTransform: "none" }}
                     />
@@ -470,7 +402,7 @@ export default function FindingsTable({
                       <IconButton
                         size="small"
                         component={Link}
-                        to={buildDetailLink(f.id)}
+                        to={buildFindingLink(f.id, returnTo)}
                         onClick={() => onNavigateToDetail()}
                         aria-label="Открыть на отдельной странице"
                       >
