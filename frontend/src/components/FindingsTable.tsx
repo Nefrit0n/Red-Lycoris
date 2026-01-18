@@ -21,7 +21,7 @@ import RepeatIcon from "@mui/icons-material/Repeat";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import AppsIcon from "@mui/icons-material/Apps";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
-import { ReactNode, useMemo } from "react";
+import { ReactNode, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Finding,
@@ -35,8 +35,8 @@ import {
  * Issue details занимает всё оставшееся место (flex-col).
  */
 const COL_CHECKBOX = 44;
-const COL_SEVERITY = 120;
-const COL_STATUS = 140;
+const COL_SEVERITY = 140;
+const COL_STATUS = 160;
 const COL_ACTIONS = 56;
 
 const severityLabels: Record<FindingSeverity, string> = {
@@ -202,9 +202,11 @@ export default function FindingsTable({
 }: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
 
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelected =
-    safeData.length > 0 && selectedIds.length === safeData.length;
-  const someSelected = selectedIds.length > 0 && !allSelected;
+    safeData.length > 0 && safeData.every((finding) => selectedIdSet.has(finding.id));
+  const someSelected =
+    safeData.some((finding) => selectedIdSet.has(finding.id)) && !allSelected;
 
   const dtf = useMemo(() => {
     try {
@@ -227,8 +229,9 @@ export default function FindingsTable({
     return dtf ? dtf.format(dt) : formatDateTimeRuCompact(value);
   };
 
-  const renderHighlightedTitle = (title: string) => {
-    const query = highlightQuery.trim();
+  const normalizedQuery = highlightQuery.trim();
+  const renderHighlightedTitle = useCallback((title: string) => {
+    const query = normalizedQuery;
     if (!query) return title;
 
     const lowerTitle = title.toLowerCase();
@@ -242,7 +245,7 @@ export default function FindingsTable({
       if (matchIndex > startIndex) parts.push(title.slice(startIndex, matchIndex));
       parts.push(
         <Box
-          key={`${title}-${matchIndex}`}
+          key={`${title}-${matchIndex}-${startIndex}`}
           component="span"
           sx={{
             backgroundColor: "rgba(255, 193, 7, 0.22)",
@@ -260,7 +263,7 @@ export default function FindingsTable({
 
     if (startIndex < title.length) parts.push(title.slice(startIndex));
     return parts;
-  };
+  }, [normalizedQuery]);
 
   const colCount = 5; // checkbox + issue + severity + status + actions
 
@@ -268,6 +271,7 @@ export default function FindingsTable({
     <TableContainer
       sx={{
         borderRadius: 2,
+        overflowX: "auto",
         "& .MuiTableCell-head": { fontWeight: 700, whiteSpace: "nowrap" },
       }}
     >
@@ -276,7 +280,7 @@ export default function FindingsTable({
         size="small"
         sx={{
           width: "100%",
-          minWidth: 920,
+          minWidth: 980,
           tableLayout: "fixed", // чтобы ширины колонок не прыгали :contentReference[oaicite:2]{index=2}
         }}
       >
@@ -299,13 +303,13 @@ export default function FindingsTable({
                 checked={allSelected}
                 indeterminate={someSelected}
                 onChange={(e) => onToggleAll(e.target.checked)}
-                disabled={loading || Boolean(errorMessage)}
+                disabled={loading || Boolean(errorMessage) || safeData.length === 0}
                 inputProps={{ "aria-label": "Выбрать все" }}
                 onClick={(e) => e.stopPropagation()}
               />
             </TableCell>
 
-            <TableCell sx={{ minWidth: 0 }}>
+            <TableCell sx={{ minWidth: 360 }}>
               <TableSortLabel
                 hideSortIcon={false}
                 active={sortField === "title"}
@@ -408,7 +412,7 @@ export default function FindingsTable({
           {!loading &&
             !errorMessage &&
             safeData.map((f) => {
-              const isSelected = selectedIds.includes(f.id);
+              const isSelected = selectedIdSet.has(f.id);
               const isActive = Boolean(activeFindingId) && activeFindingId === f.id;
               const occurrence = (f.occurrenceStatus ?? "NEW") as FindingOccurrenceStatus;
               const repeats = f.repeatCount ?? 0;
@@ -428,6 +432,7 @@ export default function FindingsTable({
                   selected={isSelected}
                   onClick={handleRowClick}
                   role="button"
+                  aria-selected={isSelected}
                   aria-current={isActive ? "true" : undefined}
                   tabIndex={0}
                   onKeyDown={(e) => {
@@ -474,8 +479,8 @@ export default function FindingsTable({
                   </TableCell>
 
                   {/* Issue details */}
-                  <TableCell sx={{ minWidth: 0 }}>
-                    <Stack spacing={compactMode ? 0 : 0.5} sx={{ minWidth: 0 }}>
+                  <TableCell sx={{ minWidth: 0, overflow: "hidden" }}>
+                    <Stack spacing={compactMode ? 0 : 0.5} sx={{ minWidth: 0, overflow: "hidden" }}>
                       <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
                         <Tooltip title={f.title} placement="top-start">
                           <Typography
