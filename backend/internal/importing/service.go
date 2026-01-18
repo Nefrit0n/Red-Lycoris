@@ -34,6 +34,21 @@ type ImportParams struct {
 	ProductID    *uuid.UUID
 	EngagementID *uuid.UUID
 	CreatedBy    *uuid.UUID
+	Callbacks    *ImportCallbacks
+}
+
+// ImportCallbacks contains optional callback functions for import events
+type ImportCallbacks struct {
+	// OnFindingCreated is called when a new finding is created
+	OnFindingCreated func(finding *models.Finding)
+	// OnDuplicateCreated is called when a duplicate finding is created
+	OnDuplicateCreated func(finding *models.Finding, masterID uuid.UUID)
+	// OnImportStarted is called when import job starts
+	OnImportStarted func(jobID uuid.UUID)
+	// OnImportFailed is called when import job fails
+	OnImportFailed func(jobID uuid.UUID, err error)
+	// OnImportSucceeded is called when import job succeeds
+	OnImportSucceeded func(jobID uuid.UUID, total, new, duplicates int)
 }
 
 // ImportFindings parses a security scan report and imports findings with deduplication.
@@ -58,12 +73,18 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	if err := storage.UpdateImportJobStatus(ctx, db, importJob.ID, models.ImportJobRunning, &startedAt, nil, nil); err != nil {
 		return nil, err
 	}
+	if params.Callbacks != nil && params.Callbacks.OnImportStarted != nil {
+		params.Callbacks.OnImportStarted(importJob.ID)
+	}
 
 	findings, err := parser.ParseReport(params.Scanner, params.Report)
 	if err != nil {
 		finishedAt := time.Now().UTC()
 		errMsg := err.Error()
 		_ = storage.UpdateImportJobStatus(ctx, db, importJob.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		if params.Callbacks != nil && params.Callbacks.OnImportFailed != nil {
+			params.Callbacks.OnImportFailed(importJob.ID, err)
+		}
 		return nil, err
 	}
 
@@ -87,7 +108,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	seenAt := time.Now().UTC()
 
 	for _, finding := range findings {
-		isNew, err := processFinding(ctx, db, processFindingParams{
+		result, err := processFinding(ctx, db, processFindingParams{
 			finding:     finding,
 			scanner:     params.Scanner,
 			productID:   params.ProductID,
@@ -98,10 +119,16 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 		if err != nil {
 			return nil, err
 		}
-		if isNew {
+		if result.isNew {
 			createdFindings++
+			if params.Callbacks != nil && params.Callbacks.OnFindingCreated != nil {
+				params.Callbacks.OnFindingCreated(result.finding)
+			}
 		} else {
 			duplicates++
+			if params.Callbacks != nil && params.Callbacks.OnDuplicateCreated != nil {
+				params.Callbacks.OnDuplicateCreated(result.finding, result.masterID)
+			}
 		}
 	}
 
@@ -116,6 +143,9 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	finishedAt := time.Now().UTC()
 	if err := storage.UpdateImportJobStatus(ctx, db, importJob.ID, models.ImportJobSucceeded, nil, &finishedAt, nil); err != nil {
 		return nil, err
+	}
+	if params.Callbacks != nil && params.Callbacks.OnImportSucceeded != nil {
+		params.Callbacks.OnImportSucceeded(importJob.ID, len(findings), createdFindings, duplicates)
 	}
 
 	return &ImportResult{
@@ -136,20 +166,26 @@ type processFindingParams struct {
 	seenAt      time.Time
 }
 
+type processFindingResult struct {
+	isNew    bool
+	finding  *models.Finding
+	masterID uuid.UUID
+}
+
 // processFinding handles a single finding with deduplication logic.
-// Returns true if a new finding was created, false if it was a duplicate.
-func processFinding(ctx context.Context, db *sql.DB, params processFindingParams) (bool, error) {
+// Returns result with finding details and whether it's new or duplicate.
+func processFinding(ctx context.Context, db *sql.DB, params processFindingParams) (*processFindingResult, error) {
 	fingerprint := dedup.ComputeFingerprint(params.scanner, params.finding)
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	masterID, repeatCount, found, err := findExistingMaster(ctx, tx, fingerprint, params.productID)
 	if err != nil {
 		_ = tx.Rollback()
-		return false, err
+		return nil, err
 	}
 
 	if !found {
@@ -169,12 +205,12 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		}
 		if err := storage.CreateFindingTx(ctx, tx, model); err != nil {
 			_ = tx.Rollback()
-			return false, err
+			return nil, err
 		}
 		if err := tx.Commit(); err != nil {
-			return false, err
+			return nil, err
 		}
-		return true, nil
+		return &processFindingResult{isNew: true, finding: model}, nil
 	}
 
 	// Create duplicate finding
@@ -194,7 +230,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 	}
 	if err := storage.CreateFindingTx(ctx, tx, duplicate); err != nil {
 		_ = tx.Rollback()
-		return false, err
+		return nil, err
 	}
 
 	// Update master's repeat count and last_seen_at
@@ -210,13 +246,13 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		masterID,
 	); err != nil {
 		_ = tx.Rollback()
-		return false, err
+		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return false, err
+		return nil, err
 	}
-	return false, nil
+	return &processFindingResult{isNew: false, finding: duplicate, masterID: masterID}, nil
 }
 
 // findExistingMaster looks for an existing master finding with the same fingerprint.
