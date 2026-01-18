@@ -357,7 +357,13 @@ func resolveFindingSortField(sortField string) string {
 	case "productName":
 		return "p.name"
 	case "severity":
-		return "f.severity"
+		return `CASE LOWER(f.severity)
+			WHEN 'critical' THEN 4
+			WHEN 'high' THEN 3
+			WHEN 'medium' THEN 2
+			WHEN 'low' THEN 1
+			ELSE 0
+		END`
 	case "status":
 		return "f.status"
 	case "last_seen_at", "lastSeenAt":
