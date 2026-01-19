@@ -1,7 +1,6 @@
 import {
   Box,
   Checkbox,
-  Chip,
   IconButton,
   Skeleton,
   Stack,
@@ -19,9 +18,22 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RepeatIcon from "@mui/icons-material/Repeat";
 import ScheduleIcon from "@mui/icons-material/Schedule";
-import AppsIcon from "@mui/icons-material/Apps";
-import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
-import { ReactNode, useCallback, useMemo } from "react";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import FiberNewIcon from "@mui/icons-material/FiberNew";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import BlockIcon from "@mui/icons-material/Block";
+import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
+import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined";
+import VerifiedIcon from "@mui/icons-material/Verified";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import RadarIcon from "@mui/icons-material/Radar";
+import { ReactNode, useCallback, useMemo, useState } from "react";
+import SecurityIcon from "@mui/icons-material/Security";
 import { Link } from "react-router-dom";
 import {
   Finding,
@@ -46,11 +58,37 @@ const severityLabels: Record<FindingSeverity, string> = {
   critical: "Critical",
 };
 
-const severityChipSx: Record<FindingSeverity, any> = {
-  low: { borderColor: "success.main", color: "success.main" },
-  medium: { borderColor: "warning.main", color: "warning.main" },
-  high: { borderColor: "error.main", color: "error.main" },
-  critical: { borderColor: "secondary.main", color: "secondary.main" },
+// Новая конфигурация severity с заливкой и иконками
+const severityConfig: Record<FindingSeverity, {
+  bgcolor: string;
+  color: string;
+  borderColor?: string;
+  icon: React.ReactNode;
+  glow?: string;
+}> = {
+  critical: {
+    bgcolor: "linear-gradient(135deg, #d32f2f 0%, #7b1fa2 100%)",
+    color: "#ffffff",
+    icon: <ErrorOutlineIcon sx={{ fontSize: 14 }} />,
+    glow: "0 0 12px rgba(211, 47, 47, 0.4)",
+  },
+  high: {
+    bgcolor: "#d32f2f",
+    color: "#ffffff",
+    icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
+  },
+  medium: {
+    bgcolor: "rgba(255, 152, 0, 0.15)",
+    color: "#ffb74d",
+    borderColor: "rgba(255, 152, 0, 0.5)",
+    icon: <ReportProblemOutlinedIcon sx={{ fontSize: 14 }} />,
+  },
+  low: {
+    bgcolor: "rgba(76, 175, 80, 0.1)",
+    color: "#81c784",
+    borderColor: "rgba(76, 175, 80, 0.3)",
+    icon: <InfoOutlinedIcon sx={{ fontSize: 14 }} />,
+  },
 };
 
 // Цвета для левой индикационной полосы
@@ -58,7 +96,15 @@ const severityBorderColors: Record<FindingSeverity, string> = {
   low: "#4caf50",
   medium: "#ff9800",
   high: "#f44336",
-  critical: "#9c27b0",
+  critical: "#d32f2f",
+};
+
+// Цвета фона строк для critical/high findings (subtle tint)
+const severityRowBgColors: Record<FindingSeverity, string | null> = {
+  critical: "rgba(211, 47, 47, 0.06)",
+  high: "rgba(244, 67, 54, 0.04)",
+  medium: null,
+  low: null,
 };
 
 const statusLabels: Record<FindingStatus, string> = {
@@ -72,32 +118,70 @@ const statusLabels: Record<FindingStatus, string> = {
   duplicate: "Duplicate",
 };
 
-const statusColors: Record<
-  FindingStatus,
-  "default" | "info" | "success" | "warning"
-> = {
-  new: "info",
-  under_review: "warning",
-  confirmed: "success",
-  false_positive: "default",
-  out_of_scope: "default",
-  risk_accepted: "warning",
-  mitigated: "success",
-  duplicate: "default",
+// Новая конфигурация статусов с иконками и семантической группировкой
+const statusConfig: Record<FindingStatus, {
+  icon: React.ReactNode;
+  bgcolor: string;
+  color: string;
+  borderColor?: string;
+  pulse?: boolean; // для "New" статуса
+}> = {
+  // === Требует внимания (Action Required) ===
+  new: {
+    icon: <FiberNewIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(33, 150, 243, 0.15)",
+    color: "#64b5f6",
+    borderColor: "rgba(33, 150, 243, 0.5)",
+    pulse: true,
+  },
+  under_review: {
+    icon: <VisibilityIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(255, 152, 0, 0.12)",
+    color: "#ffb74d",
+    borderColor: "rgba(255, 152, 0, 0.4)",
+  },
+  confirmed: {
+    icon: <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(244, 67, 54, 0.12)",
+    color: "#ef5350",
+    borderColor: "rgba(244, 67, 54, 0.4)",
+  },
+
+  // === Закрыто (Resolved) ===
+  mitigated: {
+    icon: <VerifiedIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(76, 175, 80, 0.12)",
+    color: "#81c784",
+    borderColor: "rgba(76, 175, 80, 0.4)",
+  },
+  false_positive: {
+    icon: <BlockIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(158, 158, 158, 0.1)",
+    color: "#9e9e9e",
+    borderColor: "rgba(158, 158, 158, 0.3)",
+  },
+  out_of_scope: {
+    icon: <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(158, 158, 158, 0.1)",
+    color: "#9e9e9e",
+    borderColor: "rgba(158, 158, 158, 0.3)",
+  },
+  risk_accepted: {
+    icon: <ThumbUpAltOutlinedIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(255, 193, 7, 0.1)",
+    color: "#ffd54f",
+    borderColor: "rgba(255, 193, 7, 0.3)",
+  },
+  duplicate: {
+    icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(158, 158, 158, 0.1)",
+    color: "#9e9e9e",
+    borderColor: "rgba(158, 158, 158, 0.3)",
+  },
 };
 
-const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
-  NEW: "New",
-  REPEAT: "Repeated",
-};
-
-const occurrenceColors: Record<
-  FindingOccurrenceStatus,
-  "default" | "info" | "warning"
-> = {
-  NEW: "default",
-  REPEAT: "warning",
-};
+// Примечание: occurrenceLabels и occurrenceColors удалены,
+// т.к. repeat/age badges теперь используют кастомную стилизацию
 
 interface FindingsTableProps {
   data: Finding[];
@@ -129,7 +213,59 @@ interface FindingsTableProps {
 
   /** компактный режим отображения (без метаданных) */
   compactMode?: boolean;
+
+  /** включить группировку по rule title */
+  groupByRule?: boolean;
 }
+
+// Интерфейс для группы findings
+interface FindingGroup {
+  title: string;
+  shortTitle: string;
+  findings: Finding[];
+  highestSeverity: FindingSeverity;
+  statuses: Set<FindingStatus>;
+}
+
+// Функция для группировки findings по title
+const groupFindingsByTitle = (findings: Finding[]): FindingGroup[] => {
+  const groups = new Map<string, Finding[]>();
+
+  findings.forEach(f => {
+    const key = f.title;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key)!.push(f);
+  });
+
+  const severityOrder: Record<FindingSeverity, number> = {
+    critical: 4,
+    high: 3,
+    medium: 2,
+    low: 1,
+  };
+
+  return Array.from(groups.entries()).map(([title, groupFindings]) => {
+    const { display: shortTitle } = formatSmartTitle(title);
+
+    // Находим наивысший severity в группе
+    const highestSeverity = groupFindings.reduce((max, f) => {
+      return severityOrder[f.severity] > severityOrder[max] ? f.severity : max;
+    }, groupFindings[0].severity);
+
+    // Собираем все статусы
+    const statuses = new Set(groupFindings.map(f => f.status));
+
+    return {
+      title,
+      shortTitle,
+      findings: groupFindings,
+      highestSeverity,
+      statuses,
+    };
+  });
+};
 
 const formatDateTimeRuCompact = (value?: string | null) => {
   if (!value) return "—";
@@ -172,6 +308,39 @@ const getAgeLabel = (days: number): string => {
   return `${Math.floor(days / 365)}г`;
 };
 
+/**
+ * Smart title formatting для длинных rule names.
+ * Примеры:
+ * - "java.lang.security.audit.cbc-padding-oracle.cbc-padding-oracle" -> "cbc-padding-oracle"
+ * - "Asymmetric Private Key" -> "Asymmetric Private Key" (без изменений)
+ * - "semgrep.java.spring.xxe...." -> "xxe..." (последняя значимая часть)
+ */
+const formatSmartTitle = (title: string): { display: string; isShortened: boolean } => {
+  if (!title) return { display: title, isShortened: false };
+
+  // Если title содержит точки (namespace-style), извлекаем последнюю значимую часть
+  if (title.includes(".") && title.length > 50) {
+    const parts = title.split(".");
+
+    // Находим последнюю уникальную часть (не дублирующуюся)
+    const lastPart = parts[parts.length - 1];
+    const secondLastPart = parts.length > 1 ? parts[parts.length - 2] : null;
+
+    // Если последние две части одинаковые, берём одну
+    if (secondLastPart && lastPart === secondLastPart) {
+      return { display: lastPart, isShortened: true };
+    }
+
+    // Берём последние 2-3 значимые части
+    const significantParts = parts.filter(p => p.length > 2).slice(-2);
+    if (significantParts.length > 0) {
+      return { display: significantParts.join("."), isShortened: true };
+    }
+  }
+
+  return { display: title, isShortened: false };
+};
+
 const buildFindingLink = (id: string, returnTo: string) => {
   const params = new URLSearchParams();
   if (returnTo) params.set("returnTo", returnTo);
@@ -199,8 +368,40 @@ export default function FindingsTable({
   onOpenDetails,
   activeFindingId,
   compactMode = false,
+  groupByRule = false,
 }: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
+
+  // Состояние для развёрнутых групп (по title)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Группировка данных если включена
+  const groupedData = useMemo(() => {
+    if (!groupByRule || safeData.length === 0) return null;
+    return groupFindingsByTitle(safeData);
+  }, [groupByRule, safeData]);
+
+  const toggleGroup = useCallback((title: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  }, []);
+
+  const expandAllGroups = useCallback(() => {
+    if (groupedData) {
+      setExpandedGroups(new Set(groupedData.map(g => g.title)));
+    }
+  }, [groupedData]);
+
+  const collapseAllGroups = useCallback(() => {
+    setExpandedGroups(new Set());
+  }, []);
 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelected =
@@ -396,18 +597,85 @@ export default function FindingsTable({
 
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
-                <Typography color="text.secondary" gutterBottom>
-                  Ничего не найдено по фильтрам
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="primary"
-                  sx={{ cursor: "pointer" }}
-                  onClick={onResetFilters}
+              <TableCell colSpan={colCount} align="center" sx={{ py: 8 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 2,
+                  }}
                 >
-                  Сбросить фильтры
-                </Typography>
+                  {/* Иконка с анимацией */}
+                  <Box
+                    sx={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: "50%",
+                      bgcolor: "rgba(76, 175, 80, 0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      animation: "emptyPulse 2s ease-in-out infinite",
+                      "@keyframes emptyPulse": {
+                        "0%, 100%": {
+                          transform: "scale(1)",
+                          boxShadow: "0 0 0 0 rgba(76, 175, 80, 0.2)",
+                        },
+                        "50%": {
+                          transform: "scale(1.05)",
+                          boxShadow: "0 0 0 10px rgba(76, 175, 80, 0)",
+                        },
+                      },
+                    }}
+                  >
+                    <SecurityIcon
+                      sx={{
+                        fontSize: 40,
+                        color: "success.main",
+                      }}
+                    />
+                  </Box>
+
+                  {/* Текст */}
+                  <Box sx={{ textAlign: "center" }}>
+                    <Typography
+                      variant="h6"
+                      sx={{ fontWeight: 600, color: "text.primary", mb: 0.5 }}
+                    >
+                      No findings match your filters
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{ color: "text.secondary", maxWidth: 320 }}
+                    >
+                      Try adjusting your search criteria or clear filters to see all findings
+                    </Typography>
+                  </Box>
+
+                  {/* Кнопка */}
+                  <Box
+                    onClick={onResetFilters}
+                    sx={{
+                      mt: 1,
+                      px: 3,
+                      py: 1,
+                      borderRadius: 2,
+                      bgcolor: "primary.main",
+                      color: "primary.contrastText",
+                      fontWeight: 600,
+                      fontSize: "0.875rem",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      "&:hover": {
+                        bgcolor: "primary.dark",
+                        transform: "translateY(-1px)",
+                      },
+                    }}
+                  >
+                    Clear all filters
+                  </Box>
+                </Box>
               </TableCell>
             </TableRow>
           )}
@@ -427,6 +695,8 @@ export default function FindingsTable({
                 if (batchMode) onToggleOne(f.id);
                 else onOpenDetails(f.id);
               };
+
+              const rowBgColor = severityRowBgColors[f.severity];
 
               return (
                 <TableRow
@@ -448,15 +718,31 @@ export default function FindingsTable({
                     cursor: "pointer",
                     "& td": { verticalAlign: "middle" },
 
-                    // ВАЖНО: не используем ::before на <tr> (часть браузеров превращает его в
-                    // "виртуальную" ячейку, и тогда все колонки визуально съезжают).
-                    // Полоску рисуем внутри первой <td> как absolute Box.
-                    "&:hover .finding-rowStripe": { width: 4, opacity: 1 },
+                    // Zebra striping - чередование фона
+                    "&:nth-of-type(even)": {
+                      bgcolor: rowBgColor || "rgba(255, 255, 255, 0.015)",
+                    },
+                    "&:nth-of-type(odd)": {
+                      bgcolor: rowBgColor || "transparent",
+                    },
+
+                    // Border между строками
+                    borderBottom: "1px solid",
+                    borderColor: "rgba(255, 255, 255, 0.06)",
+
+                    // Улучшенный hover эффект
+                    transition: "all 0.15s ease",
+                    "&:hover": {
+                      bgcolor: "rgba(122, 162, 247, 0.08) !important",
+                      "& .finding-rowStripe": { width: 5, opacity: 1 },
+                    },
+
+                    // Active state (открыт в drawer)
                     ...(isActive && !isSelected
                       ? {
                         bgcolor: "action.selected",
                         "&:hover": { bgcolor: "action.selected" },
-                        "& .finding-rowStripe": { width: 4, opacity: 1 },
+                        "& .finding-rowStripe": { width: 5, opacity: 1 },
                       }
                       : null),
                   }}
@@ -482,8 +768,9 @@ export default function FindingsTable({
                         width:
                           f.severity === "critical" || f.severity === "high" ? 4 : 3,
                         backgroundColor: severityBorderColors[f.severity],
+                        // Улучшенный контраст для всех уровней severity
                         opacity:
-                          f.severity === "critical" || f.severity === "high" ? 1 : 0.5,
+                          f.severity === "critical" || f.severity === "high" ? 1 : 0.7,
                         transition: "all 0.2s ease",
                         pointerEvents: "none",
                         zIndex: 0,
@@ -509,72 +796,159 @@ export default function FindingsTable({
                         spacing={1}
                         sx={{ minWidth: 0 }}
                       >
-                        <Tooltip title={f.title} placement="top-start">
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 700,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              minWidth: 0,
-                              flex: 1,
-                            }}
-                          >
-                            {renderHighlightedTitle(f.title)}
-                          </Typography>
-                        </Tooltip>
+                        {(() => {
+                          const { display: smartTitle, isShortened } = formatSmartTitle(f.title);
+                          return (
+                            <Tooltip
+                              title={
+                                <Box sx={{ maxWidth: 400, wordBreak: "break-word" }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                    {f.title}
+                                  </Typography>
+                                  {isShortened && (
+                                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                      (полное название rule)
+                                    </Typography>
+                                  )}
+                                </Box>
+                              }
+                              placement="top-start"
+                            >
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontWeight: 700,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  minWidth: 0,
+                                  flex: 1,
+                                  // Если title укорочен, показываем с иконкой/стилем
+                                  ...(isShortened && {
+                                    "&::before": {
+                                      content: '"…"',
+                                      color: "text.disabled",
+                                      mr: 0.5,
+                                    },
+                                  }),
+                                }}
+                              >
+                                {renderHighlightedTitle(isShortened ? smartTitle : f.title)}
+                              </Typography>
+                            </Tooltip>
+                          );
+                        })()}
 
-                        {/* повторяемость */}
+                        {/* повторяемость - улучшенный badge */}
                         {occurrence === "REPEAT" && repeats > 0 && (
-                          <Tooltip title={`Найдено повторно ${repeats} раз`} placement="top">
-                            <Chip
-                              size="small"
-                              icon={<RepeatIcon sx={{ fontSize: 14 }} />}
-                              label={`${repeats}x`}
+                          <Tooltip
+                            title={
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  Repeated {repeats} times
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                  This finding was detected in multiple scans
+                                </Typography>
+                              </Box>
+                            }
+                            placement="top"
+                          >
+                            <Box
                               sx={{
-                                flexShrink: 0,
-                                height: 22,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: "12px",
                                 fontWeight: 700,
-                                fontSize: "0.72rem",
-                                bgcolor: "warning.light",
-                                color: "warning.dark",
-                                border: "1.5px solid",
-                                borderColor: "warning.main",
-                                "& .MuiChip-icon": { color: "warning.dark", ml: 0.5 },
+                                fontSize: "0.7rem",
+                                bgcolor: "rgba(255, 152, 0, 0.15)",
+                                color: "#ffb74d",
+                                border: "1px solid rgba(255, 152, 0, 0.4)",
+                                flexShrink: 0,
+                                transition: "all 0.2s ease",
+                                "&:hover": {
+                                  bgcolor: "rgba(255, 152, 0, 0.25)",
+                                },
                               }}
-                            />
+                            >
+                              <RepeatIcon sx={{ fontSize: 12 }} />
+                              {repeats}x
+                            </Box>
                           </Tooltip>
                         )}
 
                         {occurrence === "REPEAT" && !repeats && (
-                          <Chip
-                            size="small"
-                            label={occurrenceLabels[occurrence]}
-                            color={occurrenceColors[occurrence]}
-                            sx={{ flexShrink: 0, height: 22 }}
-                          />
+                          <Box
+                            sx={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                              px: 1,
+                              py: 0.25,
+                              borderRadius: "12px",
+                              fontWeight: 600,
+                              fontSize: "0.7rem",
+                              bgcolor: "rgba(255, 152, 0, 0.1)",
+                              color: "#ffb74d",
+                              border: "1px solid rgba(255, 152, 0, 0.3)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <RepeatIcon sx={{ fontSize: 12 }} />
+                            Repeat
+                          </Box>
                         )}
 
-                        {/* возраст */}
+                        {/* возраст - улучшенный badge */}
                         {showAgeWarning && (
-                          <Tooltip title={`Найдена ${ageDays} дн. назад`} placement="top">
-                            <Chip
-                              size="small"
-                              icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
-                              label={getAgeLabel(ageDays)}
+                          <Tooltip
+                            title={
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {ageDays >= 90 ? "Old finding" : "Aging finding"}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                  First detected {ageDays} days ago
+                                </Typography>
+                              </Box>
+                            }
+                            placement="top"
+                          >
+                            <Box
                               sx={{
-                                flexShrink: 0,
-                                height: 22,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: "12px",
+                                fontWeight: 600,
                                 fontSize: "0.7rem",
-                                bgcolor: ageDays >= 90 ? "error.light" : "grey.300",
-                                color: ageDays >= 90 ? "error.dark" : "text.secondary",
-                                "& .MuiChip-icon": {
-                                  color: ageDays >= 90 ? "error.dark" : "text.secondary",
-                                  ml: 0.5,
+                                flexShrink: 0,
+                                transition: "all 0.2s ease",
+                                // Красный для старых (90+ дней), серый для остальных
+                                ...(ageDays >= 90
+                                  ? {
+                                      bgcolor: "rgba(244, 67, 54, 0.15)",
+                                      color: "#ef5350",
+                                      border: "1px solid rgba(244, 67, 54, 0.4)",
+                                    }
+                                  : {
+                                      bgcolor: "rgba(158, 158, 158, 0.1)",
+                                      color: "#9e9e9e",
+                                      border: "1px solid rgba(158, 158, 158, 0.3)",
+                                    }),
+                                "&:hover": {
+                                  transform: "scale(1.02)",
                                 },
                               }}
-                            />
+                            >
+                              <ScheduleIcon sx={{ fontSize: 12 }} />
+                              {getAgeLabel(ageDays)}
+                            </Box>
                           </Tooltip>
                         )}
                       </Stack>
@@ -596,7 +970,7 @@ export default function FindingsTable({
                           if (productLabel) {
                             metaItems.push({
                               key: "product",
-                              icon: <AppsIcon sx={{ fontSize: 14, color: "text.disabled" }} />,
+                              icon: <InventoryIcon sx={{ fontSize: 14, color: "text.disabled" }} />,
                               label: productLabel,
                               maxWidth: 340,
                             });
@@ -606,7 +980,7 @@ export default function FindingsTable({
                             metaItems.push({
                               key: "scanner",
                               icon: (
-                                <QrCodeScannerIcon
+                                <RadarIcon
                                   sx={{ fontSize: 14, color: "text.disabled" }}
                                 />
                               ),
@@ -687,22 +1061,40 @@ export default function FindingsTable({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={severityLabels[f.severity]}
-                      sx={{
-                        ...severityChipSx[f.severity],
-                        height: 22,
-                        maxWidth: "100%",
-                        "& .MuiChip-label": {
-                          px: 1,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        },
-                      }}
-                    />
+                    {(() => {
+                      const config = severityConfig[f.severity];
+                      const isGradient = config.bgcolor.includes("gradient");
+                      return (
+                        <Box
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                            px: 1.25,
+                            py: 0.5,
+                            borderRadius: "16px",
+                            fontWeight: 600,
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.025em",
+                            color: config.color,
+                            background: config.bgcolor,
+                            border: config.borderColor ? `1px solid ${config.borderColor}` : "none",
+                            boxShadow: config.glow ?? "none",
+                            transition: "all 0.2s ease",
+                            "&:hover": {
+                              transform: "scale(1.02)",
+                            },
+                            "& .MuiSvgIcon-root": {
+                              color: config.color,
+                            },
+                          }}
+                        >
+                          {config.icon}
+                          {severityLabels[f.severity]}
+                        </Box>
+                      );
+                    })()}
                   </TableCell>
 
                   {/* Status */}
@@ -714,22 +1106,45 @@ export default function FindingsTable({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    <Chip
-                      label={statusLabels[f.status] ?? f.status}
-                      color={statusColors[f.status]}
-                      size="small"
-                      sx={{
-                        height: 22,
-                        maxWidth: "100%",
-                        textTransform: "none",
-                        "& .MuiChip-label": {
-                          px: 1,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        },
-                      }}
-                    />
+                    {(() => {
+                      const config = statusConfig[f.status];
+                      return (
+                        <Box
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                            px: 1.25,
+                            py: 0.5,
+                            borderRadius: "16px",
+                            fontWeight: 500,
+                            fontSize: "0.75rem",
+                            color: config.color,
+                            bgcolor: config.bgcolor,
+                            border: config.borderColor ? `1px solid ${config.borderColor}` : "none",
+                            transition: "all 0.2s ease",
+                            // Пульсация для "New" статуса
+                            ...(config.pulse && {
+                              animation: "statusPulse 2s ease-in-out infinite",
+                              "@keyframes statusPulse": {
+                                "0%, 100%": {
+                                  boxShadow: `0 0 0 0 ${config.borderColor}`,
+                                },
+                                "50%": {
+                                  boxShadow: `0 0 0 4px transparent`,
+                                },
+                              },
+                            }),
+                            "& .MuiSvgIcon-root": {
+                              color: config.color,
+                            },
+                          }}
+                        >
+                          {config.icon}
+                          {statusLabels[f.status] ?? f.status}
+                        </Box>
+                      );
+                    })()}
                   </TableCell>
 
                   {/* Actions */}
