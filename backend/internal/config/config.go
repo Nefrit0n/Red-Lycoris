@@ -1,6 +1,12 @@
 package config
 
-import "os"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"log"
+	"os"
+)
 
 type Config struct {
 	AppPort                  string
@@ -47,9 +53,9 @@ func Load() Config {
 		ObjectStoreSecretKey:     getEnv("OBJECT_STORE_SECRET_KEY", "minioadmin"),
 		ObjectStoreBucket:        getEnv("OBJECT_STORE_BUCKET", "lotus-warden"),
 		ObjectStoreUseSSL:        getEnv("OBJECT_STORE_USE_SSL", "false"),
-		JWTSecret:                getEnv("JWT_SECRET", "change-me"),
+		JWTSecret:                getSecureEnv("JWT_SECRET"),
 		RootEmail:                getEnv("ROOT_EMAIL", "root@localhost"),
-		RootPassword:             getEnv("ROOT_PASSWORD", "root"),
+		RootPassword:             getSecureEnvWithDefault("ROOT_PASSWORD", "root"),
 		AnalysisMaxArchiveBytes:  getEnv("ANALYSIS_MAX_ARCHIVE_BYTES", "104857600"),
 		AnalysisMaxExtractBytes:  getEnv("ANALYSIS_MAX_EXTRACT_BYTES", "524288000"),
 		AnalysisTempDir:          getEnv("ANALYSIS_TEMP_DIR", "/tmp/lotus-warden-analysis"),
@@ -68,4 +74,34 @@ func getEnv(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// getSecureEnv returns env value or generates a random value if not set.
+// It logs a warning when using generated values in production.
+func getSecureEnv(key string) string {
+	value := os.Getenv(key)
+	if value != "" {
+		return value
+	}
+	generated := generateRandomString(32)
+	log.Printf("WARNING: %s not set, using generated value. Set this in production!", key)
+	return generated
+}
+
+// getSecureEnvWithDefault returns env value or default, but warns if default is insecure.
+func getSecureEnvWithDefault(key, insecureDefault string) string {
+	value := os.Getenv(key)
+	if value != "" {
+		return value
+	}
+	log.Printf("WARNING: %s not set, using insecure default '%s'. Set this in production!", key, insecureDefault)
+	return insecureDefault
+}
+
+func generateRandomString(length int) string {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		panic(fmt.Sprintf("failed to generate random string: %v", err))
+	}
+	return hex.EncodeToString(bytes)[:length]
 }
