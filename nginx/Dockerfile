@@ -13,19 +13,31 @@ RUN addgroup -g 1001 -S appgroup && \
     chown -R appuser:appgroup /var/cache/nginx && \
     chown -R appuser:appgroup /var/log/nginx && \
     touch /var/run/nginx.pid && \
-    chown appuser:appgroup /var/run/nginx.pid
+    chown appuser:appgroup /var/run/nginx.pid && \
+    mkdir -p /etc/nginx/ssl && \
+    chown -R appuser:appgroup /etc/nginx/ssl
 
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
-# Ensure static files are readable
-RUN chown -R appuser:appgroup /usr/share/nginx/html
+# Copy SSL certificates (must exist before building)
+# For development: run nginx/ssl/generate-certs.sh first
+COPY nginx/ssl/server.crt /etc/nginx/ssl/server.crt
+COPY nginx/ssl/server.key /etc/nginx/ssl/server.key
+
+# Ensure proper permissions
+RUN chown -R appuser:appgroup /usr/share/nginx/html && \
+    chown appuser:appgroup /etc/nginx/ssl/server.crt && \
+    chown appuser:appgroup /etc/nginx/ssl/server.key && \
+    chmod 644 /etc/nginx/ssl/server.crt && \
+    chmod 600 /etc/nginx/ssl/server.key
 
 USER appuser
 
-EXPOSE 80
+# Expose both HTTP (for redirect) and HTTPS ports
+EXPOSE 8080 8443
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/nginx-health || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
