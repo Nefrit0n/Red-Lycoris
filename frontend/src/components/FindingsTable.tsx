@@ -579,61 +579,102 @@ export default function FindingsTable({
                         )}
                       </Stack>
 
-                      {/* метаданные (только НЕ compact) */}
-                      {!compactMode && (
-                        <Stack
-                          direction="row"
-                          spacing={1.25}
-                          alignItems="center"
-                          sx={{
-                            color: "text.secondary",
-                            fontSize: "0.75rem",
-                            overflow: "hidden",
-                            minWidth: 0,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          <Stack
-                            direction="row"
-                            spacing={0.5}
-                            alignItems="center"
-                            sx={{ minWidth: 0 }}
-                          >
-                            <AppsIcon sx={{ fontSize: 14, color: "text.disabled" }} />
-                            <Typography
-                              variant="caption"
+                      {/* метаданные (только НЕ compact) — FIX: не рисуем пустое и не делаем “серую полосу” */}
+                      {!compactMode &&
+                        (() => {
+                          const productLabel = (f.productName ?? "").trim();
+                          const scannerRaw = (f.scannerType ?? "").trim();
+                          const lastSeenLabel = lastSeenAt ? formatDate(lastSeenAt) : "";
+
+                          const metaItems: Array<{
+                            key: "product" | "scanner" | "lastSeen";
+                            icon: ReactNode;
+                            label: string;
+                            maxWidth?: number;
+                          }> = [];
+
+                          if (productLabel) {
+                            metaItems.push({
+                              key: "product",
+                              icon: <AppsIcon sx={{ fontSize: 14, color: "text.disabled" }} />,
+                              label: productLabel,
+                              maxWidth: 340,
+                            });
+                          }
+
+                          if (scannerRaw) {
+                            metaItems.push({
+                              key: "scanner",
+                              icon: (
+                                <QrCodeScannerIcon
+                                  sx={{ fontSize: 14, color: "text.disabled" }}
+                                />
+                              ),
+                              label: prettifyScanner(scannerRaw),
+                              maxWidth: 180,
+                            });
+                          }
+
+                          if (lastSeenAt) {
+                            metaItems.push({
+                              key: "lastSeen",
+                              icon: <ScheduleIcon sx={{ fontSize: 13, color: "text.disabled" }} />,
+                              label: lastSeenLabel,
+                              maxWidth: 220,
+                            });
+                          }
+
+                          if (metaItems.length === 0) return null;
+
+                          return (
+                            <Box
                               sx={{
-                                fontWeight: 600,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
+                                display: "flex",
+                                alignItems: "center",
+                                flexWrap: "wrap",
+                                gap: 0.75,
+                                mt: 0.25,
+                                color: "text.secondary",
                                 minWidth: 0,
-                                maxWidth: 220,
                               }}
                             >
-                              {f.productName || "—"}
-                            </Typography>
-                          </Stack>
-
-                          <Box sx={{ width: 1, height: 12, bgcolor: "divider", flexShrink: 0 }} />
-
-                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minWidth: 0 }}>
-                            <QrCodeScannerIcon sx={{ fontSize: 14, color: "text.disabled" }} />
-                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                              {prettifyScanner(f.scannerType)}
-                            </Typography>
-                          </Stack>
-
-                          <Box sx={{ width: 1, height: 12, bgcolor: "divider", flexShrink: 0 }} />
-
-                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minWidth: 0 }}>
-                            <ScheduleIcon sx={{ fontSize: 13, color: "text.disabled" }} />
-                            <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                              {formatDate(lastSeenAt)}
-                            </Typography>
-                          </Stack>
-                        </Stack>
-                      )}
+                              {metaItems.map((m) => (
+                                <Tooltip key={m.key} title={m.label} placement="top-start">
+                                  <Box
+                                    sx={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 0.6,
+                                      px: 0.9,
+                                      py: 0.25,
+                                      borderRadius: 1,
+                                      border: "1px solid",
+                                      borderColor: "divider",
+                                      bgcolor: "action.hover",
+                                      minWidth: 0,
+                                      maxWidth: "100%",
+                                    }}
+                                  >
+                                    {m.icon}
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        fontWeight: 600,
+                                        minWidth: 0,
+                                        maxWidth: m.maxWidth ?? 260,
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {m.label}
+                                    </Typography>
+                                  </Box>
+                                </Tooltip>
+                              ))}
+                            </Box>
+                          );
+                        })()}
                     </Stack>
                   </TableCell>
 
