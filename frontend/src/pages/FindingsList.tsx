@@ -397,10 +397,19 @@ const FindingsList = () => {
             maxWidth: "100vw",
             borderTopLeftRadius: isMdUp ? 16 : 0,
             borderBottomLeftRadius: isMdUp ? 16 : 0,
+            display: "flex",
+            flexDirection: "column",
           },
         }}
       >
-        <Box sx={{ p: 2, borderBottom: "1px solid", borderColor: "divider" }}>
+        <Box
+          sx={{
+            p: 2,
+            borderBottom: "1px solid",
+            borderColor: "divider",
+            flex: "0 0 auto",
+          }}
+        >
           <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               Фильтры
@@ -422,7 +431,7 @@ const FindingsList = () => {
           </Stack>
         </Box>
 
-        <Box sx={{ p: 2, height: "100%", overflow: "auto" }}>
+        <Box sx={{ p: 2, flex: "1 1 auto", overflowY: "auto" }}>
           <FiltersPanel
             productId={filters.productId}
             search={filters.searchInput}
