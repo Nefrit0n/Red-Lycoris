@@ -1,5 +1,0 @@
-# Ignore generated certificates - never commit to git!
-*.key
-*.crt
-*.pem
-!.gitignore
