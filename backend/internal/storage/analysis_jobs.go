@@ -353,10 +353,15 @@ func ListAnalysisJobs(ctx context.Context, db *sql.DB, limit int, offset int) ([
 	return items, total, nil
 }
 
-func scanAnalysisJobDetail(row *sql.Row) (*AnalysisJobDetail, error) {
+// scanner is implemented by both *sql.Row and *sql.Rows
+type scanner interface {
+	Scan(dest ...interface{}) error
+}
+
+func scanAnalysisJobDetailRow(s scanner) (*AnalysisJobDetail, error) {
 	var item AnalysisJobDetail
 	var scanners []string
-	if err := row.Scan(
+	if err := s.Scan(
 		&item.ID,
 		&item.ProductID,
 		&item.ProductName,
@@ -385,6 +390,10 @@ func scanAnalysisJobDetail(row *sql.Row) (*AnalysisJobDetail, error) {
 	}
 	item.Scanners = scanners
 	return &item, nil
+}
+
+func scanAnalysisJobDetail(row *sql.Row) (*AnalysisJobDetail, error) {
+	return scanAnalysisJobDetailRow(row)
 }
 
 func ListAnalysisJobsWithArchiveCleanup(ctx context.Context, db *sql.DB, olderThan time.Time, limit int) ([]AnalysisJobDetail, error) {
@@ -430,37 +439,11 @@ func ListAnalysisJobsWithArchiveCleanup(ctx context.Context, db *sql.DB, olderTh
 
 	items := []AnalysisJobDetail{}
 	for rows.Next() {
-		var item AnalysisJobDetail
-		var scanners []string
-		if err := rows.Scan(
-			&item.ID,
-			&item.ProductID,
-			&item.ProductName,
-			&item.EngagementID,
-			&item.Status,
-			pq.Array(&scanners),
-			&item.SemgrepStatus,
-			&item.TrivyStatus,
-			&item.FindingsTotal,
-			&item.FindingsNew,
-			&item.DuplicatesTotal,
-			&item.CreatedAt,
-			&item.StartedAt,
-			&item.FinishedAt,
-			&item.ArchiveKey,
-			&item.ArchiveSize,
-			&item.ArtifactSemgrep,
-			&item.ArtifactTrivy,
-			&item.SemgrepImportJob,
-			&item.TrivyImportJob,
-			&item.ErrorMessage,
-			&item.CreatedBy,
-			&item.IdempotencyKey,
-		); err != nil {
+		item, err := scanAnalysisJobDetailRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		item.Scanners = scanners
-		items = append(items, item)
+		items = append(items, *item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

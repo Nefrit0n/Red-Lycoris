@@ -3,25 +3,25 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
-const defaultRootEmail = "root@localhost"
-const defaultRootPassword = "root"
 const adminRoleName = "admin"
-const rootUsername = "root"
 
+var ErrMissingRootCredentials = errors.New("root email and password are required")
+
+// EnsureRootUserExists creates or updates the root admin user.
+// Both rootEmail and rootPassword must be provided - no defaults are used.
 func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, rootPassword string) error {
 	resolvedEmail := strings.TrimSpace(rootEmail)
-	if resolvedEmail == "" {
-		resolvedEmail = defaultRootEmail
-	}
-	resolvedPassword := rootPassword
-	if strings.TrimSpace(resolvedPassword) == "" {
-		resolvedPassword = defaultRootPassword
+	resolvedPassword := strings.TrimSpace(rootPassword)
+
+	if resolvedEmail == "" || resolvedPassword == "" {
+		return ErrMissingRootCredentials
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
