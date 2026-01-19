@@ -1,11 +1,11 @@
-FROM node:20-alpine AS frontend-build
+FROM node:alpine3.23 AS frontend-build
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:alpine3.23
 
 # Create non-root user and configure nginx to run as non-root
 RUN addgroup -g 1001 -S appgroup && \

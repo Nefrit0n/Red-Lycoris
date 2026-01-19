@@ -19,9 +19,7 @@ func RequireJWT(secret string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		auth := c.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "missing token",
-			})
+			return c.Status(401).JSON(fiber.Map{"error":"missing token"})
 		}
 
 		tokenStr := strings.TrimPrefix(auth, "Bearer ")
