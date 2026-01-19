@@ -41,6 +41,8 @@ interface FiltersPanelProps {
   onDateToChange: (value: string) => void;
   onShowRepeatsChange: (value: boolean) => void;
   onReset: () => void;
+  showHeader?: boolean;
+  showChips?: boolean;
 }
 
 const FiltersPanel = ({
@@ -63,6 +65,8 @@ const FiltersPanel = ({
   onDateToChange,
   onShowRepeatsChange,
   onReset,
+  showHeader = true,
+  showChips = true,
 }: FiltersPanelProps) => {
   const handleSeverityChange = (event: SelectChangeEvent) => {
     onSeverityChange(event.target.value as FindingSeverity | "");
@@ -79,9 +83,6 @@ const FiltersPanel = ({
   const handleScannerChange = (event: SelectChangeEvent) => {
     onScannerTypeChange(event.target.value);
   };
-
-  // Derive product label for chips
-  const productLabel = productId; // Simplified, full label comes from FilterChips
 
   const hasActiveFilters =
     Boolean(productId) ||
@@ -106,22 +107,24 @@ const FiltersPanel = ({
     >
       <Stack spacing={1.5}>
         {/* Header */}
-        <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            Фильтры
-          </Typography>
+        {showHeader ? (
+          <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              Фильтры
+            </Typography>
 
-          <Button
-            variant="outlined"
-            color="inherit"
-            size="small"
-            startIcon={<RestartAltIcon />}
-            onClick={onReset}
-            sx={{ whiteSpace: "nowrap" }}
-          >
-            Сбросить
-          </Button>
-        </Box>
+            <Button
+              variant="outlined"
+              color="inherit"
+              size="small"
+              startIcon={<RestartAltIcon />}
+              onClick={onReset}
+              sx={{ whiteSpace: "nowrap" }}
+            >
+              Сбросить
+            </Button>
+          </Box>
+        ) : null}
 
         {/* Filter inputs */}
         <Grid container spacing={1.5} alignItems="center">
@@ -262,33 +265,35 @@ const FiltersPanel = ({
         </Grid>
 
         {/* Active filters chips */}
-        {hasActiveFilters ? (
-          <FilterChips
-            productId={productId}
-            productLabel={productLabel}
-            search={search}
-            filterSeverity={filterSeverity}
-            filterStatus={filterStatus}
-            filterOccurrence={filterOccurrence}
-            filterScannerType={filterScannerType}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            showRepeats={showRepeats}
-            onProductIdChange={onProductIdChange}
-            onSearchChange={onSearchChange}
-            onSeverityChange={onSeverityChange}
-            onStatusChange={onStatusChange}
-            onOccurrenceChange={onOccurrenceChange}
-            onScannerTypeChange={onScannerTypeChange}
-            onDateFromChange={onDateFromChange}
-            onDateToChange={onDateToChange}
-            onShowRepeatsChange={onShowRepeatsChange}
-          />
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            Выберите фильтры, чтобы сузить список находок.
-          </Typography>
-        )}
+        {showChips ? (
+          hasActiveFilters ? (
+            <FilterChips
+              productId={productId}
+              productLabel={productId}
+              search={search}
+              filterSeverity={filterSeverity}
+              filterStatus={filterStatus}
+              filterOccurrence={filterOccurrence}
+              filterScannerType={filterScannerType}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              showRepeats={showRepeats}
+              onProductIdChange={onProductIdChange}
+              onSearchChange={onSearchChange}
+              onSeverityChange={onSeverityChange}
+              onStatusChange={onStatusChange}
+              onOccurrenceChange={onOccurrenceChange}
+              onScannerTypeChange={onScannerTypeChange}
+              onDateFromChange={onDateFromChange}
+              onDateToChange={onDateToChange}
+              onShowRepeatsChange={onShowRepeatsChange}
+            />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Выберите фильтры, чтобы сузить список находок.
+            </Typography>
+          )
+        ) : null}
       </Stack>
     </Paper>
   );
