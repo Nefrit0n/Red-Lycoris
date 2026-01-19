@@ -35,7 +35,7 @@ services:
       context: ./backend
       target: dev
     environment:
-      <<: [*db-env, *object-store-env, *analysis-env]
+      <<: [ *db-env, *object-store-env, *analysis-env ]
       APP_PORT: ${BACKEND_PORT:-8080}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
@@ -54,7 +54,7 @@ services:
       minio:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -74,9 +74,9 @@ services:
     build:
       context: ./backend
       target: dev
-    command: ["go", "run", "./cmd/analysis_worker"]
+    command: [ "go", "run", "./cmd/analysis_worker" ]
     environment:
-      <<: [*db-env, *object-store-env, *analysis-env]
+      <<: [ *db-env, *object-store-env, *analysis-env ]
       NATS_URL: ${NATS_URL:-nats://nats:4222}
     volumes:
       - ./backend:/app
@@ -111,7 +111,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -194,7 +194,7 @@ services:
     command: >
       postgres -c max_connections=${POSTGRES_MAX_CONNECTIONS:-200} -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB} -c work_mem=${POSTGRES_WORK_MEM:-4MB}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-lotus_warden}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-lotus_warden}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -215,7 +215,7 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -232,12 +232,12 @@ services:
 
   nats:
     image: nats:2.10-alpine
-    command: ["-js"]
+    command: [ "-js" ]
     # Port exposed only for development - remove in production
     ports:
       - "${NATS_PORT:-4222}:4222"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -253,11 +253,11 @@ services:
           memory: 64M
 
   minio:
-    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
     environment:
       MINIO_ROOT_USER: ${OBJECT_STORE_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${OBJECT_STORE_SECRET_KEY:-minioadmin}
-    command: ["server", "/data", "--console-address", ":9001"]
+    command: [ "server", "/data", "--console-address", ":9001" ]
     # Ports exposed only for development - remove in production
     ports:
       - "${MINIO_PORT:-9000}:9000"
@@ -265,7 +265,7 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: [ "CMD", "mc", "ready", "local" ]
       interval: 10s
       timeout: 5s
       retries: 5
