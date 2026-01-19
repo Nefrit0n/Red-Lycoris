@@ -32,7 +32,7 @@ import {
 
 /**
  * Ширины колонок.
- * Issue details занимает всё оставшееся место (flex-col).
+ * Issue details занимает всё оставшееся место.
  */
 const COL_CHECKBOX = 44;
 const COL_SEVERITY = 140;
@@ -230,40 +230,43 @@ export default function FindingsTable({
   };
 
   const normalizedQuery = highlightQuery.trim();
-  const renderHighlightedTitle = useCallback((title: string) => {
-    const query = normalizedQuery;
-    if (!query) return title;
+  const renderHighlightedTitle = useCallback(
+    (title: string) => {
+      const query = normalizedQuery;
+      if (!query) return title;
 
-    const lowerTitle = title.toLowerCase();
-    const lowerQuery = query.toLowerCase();
+      const lowerTitle = title.toLowerCase();
+      const lowerQuery = query.toLowerCase();
 
-    const parts: ReactNode[] = [];
-    let startIndex = 0;
-    let matchIndex = lowerTitle.indexOf(lowerQuery);
+      const parts: ReactNode[] = [];
+      let startIndex = 0;
+      let matchIndex = lowerTitle.indexOf(lowerQuery);
 
-    while (matchIndex !== -1) {
-      if (matchIndex > startIndex) parts.push(title.slice(startIndex, matchIndex));
-      parts.push(
-        <Box
-          key={`${title}-${matchIndex}-${startIndex}`}
-          component="span"
-          sx={{
-            backgroundColor: "rgba(255, 193, 7, 0.22)",
-            fontWeight: 700,
-            px: 0.5,
-            borderRadius: 0.75,
-          }}
-        >
-          {title.slice(matchIndex, matchIndex + lowerQuery.length)}
-        </Box>
-      );
-      startIndex = matchIndex + lowerQuery.length;
-      matchIndex = lowerTitle.indexOf(lowerQuery, startIndex);
-    }
+      while (matchIndex !== -1) {
+        if (matchIndex > startIndex) parts.push(title.slice(startIndex, matchIndex));
+        parts.push(
+          <Box
+            key={`${title}-${matchIndex}-${startIndex}`}
+            component="span"
+            sx={{
+              backgroundColor: "rgba(255, 193, 7, 0.22)",
+              fontWeight: 700,
+              px: 0.5,
+              borderRadius: 0.75,
+            }}
+          >
+            {title.slice(matchIndex, matchIndex + lowerQuery.length)}
+          </Box>
+        );
+        startIndex = matchIndex + lowerQuery.length;
+        matchIndex = lowerTitle.indexOf(lowerQuery, startIndex);
+      }
 
-    if (startIndex < title.length) parts.push(title.slice(startIndex));
-    return parts;
-  }, [normalizedQuery]);
+      if (startIndex < title.length) parts.push(title.slice(startIndex));
+      return parts;
+    },
+    [normalizedQuery]
+  );
 
   const colCount = 5; // checkbox + issue + severity + status + actions
 
@@ -281,7 +284,7 @@ export default function FindingsTable({
         sx={{
           width: "100%",
           minWidth: 980,
-          tableLayout: "fixed", // чтобы ширины колонок не прыгали :contentReference[oaicite:2]{index=2}
+          tableLayout: "fixed", // чтобы ширины колонок не прыгали
         }}
       >
         {/* ВАЖНО: colgroup должен быть первым ребёнком table */}
@@ -443,25 +446,17 @@ export default function FindingsTable({
                   }}
                   sx={{
                     cursor: "pointer",
-                    position: "relative",
                     "& td": { verticalAlign: "middle" },
 
-                    "&::before": {
-                      content: '""',
-                      position: "absolute",
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: f.severity === "critical" || f.severity === "high" ? 4 : 3,
-                      backgroundColor: severityBorderColors[f.severity],
-                      opacity: f.severity === "critical" || f.severity === "high" ? 1 : 0.5,
-                      transition: "all 0.2s ease",
-                    },
-                    "&:hover::before": { width: 4, opacity: 1 },
+                    // ВАЖНО: не используем ::before на <tr> (часть браузеров превращает его в
+                    // "виртуальную" ячейку, и тогда все колонки визуально съезжают).
+                    // Полоску рисуем внутри первой <td> как absolute Box.
+                    "&:hover .finding-rowStripe": { width: 4, opacity: 1 },
                     ...(isActive && !isSelected
                       ? {
                         bgcolor: "action.selected",
                         "&:hover": { bgcolor: "action.selected" },
+                        "& .finding-rowStripe": { width: 4, opacity: 1 },
                       }
                       : null),
                   }}
@@ -469,19 +464,51 @@ export default function FindingsTable({
                   <TableCell
                     padding="checkbox"
                     onClick={(e) => e.stopPropagation()}
-                    sx={{ width: COL_CHECKBOX, maxWidth: COL_CHECKBOX, pl: 1.5 }}
+                    sx={{
+                      width: COL_CHECKBOX,
+                      maxWidth: COL_CHECKBOX,
+                      pl: 1.5,
+                      position: "relative",
+                      overflow: "visible",
+                    }}
                   >
+                    <Box
+                      className="finding-rowStripe"
+                      sx={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width:
+                          f.severity === "critical" || f.severity === "high" ? 4 : 3,
+                        backgroundColor: severityBorderColors[f.severity],
+                        opacity:
+                          f.severity === "critical" || f.severity === "high" ? 1 : 0.5,
+                        transition: "all 0.2s ease",
+                        pointerEvents: "none",
+                        zIndex: 0,
+                      }}
+                    />
                     <Checkbox
                       checked={isSelected}
                       onChange={() => onToggleOne(f.id)}
                       inputProps={{ "aria-label": `Выбрать ${f.title}` }}
+                      sx={{ position: "relative", zIndex: 1 }}
                     />
                   </TableCell>
 
                   {/* Issue details */}
                   <TableCell sx={{ minWidth: 0, overflow: "hidden" }}>
-                    <Stack spacing={compactMode ? 0 : 0.5} sx={{ minWidth: 0, overflow: "hidden" }}>
-                      <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+                    <Stack
+                      spacing={compactMode ? 0 : 0.5}
+                      sx={{ minWidth: 0, overflow: "hidden" }}
+                    >
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={1}
+                        sx={{ minWidth: 0 }}
+                      >
                         <Tooltip title={f.title} placement="top-start">
                           <Typography
                             variant="body2"
@@ -566,7 +593,12 @@ export default function FindingsTable({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minWidth: 0 }}>
+                          <Stack
+                            direction="row"
+                            spacing={0.5}
+                            alignItems="center"
+                            sx={{ minWidth: 0 }}
+                          >
                             <AppsIcon sx={{ fontSize: 14, color: "text.disabled" }} />
                             <Typography
                               variant="caption"
@@ -608,7 +640,11 @@ export default function FindingsTable({
                   {/* Severity */}
                   <TableCell
                     align="center"
-                    sx={{ width: COL_SEVERITY, maxWidth: COL_SEVERITY, whiteSpace: "nowrap" }}
+                    sx={{
+                      width: COL_SEVERITY,
+                      maxWidth: COL_SEVERITY,
+                      whiteSpace: "nowrap",
+                    }}
                   >
                     <Chip
                       size="small"
@@ -631,7 +667,11 @@ export default function FindingsTable({
                   {/* Status */}
                   <TableCell
                     align="center"
-                    sx={{ width: COL_STATUS, maxWidth: COL_STATUS, whiteSpace: "nowrap" }}
+                    sx={{
+                      width: COL_STATUS,
+                      maxWidth: COL_STATUS,
+                      whiteSpace: "nowrap",
+                    }}
                   >
                     <Chip
                       label={statusLabels[f.status] ?? f.status}
