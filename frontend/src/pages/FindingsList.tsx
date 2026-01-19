@@ -1,5 +1,6 @@
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Container,
@@ -15,7 +16,9 @@ import {
   useMediaQuery,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import ViewCompactIcon from "@mui/icons-material/ViewCompact";
 import ViewStreamIcon from "@mui/icons-material/ViewStream";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -24,6 +27,7 @@ import { useLocation } from "react-router-dom";
 import { getCurrentUser } from "../api/auth";
 import BulkActionsBar from "../components/BulkActionsBar";
 import FiltersPanel from "../components/FiltersPanel";
+import { FilterChips } from "../components/FilterChips";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
 import { useUrlFiltersSync } from "../hooks/useUrlFiltersSync";
@@ -50,6 +54,7 @@ const FindingsList = () => {
     const v = localStorage.getItem("findings.compactMode");
     return v ? v === "1" : true; // default: compact = ON
   });
+  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("findings.compactMode", compactMode ? "1" : "0");
@@ -114,6 +119,7 @@ const FindingsList = () => {
   );
 
   const drawerWidth = isMdUp ? 620 : "100vw";
+  const filtersDrawerWidth = isMdUp ? 420 : "100vw";
 
   const user = getCurrentUser();
   const canBulk = user?.roles?.includes("admin") || user?.roles?.includes("analyst");
@@ -125,6 +131,31 @@ const FindingsList = () => {
       JSON.stringify({ path: listPath, scrollY: window.scrollY })
     );
   }, [location.pathname, location.search]);
+
+  const activeFiltersCount = useMemo(() => {
+    const countable = [
+      filters.productId,
+      filters.searchInput.trim(),
+      filters.filterSeverity,
+      filters.filterStatus,
+      filters.filterOccurrence,
+      filters.filterScannerType,
+      filters.dateFrom,
+      filters.dateTo,
+    ];
+    const baseCount = countable.filter(Boolean).length;
+    return filters.showRepeats ? baseCount + 1 : baseCount;
+  }, [
+    filters.productId,
+    filters.searchInput,
+    filters.filterSeverity,
+    filters.filterStatus,
+    filters.filterOccurrence,
+    filters.filterScannerType,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.showRepeats,
+  ]);
 
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 2, md: 3 } }}>
@@ -138,47 +169,66 @@ const FindingsList = () => {
           Список находок
         </Typography>
 
-        <Tooltip title="Переключить режим отображения">
-          <ToggleButtonGroup
-            value={compactMode ? "compact" : "normal"}
-            exclusive
-            onChange={(_, value) => {
-              if (value !== null) setCompactMode(value === "compact");
-            }}
-            size="small"
-            aria-label="Режим отображения"
-          >
-            <ToggleButton value="normal" aria-label="Нормальный режим">
-              <ViewStreamIcon fontSize="small" />
-            </ToggleButton>
-            <ToggleButton value="compact" aria-label="Компактный режим">
-              <ViewCompactIcon fontSize="small" />
-            </ToggleButton>
-          </ToggleButtonGroup>
-        </Tooltip>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Tooltip title="Переключить режим отображения">
+            <ToggleButtonGroup
+              value={compactMode ? "compact" : "normal"}
+              exclusive
+              onChange={(_, value) => {
+                if (value !== null) setCompactMode(value === "compact");
+              }}
+              size="small"
+              aria-label="Режим отображения"
+            >
+              <ToggleButton value="normal" aria-label="Нормальный режим">
+                <ViewStreamIcon fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="compact" aria-label="Компактный режим">
+                <ViewCompactIcon fontSize="small" />
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Tooltip>
+
+          <Tooltip title="Фильтры">
+            <IconButton onClick={() => setFiltersDrawerOpen(true)} aria-label="Фильтры">
+              <Badge
+                badgeContent={activeFiltersCount}
+                color="primary"
+                overlap="circular"
+                invisible={activeFiltersCount === 0}
+              >
+                <FilterAltIcon />
+              </Badge>
+            </IconButton>
+          </Tooltip>
+        </Stack>
       </Stack>
 
-      <FiltersPanel
-        productId={filters.productId}
-        search={filters.searchInput}
-        filterSeverity={filters.filterSeverity}
-        filterStatus={filters.filterStatus}
-        filterOccurrence={filters.filterOccurrence}
-        filterScannerType={filters.filterScannerType}
-        dateFrom={filters.dateFrom}
-        dateTo={filters.dateTo}
-        showRepeats={filters.showRepeats}
-        onProductIdChange={actions.setProductId}
-        onSearchChange={actions.setSearchInput}
-        onSeverityChange={actions.setFilterSeverity}
-        onStatusChange={actions.setFilterStatus}
-        onOccurrenceChange={actions.setFilterOccurrence}
-        onScannerTypeChange={actions.setFilterScannerType}
-        onDateFromChange={actions.setDateFrom}
-        onDateToChange={actions.setDateTo}
-        onShowRepeatsChange={actions.setShowRepeats}
-        onReset={actions.resetFilters}
-      />
+      {activeFiltersCount > 0 ? (
+        <Box sx={{ mb: 2 }}>
+          <FilterChips
+            productId={filters.productId}
+            productLabel={filters.productId}
+            search={filters.searchInput}
+            filterSeverity={filters.filterSeverity}
+            filterStatus={filters.filterStatus}
+            filterOccurrence={filters.filterOccurrence}
+            filterScannerType={filters.filterScannerType}
+            dateFrom={filters.dateFrom}
+            dateTo={filters.dateTo}
+            showRepeats={filters.showRepeats}
+            onProductIdChange={actions.setProductId}
+            onSearchChange={actions.setSearchInput}
+            onSeverityChange={actions.setFilterSeverity}
+            onStatusChange={actions.setFilterStatus}
+            onOccurrenceChange={actions.setFilterOccurrence}
+            onScannerTypeChange={actions.setFilterScannerType}
+            onDateFromChange={actions.setDateFrom}
+            onDateToChange={actions.setDateTo}
+            onShowRepeatsChange={actions.setShowRepeats}
+          />
+        </Box>
+      ) : null}
 
       {canBulk && bulk.selectionCount > 0 && (
         <BulkActionsBar
@@ -334,6 +384,68 @@ const FindingsList = () => {
               onClose={drawer.closeDrawer}
             />
           ) : null}
+        </Box>
+      </Drawer>
+
+      <Drawer
+        anchor="right"
+        open={filtersDrawerOpen}
+        onClose={() => setFiltersDrawerOpen(false)}
+        PaperProps={{
+          sx: {
+            width: filtersDrawerWidth,
+            maxWidth: "100vw",
+            borderTopLeftRadius: isMdUp ? 16 : 0,
+            borderBottomLeftRadius: isMdUp ? 16 : 0,
+          },
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: "1px solid", borderColor: "divider" }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Фильтры
+            </Typography>
+
+            <Stack direction="row" gap={1} alignItems="center">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<RestartAltIcon />}
+                onClick={actions.resetFilters}
+              >
+                Сбросить
+              </Button>
+              <IconButton onClick={() => setFiltersDrawerOpen(false)} aria-label="Закрыть">
+                <CloseIcon />
+              </IconButton>
+            </Stack>
+          </Stack>
+        </Box>
+
+        <Box sx={{ p: 2, height: "100%", overflow: "auto" }}>
+          <FiltersPanel
+            productId={filters.productId}
+            search={filters.searchInput}
+            filterSeverity={filters.filterSeverity}
+            filterStatus={filters.filterStatus}
+            filterOccurrence={filters.filterOccurrence}
+            filterScannerType={filters.filterScannerType}
+            dateFrom={filters.dateFrom}
+            dateTo={filters.dateTo}
+            showRepeats={filters.showRepeats}
+            onProductIdChange={actions.setProductId}
+            onSearchChange={actions.setSearchInput}
+            onSeverityChange={actions.setFilterSeverity}
+            onStatusChange={actions.setFilterStatus}
+            onOccurrenceChange={actions.setFilterOccurrence}
+            onScannerTypeChange={actions.setFilterScannerType}
+            onDateFromChange={actions.setDateFrom}
+            onDateToChange={actions.setDateTo}
+            onShowRepeatsChange={actions.setShowRepeats}
+            onReset={actions.resetFilters}
+            showHeader={false}
+            showChips={false}
+          />
         </Box>
       </Drawer>
     </Container>
