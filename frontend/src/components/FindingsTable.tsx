@@ -33,7 +33,10 @@ import VerifiedIcon from "@mui/icons-material/Verified";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import RadarIcon from "@mui/icons-material/Radar";
-import { ReactNode, useCallback, useMemo } from "react";
+import { ReactNode, useCallback, useMemo, useState } from "react";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import SecurityIcon from "@mui/icons-material/Security";
 import { Link } from "react-router-dom";
 import {
   Finding,
@@ -223,7 +226,59 @@ interface FindingsTableProps {
 
   /** компактный режим отображения (без метаданных) */
   compactMode?: boolean;
+
+  /** включить группировку по rule title */
+  groupByRule?: boolean;
 }
+
+// Интерфейс для группы findings
+interface FindingGroup {
+  title: string;
+  shortTitle: string;
+  findings: Finding[];
+  highestSeverity: FindingSeverity;
+  statuses: Set<FindingStatus>;
+}
+
+// Функция для группировки findings по title
+const groupFindingsByTitle = (findings: Finding[]): FindingGroup[] => {
+  const groups = new Map<string, Finding[]>();
+
+  findings.forEach(f => {
+    const key = f.title;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key)!.push(f);
+  });
+
+  const severityOrder: Record<FindingSeverity, number> = {
+    critical: 4,
+    high: 3,
+    medium: 2,
+    low: 1,
+  };
+
+  return Array.from(groups.entries()).map(([title, groupFindings]) => {
+    const { display: shortTitle } = formatSmartTitle(title);
+
+    // Находим наивысший severity в группе
+    const highestSeverity = groupFindings.reduce((max, f) => {
+      return severityOrder[f.severity] > severityOrder[max] ? f.severity : max;
+    }, groupFindings[0].severity);
+
+    // Собираем все статусы
+    const statuses = new Set(groupFindings.map(f => f.status));
+
+    return {
+      title,
+      shortTitle,
+      findings: groupFindings,
+      highestSeverity,
+      statuses,
+    };
+  });
+};
 
 const formatDateTimeRuCompact = (value?: string | null) => {
   if (!value) return "—";
@@ -326,8 +381,40 @@ export default function FindingsTable({
   onOpenDetails,
   activeFindingId,
   compactMode = false,
+  groupByRule = false,
 }: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
+
+  // Состояние для развёрнутых групп (по title)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Группировка данных если включена
+  const groupedData = useMemo(() => {
+    if (!groupByRule || safeData.length === 0) return null;
+    return groupFindingsByTitle(safeData);
+  }, [groupByRule, safeData]);
+
+  const toggleGroup = useCallback((title: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  }, []);
+
+  const expandAllGroups = useCallback(() => {
+    if (groupedData) {
+      setExpandedGroups(new Set(groupedData.map(g => g.title)));
+    }
+  }, [groupedData]);
+
+  const collapseAllGroups = useCallback(() => {
+    setExpandedGroups(new Set());
+  }, []);
 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelected =
@@ -523,18 +610,85 @@ export default function FindingsTable({
 
           {!loading && !errorMessage && safeData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={colCount} align="center" sx={{ py: 6 }}>
-                <Typography color="text.secondary" gutterBottom>
-                  Ничего не найдено по фильтрам
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="primary"
-                  sx={{ cursor: "pointer" }}
-                  onClick={onResetFilters}
+              <TableCell colSpan={colCount} align="center" sx={{ py: 8 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 2,
+                  }}
                 >
-                  Сбросить фильтры
-                </Typography>
+                  {/* Иконка с анимацией */}
+                  <Box
+                    sx={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: "50%",
+                      bgcolor: "rgba(76, 175, 80, 0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      animation: "emptyPulse 2s ease-in-out infinite",
+                      "@keyframes emptyPulse": {
+                        "0%, 100%": {
+                          transform: "scale(1)",
+                          boxShadow: "0 0 0 0 rgba(76, 175, 80, 0.2)",
+                        },
+                        "50%": {
+                          transform: "scale(1.05)",
+                          boxShadow: "0 0 0 10px rgba(76, 175, 80, 0)",
+                        },
+                      },
+                    }}
+                  >
+                    <SecurityIcon
+                      sx={{
+                        fontSize: 40,
+                        color: "success.main",
+                      }}
+                    />
+                  </Box>
+
+                  {/* Текст */}
+                  <Box sx={{ textAlign: "center" }}>
+                    <Typography
+                      variant="h6"
+                      sx={{ fontWeight: 600, color: "text.primary", mb: 0.5 }}
+                    >
+                      No findings match your filters
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{ color: "text.secondary", maxWidth: 320 }}
+                    >
+                      Try adjusting your search criteria or clear filters to see all findings
+                    </Typography>
+                  </Box>
+
+                  {/* Кнопка */}
+                  <Box
+                    onClick={onResetFilters}
+                    sx={{
+                      mt: 1,
+                      px: 3,
+                      py: 1,
+                      borderRadius: 2,
+                      bgcolor: "primary.main",
+                      color: "primary.contrastText",
+                      fontWeight: 600,
+                      fontSize: "0.875rem",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      "&:hover": {
+                        bgcolor: "primary.dark",
+                        transform: "translateY(-1px)",
+                      },
+                    }}
+                  >
+                    Clear all filters
+                  </Box>
+                </Box>
               </TableCell>
             </TableRow>
           )}
@@ -700,56 +854,116 @@ export default function FindingsTable({
                           );
                         })()}
 
-                        {/* повторяемость */}
+                        {/* повторяемость - улучшенный badge */}
                         {occurrence === "REPEAT" && repeats > 0 && (
-                          <Tooltip title={`Найдено повторно ${repeats} раз`} placement="top">
-                            <Chip
-                              size="small"
-                              icon={<RepeatIcon sx={{ fontSize: 14 }} />}
-                              label={`${repeats}x`}
+                          <Tooltip
+                            title={
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  Repeated {repeats} times
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                  This finding was detected in multiple scans
+                                </Typography>
+                              </Box>
+                            }
+                            placement="top"
+                          >
+                            <Box
                               sx={{
-                                flexShrink: 0,
-                                height: 22,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: "12px",
                                 fontWeight: 700,
-                                fontSize: "0.72rem",
-                                bgcolor: "warning.light",
-                                color: "warning.dark",
-                                border: "1.5px solid",
-                                borderColor: "warning.main",
-                                "& .MuiChip-icon": { color: "warning.dark", ml: 0.5 },
+                                fontSize: "0.7rem",
+                                bgcolor: "rgba(255, 152, 0, 0.15)",
+                                color: "#ffb74d",
+                                border: "1px solid rgba(255, 152, 0, 0.4)",
+                                flexShrink: 0,
+                                transition: "all 0.2s ease",
+                                "&:hover": {
+                                  bgcolor: "rgba(255, 152, 0, 0.25)",
+                                },
                               }}
-                            />
+                            >
+                              <RepeatIcon sx={{ fontSize: 12 }} />
+                              {repeats}x
+                            </Box>
                           </Tooltip>
                         )}
 
                         {occurrence === "REPEAT" && !repeats && (
-                          <Chip
-                            size="small"
-                            label={occurrenceLabels[occurrence]}
-                            color={occurrenceColors[occurrence]}
-                            sx={{ flexShrink: 0, height: 22 }}
-                          />
+                          <Box
+                            sx={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                              px: 1,
+                              py: 0.25,
+                              borderRadius: "12px",
+                              fontWeight: 600,
+                              fontSize: "0.7rem",
+                              bgcolor: "rgba(255, 152, 0, 0.1)",
+                              color: "#ffb74d",
+                              border: "1px solid rgba(255, 152, 0, 0.3)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <RepeatIcon sx={{ fontSize: 12 }} />
+                            Repeat
+                          </Box>
                         )}
 
-                        {/* возраст */}
+                        {/* возраст - улучшенный badge */}
                         {showAgeWarning && (
-                          <Tooltip title={`Найдена ${ageDays} дн. назад`} placement="top">
-                            <Chip
-                              size="small"
-                              icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
-                              label={getAgeLabel(ageDays)}
+                          <Tooltip
+                            title={
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {ageDays >= 90 ? "Old finding" : "Aging finding"}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                  First detected {ageDays} days ago
+                                </Typography>
+                              </Box>
+                            }
+                            placement="top"
+                          >
+                            <Box
                               sx={{
-                                flexShrink: 0,
-                                height: 22,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: "12px",
+                                fontWeight: 600,
                                 fontSize: "0.7rem",
-                                bgcolor: ageDays >= 90 ? "error.light" : "grey.300",
-                                color: ageDays >= 90 ? "error.dark" : "text.secondary",
-                                "& .MuiChip-icon": {
-                                  color: ageDays >= 90 ? "error.dark" : "text.secondary",
-                                  ml: 0.5,
+                                flexShrink: 0,
+                                transition: "all 0.2s ease",
+                                // Красный для старых (90+ дней), серый для остальных
+                                ...(ageDays >= 90
+                                  ? {
+                                      bgcolor: "rgba(244, 67, 54, 0.15)",
+                                      color: "#ef5350",
+                                      border: "1px solid rgba(244, 67, 54, 0.4)",
+                                    }
+                                  : {
+                                      bgcolor: "rgba(158, 158, 158, 0.1)",
+                                      color: "#9e9e9e",
+                                      border: "1px solid rgba(158, 158, 158, 0.3)",
+                                    }),
+                                "&:hover": {
+                                  transform: "scale(1.02)",
                                 },
                               }}
-                            />
+                            >
+                              <ScheduleIcon sx={{ fontSize: 12 }} />
+                              {getAgeLabel(ageDays)}
+                            </Box>
                           </Tooltip>
                         )}
                       </Stack>
