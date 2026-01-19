@@ -21,6 +21,10 @@ import RepeatIcon from "@mui/icons-material/Repeat";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import AppsIcon from "@mui/icons-material/Apps";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { ReactNode, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -46,11 +50,37 @@ const severityLabels: Record<FindingSeverity, string> = {
   critical: "Critical",
 };
 
-const severityChipSx: Record<FindingSeverity, any> = {
-  low: { borderColor: "success.main", color: "success.main" },
-  medium: { borderColor: "warning.main", color: "warning.main" },
-  high: { borderColor: "error.main", color: "error.main" },
-  critical: { borderColor: "secondary.main", color: "secondary.main" },
+// Новая конфигурация severity с заливкой и иконками
+const severityConfig: Record<FindingSeverity, {
+  bgcolor: string;
+  color: string;
+  borderColor?: string;
+  icon: React.ReactNode;
+  glow?: string;
+}> = {
+  critical: {
+    bgcolor: "linear-gradient(135deg, #d32f2f 0%, #7b1fa2 100%)",
+    color: "#ffffff",
+    icon: <ErrorOutlineIcon sx={{ fontSize: 14 }} />,
+    glow: "0 0 12px rgba(211, 47, 47, 0.4)",
+  },
+  high: {
+    bgcolor: "#d32f2f",
+    color: "#ffffff",
+    icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
+  },
+  medium: {
+    bgcolor: "rgba(255, 152, 0, 0.15)",
+    color: "#ffb74d",
+    borderColor: "rgba(255, 152, 0, 0.5)",
+    icon: <ReportProblemOutlinedIcon sx={{ fontSize: 14 }} />,
+  },
+  low: {
+    bgcolor: "rgba(76, 175, 80, 0.1)",
+    color: "#81c784",
+    borderColor: "rgba(76, 175, 80, 0.3)",
+    icon: <InfoOutlinedIcon sx={{ fontSize: 14 }} />,
+  },
 };
 
 // Цвета для левой индикационной полосы
@@ -58,7 +88,15 @@ const severityBorderColors: Record<FindingSeverity, string> = {
   low: "#4caf50",
   medium: "#ff9800",
   high: "#f44336",
-  critical: "#9c27b0",
+  critical: "#d32f2f",
+};
+
+// Цвета фона строк для critical/high findings (subtle tint)
+const severityRowBgColors: Record<FindingSeverity, string | null> = {
+  critical: "rgba(211, 47, 47, 0.06)",
+  high: "rgba(244, 67, 54, 0.04)",
+  medium: null,
+  low: null,
 };
 
 const statusLabels: Record<FindingStatus, string> = {
@@ -428,6 +466,8 @@ export default function FindingsTable({
                 else onOpenDetails(f.id);
               };
 
+              const rowBgColor = severityRowBgColors[f.severity];
+
               return (
                 <TableRow
                   key={f.id}
@@ -448,15 +488,34 @@ export default function FindingsTable({
                     cursor: "pointer",
                     "& td": { verticalAlign: "middle" },
 
+                    // Zebra striping - чередование фона
+                    "&:nth-of-type(even)": {
+                      bgcolor: rowBgColor || "rgba(255, 255, 255, 0.015)",
+                    },
+                    "&:nth-of-type(odd)": {
+                      bgcolor: rowBgColor || "transparent",
+                    },
+
+                    // Border между строками
+                    borderBottom: "1px solid",
+                    borderColor: "rgba(255, 255, 255, 0.06)",
+
+                    // Улучшенный hover эффект
+                    transition: "all 0.15s ease",
+                    "&:hover": {
+                      bgcolor: "rgba(122, 162, 247, 0.08) !important",
+                      "& .finding-rowStripe": { width: 5, opacity: 1 },
+                    },
+
                     // ВАЖНО: не используем ::before на <tr> (часть браузеров превращает его в
                     // "виртуальную" ячейку, и тогда все колонки визуально съезжают).
                     // Полоску рисуем внутри первой <td> как absolute Box.
-                    "&:hover .finding-rowStripe": { width: 4, opacity: 1 },
+                    "&:hover .finding-rowStripe": { width: 5, opacity: 1 },
                     ...(isActive && !isSelected
                       ? {
                         bgcolor: "action.selected",
                         "&:hover": { bgcolor: "action.selected" },
-                        "& .finding-rowStripe": { width: 4, opacity: 1 },
+                        "& .finding-rowStripe": { width: 5, opacity: 1 },
                       }
                       : null),
                   }}
@@ -687,22 +746,40 @@ export default function FindingsTable({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={severityLabels[f.severity]}
-                      sx={{
-                        ...severityChipSx[f.severity],
-                        height: 22,
-                        maxWidth: "100%",
-                        "& .MuiChip-label": {
-                          px: 1,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        },
-                      }}
-                    />
+                    {(() => {
+                      const config = severityConfig[f.severity];
+                      const isGradient = config.bgcolor.includes("gradient");
+                      return (
+                        <Box
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                            px: 1.25,
+                            py: 0.5,
+                            borderRadius: "16px",
+                            fontWeight: 600,
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.025em",
+                            color: config.color,
+                            background: config.bgcolor,
+                            border: config.borderColor ? `1px solid ${config.borderColor}` : "none",
+                            boxShadow: config.glow ?? "none",
+                            transition: "all 0.2s ease",
+                            "&:hover": {
+                              transform: "scale(1.02)",
+                            },
+                            "& .MuiSvgIcon-root": {
+                              color: config.color,
+                            },
+                          }}
+                        >
+                          {config.icon}
+                          {severityLabels[f.severity]}
+                        </Box>
+                      );
+                    })()}
                   </TableCell>
 
                   {/* Status */}
