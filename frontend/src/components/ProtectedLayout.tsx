@@ -1,7 +1,6 @@
-import { Box } from "@mui/material";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { getToken } from "../api/http";
-import TopBar from "./TopBar";
+import AppShell from "./AppShell";
 
 const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
 
@@ -26,12 +25,9 @@ const ProtectedLayout = () => {
   }
 
   return (
-    <Box minHeight="100vh" display="flex" flexDirection="column">
-      <TopBar />
-      <Box flex={1} bgcolor="background.default">
-        <Outlet />
-      </Box>
-    </Box>
+    <AppShell>
+      <Outlet />
+    </AppShell>
   );
 };
 
