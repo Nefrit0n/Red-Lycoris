@@ -1,7 +1,6 @@
 import {
   Box,
   Checkbox,
-  Chip,
   IconButton,
   Skeleton,
   Stack,
@@ -34,8 +33,6 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import RadarIcon from "@mui/icons-material/Radar";
 import { ReactNode, useCallback, useMemo, useState } from "react";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import SecurityIcon from "@mui/icons-material/Security";
 import { Link } from "react-router-dom";
 import {
@@ -183,18 +180,8 @@ const statusConfig: Record<FindingStatus, {
   },
 };
 
-const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
-  NEW: "New",
-  REPEAT: "Repeated",
-};
-
-const occurrenceColors: Record<
-  FindingOccurrenceStatus,
-  "default" | "info" | "warning"
-> = {
-  NEW: "default",
-  REPEAT: "warning",
-};
+// Примечание: occurrenceLabels и occurrenceColors удалены,
+// т.к. repeat/age badges теперь используют кастомную стилизацию
 
 interface FindingsTableProps {
   data: Finding[];
@@ -750,10 +737,7 @@ export default function FindingsTable({
                       "& .finding-rowStripe": { width: 5, opacity: 1 },
                     },
 
-                    // ВАЖНО: не используем ::before на <tr> (часть браузеров превращает его в
-                    // "виртуальную" ячейку, и тогда все колонки визуально съезжают).
-                    // Полоску рисуем внутри первой <td> как absolute Box.
-                    "&:hover .finding-rowStripe": { width: 5, opacity: 1 },
+                    // Active state (открыт в drawer)
                     ...(isActive && !isSelected
                       ? {
                         bgcolor: "action.selected",
@@ -784,8 +768,9 @@ export default function FindingsTable({
                         width:
                           f.severity === "critical" || f.severity === "high" ? 4 : 3,
                         backgroundColor: severityBorderColors[f.severity],
+                        // Улучшенный контраст для всех уровней severity
                         opacity:
-                          f.severity === "critical" || f.severity === "high" ? 1 : 0.5,
+                          f.severity === "critical" || f.severity === "high" ? 1 : 0.7,
                         transition: "all 0.2s ease",
                         pointerEvents: "none",
                         zIndex: 0,
