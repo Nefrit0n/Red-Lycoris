@@ -19,12 +19,20 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RepeatIcon from "@mui/icons-material/Repeat";
 import ScheduleIcon from "@mui/icons-material/Schedule";
-import AppsIcon from "@mui/icons-material/Apps";
-import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import FiberNewIcon from "@mui/icons-material/FiberNew";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import BlockIcon from "@mui/icons-material/Block";
+import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
+import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined";
+import VerifiedIcon from "@mui/icons-material/Verified";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import RadarIcon from "@mui/icons-material/Radar";
 import { ReactNode, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -110,18 +118,66 @@ const statusLabels: Record<FindingStatus, string> = {
   duplicate: "Duplicate",
 };
 
-const statusColors: Record<
-  FindingStatus,
-  "default" | "info" | "success" | "warning"
-> = {
-  new: "info",
-  under_review: "warning",
-  confirmed: "success",
-  false_positive: "default",
-  out_of_scope: "default",
-  risk_accepted: "warning",
-  mitigated: "success",
-  duplicate: "default",
+// Новая конфигурация статусов с иконками и семантической группировкой
+const statusConfig: Record<FindingStatus, {
+  icon: React.ReactNode;
+  bgcolor: string;
+  color: string;
+  borderColor?: string;
+  pulse?: boolean; // для "New" статуса
+}> = {
+  // === Требует внимания (Action Required) ===
+  new: {
+    icon: <FiberNewIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(33, 150, 243, 0.15)",
+    color: "#64b5f6",
+    borderColor: "rgba(33, 150, 243, 0.5)",
+    pulse: true,
+  },
+  under_review: {
+    icon: <VisibilityIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(255, 152, 0, 0.12)",
+    color: "#ffb74d",
+    borderColor: "rgba(255, 152, 0, 0.4)",
+  },
+  confirmed: {
+    icon: <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(244, 67, 54, 0.12)",
+    color: "#ef5350",
+    borderColor: "rgba(244, 67, 54, 0.4)",
+  },
+
+  // === Закрыто (Resolved) ===
+  mitigated: {
+    icon: <VerifiedIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(76, 175, 80, 0.12)",
+    color: "#81c784",
+    borderColor: "rgba(76, 175, 80, 0.4)",
+  },
+  false_positive: {
+    icon: <BlockIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(158, 158, 158, 0.1)",
+    color: "#9e9e9e",
+    borderColor: "rgba(158, 158, 158, 0.3)",
+  },
+  out_of_scope: {
+    icon: <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(158, 158, 158, 0.1)",
+    color: "#9e9e9e",
+    borderColor: "rgba(158, 158, 158, 0.3)",
+  },
+  risk_accepted: {
+    icon: <ThumbUpAltOutlinedIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(255, 193, 7, 0.1)",
+    color: "#ffd54f",
+    borderColor: "rgba(255, 193, 7, 0.3)",
+  },
+  duplicate: {
+    icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
+    bgcolor: "rgba(158, 158, 158, 0.1)",
+    color: "#9e9e9e",
+    borderColor: "rgba(158, 158, 158, 0.3)",
+  },
 };
 
 const occurrenceLabels: Record<FindingOccurrenceStatus, string> = {
@@ -208,6 +264,39 @@ const getAgeLabel = (days: number): string => {
   if (days < 30) return `${Math.floor(days / 7)}н`;
   if (days < 365) return `${Math.floor(days / 30)}мес`;
   return `${Math.floor(days / 365)}г`;
+};
+
+/**
+ * Smart title formatting для длинных rule names.
+ * Примеры:
+ * - "java.lang.security.audit.cbc-padding-oracle.cbc-padding-oracle" -> "cbc-padding-oracle"
+ * - "Asymmetric Private Key" -> "Asymmetric Private Key" (без изменений)
+ * - "semgrep.java.spring.xxe...." -> "xxe..." (последняя значимая часть)
+ */
+const formatSmartTitle = (title: string): { display: string; isShortened: boolean } => {
+  if (!title) return { display: title, isShortened: false };
+
+  // Если title содержит точки (namespace-style), извлекаем последнюю значимую часть
+  if (title.includes(".") && title.length > 50) {
+    const parts = title.split(".");
+
+    // Находим последнюю уникальную часть (не дублирующуюся)
+    const lastPart = parts[parts.length - 1];
+    const secondLastPart = parts.length > 1 ? parts[parts.length - 2] : null;
+
+    // Если последние две части одинаковые, берём одну
+    if (secondLastPart && lastPart === secondLastPart) {
+      return { display: lastPart, isShortened: true };
+    }
+
+    // Берём последние 2-3 значимые части
+    const significantParts = parts.filter(p => p.length > 2).slice(-2);
+    if (significantParts.length > 0) {
+      return { display: significantParts.join("."), isShortened: true };
+    }
+  }
+
+  return { display: title, isShortened: false };
 };
 
 const buildFindingLink = (id: string, returnTo: string) => {
@@ -568,21 +657,48 @@ export default function FindingsTable({
                         spacing={1}
                         sx={{ minWidth: 0 }}
                       >
-                        <Tooltip title={f.title} placement="top-start">
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 700,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              minWidth: 0,
-                              flex: 1,
-                            }}
-                          >
-                            {renderHighlightedTitle(f.title)}
-                          </Typography>
-                        </Tooltip>
+                        {(() => {
+                          const { display: smartTitle, isShortened } = formatSmartTitle(f.title);
+                          return (
+                            <Tooltip
+                              title={
+                                <Box sx={{ maxWidth: 400, wordBreak: "break-word" }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                    {f.title}
+                                  </Typography>
+                                  {isShortened && (
+                                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                      (полное название rule)
+                                    </Typography>
+                                  )}
+                                </Box>
+                              }
+                              placement="top-start"
+                            >
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontWeight: 700,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  minWidth: 0,
+                                  flex: 1,
+                                  // Если title укорочен, показываем с иконкой/стилем
+                                  ...(isShortened && {
+                                    "&::before": {
+                                      content: '"…"',
+                                      color: "text.disabled",
+                                      mr: 0.5,
+                                    },
+                                  }),
+                                }}
+                              >
+                                {renderHighlightedTitle(isShortened ? smartTitle : f.title)}
+                              </Typography>
+                            </Tooltip>
+                          );
+                        })()}
 
                         {/* повторяемость */}
                         {occurrence === "REPEAT" && repeats > 0 && (
@@ -655,7 +771,7 @@ export default function FindingsTable({
                           if (productLabel) {
                             metaItems.push({
                               key: "product",
-                              icon: <AppsIcon sx={{ fontSize: 14, color: "text.disabled" }} />,
+                              icon: <InventoryIcon sx={{ fontSize: 14, color: "text.disabled" }} />,
                               label: productLabel,
                               maxWidth: 340,
                             });
@@ -665,7 +781,7 @@ export default function FindingsTable({
                             metaItems.push({
                               key: "scanner",
                               icon: (
-                                <QrCodeScannerIcon
+                                <RadarIcon
                                   sx={{ fontSize: 14, color: "text.disabled" }}
                                 />
                               ),
@@ -791,22 +907,45 @@ export default function FindingsTable({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    <Chip
-                      label={statusLabels[f.status] ?? f.status}
-                      color={statusColors[f.status]}
-                      size="small"
-                      sx={{
-                        height: 22,
-                        maxWidth: "100%",
-                        textTransform: "none",
-                        "& .MuiChip-label": {
-                          px: 1,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        },
-                      }}
-                    />
+                    {(() => {
+                      const config = statusConfig[f.status];
+                      return (
+                        <Box
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                            px: 1.25,
+                            py: 0.5,
+                            borderRadius: "16px",
+                            fontWeight: 500,
+                            fontSize: "0.75rem",
+                            color: config.color,
+                            bgcolor: config.bgcolor,
+                            border: config.borderColor ? `1px solid ${config.borderColor}` : "none",
+                            transition: "all 0.2s ease",
+                            // Пульсация для "New" статуса
+                            ...(config.pulse && {
+                              animation: "statusPulse 2s ease-in-out infinite",
+                              "@keyframes statusPulse": {
+                                "0%, 100%": {
+                                  boxShadow: `0 0 0 0 ${config.borderColor}`,
+                                },
+                                "50%": {
+                                  boxShadow: `0 0 0 4px transparent`,
+                                },
+                              },
+                            }),
+                            "& .MuiSvgIcon-root": {
+                              color: config.color,
+                            },
+                          }}
+                        >
+                          {config.icon}
+                          {statusLabels[f.status] ?? f.status}
+                        </Box>
+                      );
+                    })()}
                   </TableCell>
 
                   {/* Actions */}
