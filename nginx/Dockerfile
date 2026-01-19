@@ -7,34 +7,27 @@ RUN npm run build
 
 FROM nginx:alpine3.23
 
+# openssl нужен для генерации сертификата при старте
+RUN apk add --no-cache openssl
+
 # Create non-root user and configure nginx to run as non-root
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup && \
-    chown -R appuser:appgroup /var/cache/nginx && \
-    chown -R appuser:appgroup /var/log/nginx && \
+    mkdir -p /var/cache/nginx /var/log/nginx /etc/nginx/ssl /docker-entrypoint.d && \
     touch /var/run/nginx.pid && \
-    chown appuser:appgroup /var/run/nginx.pid && \
-    mkdir -p /etc/nginx/ssl && \
-    chown -R appuser:appgroup /etc/nginx/ssl
+    chown -R appuser:appgroup /var/cache/nginx /var/log/nginx /var/run/nginx.pid /etc/nginx/ssl /docker-entrypoint.d
 
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
-# Copy SSL certificates (must exist before building)
-# For development: run nginx/ssl/generate-certs.sh first
-COPY nginx/ssl/server.crt /etc/nginx/ssl/server.crt
-COPY nginx/ssl/server.key /etc/nginx/ssl/server.key
-
-# Ensure proper permissions
-RUN chown -R appuser:appgroup /usr/share/nginx/html && \
-    chown appuser:appgroup /etc/nginx/ssl/server.crt && \
-    chown appuser:appgroup /etc/nginx/ssl/server.key && \
-    chmod 644 /etc/nginx/ssl/server.crt && \
-    chmod 600 /etc/nginx/ssl/server.key
+# Скрипт автогенерации TLS при старте контейнера
+COPY nginx/docker-entrypoint.d/10-generate-cert.sh /docker-entrypoint.d/10-generate-cert.sh
+RUN chmod +x /docker-entrypoint.d/10-generate-cert.sh && \
+    chown appuser:appgroup /docker-entrypoint.d/10-generate-cert.sh && \
+    chown -R appuser:appgroup /usr/share/nginx/html
 
 USER appuser
 
-# Expose both HTTP (for redirect) and HTTPS ports
 EXPOSE 8080 8443
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
