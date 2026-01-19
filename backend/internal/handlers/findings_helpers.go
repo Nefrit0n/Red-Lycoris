@@ -137,12 +137,29 @@ func resolveProductFilter(ctx context.Context, db *sql.DB, productIDParam string
 
 // userIDFromContext extracts user ID from fiber context
 func userIDFromContext(c *fiber.Ctx) *uuid.UUID {
-	userID := c.Locals("userID")
-	if userID == nil {
-		return nil
+	// основной кейс: middleware кладет "user_id"
+	if v := c.Locals("user_id"); v != nil {
+		switch t := v.(type) {
+		case uuid.UUID:
+			return &t
+		case string:
+			if id, err := uuid.Parse(t); err == nil {
+				return &id
+			}
+		}
 	}
-	if id, ok := userID.(uuid.UUID); ok {
-		return &id
+
+	// fallback: если где-то остался старый ключ
+	if v := c.Locals("userID"); v != nil {
+		switch t := v.(type) {
+		case uuid.UUID:
+			return &t
+		case string:
+			if id, err := uuid.Parse(t); err == nil {
+				return &id
+			}
+		}
 	}
+
 	return nil
 }
