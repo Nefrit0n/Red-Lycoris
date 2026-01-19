@@ -1,3 +1,5 @@
+# docker-compose.prod.yml
+
 # Common environment variables using YAML anchors
 x-db-env: &db-env
   DB_HOST: ${DB_HOST:-postgres}
@@ -30,20 +32,51 @@ x-celery-env: &celery-env
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
 
 services:
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports:
+      # PROD: наружу только nginx
+      - "80:8080" # HTTP -> redirect to HTTPS
+      - "443:8443" # HTTPS
+    volumes:
+      # Persist TLS certs (autogen on first start, survive restarts/rebuilds)
+      - nginx_ssl:/etc/nginx/ssl
+    environment:
+      # CN + SAN для self-signed (подставь домен в .env)
+      SSL_DOMAIN: ${SSL_DOMAIN:-localhost}
+      TLS_SAN: ${TLS_SAN:-DNS:localhost,IP:127.0.0.1}
+    depends_on:
+      backend:
+        condition: service_healthy
+      python-api:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/nginx-health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-net
+
   backend:
     build:
       context: ./backend
+      # ВАЖНО: если у тебя нет target "prod" в Dockerfile backend — убери target или замени на существующий
       target: dev
     environment:
       <<: [ *db-env, *object-store-env, *analysis-env ]
-      APP_PORT: ${BACKEND_PORT:-8080}
+      APP_ENV: production
+      APP_PORT: 8080
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       MIGRATIONS_PATH: /app/migrations
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
-    volumes:
-      - ./backend:/app
+
+      # Критично: стабильный секрет, иначе токены умрут при рестартах
+      JWT_SECRET: ${JWT_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,17 +91,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     restart: unless-stopped
     networks:
-      - frontend-net
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
+      - app-net
 
   analysis-worker:
     build:
@@ -89,24 +115,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
+      - app-net
 
   python-api:
     build:
       context: ./python_api
     environment:
       <<: *celery-env
-      PYTHON_API_PORT: ${PYTHON_API_PORT:-8000}
+      APP_ENV: production
+      PYTHON_API_PORT: 8000
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_WORKER_CLASS: ${GUNICORN_WORKER_CLASS:-uvicorn.workers.UvicornWorker}
-    ports:
-      - "${PYTHON_API_PORT:-8000}:8000"
     depends_on:
       redis:
         condition: service_healthy
@@ -115,17 +134,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     restart: unless-stopped
     networks:
-      - frontend-net
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
+      - app-net
 
   celery-worker:
     build:
@@ -134,51 +146,13 @@ services:
       celery -A app.celery_app:celery_app worker --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
     environment:
       <<: *celery-env
+      APP_ENV: production
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
-
-  nginx:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
-    ports:
-      - "${NGINX_HTTP_PORT:-8080}:8080"   # HTTP (redirects to HTTPS)
-      - "${NGINX_HTTPS_PORT:-8443}:8443"  # HTTPS
-    volumes:
-      # Mount SSL certificates for development (override baked-in certs)
-      # For production, certificates should be baked into image or use secrets
-      - ./nginx/ssl/server.crt:/etc/nginx/ssl/server.crt:ro
-      - ./nginx/ssl/server.key:/etc/nginx/ssl/server.key:ro
-    depends_on:
-      backend:
-        condition: service_healthy
-      python-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/nginx-health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-    restart: unless-stopped
-    networks:
-      - frontend-net
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-        reservations:
-          memory: 64M
+      - app-net
 
   postgres:
     image: postgres:16-alpine
@@ -186,9 +160,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-lotus_warden}
-    # Port exposed only for development - remove in production
-    ports:
-      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     command: >
@@ -198,59 +169,35 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
     restart: unless-stopped
     networks:
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
+      - app-net
 
   redis:
     image: redis:7-alpine
-    # Port exposed only for development - remove in production
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 5s
+      start_period: 10s
     restart: unless-stopped
     networks:
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-        reservations:
-          memory: 64M
+      - app-net
 
   nats:
     image: nats:2.10-alpine
     command: [ "-js" ]
-    # Port exposed only for development - remove in production
-    ports:
-      - "${NATS_PORT:-4222}:4222"
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz" ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 5s
+      start_period: 10s
     restart: unless-stopped
     networks:
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-        reservations:
-          memory: 64M
+      - app-net
 
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
@@ -258,10 +205,6 @@ services:
       MINIO_ROOT_USER: ${OBJECT_STORE_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${OBJECT_STORE_SECRET_KEY:-minioadmin}
     command: [ "server", "/data", "--console-address", ":9001" ]
-    # Ports exposed only for development - remove in production
-    ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -269,23 +212,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
     restart: unless-stopped
     networks:
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
+      - app-net
 
 networks:
-  frontend-net:
-    driver: bridge
-  backend-net:
+  app-net:
     driver: bridge
 
 volumes:
   postgres_data:
   minio_data:
+  nginx_ssl:
