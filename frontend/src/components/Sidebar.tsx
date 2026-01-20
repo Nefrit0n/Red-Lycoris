@@ -14,6 +14,7 @@ import {
   BugReport as BugReportIcon,
   Analytics as AnalyticsIcon,
   CloudUpload as CloudUploadIcon,
+  Dashboard as DashboardIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
   MenuOpen as MenuOpenIcon,
@@ -59,6 +60,9 @@ const writeRecent = (entries: RecentEntry[]) => {
 };
 
 const resolveTitleForPath = (path: string): string | null => {
+  if (path.startsWith("/dashboard")) {
+    return "Dashboard";
+  }
   if (path.startsWith("/findings")) {
     return "Находки";
   }
@@ -95,6 +99,7 @@ const Sidebar = () => {
   const navigationItems = useMemo<NavItem[]>(
     () => {
       const items: NavItem[] = [
+        { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
         { label: "Находки", path: "/findings", icon: <BugReportIcon /> },
         { label: "Продукты", path: "/products", icon: <Inventory2Icon /> },
         { label: "Анализ", path: "/analyze", icon: <AnalyticsIcon /> },
