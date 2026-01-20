@@ -752,6 +752,21 @@ export default function FindingsTable({
                 : isNonEmptyString(f.description)
                   ? f.description
                   : null;
+              const intelSummary = f.intel_summary;
+              const cvssScore =
+                typeof intelSummary?.cvss?.score === "number"
+                  ? intelSummary?.cvss?.score
+                  : null;
+              const cvssVersion = intelSummary?.cvss?.version ?? null;
+              const epssScore =
+                typeof intelSummary?.epss?.score === "number"
+                  ? intelSummary?.epss?.score
+                  : null;
+              const epssPercentile =
+                typeof intelSummary?.epss?.percentile === "number"
+                  ? intelSummary?.epss?.percentile
+                  : null;
+              const isKev = Boolean(intelSummary?.kev);
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
@@ -1034,6 +1049,98 @@ export default function FindingsTable({
                         >
                           {message}
                         </Typography>
+                      )}
+
+                      {(cvssScore !== null || epssScore !== null || isKev) && (
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          sx={{ alignItems: "center", flexWrap: "wrap", mt: 0.25 }}
+                        >
+                          {cvssScore !== null && (
+                            <Tooltip
+                              title={`CVSS${cvssVersion ? ` v${cvssVersion}` : ""}: ${cvssScore.toFixed(
+                                1
+                              )}`}
+                            >
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                  px: 1,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 700,
+                                  fontSize: "0.7rem",
+                                  bgcolor:
+                                    cvssScore >= 9
+                                      ? "rgba(244, 67, 54, 0.2)"
+                                      : cvssScore >= 7
+                                        ? "rgba(255, 152, 0, 0.2)"
+                                        : "rgba(76, 175, 80, 0.2)",
+                                  color:
+                                    cvssScore >= 9
+                                      ? "#ef5350"
+                                      : cvssScore >= 7
+                                        ? "#ffb74d"
+                                        : "#81c784",
+                                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                                }}
+                              >
+                                CVSS {cvssScore.toFixed(1)}
+                              </Box>
+                            </Tooltip>
+                          )}
+                          {epssScore !== null && (
+                            <Tooltip
+                              title={`EPSS: ${(epssScore * 100).toFixed(2)}%${
+                                epssPercentile !== null
+                                  ? ` (p${(epssPercentile * 100).toFixed(1)})`
+                                  : ""
+                              }`}
+                            >
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                  px: 1,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 700,
+                                  fontSize: "0.7rem",
+                                  bgcolor: "rgba(33, 150, 243, 0.15)",
+                                  color: "#64b5f6",
+                                  border: "1px solid rgba(100, 181, 246, 0.4)",
+                                }}
+                              >
+                                EPSS {(epssScore * 100).toFixed(1)}%
+                              </Box>
+                            </Tooltip>
+                          )}
+                          {isKev && (
+                            <Tooltip title="Known Exploited Vulnerability">
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                  px: 1,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 700,
+                                  fontSize: "0.7rem",
+                                  bgcolor: "rgba(255, 82, 82, 0.2)",
+                                  color: "#ff8a80",
+                                  border: "1px solid rgba(255, 82, 82, 0.5)",
+                                }}
+                              >
+                                KEV
+                              </Box>
+                            </Tooltip>
+                          )}
+                        </Stack>
                       )}
 
                       {/* метаданные (только НЕ compact) — FIX: не рисуем пустое и не делаем “серую полосу” */}
