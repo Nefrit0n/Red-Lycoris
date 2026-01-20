@@ -22,7 +22,7 @@ func TestFindingsListDefaultsToCanonical(t *testing.T) {
 	defer db.Close()
 
 	cfg := config.Config{JWTSecret: "test-secret"}
-	app := server.NewApp(cfg, db)
+	app := server.NewApp(cfg, db, nil, nil)
 
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM findings.*duplicate_id IS NULL").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))

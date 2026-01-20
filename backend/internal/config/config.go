@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -35,6 +37,13 @@ type Config struct {
 	AnalysisSemgrepImage     string
 	AnalysisTrivyImage       string
 	AnalysisContainerNetwork string
+	NVDAPIKey                string
+	EPSSEnabled              bool
+	KEVURL                   string
+	KEVMirrorURL             string
+	IntelRefreshInterval     string
+	IntelWorkerConcurrency   int
+	IntelRetryBase           string
 }
 
 func Load() Config {
@@ -65,6 +74,13 @@ func Load() Config {
 		AnalysisSemgrepImage:     getEnv("ANALYSIS_SEMGREP_IMAGE", "semgrep/semgrep:latest"),
 		AnalysisTrivyImage:       getEnv("ANALYSIS_TRIVY_IMAGE", "aquasec/trivy:latest"),
 		AnalysisContainerNetwork: getEnv("ANALYSIS_CONTAINER_NETWORK", "none"),
+		NVDAPIKey:                getEnv("NVD_API_KEY", ""),
+		EPSSEnabled:              getEnvAsBool("EPSS_ENABLED", true),
+		KEVURL:                   getEnv("KEV_URL", ""),
+		KEVMirrorURL:             getEnv("KEV_MIRROR_URL", ""),
+		IntelRefreshInterval:     getEnv("INTEL_REFRESH_INTERVAL", "24h"),
+		IntelWorkerConcurrency:   getEnvAsInt("INTEL_WORKER_CONCURRENCY", 4),
+		IntelRetryBase:           getEnv("INTEL_RETRY_BASE", "30m"),
 	}
 }
 
@@ -104,4 +120,28 @@ func generateRandomString(length int) string {
 		panic(fmt.Sprintf("failed to generate random string: %v", err))
 	}
 	return hex.EncodeToString(bytes)[:length]
+}
+
+func getEnvAsBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func getEnvAsInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

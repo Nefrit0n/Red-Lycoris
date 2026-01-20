@@ -36,6 +36,7 @@ export interface Finding {
   repeatCount?: number | null;
   createdAt: string;
   updatedAt: string;
+  intel_summary?: IntelSummary | null;
 }
 
 export interface ApiResponse {
@@ -95,6 +96,34 @@ export interface FindingDetail {
   occurrences?: FindingOccurrence[];
   duplicates?: FindingDuplicateGroup | null;
   evidence?: SemgrepEvidence | null;
+  intel_summary?: IntelSummary | null;
+  intel_details?: IntelDetail | null;
+}
+
+export interface IntelSummary {
+  identifiers: string[];
+  cvss?: {
+    score?: number | null;
+    version?: string | null;
+  } | null;
+  epss?: {
+    score?: number | null;
+    percentile?: number | null;
+  } | null;
+  kev: boolean;
+  last_refreshed_at?: string | null;
+}
+
+export interface IntelDetail {
+  identifiers: string[];
+  nvd?: Record<string, unknown> | null;
+  epss?: Record<string, unknown> | null;
+  kev?: Record<string, unknown> | null;
+  references?: Array<{
+    title?: string | null;
+    url: string;
+  }> | null;
+  updated_at?: string | null;
 }
 
 export interface FindingComment {
