@@ -7,6 +7,7 @@ type Finding struct {
 	Location    string         `json:"location,omitempty"`
 	RuleID      string         `json:"rule_id,omitempty"`
 	RawData     map[string]any `json:"raw_data,omitempty"`
+	Evidence    map[string]any `json:"evidence,omitempty"`
 }
 
 type Parser interface {

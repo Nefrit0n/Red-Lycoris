@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"time"
 
 	"lotus-warden/backend/internal/dedup"
@@ -128,6 +129,16 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 			duplicates++
 			if params.Callbacks != nil && params.Callbacks.OnDuplicateCreated != nil {
 				params.Callbacks.OnDuplicateCreated(result.finding, result.masterID)
+			}
+		}
+
+		if len(finding.Evidence) > 0 {
+			targetID := result.finding.ID
+			if !result.isNew {
+				targetID = result.masterID
+			}
+			if err := createFindingImportEvent(ctx, db, targetID, finding.Evidence); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -298,4 +309,20 @@ func NullUUIDPtr(value uuid.NullUUID) *uuid.UUID {
 		return nil
 	}
 	return &value.UUID
+}
+
+func createFindingImportEvent(ctx context.Context, db *sql.DB, findingID uuid.UUID, evidence map[string]any) error {
+	if len(evidence) == 0 {
+		return nil
+	}
+	payload, err := json.Marshal(evidence)
+	if err != nil {
+		return err
+	}
+	event := &models.FindingEvent{
+		FindingID: findingID,
+		EventType: "finding.imported",
+		Payload:   payload,
+	}
+	return storage.CreateFindingEvent(ctx, db, event)
 }
