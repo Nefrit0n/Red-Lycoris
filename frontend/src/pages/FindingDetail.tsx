@@ -8,6 +8,7 @@ import {
   Container,
   Divider,
   IconButton,
+  Link as MuiLink,
   MenuItem,
   Stack,
   Tab,
@@ -50,6 +51,57 @@ type FindingDetailContentProps = {
   returnTo?: string | null;
   onClose?: () => void;
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const toStringValue = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return null;
+};
+
+const extractStringFromRecord = (value: Record<string, unknown>): string | null => {
+  const keys = ["url", "link", "name", "id", "value"];
+  for (const key of keys) {
+    const candidate = toStringValue(value[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const toStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const fromPrimitive = toStringValue(item);
+      if (fromPrimitive) return [fromPrimitive];
+      if (isRecord(item)) {
+        const fromRecord = extractStringFromRecord(item);
+        return fromRecord ? [fromRecord] : [];
+      }
+      return [];
+    });
+  }
+
+  const fromPrimitive = toStringValue(value);
+  if (fromPrimitive) return [fromPrimitive];
+  if (isRecord(value)) {
+    const fromRecord = extractStringFromRecord(value);
+    return fromRecord ? [fromRecord] : [];
+  }
+  return [];
+};
+
+const uniq = (values: string[]) => Array.from(new Set(values));
+
+const isProbablyUrl = (value: string) => /^https?:\/\//i.test(value);
 
 export const FindingDetailContent = ({
   id,
@@ -129,6 +181,21 @@ export const FindingDetailContent = ({
     data?.evidence && (data.evidence as SemgrepEvidence).scannerType === "semgrep"
       ? (data.evidence as SemgrepEvidence)
       : null;
+  const metadata = semgrepEvidence?.metadata;
+  const metadataRecord = isRecord(metadata) ? metadata : null;
+  const cweList = uniq(toStringArray(metadataRecord?.cwe));
+  const owaspList = uniq(toStringArray(metadataRecord?.owasp));
+  const technologyList = uniq(toStringArray(metadataRecord?.technology));
+  const category = toStringValue(metadataRecord?.category);
+  const subcategory = toStringValue(metadataRecord?.subcategory);
+  const references = uniq(toStringArray(metadataRecord?.references));
+  const hasStructuredMetadata =
+    cweList.length > 0 ||
+    owaspList.length > 0 ||
+    technologyList.length > 0 ||
+    Boolean(category) ||
+    Boolean(subcategory) ||
+    references.length > 0;
 
   // Loading state
   if (loading) {
@@ -439,6 +506,8 @@ export const FindingDetailContent = ({
                       borderRadius: 1.5,
                       backgroundColor: "action.hover",
                       overflowX: "auto",
+                      maxHeight: 240,
+                      overflowY: "auto",
                       fontSize: "0.75rem",
                     }}
                   >
@@ -449,25 +518,140 @@ export const FindingDetailContent = ({
 
               {semgrepEvidence.metadata && (
                 <Box>
-                  <Button size="small" onClick={() => setEvidenceExpanded((prev) => !prev)}>
-                    {evidenceExpanded ? "Скрыть metadata" : "Показать metadata"}
-                  </Button>
-                  <Collapse in={evidenceExpanded} timeout="auto" unmountOnExit>
-                    <Box
-                      component="pre"
-                      sx={{
-                        mt: 1,
-                        mb: 0,
-                        p: 1.5,
-                        borderRadius: 1.5,
-                        backgroundColor: "action.hover",
-                        overflowX: "auto",
-                        fontSize: "0.75rem",
-                      }}
-                    >
-                      {JSON.stringify(semgrepEvidence.metadata, null, 2)}
-                    </Box>
-                  </Collapse>
+                  <Divider sx={{ my: 1.5 }} />
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Метаданные
+                  </Typography>
+                  {hasStructuredMetadata ? (
+                    <Stack spacing={1.2}>
+                      {cweList.length > 0 && (
+                        <Stack direction="row" gap={1} alignItems="flex-start">
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ minWidth: 120 }}
+                          >
+                            CWE
+                          </Typography>
+                          <Stack direction="row" gap={0.5} flexWrap="wrap">
+                            {cweList.map((item) => (
+                              <Chip key={item} label={item} size="small" variant="outlined" />
+                            ))}
+                          </Stack>
+                        </Stack>
+                      )}
+
+                      {owaspList.length > 0 && (
+                        <Stack direction="row" gap={1} alignItems="flex-start">
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ minWidth: 120 }}
+                          >
+                            OWASP
+                          </Typography>
+                          <Stack direction="row" gap={0.5} flexWrap="wrap">
+                            {owaspList.map((item) => (
+                              <Chip key={item} label={item} size="small" variant="outlined" />
+                            ))}
+                          </Stack>
+                        </Stack>
+                      )}
+
+                      {technologyList.length > 0 && (
+                        <Stack direction="row" gap={1} alignItems="flex-start">
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ minWidth: 120 }}
+                          >
+                            Technology
+                          </Typography>
+                          <Stack direction="row" gap={0.5} flexWrap="wrap">
+                            {technologyList.map((item) => (
+                              <Chip key={item} label={item} size="small" variant="outlined" />
+                            ))}
+                          </Stack>
+                        </Stack>
+                      )}
+
+                      {(category || subcategory) && (
+                        <Stack direction="row" gap={1}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ minWidth: 120 }}
+                          >
+                            Category
+                          </Typography>
+                          <Typography variant="body2">
+                            {category ?? "—"}
+                            {subcategory ? ` / ${subcategory}` : ""}
+                          </Typography>
+                        </Stack>
+                      )}
+
+                      {references.length > 0 && (
+                        <Stack direction="row" gap={1} alignItems="flex-start">
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ minWidth: 120 }}
+                          >
+                            References
+                          </Typography>
+                          <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                            {references.map((ref) =>
+                              isProbablyUrl(ref) ? (
+                                <MuiLink
+                                  key={ref}
+                                  href={ref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  underline="hover"
+                                  sx={{ wordBreak: "break-all" }}
+                                >
+                                  {ref}
+                                </MuiLink>
+                              ) : (
+                                <Typography key={ref} variant="body2" sx={{ wordBreak: "break-all" }}>
+                                  {ref}
+                                </Typography>
+                              )
+                            )}
+                          </Stack>
+                        </Stack>
+                      )}
+                    </Stack>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Нет структурированных метаданных.
+                    </Typography>
+                  )}
+
+                  <Box sx={{ mt: 1 }}>
+                    <Button size="small" onClick={() => setEvidenceExpanded((prev) => !prev)}>
+                      {evidenceExpanded
+                        ? "Скрыть полную metadata (JSON)"
+                        : "Показать полную metadata (JSON)"}
+                    </Button>
+                    <Collapse in={evidenceExpanded} timeout="auto" unmountOnExit>
+                      <Box
+                        component="pre"
+                        sx={{
+                          mt: 1,
+                          mb: 0,
+                          p: 1.5,
+                          borderRadius: 1.5,
+                          backgroundColor: "action.hover",
+                          overflowX: "auto",
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        {JSON.stringify(semgrepEvidence.metadata, null, 2)}
+                      </Box>
+                    </Collapse>
+                  </Box>
                 </Box>
               )}
             </Stack>
