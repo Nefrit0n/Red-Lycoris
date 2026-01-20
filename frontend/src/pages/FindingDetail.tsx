@@ -8,6 +8,7 @@ import {
   Container,
   Divider,
   IconButton,
+  Link as MuiLink,
   MenuItem,
   Stack,
   Tab,
@@ -49,6 +50,57 @@ type FindingDetailContentProps = {
   returnTo?: string | null;
   onClose?: () => void;
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const toStringValue = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return null;
+};
+
+const extractStringFromRecord = (value: Record<string, unknown>): string | null => {
+  const keys = ["url", "link", "name", "id", "value"];
+  for (const key of keys) {
+    const candidate = toStringValue(value[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const toStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const fromPrimitive = toStringValue(item);
+      if (fromPrimitive) return [fromPrimitive];
+      if (isRecord(item)) {
+        const fromRecord = extractStringFromRecord(item);
+        return fromRecord ? [fromRecord] : [];
+      }
+      return [];
+    });
+  }
+
+  const fromPrimitive = toStringValue(value);
+  if (fromPrimitive) return [fromPrimitive];
+  if (isRecord(value)) {
+    const fromRecord = extractStringFromRecord(value);
+    return fromRecord ? [fromRecord] : [];
+  }
+  return [];
+};
+
+const uniq = (values: string[]) => Array.from(new Set(values));
+
+const isProbablyUrl = (value: string) => /^https?:\/\//i.test(value);
 
 export const FindingDetailContent = ({
   id,
@@ -126,6 +178,21 @@ export const FindingDetailContent = ({
     data?.evidence && (data.evidence as SemgrepEvidence).scannerType === "semgrep"
       ? (data.evidence as SemgrepEvidence)
       : null;
+  const metadata = semgrepEvidence?.metadata;
+  const metadataRecord = isRecord(metadata) ? metadata : null;
+  const cweList = uniq(toStringArray(metadataRecord?.cwe));
+  const owaspList = uniq(toStringArray(metadataRecord?.owasp));
+  const technologyList = uniq(toStringArray(metadataRecord?.technology));
+  const category = toStringValue(metadataRecord?.category);
+  const subcategory = toStringValue(metadataRecord?.subcategory);
+  const references = uniq(toStringArray(metadataRecord?.references));
+  const hasStructuredMetadata =
+    cweList.length > 0 ||
+    owaspList.length > 0 ||
+    technologyList.length > 0 ||
+    Boolean(category) ||
+    Boolean(subcategory) ||
+    references.length > 0;
 
   // Loading state
   if (loading) {
