@@ -40,6 +40,7 @@ import {
   FindingOccurrenceStatus,
   FindingSeverity,
   FindingStatus,
+  SemgrepEvidence,
 } from "../types/findings";
 
 /**
@@ -339,6 +340,54 @@ const formatSmartTitle = (title: string): { display: string; isShortened: boolea
   }
 
   return { display: title, isShortened: false };
+};
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+
+const getSemgrepEvidence = (finding: Finding): SemgrepEvidence | null => {
+  const evidence = finding.evidence;
+  if (!evidence || typeof evidence !== "object") return null;
+  if (isNonEmptyString(evidence.scannerType) && evidence.scannerType !== "semgrep") {
+    return null;
+  }
+  return evidence;
+};
+
+const buildLocationLabel = (finding: Finding, evidence: SemgrepEvidence | null) => {
+  const path = isNonEmptyString(evidence?.path) ? evidence?.path : null;
+  const startLine =
+    typeof evidence?.start?.line === "number" && evidence.start.line > 0
+      ? evidence.start.line
+      : null;
+  const startCol =
+    typeof evidence?.start?.col === "number" && evidence.start.col > 0
+      ? evidence.start.col
+      : null;
+  const endLine =
+    typeof evidence?.end?.line === "number" && evidence.end.line > 0 ? evidence.end.line : null;
+  const endCol =
+    typeof evidence?.end?.col === "number" && evidence.end.col > 0 ? evidence.end.col : null;
+
+  if (path) {
+    const startLabel = startLine
+      ? `${startLine}${startCol ? `:${startCol}` : ""}`
+      : "";
+    const endLabel = endLine ? `${endLine}${endCol ? `:${endCol}` : ""}` : "";
+    if (startLabel && endLabel) {
+      return `${path}:${startLabel} → ${endLabel}`;
+    }
+    if (startLabel) {
+      return `${path}:${startLabel}`;
+    }
+    return path;
+  }
+
+  if (isNonEmptyString(finding.location)) {
+    return finding.location;
+  }
+
+  return "";
 };
 
 const buildFindingLink = (id: string, returnTo: string) => {
@@ -690,6 +739,19 @@ export default function FindingsTable({
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
               const ageDays = getAgeDays(f.firstSeenAt || f.createdAt);
               const showAgeWarning = ageDays >= 30;
+              const evidence = getSemgrepEvidence(f);
+              const locationLabel = buildLocationLabel(f, evidence);
+              const primaryLabel = locationLabel || f.title;
+              const ruleId = isNonEmptyString(evidence?.ruleId)
+                ? evidence?.ruleId
+                : isNonEmptyString(f.ruleId)
+                  ? f.ruleId
+                  : f.title;
+              const message = isNonEmptyString(evidence?.message)
+                ? evidence?.message
+                : isNonEmptyString(f.description)
+                  ? f.description
+                  : null;
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
@@ -790,54 +852,35 @@ export default function FindingsTable({
                       spacing={compactMode ? 0 : 0.5}
                       sx={{ minWidth: 0, overflow: "hidden" }}
                     >
-                      <Stack
-                        direction="row"
-                        alignItems="center"
-                        spacing={1}
-                        sx={{ minWidth: 0 }}
-                      >
-                        {(() => {
-                          const { display: smartTitle, isShortened } = formatSmartTitle(f.title);
-                          return (
-                            <Tooltip
-                              title={
-                                <Box sx={{ maxWidth: 400, wordBreak: "break-word" }}>
-                                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                    {f.title}
-                                  </Typography>
-                                  {isShortened && (
-                                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                                      (полное название rule)
-                                    </Typography>
-                                  )}
-                                </Box>
-                              }
-                              placement="top-start"
-                            >
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  fontWeight: 700,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                  minWidth: 0,
-                                  flex: 1,
-                                  // Если title укорочен, показываем с иконкой/стилем
-                                  ...(isShortened && {
-                                    "&::before": {
-                                      content: '"…"',
-                                      color: "text.disabled",
-                                      mr: 0.5,
-                                    },
-                                  }),
-                                }}
-                              >
-                                {renderHighlightedTitle(isShortened ? smartTitle : f.title)}
-                              </Typography>
-                            </Tooltip>
-                          );
-                        })()}
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+                        <Tooltip
+                          title={
+                            primaryLabel ? (
+                              <Box sx={{ maxWidth: 520, wordBreak: "break-word" }}>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {primaryLabel}
+                                </Typography>
+                              </Box>
+                            ) : (
+                              ""
+                            )
+                          }
+                          placement="top-start"
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 700,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              minWidth: 0,
+                              flex: 1,
+                            }}
+                          >
+                            {primaryLabel || "—"}
+                          </Typography>
+                        </Tooltip>
 
                         {/* повторяемость - улучшенный badge */}
                         {occurrence === "REPEAT" && repeats > 0 && (
@@ -952,6 +995,46 @@ export default function FindingsTable({
                           </Tooltip>
                         )}
                       </Stack>
+
+                      {ruleId && (
+                        <Tooltip title={ruleId} placement="top-start">
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "text.secondary",
+                              fontWeight: 600,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              minWidth: 0,
+                            }}
+                          >
+                            {(() => {
+                              const { display: smartTitle, isShortened } = formatSmartTitle(ruleId);
+                              return (
+                                <Box component="span" sx={{ minWidth: 0 }}>
+                                  Rule: {renderHighlightedTitle(isShortened ? smartTitle : ruleId)}
+                                </Box>
+                              );
+                            })()}
+                          </Typography>
+                        </Tooltip>
+                      )}
+
+                      {message && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: "text.secondary",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 1,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {message}
+                        </Typography>
+                      )}
 
                       {/* метаданные (только НЕ compact) — FIX: не рисуем пустое и не делаем “серую полосу” */}
                       {!compactMode &&
