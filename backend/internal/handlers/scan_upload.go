@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"lotus-warden/backend/internal/events"
 	"lotus-warden/backend/internal/importing"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/parser"
@@ -48,12 +49,14 @@ type ScanUploadResponse struct {
 type ScanUploadHandler struct {
 	db        *sql.DB
 	validator *validator.Validate
+	publisher *events.Publisher
 }
 
-func NewScanUploadHandler(db *sql.DB) *ScanUploadHandler {
+func NewScanUploadHandler(db *sql.DB, publisher *events.Publisher) *ScanUploadHandler {
 	return &ScanUploadHandler{
 		db:        db,
 		validator: validator.New(),
+		publisher: publisher,
 	}
 }
 
@@ -173,6 +176,24 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 				"findings_new":   new,
 				"duplicates":     duplicates,
 				"meta":           auditMeta,
+			})
+		},
+		OnIdentifiersDetected: func(identifiers []string) {
+			if h.publisher == nil || len(identifiers) == 0 {
+				return
+			}
+			var product string
+			if productID != nil {
+				product = productID.String()
+			}
+			var productPtr *string
+			if product != "" {
+				productPtr = &product
+			}
+			_ = h.publisher.PublishJSON(c.Context(), events.IntelEnrichRequested, events.IntelEnrichRequest{
+				Identifiers: identifiers,
+				ProductID:   productPtr,
+				Source:      "scan_upload",
 			})
 		},
 	}

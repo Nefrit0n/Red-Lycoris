@@ -73,6 +73,59 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 	}
 }
 
+func mapIntelSummary(summary storage.IntelSummary) *IntelSummaryResponse {
+	if len(summary.Identifiers) == 0 {
+		return nil
+	}
+	resp := &IntelSummaryResponse{
+		Identifiers: summary.Identifiers,
+		KEV:         summary.KEV,
+	}
+	if summary.CVSSScore != nil || summary.CVSSVersion != nil {
+		resp.CVSS = &IntelCVSSResponse{
+			Score:   summary.CVSSScore,
+			Version: summary.CVSSVersion,
+		}
+	}
+	if summary.EPSSScore != nil || summary.EPSSPercentile != nil {
+		resp.EPSS = &IntelEPSSResponse{
+			Score:      summary.EPSSScore,
+			Percentile: summary.EPSSPercentile,
+		}
+	}
+	if summary.LastRefreshedAt != nil {
+		value := summary.LastRefreshedAt.Format(timeFormatRFC3339())
+		resp.LastRefreshedAt = &value
+	}
+	return resp
+}
+
+func mapIntelDetail(detail *storage.IntelDetail) *IntelDetailResponse {
+	if detail == nil {
+		return nil
+	}
+	resp := &IntelDetailResponse{
+		Identifiers: detail.Identifiers,
+		NVD:         detail.NVD,
+		EPSS:        detail.EPSS,
+		KEV:         detail.KEV,
+	}
+	if len(detail.References) > 0 {
+		resp.References = make([]IntelReferenceResponse, 0, len(detail.References))
+		for _, ref := range detail.References {
+			resp.References = append(resp.References, IntelReferenceResponse{
+				Title: ref.Title,
+				URL:   ref.URL,
+			})
+		}
+	}
+	if detail.UpdatedAt != nil {
+		value := detail.UpdatedAt.Format(timeFormatRFC3339())
+		resp.UpdatedAt = &value
+	}
+	return resp
+}
+
 // mapFindingDetail converts storage.FindingDetail to FindingResponse
 func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 	var productID *string

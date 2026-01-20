@@ -99,6 +99,14 @@ npm run lint
 npm run test
 ```
 
+## Локальная разработка Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 ## Быстрый флоу root → смена пароля → импорт → триаж
 
 1. Поднимите сервисы и зайдите в UI: `http://localhost:5173` (dev) или `http://localhost:8081` (NGINX).
