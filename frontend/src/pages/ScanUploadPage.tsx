@@ -30,7 +30,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchFindingDetail, fetchFindings } from "../api/findings";
 import { uploadScan, UploadScanResponse } from "../api/scans";
-import { Finding, SemgrepEvidence } from "../types/findings";
+import { Finding, FindingEvidence } from "../types/findings";
 import DragDropUpload from "../components/DragDropUpload";
 
 interface UploadHistoryItem extends UploadScanResponse {
@@ -43,7 +43,7 @@ const HISTORY_KEY = "lotus_warden_upload_history";
 const LAST_UPLOAD_KEY = "lotus_warden_last_upload";
 
 interface FindingPreview extends Finding {
-  evidence?: SemgrepEvidence | null;
+  evidence?: FindingEvidence | null;
 }
 
 const STEPS = ["Выбор файла", "Настройка", "Загрузка", "Результаты"];
