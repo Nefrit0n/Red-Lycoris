@@ -178,6 +178,23 @@ export const FindingDetailContent = ({
     data?.evidence && (data.evidence as SemgrepEvidence).scannerType === "semgrep"
       ? (data.evidence as SemgrepEvidence)
       : null;
+  const intelSummary = data?.intel_summary ?? null;
+  const intelDetails = data?.intel_details ?? null;
+  const intelIdentifiers =
+    intelDetails?.identifiers?.length
+      ? intelDetails.identifiers
+      : intelSummary?.identifiers ?? [];
+  const cvssScore =
+    typeof intelSummary?.cvss?.score === "number" ? intelSummary?.cvss?.score : null;
+  const cvssVersion = intelSummary?.cvss?.version ?? null;
+  const epssScore =
+    typeof intelSummary?.epss?.score === "number" ? intelSummary?.epss?.score : null;
+  const epssPercentile =
+    typeof intelSummary?.epss?.percentile === "number"
+      ? intelSummary?.epss?.percentile
+      : null;
+  const kevFlag = Boolean(intelSummary?.kev);
+  const intelReferences = intelDetails?.references ?? [];
   const metadata = semgrepEvidence?.metadata;
   const metadataRecord = isRecord(metadata) ? metadata : null;
   const cweList = uniq(toStringArray(metadataRecord?.cwe));
@@ -424,6 +441,82 @@ export const FindingDetailContent = ({
             )}
           </Stack>
         </Section>
+
+        {(intelIdentifiers.length > 0 ||
+          cvssScore !== null ||
+          epssScore !== null ||
+          kevFlag ||
+          intelReferences.length > 0) && (
+          <Section title="Vulnerability Intelligence" dense={compact}>
+            {intelIdentifiers.length > 0 && (
+              <Stack spacing={1.2}>
+                <Typography variant="caption" color="text.secondary">
+                  Identifiers
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {intelIdentifiers.map((identifier) => (
+                    <Chip
+                      key={identifier}
+                      label={identifier}
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleCopyValue(identifier)}
+                      icon={<ContentCopyIcon fontSize="inherit" />}
+                      sx={{ cursor: "pointer" }}
+                    />
+                  ))}
+                </Stack>
+              </Stack>
+            )}
+
+            {(cvssScore !== null || epssScore !== null || kevFlag) && (
+              <Stack direction="row" spacing={2} sx={{ mt: 2, flexWrap: "wrap" }}>
+                {cvssScore !== null && (
+                  <Chip
+                    label={`CVSS${cvssVersion ? ` v${cvssVersion}` : ""}: ${cvssScore.toFixed(1)}`}
+                    color={cvssScore >= 9 ? "error" : cvssScore >= 7 ? "warning" : "success"}
+                    size="small"
+                  />
+                )}
+                {epssScore !== null && (
+                  <Chip
+                    label={`EPSS: ${(epssScore * 100).toFixed(2)}%${
+                      epssPercentile !== null
+                        ? ` (p${(epssPercentile * 100).toFixed(1)})`
+                        : ""
+                    }`}
+                    color="primary"
+                    size="small"
+                    variant="outlined"
+                  />
+                )}
+                {kevFlag && (
+                  <Chip label="KEV" color="error" size="small" variant="outlined" />
+                )}
+              </Stack>
+            )}
+
+            {intelReferences.length > 0 && (
+              <Stack spacing={0.5} sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  References
+                </Typography>
+                <Stack spacing={0.5}>
+                  {intelReferences.map((ref) => (
+                    <Stack key={ref.url} direction="row" alignItems="center" spacing={1}>
+                      <MuiLink href={ref.url} target="_blank" rel="noreferrer">
+                        {ref.title || ref.url}
+                      </MuiLink>
+                      <IconButton size="small" onClick={() => handleCopyValue(ref.url)}>
+                        <ContentCopyIcon fontSize="inherit" />
+                      </IconButton>
+                    </Stack>
+                  ))}
+                </Stack>
+              </Stack>
+            )}
+          </Section>
+        )}
 
         {canEdit && (
           <Box sx={{ mt: 2 }}>
