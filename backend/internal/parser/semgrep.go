@@ -22,12 +22,18 @@ func (p *SemgrepParser) CanParse(data []byte) bool {
 		return false
 	}
 
-	var report semgrepReport
-	if err := json.Unmarshal(data, &report); err != nil {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(data, &payload); err != nil {
 		return false
 	}
 
-	return len(report.Results) > 0
+	if _, ok := payload["results"]; !ok {
+		return false
+	}
+	if _, ok := payload["paths"]; !ok {
+		return false
+	}
+	return true
 }
 
 func (p *SemgrepParser) Parse(data []byte) ([]Finding, error) {
@@ -60,6 +66,8 @@ func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
 		descPtr = &desc
 	}
 
+	evidence := buildSemgrepEvidence(r)
+
 	return Finding{
 		Title:       r.CheckID,
 		Description: descPtr,
@@ -70,11 +78,14 @@ func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
 			"path":              r.Path,
 			"original_severity": r.Extra.Severity,
 		},
+		Evidence: evidence,
 	}
 }
 
 type semgrepReport struct {
 	Results []semgrepResult `json:"results"`
+	Paths   json.RawMessage `json:"paths"`
+	Errors  json.RawMessage `json:"errors"`
 }
 
 type semgrepResult struct {
@@ -82,19 +93,30 @@ type semgrepResult struct {
 	Path    string `json:"path"`
 	Start   struct {
 		Line int `json:"line"`
+		Col  int `json:"col"`
 	} `json:"start"`
+	End struct {
+		Line int `json:"line"`
+		Col  int `json:"col"`
+	} `json:"end"`
 	Extra semgrepExtra `json:"extra"`
 }
 
 type semgrepExtra struct {
-	Message  string `json:"message"`
-	Severity string `json:"severity"`
+	Message  string          `json:"message"`
+	Severity string          `json:"severity"`
+	Lines    json.RawMessage `json:"lines"`
+	Metadata json.RawMessage `json:"metadata"`
 }
 
 var semgrepSeverityMap = map[string]string{
-	"ERROR":   models.SeverityHigh,
-	"WARNING": models.SeverityMedium,
-	"INFO":    models.SeverityLow,
+	"ERROR":    models.SeverityHigh,
+	"WARNING":  models.SeverityMedium,
+	"INFO":     models.SeverityLow,
+	"LOW":      models.SeverityLow,
+	"MEDIUM":   models.SeverityMedium,
+	"HIGH":     models.SeverityHigh,
+	"CRITICAL": models.SeverityCritical,
 }
 
 func mapSemgrepSeverity(raw string) string {
@@ -102,4 +124,72 @@ func mapSemgrepSeverity(raw string) string {
 		return v
 	}
 	return models.SeverityLow
+}
+
+func buildSemgrepEvidence(r semgrepResult) map[string]any {
+	evidence := map[string]any{
+		"scannerType": "semgrep",
+		"ruleId":      strings.TrimSpace(r.CheckID),
+		"path":        strings.TrimSpace(r.Path),
+		"severityRaw": strings.TrimSpace(r.Extra.Severity),
+	}
+
+	if message := strings.TrimSpace(r.Extra.Message); message != "" {
+		evidence["message"] = message
+	}
+
+	if r.Start.Line > 0 || r.Start.Col > 0 {
+		start := map[string]any{}
+		if r.Start.Line > 0 {
+			start["line"] = r.Start.Line
+		}
+		if r.Start.Col > 0 {
+			start["col"] = r.Start.Col
+		}
+		evidence["start"] = start
+	}
+	if r.End.Line > 0 || r.End.Col > 0 {
+		end := map[string]any{}
+		if r.End.Line > 0 {
+			end["line"] = r.End.Line
+		}
+		if r.End.Col > 0 {
+			end["col"] = r.End.Col
+		}
+		evidence["end"] = end
+	}
+
+	if snippet := semgrepLinesToSnippet(r.Extra.Lines); snippet != "" {
+		evidence["code"] = snippet
+	}
+
+	if len(r.Extra.Metadata) > 0 && string(r.Extra.Metadata) != "null" {
+		evidence["metadata"] = json.RawMessage(r.Extra.Metadata)
+	}
+
+	for key, value := range evidence {
+		if str, ok := value.(string); ok && strings.TrimSpace(str) == "" {
+			delete(evidence, key)
+		}
+	}
+
+	return evidence
+}
+
+func semgrepLinesToSnippet(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return ""
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.Contains(strings.ToLower(trimmed), "requires login") {
+		return ""
+	}
+	return trimmed
 }

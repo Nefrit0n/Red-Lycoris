@@ -92,6 +92,9 @@ func TestParseSemgrepReport(t *testing.T) {
 				},
 			},
 		},
+		"paths": map[string]any{
+			"scanned": []string{"main.go"},
+		},
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -107,6 +110,28 @@ func TestParseSemgrepReport(t *testing.T) {
 	}
 	if findings[0].Location != "main.go:42" {
 		t.Fatalf("expected location main.go:42, got %s", findings[0].Location)
+	}
+}
+
+func TestParseSemgrepEmptyResults(t *testing.T) {
+	payload := map[string]any{
+		"results": []any{},
+		"paths": map[string]any{
+			"scanned": []string{"main.go"},
+		},
+		"errors": []any{},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	findings, err := ParseReport("semgrep", raw)
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings, got %d", len(findings))
 	}
 }
 

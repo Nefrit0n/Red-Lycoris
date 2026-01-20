@@ -42,7 +42,7 @@ import {
   formatDateRu,
   EventCategory,
 } from "../utils/findingFormatters";
-import { FindingComment, FindingEvent } from "../types/findings";
+import { FindingComment, FindingEvent, SemgrepEvidence } from "../types/findings";
 
 type FindingDetailContentProps = {
   id: string;
@@ -61,6 +61,7 @@ export const FindingDetailContent = ({
   const [tab, setTab] = useState(0);
   const [eventFilter, setEventFilter] = useState<EventCategory>("all");
   const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
+  const [evidenceExpanded, setEvidenceExpanded] = useState(false);
 
   // User permissions
   const user = getCurrentUser();
@@ -124,6 +125,10 @@ export const FindingDetailContent = ({
     ? (data as any).occurrences
     : [];
   const hasOccurrences = occurrences.length > 0;
+  const semgrepEvidence =
+    data?.evidence && (data.evidence as SemgrepEvidence).scannerType === "semgrep"
+      ? (data.evidence as SemgrepEvidence)
+      : null;
 
   // Loading state
   if (loading) {
@@ -261,6 +266,7 @@ export const FindingDetailContent = ({
         allowScrollButtonsMobile
       >
         <Tab label="Описание" />
+        {semgrepEvidence ? <Tab label="Источник (Semgrep)" /> : null}
         <Tab label={`Occurrences${hasOccurrences ? ` (${occurrences.length})` : ""}`} />
         <Tab label={`Комментарии (${data.comments?.length ?? 0})`} />
         <Tab label={`История (${data.events?.length ?? 0})`} />
@@ -377,8 +383,100 @@ export const FindingDetailContent = ({
         )}
       </TabPanel>
 
+      {/* Tab: Semgrep Evidence */}
+      {semgrepEvidence && (
+        <TabPanel value={tab} index={1}>
+          <Section title="Источник (Semgrep)" dense={compact}>
+            <Stack spacing={1.2}>
+              <Stack direction="row" gap={1}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                  Rule ID
+                </Typography>
+                <Typography variant="body2">{semgrepEvidence.ruleId || "—"}</Typography>
+              </Stack>
+              <Stack direction="row" gap={1}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                  Path
+                </Typography>
+                <Typography variant="body2">
+                  {semgrepEvidence.path || "—"}
+                  {semgrepEvidence.start?.line
+                    ? `:${semgrepEvidence.start.line}${
+                        semgrepEvidence.start.col ? `:${semgrepEvidence.start.col}` : ""
+                      }`
+                    : ""}
+                  {semgrepEvidence.end?.line
+                    ? ` → ${semgrepEvidence.end.line}${
+                        semgrepEvidence.end.col ? `:${semgrepEvidence.end.col}` : ""
+                      }`
+                    : ""}
+                </Typography>
+              </Stack>
+              <Stack direction="row" gap={1}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                  Message
+                </Typography>
+                <Typography variant="body2">{semgrepEvidence.message || "—"}</Typography>
+              </Stack>
+              <Stack direction="row" gap={1}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                  Severity (raw)
+                </Typography>
+                <Typography variant="body2">{semgrepEvidence.severityRaw || "—"}</Typography>
+              </Stack>
+
+              {semgrepEvidence.code && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Code snippet
+                  </Typography>
+                  <Box
+                    component="pre"
+                    sx={{
+                      mt: 0.5,
+                      mb: 0,
+                      p: 1.5,
+                      borderRadius: 1.5,
+                      backgroundColor: "action.hover",
+                      overflowX: "auto",
+                      fontSize: "0.75rem",
+                    }}
+                  >
+                    {semgrepEvidence.code}
+                  </Box>
+                </Box>
+              )}
+
+              {semgrepEvidence.metadata && (
+                <Box>
+                  <Button size="small" onClick={() => setEvidenceExpanded((prev) => !prev)}>
+                    {evidenceExpanded ? "Скрыть metadata" : "Показать metadata"}
+                  </Button>
+                  <Collapse in={evidenceExpanded} timeout="auto" unmountOnExit>
+                    <Box
+                      component="pre"
+                      sx={{
+                        mt: 1,
+                        mb: 0,
+                        p: 1.5,
+                        borderRadius: 1.5,
+                        backgroundColor: "action.hover",
+                        overflowX: "auto",
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      {JSON.stringify(semgrepEvidence.metadata, null, 2)}
+                    </Box>
+                  </Collapse>
+                </Box>
+              )}
+            </Stack>
+          </Section>
+        </TabPanel>
+      )}
+
       {/* Tab: Occurrences */}
-      <TabPanel value={tab} index={1}>
+      <TabPanel value={tab} index={semgrepEvidence ? 2 : 1}>
         <Section title="Occurrences / Repeats" dense={compact}>
           {!hasOccurrences ? (
             <Typography variant="body2" color="text.secondary">
@@ -478,7 +576,7 @@ export const FindingDetailContent = ({
       </TabPanel>
 
       {/* Tab: Comments */}
-      <TabPanel value={tab} index={2}>
+      <TabPanel value={tab} index={semgrepEvidence ? 3 : 2}>
         <Section title="Комментарии" dense={compact}>
           <Stack spacing={1.2}>
             {(data.comments ?? []).length === 0 && (
@@ -533,7 +631,7 @@ export const FindingDetailContent = ({
       </TabPanel>
 
       {/* Tab: Events History */}
-      <TabPanel value={tab} index={3}>
+      <TabPanel value={tab} index={semgrepEvidence ? 4 : 3}>
         <Section title="История изменений" dense={compact}>
           <ToggleButtonGroup
             exclusive
@@ -600,7 +698,7 @@ export const FindingDetailContent = ({
 
       {/* Tab: Duplicates */}
       {data.duplicates && (
-        <TabPanel value={tab} index={4}>
+        <TabPanel value={tab} index={semgrepEvidence ? 5 : 4}>
           <Section title="Дубликаты" dense={compact}>
             {data.duplicates.master.id !== data.id ? (
               <Stack spacing={1}>
