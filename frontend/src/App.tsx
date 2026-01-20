@@ -13,6 +13,7 @@ import ScanUploadPage from "./pages/ScanUploadPage";
 import ImportJobsList from "./pages/ImportJobsList";
 import ImportJobDetail from "./pages/ImportJobDetail";
 import ProductsList from "./pages/ProductsList";
+import ProductDetailPage from "./pages/ProductDetail";
 import AdminOverview from "./pages/AdminOverview";
 import AnalyzeJobsPage from "./pages/AnalyzeJobsPage";
 import AnalysisJobDetail from "./pages/AnalysisJobDetail";
@@ -46,6 +47,7 @@ const App = () => {
             <Route path="/imports" element={<ImportJobsList />} />
             <Route path="/imports/:id" element={<ImportJobDetail />} />
             <Route path="/products" element={<ProductsList />} />
+            <Route path="/products/:id" element={<ProductDetailPage />} />
             <Route path="/analyze" element={<AnalyzeJobsPage />} />
             <Route path="/analyze/:id" element={<AnalysisJobDetail />} />
 
