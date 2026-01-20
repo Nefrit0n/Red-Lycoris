@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import ProtectedLayout from "./components/ProtectedLayout";
 import theme from "./theme";
 
+import Dashboard from "./pages/Dashboard";
 import FindingDetailPage from "./pages/FindingDetail";
 import FindingsList from "./pages/FindingsList";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -34,6 +35,9 @@ const App = () => {
           <Route element={<ProtectedLayout />}>
             <Route path="/change-password" element={<ChangePasswordPage />} />
 
+            {/* Dashboard - главная страница */}
+            <Route path="/dashboard" element={<Dashboard />} />
+
             {/* Каноничный список находок */}
             <Route path="/findings" element={<FindingsList />} />
             <Route path="/findings/:id" element={<FindingDetailPage />} />
@@ -53,12 +57,11 @@ const App = () => {
             <Route path="/admin/scanners" element={<AdminScannersPage />} />
             <Route path="/admin/setup" element={<AdminSetupPage />} />
 
-            {/* Редиректы со старых/алиасов */}
-            <Route path="/dashboard" element={<Navigate to="/findings" replace />} />
-            <Route path="/" element={<Navigate to="/findings" replace />} />
+            {/* Редиректы */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
             {/* Catch-all */}
-            <Route path="*" element={<Navigate to="/findings" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>
       </BrowserRouter>
