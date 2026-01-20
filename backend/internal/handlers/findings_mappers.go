@@ -241,6 +241,19 @@ func mapFindingEvents(items []storage.FindingEventItem) []FindingEventResponse {
 	return events
 }
 
+func latestImportedEvidence(events []FindingEventResponse) map[string]interface{} {
+	for _, event := range events {
+		if event.EventType != "finding.imported" {
+			continue
+		}
+		if len(event.Payload) == 0 {
+			continue
+		}
+		return event.Payload
+	}
+	return nil
+}
+
 // mapFindingOccurrences converts a slice of storage.FindingOccurrenceItem to FindingOccurrenceResponse slice
 func mapFindingOccurrences(items []storage.FindingOccurrenceItem) []FindingOccurrenceResponse {
 	response := make([]FindingOccurrenceResponse, 0, len(items))
