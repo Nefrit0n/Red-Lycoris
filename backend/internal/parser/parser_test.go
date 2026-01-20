@@ -2,26 +2,61 @@ package parser
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
 func TestParseTrivyReport(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "trivy_result.json"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+
+	findings, err := ParseReport("trivy", raw)
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	if len(findings) == 0 {
+		t.Fatalf("expected findings, got %d", len(findings))
+	}
+	first := findings[0]
+	if first.RuleID != "CVE-2024-0001" {
+		t.Fatalf("expected rule id to be set")
+	}
+	if first.Title != "CVE-2024-0001 — lodash" {
+		t.Fatalf("expected title to be stable, got %s", first.Title)
+	}
+	if first.Location != "package-lock.json" {
+		t.Fatalf("expected location package-lock.json, got %s", first.Location)
+	}
+	if first.Severity != "high" {
+		t.Fatalf("expected severity normalized, got %s", first.Severity)
+	}
+	if first.Evidence == nil {
+		t.Fatalf("expected evidence to be set")
+	}
+	if tool, ok := first.Evidence["tool"].(string); !ok || tool != "trivy" {
+		t.Fatalf("expected evidence tool trivy")
+	}
+	if evidenceType, ok := first.Evidence["type"].(string); !ok || evidenceType != "sca" {
+		t.Fatalf("expected evidence type sca")
+	}
+	if vulnID, ok := first.Evidence["vulnerabilityId"].(string); !ok || vulnID == "" {
+		t.Fatalf("expected vulnerability id to be present")
+	}
+	if pkg, ok := first.Evidence["pkgName"].(string); !ok || pkg == "" {
+		t.Fatalf("expected package name to be present")
+	}
+	if severityRaw, ok := first.Evidence["severityRaw"].(string); !ok || severityRaw == "" {
+		t.Fatalf("expected severity raw to be present")
+	}
+}
+
+func TestParseTrivyEmptyResults(t *testing.T) {
 	payload := map[string]any{
-		"ArtifactName": "billing-api",
-		"Results": []any{
-			map[string]any{
-				"Target": "app",
-				"Vulnerabilities": []any{
-					map[string]any{
-						"VulnerabilityID": "CVE-2024-0001",
-						"Title":           "SQL Injection",
-						"Description":     "SQLi found",
-						"Severity":        "HIGH",
-						"PkgName":         "lib-sql",
-					},
-				},
-			},
-		},
+		"ArtifactName": "empty-report",
+		"Results":      []any{},
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -32,14 +67,8 @@ func TestParseTrivyReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse report: %v", err)
 	}
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(findings))
-	}
-	if findings[0].RuleID != "CVE-2024-0001" {
-		t.Fatalf("expected rule id to be set")
-	}
-	if findings[0].Severity != "high" {
-		t.Fatalf("expected severity normalized, got %s", findings[0].Severity)
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings, got %d", len(findings))
 	}
 }
 
