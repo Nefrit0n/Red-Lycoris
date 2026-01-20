@@ -72,6 +72,7 @@ type FindingDetailResponse struct {
 	Events      []FindingEventResponse      `json:"events"`
 	Occurrences []FindingOccurrenceResponse `json:"occurrences"`
 	Duplicates  *DuplicateGroupResponse     `json:"duplicates,omitempty"`
+	Evidence    map[string]interface{}      `json:"evidence,omitempty"`
 }
 
 type FindingOccurrenceResponse struct {
@@ -253,12 +254,15 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch occurrences"})
 	}
 
+	mappedEvents := mapFindingEvents(events)
+
 	resp := FindingDetailResponse{
 		FindingResponse: mapFindingDetail(*finding),
 		Comments:        mapFindingComments(comments),
-		Events:          mapFindingEvents(events),
+		Events:          mappedEvents,
 		Occurrences:     mapFindingOccurrences(occurrences),
 		Duplicates:      mapDuplicateGroup(duplicates),
+		Evidence:        latestImportedEvidence(mappedEvents),
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})

@@ -90,6 +90,7 @@ export interface FindingDetail {
   events: FindingEvent[];
   occurrences?: FindingOccurrence[];
   duplicates?: FindingDuplicateGroup | null;
+  evidence?: SemgrepEvidence | null;
 }
 
 export interface FindingComment {
@@ -128,4 +129,21 @@ export interface FindingNeighbors {
   nextId?: string | null;
   position: number;
   total: number;
+}
+
+export interface SemgrepEvidenceRange {
+  line?: number;
+  col?: number;
+}
+
+export interface SemgrepEvidence {
+  scannerType?: string | null;
+  ruleId?: string | null;
+  path?: string | null;
+  start?: SemgrepEvidenceRange | null;
+  end?: SemgrepEvidenceRange | null;
+  message?: string | null;
+  severityRaw?: string | null;
+  code?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
