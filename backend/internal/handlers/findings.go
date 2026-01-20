@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -23,25 +24,26 @@ type FindingsHandler struct {
 // Response types
 
 type FindingResponse struct {
-	ID          string         `json:"id"`
-	Title       string         `json:"title"`
-	Description *string        `json:"description,omitempty"`
-	Fingerprint *string        `json:"fingerprint,omitempty"`
-	Severity    string         `json:"severity"`
-	Status      string         `json:"status"`
-	ScannerType *string        `json:"scannerType,omitempty"`
-	Occurrence  *string        `json:"occurrenceStatus,omitempty"`
-	FirstSeenAt *string        `json:"firstSeenAt,omitempty"`
-	LastSeenAt  *string        `json:"lastSeenAt,omitempty"`
-	RepeatCount *int           `json:"repeatCount,omitempty"`
-	ProductID   *string        `json:"productId,omitempty"`
-	ProductName *string        `json:"productName,omitempty"`
-	AssigneeID  *string        `json:"assigneeId,omitempty"`
-	Owner       *OwnerResponse `json:"owner,omitempty"`
-	ImportJobID *string        `json:"importJobId,omitempty"`
-	CreatedAt   string         `json:"createdAt"`
-	UpdatedAt   string         `json:"updatedAt"`
-	DeletedAt   *string        `json:"deletedAt,omitempty"`
+	ID           string                `json:"id"`
+	Title        string                `json:"title"`
+	Description  *string               `json:"description,omitempty"`
+	Fingerprint  *string               `json:"fingerprint,omitempty"`
+	Severity     string                `json:"severity"`
+	Status       string                `json:"status"`
+	ScannerType  *string               `json:"scannerType,omitempty"`
+	Occurrence   *string               `json:"occurrenceStatus,omitempty"`
+	FirstSeenAt  *string               `json:"firstSeenAt,omitempty"`
+	LastSeenAt   *string               `json:"lastSeenAt,omitempty"`
+	RepeatCount  *int                  `json:"repeatCount,omitempty"`
+	ProductID    *string               `json:"productId,omitempty"`
+	ProductName  *string               `json:"productName,omitempty"`
+	AssigneeID   *string               `json:"assigneeId,omitempty"`
+	Owner        *OwnerResponse        `json:"owner,omitempty"`
+	ImportJobID  *string               `json:"importJobId,omitempty"`
+	CreatedAt    string                `json:"createdAt"`
+	UpdatedAt    string                `json:"updatedAt"`
+	DeletedAt    *string               `json:"deletedAt,omitempty"`
+	IntelSummary *IntelSummaryResponse `json:"intel_summary,omitempty"`
 }
 
 type OwnerResponse struct {
@@ -68,11 +70,12 @@ type FindingEventResponse struct {
 
 type FindingDetailResponse struct {
 	FindingResponse
-	Comments    []FindingCommentResponse    `json:"comments"`
-	Events      []FindingEventResponse      `json:"events"`
-	Occurrences []FindingOccurrenceResponse `json:"occurrences"`
-	Duplicates  *DuplicateGroupResponse     `json:"duplicates,omitempty"`
-	Evidence    map[string]interface{}      `json:"evidence,omitempty"`
+	Comments     []FindingCommentResponse    `json:"comments"`
+	Events       []FindingEventResponse      `json:"events"`
+	Occurrences  []FindingOccurrenceResponse `json:"occurrences"`
+	Duplicates   *DuplicateGroupResponse     `json:"duplicates,omitempty"`
+	Evidence     map[string]interface{}      `json:"evidence,omitempty"`
+	IntelDetails *IntelDetailResponse        `json:"intel_details,omitempty"`
 }
 
 type FindingOccurrenceResponse struct {
@@ -94,6 +97,38 @@ type FindingNeighborsResponse struct {
 	NextID   *string `json:"nextId,omitempty"`
 	Position int     `json:"position"`
 	Total    int     `json:"total"`
+}
+
+type IntelSummaryResponse struct {
+	Identifiers     []string           `json:"identifiers"`
+	CVSS            *IntelCVSSResponse `json:"cvss,omitempty"`
+	EPSS            *IntelEPSSResponse `json:"epss,omitempty"`
+	KEV             bool               `json:"kev"`
+	LastRefreshedAt *string            `json:"last_refreshed_at,omitempty"`
+}
+
+type IntelCVSSResponse struct {
+	Score   *float64 `json:"score,omitempty"`
+	Version *string  `json:"version,omitempty"`
+}
+
+type IntelEPSSResponse struct {
+	Score      *float64 `json:"score,omitempty"`
+	Percentile *float64 `json:"percentile,omitempty"`
+}
+
+type IntelReferenceResponse struct {
+	Title *string `json:"title,omitempty"`
+	URL   string  `json:"url"`
+}
+
+type IntelDetailResponse struct {
+	Identifiers []string                   `json:"identifiers"`
+	NVD         map[string]json.RawMessage `json:"nvd,omitempty"`
+	EPSS        map[string]json.RawMessage `json:"epss,omitempty"`
+	KEV         map[string]json.RawMessage `json:"kev,omitempty"`
+	References  []IntelReferenceResponse   `json:"references,omitempty"`
+	UpdatedAt   *string                    `json:"updated_at,omitempty"`
 }
 
 // Request types
@@ -191,9 +226,22 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
 	}
 
+	ids := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	intelSummaries, err := storage.GetIntelSummaries(c.Context(), h.db, ids)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch intel summaries"})
+	}
+
 	response := make([]FindingResponse, 0, len(items))
 	for _, item := range items {
-		response = append(response, mapFindingListItem(item))
+		mapped := mapFindingListItem(item)
+		if summary, ok := intelSummaries[item.ID]; ok {
+			mapped.IntelSummary = mapIntelSummary(summary)
+		}
+		response = append(response, mapped)
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response, "total": total})
@@ -253,16 +301,29 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch occurrences"})
 	}
+	intelDetail, err := storage.GetIntelDetail(c.Context(), h.db, masterID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch intel details"})
+	}
+	intelSummaryMap, err := storage.GetIntelSummaries(c.Context(), h.db, []uuid.UUID{masterID})
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch intel summary"})
+	}
 
 	mappedEvents := mapFindingEvents(events)
+	mappedFinding := mapFindingDetail(*finding)
+	if summary, ok := intelSummaryMap[masterID]; ok {
+		mappedFinding.IntelSummary = mapIntelSummary(summary)
+	}
 
 	resp := FindingDetailResponse{
-		FindingResponse: mapFindingDetail(*finding),
+		FindingResponse: mappedFinding,
 		Comments:        mapFindingComments(comments),
 		Events:          mappedEvents,
 		Occurrences:     mapFindingOccurrences(occurrences),
 		Duplicates:      mapDuplicateGroup(duplicates),
 		Evidence:        latestImportedEvidence(mappedEvents),
+		IntelDetails:    mapIntelDetail(intelDetail),
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})

@@ -27,6 +27,15 @@ x-analysis-env: &analysis-env
   ANALYSIS_TRIVY_IMAGE: ${ANALYSIS_TRIVY_IMAGE:-aquasec/trivy:0.58.1}
   ANALYSIS_CONTAINER_NETWORK: ${ANALYSIS_CONTAINER_NETWORK:-none}
 
+x-intel-env: &intel-env
+  NVD_API_KEY: ${NVD_API_KEY:-}
+  EPSS_ENABLED: ${EPSS_ENABLED:-true}
+  KEV_URL: ${KEV_URL:-}
+  KEV_MIRROR_URL: ${KEV_MIRROR_URL:-}
+  INTEL_REFRESH_INTERVAL: ${INTEL_REFRESH_INTERVAL:-24h}
+  INTEL_WORKER_CONCURRENCY: ${INTEL_WORKER_CONCURRENCY:-4}
+  INTEL_RETRY_BASE: ${INTEL_RETRY_BASE:-30m}
+
 x-celery-env: &celery-env
   CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
@@ -68,7 +77,7 @@ services:
       # ВАЖНО: если у тебя нет target "prod" в Dockerfile backend — убери target или замени на существующий
       target: dev
     environment:
-      <<: [ *db-env, *object-store-env, *analysis-env ]
+      <<: [ *db-env, *object-store-env, *analysis-env, *intel-env ]
       APP_ENV: production
       APP_PORT: 8080
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
@@ -102,7 +111,7 @@ services:
       target: dev
     command: [ "go", "run", "./cmd/analysis_worker" ]
     environment:
-      <<: [ *db-env, *object-store-env, *analysis-env ]
+      <<: [ *db-env, *object-store-env, *analysis-env, *intel-env ]
       NATS_URL: ${NATS_URL:-nats://nats:4222}
     volumes:
       - ./backend:/app
@@ -113,6 +122,25 @@ services:
         condition: service_started
       minio:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-net
+
+  intel-worker:
+    build:
+      context: ./backend
+      target: dev
+    command: [ "go", "run", "./cmd/intel_worker" ]
+    environment:
+      <<: [ *db-env, *intel-env ]
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
     restart: unless-stopped
     networks:
       - app-net

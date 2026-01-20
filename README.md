@@ -1,6 +1,17 @@
 # Lotus Warden
 
-Каркас проекта с React + TypeScript (MUI), Go Fiber API, Python + Celery для фоновых задач, PostgreSQL и Redis.
+ASOC-платформа для импорта и триажа уязвимостей с обогащением (CVSS/EPSS/KEV), React + TypeScript (MUI), Go Fiber API, Python + Celery для фоновых задач, PostgreSQL/Redis/NATS/MinIO.
+
+## Архитектура (кратко)
+
+- **Frontend**: React + TypeScript + MUI (Vite dev сервер).
+- **Backend**: Go Fiber API + JetStream события.
+- **Workers**:
+  - `analysis-worker` — запускает сканеры и импортирует findings.
+  - `intel-worker` — обогащает vulnerability identifiers через NVD/EPSS/KEV.
+  - `celery-worker` — Python фоновые задачи (legacy/вспомогательные).
+- **Хранилище**: PostgreSQL (findings, intel) + Redis (вспомогательные задачи).
+- **Инфраструктура**: NATS JetStream (события), MinIO (артефакты).
 
 ## Быстрый старт
 
@@ -22,6 +33,8 @@ docker compose up --build
 - NGINX (статический фронтенд + прокси API): `http://localhost:8081`
 - Go API: `http://localhost:8080`
 - Python API (через NGINX): `http://localhost:8081/api/health`
+- NATS JetStream: `nats://localhost:4222`
+- MinIO: `http://localhost:9000`
 
 ## Фоновые задачи Celery
 
@@ -71,6 +84,7 @@ Go API:
 - `GET /api/v1/findings/{id}` — детали finding с комментариями/историей.
 - `POST /api/v1/findings/{id}/comments` — добавить комментарий.
 - `POST /api/v1/findings/bulk` — массовые действия.
+- `POST /api/v1/intel/refresh` — ручной запуск enrichment (admin-only).
 - `GET /api/v1/import-jobs` — список импортов.
 - `GET /api/v1/import-jobs/{id}` — детали импорта.
 - `GET /api/v1/products` — список продуктов.
@@ -98,6 +112,25 @@ npm install
 npm run lint
 npm run test
 ```
+
+## Локальная разработка Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Конфигурация (env)
+
+Минимальный набор уже в `.env.example`, дополнительно можно настроить:
+
+- `NVD_API_KEY` — API ключ NVD (опционально).
+- `EPSS_ENABLED` — включить EPSS (по умолчанию `true`).
+- `KEV_URL` / `KEV_MIRROR_URL` — источник KEV (mirror для 403/timeout).
+- `INTEL_REFRESH_INTERVAL` — интервал обновления intel (например `24h`).
+- `INTEL_WORKER_CONCURRENCY` — concurrency для провайдеров.
+- `INTEL_RETRY_BASE` — базовый интервал ретраев (например `30m`).
 
 ## Быстрый флоу root → смена пароля → импорт → триаж
 

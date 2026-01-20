@@ -48,7 +48,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured := api.Group("", middleware.RequireJWT(cfg.JWTSecret))
 	secured.Post("/auth/change-password", authHandler.ChangePassword)
 
-	scanHandler := handlers.NewScanUploadHandler(db)
+	scanHandler := handlers.NewScanUploadHandler(db, publisher)
 	secured.Post(
 		"/scans/upload",
 		middleware.AuthorizeRole("analyst", "admin"),
@@ -87,6 +87,9 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured.Get("/products", productsHandler.List)
 	secured.Get("/products/:id", productsHandler.Get)
 	secured.Post("/products", middleware.AuthorizeRole("admin", "analyst"), productsHandler.Create)
+
+	intelHandler := handlers.NewIntelHandler(db, publisher)
+	secured.Post("/intel/refresh", middleware.AuthorizeRole("admin"), intelHandler.Refresh)
 
 	admin := secured.Group("/admin", middleware.AuthorizeRole("admin"))
 	auditLogHandler := handlers.NewAuditLogHandler(db)

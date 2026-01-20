@@ -150,7 +150,7 @@ func handleMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objects
 
 	for _, scanner := range job.Scanners {
 		scanner = strings.ToLower(strings.TrimSpace(scanner))
-		result, err := runScanner(ctx, db, store, job, scanner, jobDir, workspace, scannerCfg)
+		result, err := runScanner(ctx, db, store, publisher, job, scanner, jobDir, workspace, scannerCfg)
 		if err != nil {
 			scanErrors = append(scanErrors, err.Error())
 		}
@@ -184,7 +184,7 @@ func handleMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objects
 	return finalizeJob(ctx, db, publisher, job, status, startedAt, finalErr)
 }
 
-func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, job *storage.AnalysisJobDetail, scanner string, jobDir string, workspace string, cfg scanners.RunnerConfig) (*importing.ImportResult, error) {
+func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publisher *events.Publisher, job *storage.AnalysisJobDetail, scanner string, jobDir string, workspace string, cfg scanners.RunnerConfig) (*importing.ImportResult, error) {
 	resultPath := filepath.Join(jobDir, fmt.Sprintf("result_%s.json", scanner))
 
 	var scanErr error
@@ -234,6 +234,23 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, job *s
 				ProductID:    importing.NullUUIDPtr(job.ProductID),
 				EngagementID: importing.NullUUIDPtr(job.EngagementID),
 				CreatedBy:    importing.NullUUIDPtr(job.CreatedBy),
+				Callbacks: &importing.ImportCallbacks{
+					OnIdentifiersDetected: func(identifiers []string) {
+						if publisher == nil || len(identifiers) == 0 {
+							return
+						}
+						var productPtr *string
+						if job.ProductID.Valid {
+							value := job.ProductID.UUID.String()
+							productPtr = &value
+						}
+						_ = publisher.PublishJSON(ctx, events.IntelEnrichRequested, events.IntelEnrichRequest{
+							Identifiers: identifiers,
+							ProductID:   productPtr,
+							Source:      "analysis_worker",
+						})
+					},
+				},
 			})
 			if importResult != nil {
 				importJobID = &importResult.ImportJobID
