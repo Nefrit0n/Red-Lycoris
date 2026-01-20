@@ -12,6 +12,7 @@ import {
   RecentActivityItem,
 } from "../types/dashboard";
 import { Finding, FindingSeverity, FindingStatus } from "../types/findings";
+import { normalizeDateFrom } from "../utils/urlHelpers";
 
 const OPEN_STATUSES: FindingStatus[] = ["new", "under_review", "confirmed"];
 const SEVERITIES: FindingSeverity[] = ["critical", "high", "medium", "low"];
@@ -55,7 +56,7 @@ export const fetchDashboardData = async (signal?: AbortSignal): Promise<Dashboar
         limit: 100,
         offset: 0,
         filterStatus: "mitigated",
-        dateFrom: format(subDays(new Date(), 7), "yyyy-MM-dd"),
+        dateFrom: normalizeDateFrom(format(subDays(new Date(), 7), "dd-MM-yyyy")),
       },
       signal
     ),
@@ -126,7 +127,7 @@ function calculateTrend(findings: Finding[]): TrendPoint[] {
 
   for (let i = 29; i >= 0; i--) {
     const date = subDays(today, i);
-    const dateStr = format(date, "yyyy-MM-dd");
+    const dateStr = format(date, "dd-MM-yyyy");
     const displayDate = format(date, "dd.MM");
 
     // Count findings that existed on this date

@@ -742,11 +742,20 @@ export default function FindingsTable({
               const evidence = getSemgrepEvidence(f);
               const locationLabel = buildLocationLabel(f, evidence);
               const primaryLabel = locationLabel || f.title;
-              const ruleId = isNonEmptyString(evidence?.ruleId)
-                ? evidence?.ruleId
+
+              const ruleId: string | null = isNonEmptyString(evidence?.ruleId)
+                ? evidence.ruleId
                 : isNonEmptyString(f.ruleId)
                   ? f.ruleId
-                  : f.title;
+                  : isNonEmptyString((f as any).rule_id)
+                    ? (f as any).rule_id
+                    : null;
+
+              const shouldShowRule =
+                ruleId !== null &&
+                ruleId.trim() !== primaryLabel.trim() &&
+                !primaryLabel.includes(ruleId);
+
               const message = isNonEmptyString(evidence?.message)
                 ? evidence?.message
                 : isNonEmptyString(f.description)
@@ -975,15 +984,15 @@ export default function FindingsTable({
                                 // Красный для старых (90+ дней), серый для остальных
                                 ...(ageDays >= 90
                                   ? {
-                                      bgcolor: "rgba(244, 67, 54, 0.15)",
-                                      color: "#ef5350",
-                                      border: "1px solid rgba(244, 67, 54, 0.4)",
-                                    }
+                                    bgcolor: "rgba(244, 67, 54, 0.15)",
+                                    color: "#ef5350",
+                                    border: "1px solid rgba(244, 67, 54, 0.4)",
+                                  }
                                   : {
-                                      bgcolor: "rgba(158, 158, 158, 0.1)",
-                                      color: "#9e9e9e",
-                                      border: "1px solid rgba(158, 158, 158, 0.3)",
-                                    }),
+                                    bgcolor: "rgba(158, 158, 158, 0.1)",
+                                    color: "#9e9e9e",
+                                    border: "1px solid rgba(158, 158, 158, 0.3)",
+                                  }),
                                 "&:hover": {
                                   transform: "scale(1.02)",
                                 },
@@ -996,7 +1005,7 @@ export default function FindingsTable({
                         )}
                       </Stack>
 
-                      {ruleId && (
+                      {shouldShowRule && ruleId && (
                         <Tooltip title={ruleId} placement="top-start">
                           <Typography
                             variant="caption"
