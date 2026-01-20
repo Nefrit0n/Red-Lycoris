@@ -1,35 +1,56 @@
-CREATE TABLE IF NOT EXISTS vuln_intel (
+BEGIN;
+
+ALTER TABLE findings
+    ADD COLUMN IF NOT EXISTS evidence JSONB;
+
+ALTER TABLE findings
+    ADD COLUMN IF NOT EXISTS raw_data JSONB;
+
+COMMENT ON COLUMN findings.evidence IS
+    'Structured scanner evidence (semgrep, trivy, etc) used for FindingDetail';
+
+COMMENT ON COLUMN findings.raw_data IS
+    'Raw parsed scanner payload for debugging and future enrichment';
+
+CREATE TABLE IF NOT EXISTS vulnerability_intel (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    identifier TEXT NOT NULL,
-    source_version TEXT NOT NULL DEFAULT 'v1',
-    nvd_payload JSONB,
-    epss_payload JSONB,
-    kev_payload JSONB,
-    references JSONB,
-    cvss_score DOUBLE PRECISION,
-    cvss_version TEXT,
-    epss_score DOUBLE PRECISION,
-    epss_percentile DOUBLE PRECISION,
-    kev BOOLEAN NOT NULL DEFAULT FALSE,
-    last_refreshed_at TIMESTAMPTZ,
-    next_retry_at TIMESTAMPTZ,
-    last_error TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (identifier, source_version)
+
+    -- идентификаторы
+    vulnerability_id TEXT NOT NULL,           -- CVE-XXXX / GHSA-XXXX
+    source           TEXT NOT NULL,           -- trivy / osv / nvd
+
+    -- scoring
+    severity         TEXT,
+    cvss_v3_score    NUMERIC,
+    cvss_v3_vector   TEXT,
+
+    -- содержимое
+    description      TEXT,
+    references       JSONB,
+
+    -- даты
+    published_at     TIMESTAMPTZ,
+    modified_at      TIMESTAMPTZ,
+
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT uq_vuln_intel UNIQUE (vulnerability_id, source)
 );
 
-CREATE INDEX IF NOT EXISTS idx_vuln_intel_identifier ON vuln_intel (identifier);
-CREATE INDEX IF NOT EXISTS idx_vuln_intel_refresh ON vuln_intel (last_refreshed_at);
+COMMENT ON TABLE vulnerability_intel IS
+    'Normalized vulnerability intelligence (CVE, GHSA)';
 
-CREATE TABLE IF NOT EXISTS finding_vuln_identifiers (
-    finding_id UUID NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
-    identifier TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (finding_id, identifier)
-);
+ALTER TABLE findings
+    ADD COLUMN IF NOT EXISTS vulnerability_intel_id UUID;
 
-CREATE INDEX IF NOT EXISTS idx_finding_vuln_identifiers_identifier
-    ON finding_vuln_identifiers (identifier);
-CREATE INDEX IF NOT EXISTS idx_finding_vuln_identifiers_created_at
-    ON finding_vuln_identifiers (created_at DESC);
+COMMENT ON COLUMN findings.vulnerability_intel_id IS
+    'Reference to vulnerability_intel (optional, async populated)';
+
+CREATE INDEX IF NOT EXISTS idx_findings_vulnerability_intel_id
+    ON findings (vulnerability_intel_id);
+
+CREATE INDEX IF NOT EXISTS idx_vuln_intel_vulnerability_id
+    ON vulnerability_intel (vulnerability_id);
+
+COMMIT;
