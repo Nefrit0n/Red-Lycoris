@@ -4,21 +4,34 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
+  Collapse,
   Divider,
   FormControl,
+  Grid,
+  IconButton,
   InputLabel,
   LinearProgress,
   MenuItem,
+  Paper,
   Select,
   Stack,
+  Step,
+  StepLabel,
+  Stepper,
   TextField,
   Typography,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import HistoryIcon from "@mui/icons-material/History";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchFindingDetail, fetchFindings } from "../api/findings";
 import { uploadScan, UploadScanResponse } from "../api/scans";
 import { Finding, SemgrepEvidence } from "../types/findings";
+import DragDropUpload from "../components/DragDropUpload";
 
 interface UploadHistoryItem extends UploadScanResponse {
   fileName: string;
@@ -33,6 +46,26 @@ interface FindingPreview extends Finding {
   evidence?: SemgrepEvidence | null;
 }
 
+const STEPS = ["Выбор файла", "Настройка", "Загрузка", "Результаты"];
+
+const SCANNER_INFO: Record<string, { name: string; description: string; formats: string }> = {
+  semgrep: {
+    name: "Semgrep",
+    description: "SAST анализатор кода",
+    formats: "JSON",
+  },
+  trivy: {
+    name: "Trivy",
+    description: "Сканер контейнеров и зависимостей",
+    formats: "JSON",
+  },
+  zap: {
+    name: "OWASP ZAP",
+    description: "DAST сканер веб-приложений",
+    formats: "JSON",
+  },
+};
+
 const ScanUploadPage = () => {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
@@ -43,21 +76,30 @@ const ScanUploadPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<UploadScanResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [previewFindings, setPreviewFindings] = useState<FindingPreview[]>([]);
   const [previewTotal, setPreviewTotal] = useState<number | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<UploadHistoryItem[]>(() => {
     const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) {
-      return [];
-    }
+    if (!raw) return [];
     try {
       return JSON.parse(raw) as UploadHistoryItem[];
     } catch {
       return [];
     }
   });
+
+  // Calculate current step
+  const activeStep = useMemo(() => {
+    if (success) return 3;
+    if (loading) return 2;
+    if (file && scannerType) return 1;
+    return 0;
+  }, [file, scannerType, loading, success]);
 
   const isValid = useMemo(() => {
     return Boolean(file && scannerType);
@@ -74,6 +116,16 @@ const ScanUploadPage = () => {
     setPreviewTotal(null);
     setPreviewError(null);
     setLoading(true);
+    setUploadProgress(0);
+
+    // Simulate upload progress
+    const progressInterval = setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev >= 90) return prev;
+        return prev + Math.random() * 15;
+      });
+    }, 200);
+
     try {
       const result = await uploadScan({
         file,
@@ -82,7 +134,11 @@ const ScanUploadPage = () => {
         productVersion: productVersion || undefined,
         productIdentifier: productIdentifier || undefined,
       });
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
       setSuccess(result);
+
       const entry: UploadHistoryItem = {
         ...result,
         fileName: file.name,
@@ -97,6 +153,7 @@ const ScanUploadPage = () => {
         JSON.stringify({ productId: result.productId ?? null })
       );
     } catch (err) {
+      clearInterval(progressInterval);
       setError(err instanceof Error ? err.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
@@ -104,9 +161,7 @@ const ScanUploadPage = () => {
   };
 
   useEffect(() => {
-    if (!success?.importJobId) {
-      return;
-    }
+    if (!success?.importJobId) return;
 
     const controller = new AbortController();
     const loadPreview = async () => {
@@ -115,7 +170,7 @@ const ScanUploadPage = () => {
       try {
         const response = await fetchFindings(
           {
-            limit: 20,
+            limit: 10,
             offset: 0,
             canonicalOnly: true,
             includeRepeats: false,
@@ -158,19 +213,30 @@ const ScanUploadPage = () => {
     };
 
     void loadPreview();
-
     return () => controller.abort();
   }, [success?.importJobId]);
+
+  const handleReset = () => {
+    setFile(null);
+    setScannerType("");
+    setProductName("");
+    setProductVersion("");
+    setProductIdentifier("");
+    setError(null);
+    setSuccess(null);
+    setUploadProgress(0);
+    setPreviewFindings([]);
+    setPreviewTotal(null);
+  };
 
   const handleViewFindings = () => {
     const params = new URLSearchParams();
     if (success?.productId) {
       params.set("productId", success.productId);
     }
-    const search = params.toString();
     navigate({
       pathname: "/findings",
-      search: search ? `?${search}` : "",
+      search: params.toString() ? `?${params.toString()}` : "",
     });
   };
 
@@ -185,238 +251,315 @@ const ScanUploadPage = () => {
   };
 
   return (
-    <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }}>
+    <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }} maxWidth="lg" mx="auto">
       <Stack spacing={3}>
+        {/* Header */}
         <Box>
-          <Typography variant="h4" gutterBottom>
-            Upload Scan
-          </Typography>
-          <Typography color="text.secondary">
-            Загрузите отчёт сканера, чтобы создать результаты и находки.
-          </Typography>
+          <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+            <Box>
+              <Typography variant="h4" gutterBottom>
+                Upload Scan
+              </Typography>
+              <Typography color="text.secondary">
+                Загрузите отчёт сканера для создания находок
+              </Typography>
+            </Box>
+            <Button
+              startIcon={<HistoryIcon />}
+              onClick={() => setShowHistory(!showHistory)}
+              variant={showHistory ? "contained" : "outlined"}
+              size="small"
+            >
+              История ({history.length})
+            </Button>
+          </Stack>
         </Box>
 
-        <Card>
+        {/* History Collapse */}
+        <Collapse in={showHistory}>
+          <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Последние загрузки
+              </Typography>
+              {history.length === 0 ? (
+                <Typography color="text.secondary">Пока нет загрузок</Typography>
+              ) : (
+                <Stack spacing={1}>
+                  {history.slice(0, 5).map((entry, index) => (
+                    <Paper
+                      key={`${entry.scanId}-${entry.uploadedAt}`}
+                      sx={{
+                        p: 1.5,
+                        bgcolor: "action.hover",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="body2" fontWeight={500}>
+                          {entry.fileName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {SCANNER_INFO[entry.scannerType]?.name || entry.scannerType} ·{" "}
+                          {new Date(entry.uploadedAt).toLocaleString("ru-RU")}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1}>
+                        <Chip
+                          label={`${entry.createdFindings} находок`}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                        {entry.duplicates > 0 && (
+                          <Chip
+                            label={`${entry.duplicates} дубл.`}
+                            size="small"
+                            variant="outlined"
+                          />
+                        )}
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+        </Collapse>
+
+        {/* Stepper */}
+        <Stepper activeStep={activeStep} alternativeLabel>
+          {STEPS.map((label) => (
+            <Step key={label}>
+              <StepLabel>{label}</StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+
+        {/* Main Upload Card */}
+        <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
           <CardContent>
-            <Stack spacing={2}>
-              <FormControl fullWidth>
-                <InputLabel id="scanner-type-label">Scanner</InputLabel>
-                <Select
-                  labelId="scanner-type-label"
-                  value={scannerType}
-                  label="Scanner"
-                  onChange={(event) => setScannerType(event.target.value)}
+            <Stack spacing={3}>
+              {/* Scanner Selection */}
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  1. Выберите тип сканера
+                </Typography>
+                <Grid container spacing={2}>
+                  {Object.entries(SCANNER_INFO).map(([key, info]) => (
+                    <Grid item xs={12} sm={4} key={key}>
+                      <Paper
+                        onClick={() => !loading && setScannerType(key)}
+                        sx={{
+                          p: 2,
+                          cursor: loading ? "not-allowed" : "pointer",
+                          border: "2px solid",
+                          borderColor: scannerType === key ? "primary.main" : "divider",
+                          bgcolor: scannerType === key ? "action.selected" : "transparent",
+                          transition: "all 0.2s ease",
+                          "&:hover": {
+                            borderColor: loading ? "divider" : "primary.light",
+                          },
+                        }}
+                      >
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {info.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {info.description}
+                        </Typography>
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          Формат: {info.formats}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+
+              {/* File Upload */}
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  2. Загрузите файл отчёта
+                </Typography>
+                <DragDropUpload
+                  onFileSelect={setFile}
+                  file={file}
+                  accept=".json,.sarif"
+                  disabled={loading}
+                  uploading={loading}
+                  uploadProgress={uploadProgress}
+                  uploadComplete={Boolean(success)}
+                />
+              </Box>
+
+              {/* Advanced Options */}
+              <Box>
+                <Button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  endIcon={showAdvanced ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  sx={{ mb: 1 }}
                 >
-                  <MenuItem value="trivy">Trivy</MenuItem>
-                  <MenuItem value="zap">OWASP ZAP</MenuItem>
-                  <MenuItem value="semgrep">Semgrep</MenuItem>
-                </Select>
-              </FormControl>
+                  Дополнительные настройки
+                </Button>
+                <Collapse in={showAdvanced}>
+                  <Stack spacing={2} sx={{ pt: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Укажите информацию о продукте для группировки находок
+                    </Typography>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                      <TextField
+                        label="Название продукта"
+                        fullWidth
+                        size="small"
+                        value={productName}
+                        onChange={(e) => setProductName(e.target.value)}
+                        disabled={loading}
+                      />
+                      <TextField
+                        label="Версия"
+                        fullWidth
+                        size="small"
+                        value={productVersion}
+                        onChange={(e) => setProductVersion(e.target.value)}
+                        disabled={loading}
+                      />
+                    </Stack>
+                    <TextField
+                      label="Идентификатор продукта"
+                      fullWidth
+                      size="small"
+                      value={productIdentifier}
+                      onChange={(e) => setProductIdentifier(e.target.value)}
+                      disabled={loading}
+                      helperText="Уникальный идентификатор для связи с CI/CD"
+                    />
+                  </Stack>
+                </Collapse>
+              </Box>
 
-              <Button variant="outlined" component="label">
-                {file ? `Файл: ${file.name}` : "Выбрать файл отчёта"}
-                <input
-                  hidden
-                  type="file"
-                  onChange={(event) => {
-                    const selected = event.target.files?.[0] || null;
-                    setFile(selected);
-                  }}
-                />
-              </Button>
-
-              <Divider />
-
-              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                <TextField
-                  label="Product name"
-                  fullWidth
-                  value={productName}
-                  onChange={(event) => setProductName(event.target.value)}
-                />
-                <TextField
-                  label="Product version"
-                  fullWidth
-                  value={productVersion}
-                  onChange={(event) => setProductVersion(event.target.value)}
-                />
-              </Stack>
-
-              <TextField
-                label="Product identifier"
-                fullWidth
-                value={productIdentifier}
-                onChange={(event) => setProductIdentifier(event.target.value)}
-              />
-
-              {loading && <LinearProgress />}
-
-              <Button
-                variant="contained"
-                onClick={handleUpload}
-                disabled={!isValid || loading}
-              >
-                Upload
-              </Button>
-
+              {/* Error */}
               {error && <Alert severity="error">{error}</Alert>}
+
+              {/* Success Results */}
               {success && (
-                <Stack spacing={2}>
+                <Box>
                   <Alert
                     severity="success"
+                    sx={{ mb: 2 }}
                     action={
                       <Stack direction="row" spacing={1}>
-                        <Button color="inherit" size="small" onClick={handleViewFindings}>
-                          Перейти к находкам
+                        <Button
+                          color="inherit"
+                          size="small"
+                          onClick={handleViewFindings}
+                          endIcon={<OpenInNewIcon fontSize="small" />}
+                        >
+                          Все находки
                         </Button>
                         <Button color="inherit" size="small" onClick={handleViewImport}>
-                          Импорт
+                          Детали импорта
                         </Button>
                       </Stack>
                     }
                   >
-                    Загружено: создано находок {success.createdFindings}, дубликатов{" "}
-                    {success.duplicates}.
+                    <Typography variant="body2">
+                      Загружено успешно! Создано находок: <strong>{success.createdFindings}</strong>
+                      {success.duplicates > 0 && (
+                        <>, дубликатов: <strong>{success.duplicates}</strong></>
+                      )}
+                    </Typography>
                   </Alert>
 
-                  <Box>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Первые 20 находок
-                    </Typography>
-                    {previewLoading && <LinearProgress />}
-                    {previewError && <Alert severity="error">{previewError}</Alert>}
-                    {previewTotal === 0 && !previewLoading && !previewError && (
-                      <Alert severity="info">В отчёте не найдено уязвимостей.</Alert>
-                    )}
-                    {previewFindings.length > 0 && (
-                      <Box sx={{ overflowX: "auto" }}>
-                        <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
-                          <Box component="thead">
-                            <Box component="tr" sx={{ textAlign: "left" }}>
-                              {["Title / RuleId", "Path:Line", "Severity", "Status", ""].map((h) => (
-                                <Box
-                                  key={h}
-                                  component="th"
-                                  style={{
-                                    fontWeight: 600,
-                                    fontSize: 12,
-                                    padding: "10px 8px",
-                                    borderBottom: "1px solid rgba(0,0,0,0.08)",
-                                  }}
-                                >
-                                  {h}
-                                </Box>
-                              ))}
-                            </Box>
-                          </Box>
-                          <Box component="tbody">
-                            {previewFindings.map((finding) => {
-                              const ruleId = finding.evidence?.ruleId || finding.title;
-                              const path = finding.evidence?.path || "";
-                              const startLine = finding.evidence?.start?.line;
-                              const pathLine = path
-                                ? `${path}${startLine ? `:${startLine}` : ""}`
-                                : "—";
-                              const occurrence = finding.occurrenceStatus === "REPEAT" ? "Repeat" : "New";
-                              return (
-                                <Box key={finding.id} component="tr">
-                                  <Box
-                                    component="td"
-                                    style={{
-                                      padding: "10px 8px",
-                                      borderBottom: "1px solid rgba(0,0,0,0.06)",
-                                      fontSize: 13,
-                                    }}
-                                  >
-                                    <Typography variant="body2">{finding.title}</Typography>
-                                    {ruleId && ruleId !== finding.title && (
-                                      <Typography variant="caption" color="text.secondary">
-                                        {ruleId}
-                                      </Typography>
-                                    )}
-                                  </Box>
-                                  <Box
-                                    component="td"
-                                    style={{
-                                      padding: "10px 8px",
-                                      borderBottom: "1px solid rgba(0,0,0,0.06)",
-                                      fontSize: 13,
-                                    }}
-                                  >
-                                    {pathLine}
-                                  </Box>
-                                  <Box
-                                    component="td"
-                                    style={{
-                                      padding: "10px 8px",
-                                      borderBottom: "1px solid rgba(0,0,0,0.06)",
-                                      fontSize: 13,
-                                    }}
-                                  >
-                                    {finding.severity}
-                                  </Box>
-                                  <Box
-                                    component="td"
-                                    style={{
-                                      padding: "10px 8px",
-                                      borderBottom: "1px solid rgba(0,0,0,0.06)",
-                                      fontSize: 13,
-                                    }}
-                                  >
-                                    {occurrence}
-                                  </Box>
-                                  <Box
-                                    component="td"
-                                    style={{
-                                      padding: "10px 8px",
-                                      borderBottom: "1px solid rgba(0,0,0,0.06)",
-                                      fontSize: 13,
-                                      textAlign: "right",
-                                    }}
-                                  >
-                                    <Button size="small" onClick={() => handleOpenFinding(finding.id)}>
-                                      Открыть в находках
-                                    </Button>
-                                  </Box>
-                                </Box>
-                              );
-                            })}
-                          </Box>
-                        </Box>
-                      </Box>
-                    )}
-                  </Box>
-                </Stack>
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              История загрузок
-            </Typography>
-            <Stack spacing={1}>
-              {history.length === 0 && (
-                <Typography color="text.secondary">
-                  Пока нет загруженных отчётов.
-                </Typography>
-              )}
-              {history.map((entry) => (
-                <Box key={`${entry.scanId}-${entry.uploadedAt}`}>
-                  <Typography variant="subtitle2">{entry.fileName}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {entry.scannerType} ·{" "}
-                    {new Date(entry.uploadedAt).toLocaleString()}
+                  {/* Preview */}
+                  <Typography variant="subtitle2" gutterBottom>
+                    Предпросмотр находок ({previewTotal ?? 0} всего)
                   </Typography>
-                  <Typography variant="body2">
-                    Findings: {entry.createdFindings} · Duplicates:{" "}
-                    {entry.duplicates}
-                  </Typography>
-                  <Divider sx={{ mt: 1 }} />
+                  {previewLoading && <LinearProgress sx={{ mb: 1 }} />}
+                  {previewError && <Alert severity="error" sx={{ mb: 1 }}>{previewError}</Alert>}
+                  {previewTotal === 0 && !previewLoading && (
+                    <Alert severity="info">В отчёте не найдено уязвимостей</Alert>
+                  )}
+                  {previewFindings.length > 0 && (
+                    <Stack spacing={1}>
+                      {previewFindings.map((finding) => {
+                        const path = finding.evidence?.path || "";
+                        const startLine = finding.evidence?.start?.line;
+                        return (
+                          <Paper
+                            key={finding.id}
+                            sx={{
+                              p: 1.5,
+                              cursor: "pointer",
+                              "&:hover": { bgcolor: "action.hover" },
+                            }}
+                            onClick={() => handleOpenFinding(finding.id)}
+                          >
+                            <Stack
+                              direction="row"
+                              justifyContent="space-between"
+                              alignItems="center"
+                            >
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography variant="body2" fontWeight={500} noWrap>
+                                  {finding.title}
+                                </Typography>
+                                {path && (
+                                  <Typography variant="caption" color="text.secondary" noWrap>
+                                    {path}
+                                    {startLine && `:${startLine}`}
+                                  </Typography>
+                                )}
+                              </Box>
+                              <Stack direction="row" spacing={1}>
+                                <Chip
+                                  label={finding.severity}
+                                  size="small"
+                                  color={
+                                    finding.severity === "critical" || finding.severity === "high"
+                                      ? "error"
+                                      : finding.severity === "medium"
+                                      ? "warning"
+                                      : "default"
+                                  }
+                                />
+                                {finding.occurrenceStatus === "REPEAT" && (
+                                  <Chip label="Repeat" size="small" variant="outlined" />
+                                )}
+                              </Stack>
+                            </Stack>
+                          </Paper>
+                        );
+                      })}
+                      {(previewTotal ?? 0) > previewFindings.length && (
+                        <Button size="small" onClick={handleViewFindings}>
+                          Показать все {previewTotal} находок
+                        </Button>
+                      )}
+                    </Stack>
+                  )}
                 </Box>
-              ))}
+              )}
+
+              {/* Actions */}
+              <Stack direction="row" spacing={2}>
+                {success ? (
+                  <Button variant="contained" onClick={handleReset}>
+                    Загрузить ещё
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    onClick={handleUpload}
+                    disabled={!isValid || loading}
+                    sx={{ minWidth: 150 }}
+                  >
+                    {loading ? "Загрузка..." : "Загрузить"}
+                  </Button>
+                )}
+              </Stack>
             </Stack>
           </CardContent>
         </Card>
