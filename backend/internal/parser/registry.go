@@ -91,7 +91,7 @@ func ParseReport(scannerType string, data []byte) ([]Finding, error) {
 	}
 
 	if len(findings) == 0 && json.Valid(data) {
-		if !strings.EqualFold(scannerType, "semgrep") {
+		if !strings.EqualFold(scannerType, "semgrep") && !strings.EqualFold(scannerType, "trivy") {
 			return nil, fmt.Errorf("report contains no findings")
 		}
 	}
