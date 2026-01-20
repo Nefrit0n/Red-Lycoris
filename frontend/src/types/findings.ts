@@ -18,12 +18,16 @@ export interface FindingOwner {
 export interface Finding {
   id: string;
   title: string;
+  description?: string | null;
+  ruleId?: string | null;
+  location?: string | null;
   productId?: string | null;
   productName?: string | null;
   assigneeId?: string | null;
   owner?: FindingOwner | null;
   importJobId?: string | null;
   scannerType?: string | null;
+  evidence?: SemgrepEvidence | null;
   severity: FindingSeverity;
   status: FindingStatus;
   occurrenceStatus?: FindingOccurrenceStatus | null;
