@@ -1,5 +1,6 @@
 import {
   Box,
+  Chip,
   Divider,
   IconButton,
   List,
@@ -15,15 +16,19 @@ import {
   Analytics as AnalyticsIcon,
   CloudUpload as CloudUploadIcon,
   Dashboard as DashboardIcon,
+  DarkMode as DarkModeIcon,
+  LightMode as LightModeIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
   MenuOpen as MenuOpenIcon,
+  Search as SearchIcon,
   Storage as StorageIcon,
   Inventory2 as Inventory2Icon,
 } from "@mui/icons-material";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrentUser, isAdminUser, logout } from "../api/auth";
+import { useThemeMode } from "../contexts/ThemeContext";
 
 type RecentEntry = {
   path: string;
@@ -84,11 +89,16 @@ const resolveTitleForPath = (path: string): string | null => {
   return null;
 };
 
-const Sidebar = () => {
+interface SidebarProps {
+  onOpenCommandPalette?: () => void;
+}
+
+const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getCurrentUser();
   const canSeeAdmin = isAdminUser(user);
+  const { resolvedMode, toggleMode } = useThemeMode();
 
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     const raw = localStorage.getItem(COLLAPSED_KEY);
@@ -280,11 +290,82 @@ const Sidebar = () => {
           py: 2,
           display: "flex",
           flexDirection: "column",
-          gap: 1.5,
+          gap: 1,
         }}
       >
+        {/* Search Button */}
+        {onOpenCommandPalette && (
+          <Tooltip title={collapsed ? "Поиск (⌘K)" : ""} placement="right">
+            <ListItemButton
+              onClick={onOpenCommandPalette}
+              sx={{
+                borderRadius: 1.5,
+                justifyContent: collapsed ? "center" : "flex-start",
+                px: collapsed ? 1 : 2,
+                border: "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  mr: collapsed ? 0 : 1.5,
+                  color: "text.secondary",
+                  justifyContent: "center",
+                }}
+              >
+                <SearchIcon fontSize="small" />
+              </ListItemIcon>
+              {!collapsed && (
+                <>
+                  <ListItemText
+                    primary="Поиск"
+                    primaryTypographyProps={{ fontSize: "0.875rem" }}
+                  />
+                  <Chip
+                    label="⌘K"
+                    size="small"
+                    sx={{ height: 20, fontSize: "0.65rem" }}
+                  />
+                </>
+              )}
+            </ListItemButton>
+          </Tooltip>
+        )}
+
+        {/* Theme Toggle */}
+        <Tooltip title={collapsed ? (resolvedMode === "dark" ? "Светлая тема" : "Тёмная тема") : ""} placement="right">
+          <ListItemButton
+            onClick={toggleMode}
+            sx={{
+              borderRadius: 1.5,
+              justifyContent: collapsed ? "center" : "flex-start",
+              px: collapsed ? 1 : 2,
+            }}
+          >
+            <ListItemIcon
+              sx={{
+                minWidth: 0,
+                mr: collapsed ? 0 : 2,
+                color: "text.secondary",
+                justifyContent: "center",
+              }}
+            >
+              {resolvedMode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
+            </ListItemIcon>
+            {!collapsed && (
+              <ListItemText
+                primary={resolvedMode === "dark" ? "Светлая тема" : "Тёмная тема"}
+              />
+            )}
+          </ListItemButton>
+        </Tooltip>
+
+        <Divider sx={{ my: 0.5 }} />
+
+        {/* User Info */}
         {!collapsed && user && (
-          <Box>
+          <Box sx={{ px: 1 }}>
             <Typography variant="body2" fontWeight={600}>
               {user.username}
             </Typography>
@@ -293,6 +374,8 @@ const Sidebar = () => {
             </Typography>
           </Box>
         )}
+
+        {/* Logout */}
         <Tooltip title="Выйти" placement="right" disableHoverListener={!collapsed}>
           <ListItemButton
             onClick={handleLogout}
