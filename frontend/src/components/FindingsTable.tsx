@@ -348,6 +348,7 @@ const isNonEmptyString = (value: unknown): value is string =>
 const getSemgrepEvidence = (finding: Finding): SemgrepEvidence | null => {
   const evidence = finding.evidence;
   if (!evidence || typeof evidence !== "object") return null;
+  if (!("scannerType" in evidence)) return null;
   if (isNonEmptyString(evidence.scannerType) && evidence.scannerType !== "semgrep") {
     return null;
   }
