@@ -55,11 +55,19 @@ func (p *SemgrepParser) Parse(data []byte) ([]Finding, error) {
 }
 
 func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
-	location := strings.TrimSpace(r.Path)
-	if r.Start.Line > 0 {
-		location = fmt.Sprintf("%s:%d", location, r.Start.Line)
+	// Title = path (как ты хочешь в UI)
+	title := strings.TrimSpace(r.Path)
+	if title == "" {
+		title = r.CheckID // fallback на ruleId если path почему-то пустой
 	}
 
+	// Location = path:line (для фильтров/контекста)
+	location := title
+	if r.Start.Line > 0 {
+		location = fmt.Sprintf("%s:%d", title, r.Start.Line)
+	}
+
+	// Description = message (полный текст)
 	desc := strings.TrimSpace(r.Extra.Message)
 	var descPtr *string
 	if desc != "" {
@@ -69,7 +77,7 @@ func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
 	evidence := buildSemgrepEvidence(r)
 
 	return Finding{
-		Title:       r.CheckID,
+		Title:       title,
 		Description: descPtr,
 		Severity:    mapSemgrepSeverity(r.Extra.Severity),
 		Location:    location,
@@ -77,10 +85,12 @@ func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
 		RawData: map[string]any{
 			"path":              r.Path,
 			"original_severity": r.Extra.Severity,
+			"check_id":          r.CheckID,
 		},
 		Evidence: evidence,
 	}
 }
+
 
 type semgrepReport struct {
 	Results []semgrepResult `json:"results"`
