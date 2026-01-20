@@ -21,28 +21,27 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import LinkIcon from "@mui/icons-material/Link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCurrentUser } from "../api/auth";
+import CodeBlock from "../components/CodeBlock";
+import EventTimeline from "../components/EventTimeline";
+import RemediationGuidance from "../components/RemediationGuidance";
 import { Section } from "../components/Section";
 import { TabPanel } from "../components/TabPanel";
 import { useFindingDetail } from "../hooks/useFindingDetail";
 import { useFindingStatus } from "../hooks/useFindingStatus";
 import { useFindingComments } from "../hooks/useFindingComments";
 import { useFindingNeighbors } from "../hooks/useFindingNeighbors";
+import { useKeyboardNavigation } from "../hooks/useKeyboardNavigation";
 import {
   SEVERITY_STYLES,
   STATUS_COLORS,
   STATUS_LABELS,
   ALL_STATUSES,
 } from "../utils/findingConstants";
-import {
-  formatEventSummary,
-  getEventCategory,
-  formatDateRu,
-  EventCategory,
-} from "../utils/findingFormatters";
-import { FindingComment, FindingEvent, SemgrepEvidence } from "../types/findings";
+import { formatDateRu, EventCategory } from "../utils/findingFormatters";
+import { FindingComment, SemgrepEvidence } from "../types/findings";
 
 type FindingDetailContentProps = {
   id: string;
@@ -60,7 +59,6 @@ export const FindingDetailContent = ({
   // Tabs and filters
   const [tab, setTab] = useState(0);
   const [eventFilter, setEventFilter] = useState<EventCategory>("all");
-  const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
   const [evidenceExpanded, setEvidenceExpanded] = useState(false);
 
   // User permissions
@@ -94,6 +92,22 @@ export const FindingDetailContent = ({
     returnToProp,
   });
 
+  // Keyboard navigation (j/k for next/prev)
+  useKeyboardNavigation({
+    onPrevious: () => {
+      if (navigation.neighbors?.prevId) {
+        navigation.handleNavigateNeighbor(navigation.neighbors.prevId);
+      }
+    },
+    onNext: () => {
+      if (navigation.neighbors?.nextId) {
+        navigation.handleNavigateNeighbor(navigation.neighbors.nextId);
+      }
+    },
+    onClose,
+    enabled: !navigation.neighborsLoading && Boolean(navigation.returnToUrl),
+  });
+
   // Handle copy to clipboard
   const handleCopyValue = async (value: string) => {
     try {
@@ -102,23 +116,6 @@ export const FindingDetailContent = ({
       // ignore
     }
   };
-
-  // Toggle event payload visibility
-  const toggleEventPayload = (eventId: string) => {
-    setExpandedEventIds((prev) => {
-      const next = new Set(prev);
-      next.has(eventId) ? next.delete(eventId) : next.add(eventId);
-      return next;
-    });
-  };
-
-  // Filter events
-  const filteredEvents = useMemo(() => {
-    if (!data?.events) return [];
-    return data.events.filter((e) =>
-      eventFilter === "all" ? true : getEventCategory(e) === eventFilter
-    );
-  }, [data?.events, eventFilter]);
 
   // Extract occurrences
   const occurrences: any[] = Array.isArray((data as any)?.occurrences)
@@ -216,32 +213,55 @@ export const FindingDetailContent = ({
         <Stack direction="row" alignItems="center" gap={1}>
           {navigation.returnToUrl && (
             <Stack direction="row" gap={1} alignItems="center">
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={navigation.neighborsLoading || !navigation.neighbors?.prevId}
-                onClick={() =>
-                  navigation.neighbors?.prevId &&
-                  navigation.handleNavigateNeighbor(navigation.neighbors.prevId)
-                }
-              >
-                Предыдущая
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={navigation.neighborsLoading || !navigation.neighbors?.nextId}
-                onClick={() =>
-                  navigation.neighbors?.nextId &&
-                  navigation.handleNavigateNeighbor(navigation.neighbors.nextId)
-                }
-              >
-                Следующая
-              </Button>
+              <Tooltip title="Предыдущая (k)">
+                <span>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={navigation.neighborsLoading || !navigation.neighbors?.prevId}
+                    onClick={() =>
+                      navigation.neighbors?.prevId &&
+                      navigation.handleNavigateNeighbor(navigation.neighbors.prevId)
+                    }
+                  >
+                    Предыдущая
+                  </Button>
+                </span>
+              </Tooltip>
+              <Tooltip title="Следующая (j)">
+                <span>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={navigation.neighborsLoading || !navigation.neighbors?.nextId}
+                    onClick={() =>
+                      navigation.neighbors?.nextId &&
+                      navigation.handleNavigateNeighbor(navigation.neighbors.nextId)
+                    }
+                  >
+                    Следующая
+                  </Button>
+                </span>
+              </Tooltip>
               {navigation.neighbors && !navigation.neighborsError && (
-                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-                  {navigation.neighbors.position} из {navigation.neighbors.total}
-                </Typography>
+                <Stack direction="row" alignItems="center" gap={0.5}>
+                  <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
+                    {navigation.neighbors.position} из {navigation.neighbors.total}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.disabled",
+                      fontSize: "0.65rem",
+                      px: 0.5,
+                      py: 0.25,
+                      borderRadius: 0.5,
+                      bgcolor: "action.hover",
+                    }}
+                  >
+                    j/k
+                  </Typography>
+                </Stack>
               )}
             </Stack>
           )}
@@ -426,25 +446,20 @@ export const FindingDetailContent = ({
               </Stack>
 
               {semgrepEvidence.code && (
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Code snippet
-                  </Typography>
-                  <Box
-                    component="pre"
-                    sx={{
-                      mt: 0.5,
-                      mb: 0,
-                      p: 1.5,
-                      borderRadius: 1.5,
-                      backgroundColor: "action.hover",
-                      overflowX: "auto",
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    {semgrepEvidence.code}
-                  </Box>
-                </Box>
+                <CodeBlock
+                  code={semgrepEvidence.code}
+                  language={semgrepEvidence.path?.split('.').pop() || undefined}
+                  filename={semgrepEvidence.path || undefined}
+                  startLine={semgrepEvidence.start?.line}
+                  highlightLines={
+                    semgrepEvidence.start?.line && semgrepEvidence.end?.line
+                      ? Array.from(
+                          { length: semgrepEvidence.end.line - semgrepEvidence.start.line + 1 },
+                          (_, i) => semgrepEvidence.start!.line + i
+                        )
+                      : undefined
+                  }
+                />
               )}
 
               {semgrepEvidence.metadata && (
@@ -453,25 +468,25 @@ export const FindingDetailContent = ({
                     {evidenceExpanded ? "Скрыть metadata" : "Показать metadata"}
                   </Button>
                   <Collapse in={evidenceExpanded} timeout="auto" unmountOnExit>
-                    <Box
-                      component="pre"
-                      sx={{
-                        mt: 1,
-                        mb: 0,
-                        p: 1.5,
-                        borderRadius: 1.5,
-                        backgroundColor: "action.hover",
-                        overflowX: "auto",
-                        fontSize: "0.75rem",
-                      }}
-                    >
-                      {JSON.stringify(semgrepEvidence.metadata, null, 2)}
-                    </Box>
+                    <CodeBlock
+                      code={JSON.stringify(semgrepEvidence.metadata, null, 2)}
+                      language="json"
+                      maxHeight={300}
+                    />
                   </Collapse>
                 </Box>
               )}
             </Stack>
           </Section>
+
+          {/* Remediation Guidance */}
+          <Box sx={{ mt: 2 }}>
+            <RemediationGuidance
+              evidence={semgrepEvidence}
+              title={data.title}
+              severity={data.severity}
+            />
+          </Box>
         </TabPanel>
       )}
 
@@ -638,7 +653,7 @@ export const FindingDetailContent = ({
             size="small"
             value={eventFilter}
             onChange={(_, v) => v && setEventFilter(v)}
-            sx={{ flexWrap: "wrap" }}
+            sx={{ flexWrap: "wrap", mb: 2 }}
           >
             <ToggleButton value="all">Все</ToggleButton>
             <ToggleButton value="status">Статус</ToggleButton>
@@ -647,52 +662,11 @@ export const FindingDetailContent = ({
             <ToggleButton value="other">Другое</ToggleButton>
           </ToggleButtonGroup>
 
-          <Stack spacing={1.2} sx={{ mt: 2 }}>
-            {filteredEvents.length === 0 && (
-              <Typography variant="body2" color="text.secondary">
-                История пуста.
-              </Typography>
-            )}
-
-            {filteredEvents.map((e: FindingEvent) => (
-              <Box key={e.id} sx={{ p: 1.5, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-                <Stack direction="row" justifyContent="space-between" gap={2}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {formatEventSummary(e)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-                    {e.actor || "system"} · {formatDateRu(e.createdAt)}
-                  </Typography>
-                </Stack>
-
-                <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} alignItems="center">
-                  <Typography variant="caption" color="text.secondary">
-                    Тип: {e.eventType}
-                  </Typography>
-                  <Button size="small" onClick={() => toggleEventPayload(e.id)}>
-                    {expandedEventIds.has(e.id) ? "Скрыть payload" : "Показать payload"}
-                  </Button>
-                </Stack>
-
-                <Collapse in={expandedEventIds.has(e.id)} timeout="auto" unmountOnExit>
-                  <Box
-                    component="pre"
-                    sx={{
-                      mt: 1,
-                      mb: 0,
-                      p: 1.5,
-                      borderRadius: 1.5,
-                      backgroundColor: "action.hover",
-                      overflowX: "auto",
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    {JSON.stringify(e.payload, null, 2)}
-                  </Box>
-                </Collapse>
-              </Box>
-            ))}
-          </Stack>
+          <EventTimeline
+            events={data.events ?? []}
+            filter={eventFilter}
+            compact={compact}
+          />
         </Section>
       </TabPanel>
 
