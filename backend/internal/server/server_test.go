@@ -22,7 +22,7 @@ func TestFindingsUpdateRequiresRole(t *testing.T) {
 	defer db.Close()
 
 	cfg := config.Config{JWTSecret: "test-secret"}
-	app := server.NewApp(cfg, db)
+	app := server.NewApp(cfg, db, nil, nil)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
 		UserID: uuid.New().String(),

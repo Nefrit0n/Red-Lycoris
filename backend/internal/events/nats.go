@@ -39,6 +39,16 @@ func NewPublisher(url string) (*Publisher, error) {
 		nc.Close()
 		return nil, err
 	}
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:      IntelStreamName,
+		Subjects:  []string{IntelSubject},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    7 * 24 * time.Hour,
+	})
+	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
+		nc.Close()
+		return nil, err
+	}
 	return &Publisher{nc: nc, js: js}, nil
 }
 

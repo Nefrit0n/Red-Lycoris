@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"lotus-warden/backend/internal/dedup"
+	"lotus-warden/backend/internal/intel"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/parser"
 	"lotus-warden/backend/internal/storage"
@@ -44,6 +45,8 @@ type ImportCallbacks struct {
 	OnFindingCreated func(finding *models.Finding)
 	// OnDuplicateCreated is called when a duplicate finding is created
 	OnDuplicateCreated func(finding *models.Finding, masterID uuid.UUID)
+	// OnIdentifiersDetected is called when vulnerability identifiers are detected
+	OnIdentifiersDetected func(identifiers []string)
 	// OnImportStarted is called when import job starts
 	OnImportStarted func(jobID uuid.UUID)
 	// OnImportFailed is called when import job fails
@@ -107,6 +110,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	duplicates := 0
 	createdFindings := 0
 	seenAt := time.Now().UTC()
+	identifierSet := map[string]struct{}{}
 
 	for _, finding := range findings {
 		result, err := processFinding(ctx, db, processFindingParams{
@@ -141,6 +145,20 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 				return nil, err
 			}
 		}
+
+		identifiers := intel.ExtractIdentifiersFromFinding(finding)
+		if len(identifiers) > 0 {
+			targetID := result.finding.ID
+			if !result.isNew {
+				targetID = result.masterID
+			}
+			if err := storage.UpsertFindingIdentifiers(ctx, db, targetID, identifiers); err != nil {
+				return nil, err
+			}
+			for _, identifier := range identifiers {
+				identifierSet[identifier] = struct{}{}
+			}
+		}
 	}
 
 	if params.ProductID != nil {
@@ -149,6 +167,14 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 
 	if err := storage.UpdateImportJobStats(ctx, db, importJob.ID, len(findings), createdFindings, duplicates); err != nil {
 		return nil, err
+	}
+
+	if params.Callbacks != nil && params.Callbacks.OnIdentifiersDetected != nil && len(identifierSet) > 0 {
+		identifiers := make([]string, 0, len(identifierSet))
+		for identifier := range identifierSet {
+			identifiers = append(identifiers, identifier)
+		}
+		params.Callbacks.OnIdentifiersDetected(identifiers)
 	}
 
 	finishedAt := time.Now().UTC()

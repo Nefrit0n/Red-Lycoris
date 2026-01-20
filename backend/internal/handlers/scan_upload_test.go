@@ -26,7 +26,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 	defer db.Close()
 
 	cfg := config.Config{JWTSecret: "test-secret"}
-	app := server.NewApp(cfg, db)
+	app := server.NewApp(cfg, db, nil, nil)
 
 	findings := []parser.Finding{
 		{Title: "SQL Injection", Severity: "high", Location: "app", RuleID: "CVE-2024-0001"},
@@ -180,7 +180,7 @@ func TestScanUploadRejectsOversizedReport(t *testing.T) {
 	defer db.Close()
 
 	cfg := config.Config{JWTSecret: "test-secret"}
-	app := server.NewApp(cfg, db)
+	app := server.NewApp(cfg, db, nil, nil)
 
 	largePayload := strings.Repeat("a", 11*1024*1024)
 	body, err := json.Marshal(map[string]any{
