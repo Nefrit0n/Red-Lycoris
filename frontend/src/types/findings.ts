@@ -27,7 +27,7 @@ export interface Finding {
   owner?: FindingOwner | null;
   importJobId?: string | null;
   scannerType?: string | null;
-  evidence?: SemgrepEvidence | null;
+  evidence?: FindingEvidence | null;
   severity: FindingSeverity;
   status: FindingStatus;
   occurrenceStatus?: FindingOccurrenceStatus | null;
@@ -95,7 +95,7 @@ export interface FindingDetail {
   events: FindingEvent[];
   occurrences?: FindingOccurrence[];
   duplicates?: FindingDuplicateGroup | null;
-  evidence?: SemgrepEvidence | null;
+  evidence?: FindingEvidence | null;
   intel_summary?: IntelSummary | null;
   intel_details?: IntelDetail | null;
 }
@@ -180,3 +180,29 @@ export interface SemgrepEvidence {
   code?: string | null;
   metadata?: Record<string, unknown> | null;
 }
+
+export interface TrivyEvidence {
+  tool?: string | null;
+  type?: string | null;
+  target?: string | null;
+  class?: string | null;
+  targetType?: string | null;
+  vulnerabilityId?: string | null;
+  severityRaw?: string | null;
+  pkgName?: string | null;
+  installedVersion?: string | null;
+  fixedVersion?: string | null;
+  purl?: string | null;
+  primaryUrl?: string | null;
+  title?: string | null;
+  description?: string | null;
+  references?: string[] | null;
+  cweIds?: string[] | null;
+  cvss?: Record<string, unknown> | null;
+  publishedDate?: string | null;
+  lastModifiedDate?: string | null;
+  datasource?: Record<string, unknown> | null;
+  trivyFingerprint?: string | null;
+}
+
+export type FindingEvidence = SemgrepEvidence | TrivyEvidence;
