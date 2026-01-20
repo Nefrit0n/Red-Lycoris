@@ -26,11 +26,13 @@ import { useLocation } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
 import BulkActionsBar from "../components/BulkActionsBar";
+import ExportMenu from "../components/ExportMenu";
 import FiltersPanel from "../components/FiltersPanel";
 import { FilterChips } from "../components/FilterChips";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
-import { useUrlFiltersSync } from "../hooks/useUrlFiltersSync";
+import SavedViewsSelector from "../components/SavedViewsSelector";
+import { useUrlFiltersSync, FiltersState } from "../hooks/useUrlFiltersSync";
 import { useFindingsData } from "../hooks/useFindingsData";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
@@ -157,6 +159,22 @@ const FindingsList = () => {
     filters.showRepeats,
   ]);
 
+  // Apply saved view filters
+  const handleApplyView = useCallback(
+    (viewFilters: Partial<FiltersState>) => {
+      if (viewFilters.productId !== undefined) actions.setProductId(viewFilters.productId);
+      if (viewFilters.searchInput !== undefined) actions.setSearchInput(viewFilters.searchInput);
+      if (viewFilters.filterSeverity !== undefined) actions.setFilterSeverity(viewFilters.filterSeverity);
+      if (viewFilters.filterStatus !== undefined) actions.setFilterStatus(viewFilters.filterStatus);
+      if (viewFilters.filterOccurrence !== undefined) actions.setFilterOccurrence(viewFilters.filterOccurrence);
+      if (viewFilters.filterScannerType !== undefined) actions.setFilterScannerType(viewFilters.filterScannerType);
+      if (viewFilters.dateFrom !== undefined) actions.setDateFrom(viewFilters.dateFrom);
+      if (viewFilters.dateTo !== undefined) actions.setDateTo(viewFilters.dateTo);
+      if (viewFilters.showRepeats !== undefined) actions.setShowRepeats(viewFilters.showRepeats);
+    },
+    [actions]
+  );
+
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 2, md: 3 } }}>
       <Stack
@@ -170,6 +188,15 @@ const FindingsList = () => {
         </Typography>
 
         <Stack direction="row" alignItems="center" spacing={1}>
+          {/* Saved Views */}
+          <SavedViewsSelector
+            currentFilters={filters}
+            onApplyView={handleApplyView}
+          />
+
+          {/* Export */}
+          <ExportMenu data={data} filename="findings" disabled={loading} />
+
           <Tooltip title="Переключить режим отображения">
             <ToggleButtonGroup
               value={compactMode ? "compact" : "normal"}

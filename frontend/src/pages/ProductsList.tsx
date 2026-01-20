@@ -3,35 +3,68 @@ import {
   Box,
   CircularProgress,
   Container,
+  Grid,
+  IconButton,
   Paper,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import ViewListIcon from "@mui/icons-material/ViewList";
+import ViewModuleIcon from "@mui/icons-material/ViewModule";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { fetchProducts } from "../api/products";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { fetchProducts, fetchProductsWithStats } from "../api/products";
 import PaginationControl from "../components/PaginationControl";
-import { Product } from "../types/products";
+import ProductCard, { ProductCardData } from "../components/ProductCard";
+import { Product, ProductWithStats } from "../types/products";
+
+type ViewMode = "table" | "cards";
 
 const ProductsList = () => {
   const navigate = useNavigate();
-  const [data, setData] = useState<Product[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [data, setData] = useState<ProductWithStats[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
 
+  // View mode from URL or localStorage
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const urlView = searchParams.get("view") as ViewMode;
+    if (urlView === "table" || urlView === "cards") return urlView;
+    const stored = localStorage.getItem("productsViewMode") as ViewMode;
+    return stored === "cards" ? "cards" : "table";
+  });
+
+  const handleViewChange = (_: React.MouseEvent, newView: ViewMode | null) => {
+    if (newView) {
+      setViewMode(newView);
+      localStorage.setItem("productsViewMode", newView);
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set("view", newView);
+      setSearchParams(newParams, { replace: true });
+    }
+  };
+
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetchProducts(pageSize, page * pageSize, signal);
+        // Use fetchProductsWithStats for cards view to get severity breakdown
+        const response =
+          viewMode === "cards"
+            ? await fetchProductsWithStats(pageSize, page * pageSize, signal)
+            : await fetchProducts(pageSize, page * pageSize, signal);
         setData(response.data);
         setTotal(response.total);
       } catch (err) {
@@ -42,7 +75,7 @@ const ProductsList = () => {
         setLoading(false);
       }
     },
-    [page, pageSize]
+    [page, pageSize, viewMode]
   );
 
   useEffect(() => {
@@ -51,14 +84,55 @@ const ProductsList = () => {
     return () => controller.abort();
   }, [fetchData]);
 
+  const handleProductClick = (productId: string) => {
+    navigate(`/products/${productId}`);
+  };
+
+  const handleViewFindings = (productId: string) => {
+    navigate({
+      pathname: "/findings",
+      search: `?productId=${productId}`,
+    });
+  };
+
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Products
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        Inventory продуктов и актуальные показатели по находкам.
-      </Typography>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Products
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Inventory продуктов и актуальные показатели по находкам.
+          </Typography>
+        </Box>
+
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={handleViewChange}
+          size="small"
+          aria-label="view mode"
+        >
+          <ToggleButton value="table" aria-label="table view">
+            <Tooltip title="Таблица">
+              <ViewListIcon />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="cards" aria-label="cards view">
+            <Tooltip title="Карточки">
+              <ViewModuleIcon />
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -66,12 +140,33 @@ const ProductsList = () => {
         </Alert>
       )}
 
-      <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-        {loading ? (
-          <Box display="flex" justifyContent="center" py={8}>
-            <CircularProgress />
-          </Box>
-        ) : (
+      {loading ? (
+        <Box display="flex" justifyContent="center" py={8}>
+          <CircularProgress />
+        </Box>
+      ) : viewMode === "cards" ? (
+        /* Cards View */
+        <Box>
+          {data.length === 0 ? (
+            <Paper elevation={0} sx={{ p: 6, textAlign: "center", borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
+              <Typography color="text.secondary">Продуктов пока нет.</Typography>
+            </Paper>
+          ) : (
+            <Grid container spacing={2}>
+              {data.map((item) => (
+                <Grid item xs={12} sm={6} md={4} lg={3} key={item.id}>
+                  <ProductCard
+                    product={item as ProductCardData}
+                    onClick={() => handleProductClick(item.id)}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          )}
+        </Box>
+      ) : (
+        /* Table View */
+        <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
           <Table>
             <TableHead>
               <TableRow>
@@ -86,14 +181,17 @@ const ProductsList = () => {
               {data.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                    <Typography color="text.secondary">
-                      Продуктов пока нет.
-                    </Typography>
+                    <Typography color="text.secondary">Продуктов пока нет.</Typography>
                   </TableCell>
                 </TableRow>
               ) : (
                 data.map((item) => (
-                  <TableRow key={item.id} hover>
+                  <TableRow
+                    key={item.id}
+                    hover
+                    sx={{ cursor: "pointer" }}
+                    onClick={() => handleProductClick(item.id)}
+                  >
                     <TableCell>
                       {item.name}
                       {item.version ? ` (${item.version})` : ""}
@@ -107,13 +205,10 @@ const ProductsList = () => {
                       <Typography
                         variant="body2"
                         color="primary"
-                        sx={{ cursor: "pointer" }}
-                        onClick={() =>
-                          navigate({
-                            pathname: "/findings",
-                            search: `?productId=${item.id}`,
-                          })
-                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewFindings(item.id);
+                        }}
                       >
                         Открыть findings
                       </Typography>
@@ -123,8 +218,8 @@ const ProductsList = () => {
               )}
             </TableBody>
           </Table>
-        )}
-      </Paper>
+        </Paper>
+      )}
 
       <PaginationControl
         page={page}

@@ -1,0 +1,451 @@
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Container,
+  Divider,
+  Grid,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import BugReportIcon from "@mui/icons-material/BugReport";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ErrorIcon from "@mui/icons-material/Error";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import SecurityIcon from "@mui/icons-material/Security";
+import WarningIcon from "@mui/icons-material/Warning";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+} from "recharts";
+import { fetchProductDetail } from "../api/products";
+import { Section } from "../components/Section";
+import { ProductDetail as ProductDetailType } from "../types/products";
+
+const SEVERITY_COLORS = {
+  critical: "#f44336",
+  high: "#ff9800",
+  medium: "#ffeb3b",
+  low: "#4caf50",
+  info: "#2196f3",
+};
+
+const STATUS_ICONS: Record<string, React.ReactElement> = {
+  completed: <CheckCircleIcon sx={{ color: "success.main" }} />,
+  failed: <ErrorIcon sx={{ color: "error.main" }} />,
+  processing: <ScheduleIcon sx={{ color: "warning.main" }} />,
+};
+
+const calculateHealthScore = (breakdown?: ProductDetailType["severityBreakdown"]): number => {
+  if (!breakdown) return 100;
+  const total =
+    breakdown.critical + breakdown.high + breakdown.medium + breakdown.low + breakdown.info;
+  if (total === 0) return 100;
+  const weightedSum =
+    breakdown.critical * 10 +
+    breakdown.high * 5 +
+    breakdown.medium * 2 +
+    breakdown.low * 1 +
+    breakdown.info * 0.5;
+  const maxPenalty = total * 10;
+  return Math.max(0, Math.round(100 - (weightedSum / maxPenalty) * 100));
+};
+
+const getHealthColor = (score: number): string => {
+  if (score >= 80) return "#4caf50";
+  if (score >= 60) return "#8bc34a";
+  if (score >= 40) return "#ffeb3b";
+  if (score >= 20) return "#ff9800";
+  return "#f44336";
+};
+
+interface MetricCardProps {
+  title: string;
+  value: number | string;
+  icon: React.ReactElement;
+  color?: string;
+}
+
+const MetricCard = ({ title, value, icon, color }: MetricCardProps) => (
+  <Paper
+    elevation={0}
+    sx={{
+      p: 2,
+      border: "1px solid",
+      borderColor: "divider",
+      borderRadius: 2,
+      display: "flex",
+      alignItems: "center",
+      gap: 2,
+    }}
+  >
+    <Box
+      sx={{
+        width: 48,
+        height: 48,
+        borderRadius: 2,
+        bgcolor: color ? `${color}20` : "action.hover",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: color || "text.secondary",
+      }}
+    >
+      {icon}
+    </Box>
+    <Box>
+      <Typography variant="h5" fontWeight={600}>
+        {value}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {title}
+      </Typography>
+    </Box>
+  </Paper>
+);
+
+const SeverityPieChart = ({ breakdown }: { breakdown?: ProductDetailType["severityBreakdown"] }) => {
+  if (!breakdown) return null;
+
+  const data = [
+    { name: "Critical", value: breakdown.critical, color: SEVERITY_COLORS.critical },
+    { name: "High", value: breakdown.high, color: SEVERITY_COLORS.high },
+    { name: "Medium", value: breakdown.medium, color: SEVERITY_COLORS.medium },
+    { name: "Low", value: breakdown.low, color: SEVERITY_COLORS.low },
+    { name: "Info", value: breakdown.info, color: SEVERITY_COLORS.info },
+  ].filter((d) => d.value > 0);
+
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+
+  if (total === 0) {
+    return (
+      <Box sx={{ textAlign: "center", py: 4 }}>
+        <SecurityIcon sx={{ fontSize: 48, color: "success.main", mb: 1 }} />
+        <Typography color="text.secondary">Нет открытых находок</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ height: 200 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            cx="50%"
+            cy="50%"
+            innerRadius={50}
+            outerRadius={80}
+            paddingAngle={2}
+            label={({ name, value }) => `${name}: ${value}`}
+            labelLine={false}
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color} />
+            ))}
+          </Pie>
+          <RechartsTooltip />
+        </PieChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+};
+
+const SeverityBarChart = ({ breakdown }: { breakdown?: ProductDetailType["severityBreakdown"] }) => {
+  if (!breakdown) return null;
+
+  const data = [
+    { name: "Critical", value: breakdown.critical, fill: SEVERITY_COLORS.critical },
+    { name: "High", value: breakdown.high, fill: SEVERITY_COLORS.high },
+    { name: "Medium", value: breakdown.medium, fill: SEVERITY_COLORS.medium },
+    { name: "Low", value: breakdown.low, fill: SEVERITY_COLORS.low },
+    { name: "Info", value: breakdown.info, fill: SEVERITY_COLORS.info },
+  ];
+
+  return (
+    <Box sx={{ height: 200 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ left: 60 }}>
+          <XAxis type="number" />
+          <YAxis type="category" dataKey="name" width={60} />
+          <RechartsTooltip />
+          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.fill} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+};
+
+const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans"] }) => {
+  if (!scans || scans.length === 0) {
+    return (
+      <Typography color="text.secondary" sx={{ py: 2 }}>
+        Нет данных о сканах.
+      </Typography>
+    );
+  }
+
+  return (
+    <Stack spacing={1.5}>
+      {scans.map((scan, index) => (
+        <Box
+          key={scan.id}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            p: 1.5,
+            borderRadius: 1.5,
+            bgcolor: "action.hover",
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            {STATUS_ICONS[scan.status] || <ScheduleIcon sx={{ color: "text.secondary" }} />}
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2" fontWeight={500}>
+              {scan.scannerType}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {new Date(scan.createdAt).toLocaleString("ru-RU")}
+            </Typography>
+          </Box>
+          <Chip
+            label={`${scan.findingsCount} находок`}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: "0.7rem" }}
+          />
+        </Box>
+      ))}
+    </Stack>
+  );
+};
+
+const ProductDetailPage = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [data, setData] = useState<ProductDetailType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!id) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const product = await fetchProductDetail(id, signal);
+        setData(product);
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          setError(err instanceof Error ? err.message : "Не удалось загрузить продукт.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [id]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
+  }, [fetchData]);
+
+  if (!id) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Alert severity="error">Некорректный ID продукта</Alert>
+      </Container>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box display="flex" justifyContent="center" py={8}>
+          <CircularProgress />
+        </Box>
+      </Container>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Alert severity="error">{error || "Продукт не найден"}</Alert>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/products")} sx={{ mt: 2 }}>
+          Назад к продуктам
+        </Button>
+      </Container>
+    );
+  }
+
+  const healthScore = calculateHealthScore(data.severityBreakdown);
+  const healthColor = getHealthColor(healthScore);
+  const totalOpenFindings = data.findingsOpenCount;
+
+  return (
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      {/* Header */}
+      <Box sx={{ mb: 3 }}>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/products")}
+          sx={{ mb: 1 }}
+        >
+          Назад к продуктам
+        </Button>
+
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+          <Box>
+            <Typography variant="h4" component="h1" fontWeight={600}>
+              {data.name}
+            </Typography>
+            {data.identifier && (
+              <Typography variant="body1" color="text.secondary">
+                {data.identifier}
+                {data.version && ` • v${data.version}`}
+              </Typography>
+            )}
+          </Box>
+
+          <Chip
+            label={`Health: ${healthScore}%`}
+            sx={{
+              bgcolor: healthColor,
+              color: healthScore >= 40 && healthScore < 80 ? "rgba(0,0,0,0.87)" : "white",
+              fontWeight: 700,
+              fontSize: "0.875rem",
+              px: 1,
+            }}
+          />
+        </Stack>
+      </Box>
+
+      {/* Metrics Cards */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Открытые находки"
+            value={totalOpenFindings}
+            icon={<BugReportIcon />}
+            color={totalOpenFindings > 0 ? "#ff9800" : "#4caf50"}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Critical/High"
+            value={
+              (data.severityBreakdown?.critical || 0) + (data.severityBreakdown?.high || 0)
+            }
+            icon={<WarningIcon />}
+            color="#f44336"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Исправлено"
+            value={data.findingsFixedCount || 0}
+            icon={<CheckCircleIcon />}
+            color="#4caf50"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="False Positives"
+            value={data.findingsFalsePositiveCount || 0}
+            icon={<SecurityIcon />}
+            color="#9e9e9e"
+          />
+        </Grid>
+      </Grid>
+
+      {/* Charts Section */}
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
+          <Section title="Распределение по Severity">
+            <SeverityPieChart breakdown={data.severityBreakdown} />
+          </Section>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Section title="Breakdown по Severity">
+            <SeverityBarChart breakdown={data.severityBreakdown} />
+          </Section>
+        </Grid>
+      </Grid>
+
+      {/* Recent Scans and Actions */}
+      <Grid container spacing={3} sx={{ mt: 1 }}>
+        <Grid item xs={12} md={6}>
+          <Section title="Последние сканы">
+            <RecentScansTimeline scans={data.recentScans} />
+          </Section>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Section title="Действия">
+            <Stack spacing={2}>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={() =>
+                  navigate({
+                    pathname: "/findings",
+                    search: `?productId=${id}`,
+                  })
+                }
+              >
+                Просмотреть все находки ({totalOpenFindings})
+              </Button>
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={() =>
+                  navigate({
+                    pathname: "/findings",
+                    search: `?productId=${id}&severity=critical,high`,
+                  })
+                }
+              >
+                Только Critical/High
+              </Button>
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={() =>
+                  navigate({
+                    pathname: "/analysis",
+                  })
+                }
+              >
+                Запустить новый скан
+              </Button>
+            </Stack>
+          </Section>
+        </Grid>
+      </Grid>
+    </Container>
+  );
+};
+
+export default ProductDetailPage;
