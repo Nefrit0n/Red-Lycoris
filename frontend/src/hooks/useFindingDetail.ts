@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchFindingDetail } from "../api/findings";
+import { fetchFindingDetail } from "../clients/findingsClient";
 import { FindingDetail } from "../types/findings";
 
 interface UseFindingDetailResult {

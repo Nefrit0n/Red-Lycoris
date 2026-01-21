@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { addFindingComment } from "../api/findings";
+import { addFindingComment } from "../clients/findingsClient";
 
 type CommentState = "idle" | "saving" | "error";
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { fetchFindingNeighbors } from "../api/findings";
+import { fetchFindingNeighbors } from "../clients/findingsClient";
 import { FindingNeighbors } from "../types/findings";
 import { buildFindingLink } from "../utils/findingFormatters";
 
