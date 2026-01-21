@@ -21,14 +21,6 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := storage.RunMigrations(db); err != nil {
-		log.Fatalf("database migration failed: %v", err)
-	}
-
-	if err := storage.EnsureRootUserExists(context.Background(), db, cfg.RootEmail, cfg.RootPassword); err != nil {
-		log.Fatalf("root user initialization failed: %v", err)
-	}
-
 	store, err := objectstore.NewMinioStore(cfg)
 	if err != nil {
 		log.Fatalf("object store init failed: %v", err)
