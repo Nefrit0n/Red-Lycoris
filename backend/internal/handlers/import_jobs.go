@@ -15,6 +15,8 @@ import (
 type ImportJobResponse struct {
 	ID                string  `json:"id"`
 	Scanner           string  `json:"scanner"`
+	SourceType        *string `json:"sourceType,omitempty"`
+	SourceVersion     *string `json:"sourceVersion,omitempty"`
 	Status            string  `json:"status"`
 	FindingsTotal     int     `json:"findingsTotal"`
 	FindingsNew       int     `json:"findingsNew"`
@@ -135,9 +137,21 @@ func mapImportJobListItem(item storage.ImportJobListItem) ImportJobResponse {
 		value := item.CreatedBy.UUID.String()
 		createdBy = &value
 	}
+	var sourceType *string
+	if item.SourceType.Valid {
+		value := item.SourceType.String
+		sourceType = &value
+	}
+	var sourceVersion *string
+	if item.SourceVersion.Valid {
+		value := item.SourceVersion.String
+		sourceVersion = &value
+	}
 	return ImportJobResponse{
 		ID:                item.ID.String(),
 		Scanner:           item.Scanner,
+		SourceType:        sourceType,
+		SourceVersion:     sourceVersion,
 		Status:            item.Status,
 		FindingsTotal:     item.FindingsTotal,
 		FindingsNew:       item.FindingsNew,

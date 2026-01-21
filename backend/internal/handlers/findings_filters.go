@@ -23,6 +23,7 @@ type FindingFilterParams struct {
 	Status           string
 	OccurrenceStatus string
 	ScannerType      string
+	SourceType       string
 	Query            string
 	CanonicalOnly    bool
 	IncludeRepeats   bool
@@ -38,6 +39,7 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 		Status:           strings.TrimSpace(c.Query("status")),
 		OccurrenceStatus: strings.TrimSpace(c.Query("occurrenceStatus")),
 		ScannerType:      strings.TrimSpace(c.Query("scannerType")),
+		SourceType:       strings.TrimSpace(c.Query("sourceType")),
 		Query:            firstNonEmpty(strings.TrimSpace(c.Query("search")), strings.TrimSpace(c.Query("q"))),
 		CanonicalOnly:    parseBoolWithDefault(c.Query("canonicalOnly"), true),
 		IncludeRepeats:   parseBoolWithDefault(c.Query("includeRepeats"), false),
@@ -92,6 +94,7 @@ func (p *FindingFilterParams) toStorageFilters(limit, offset int) storage.Findin
 		Status:           p.Status,
 		OccurrenceStatus: p.OccurrenceStatus,
 		ScannerType:      p.ScannerType,
+		SourceType:       p.SourceType,
 		ProductID:        p.ProductID,
 		ImportJobID:      p.ImportJobID,
 		Query:            p.Query,
@@ -154,6 +157,7 @@ func parseBulkFilters(c *fiber.Ctx, db *sql.DB, filterInput *BulkActionFilters) 
 	filters.Status = strings.TrimSpace(filterInput.Status)
 	filters.OccurrenceStatus = strings.TrimSpace(filterInput.OccurrenceStatus)
 	filters.ScannerType = strings.TrimSpace(filterInput.ScannerType)
+	filters.SourceType = strings.TrimSpace(filterInput.SourceType)
 	filters.Query = strings.TrimSpace(filterInput.Query)
 
 	if filterInput.DateFrom != nil && strings.TrimSpace(*filterInput.DateFrom) != "" {
