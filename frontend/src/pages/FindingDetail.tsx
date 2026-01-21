@@ -42,7 +42,7 @@ import {
   ALL_STATUSES,
 } from "../utils/findingConstants";
 import { formatDateRu, EventCategory } from "../utils/findingFormatters";
-import { FindingComment, SemgrepEvidence, TrivyEvidence } from "../types/findings";
+import { FindingComment, SemgrepEvidence } from "../types/findings";
 
 type FindingDetailContentProps = {
   id: string;
@@ -102,37 +102,6 @@ const uniq = (values: string[]) => Array.from(new Set(values));
 
 const isProbablyUrl = (value: string) => /^https?:\/\//i.test(value);
 
-const cvssSummaryFromRecord = (record: Record<string, unknown>, scoreKey: string, vectorKey: string) => {
-  const scoreValue = record[scoreKey];
-  const vectorValue = record[vectorKey];
-  const score =
-    typeof scoreValue === "number" ? scoreValue.toFixed(1) : toStringValue(scoreValue);
-  if (!score) return null;
-  const vector = toStringValue(vectorValue);
-  return vector ? `${score} (${vector})` : score;
-};
-
-const extractCvssSummary = (cvss: unknown): string | null => {
-  if (!isRecord(cvss)) return null;
-  const candidates = [cvss, ...Object.values(cvss).filter(isRecord)];
-
-  for (const candidate of candidates) {
-    const v3 =
-      cvssSummaryFromRecord(candidate, "V3Score", "V3Vector") ??
-      cvssSummaryFromRecord(candidate, "v3Score", "v3Vector");
-    if (v3) return v3;
-  }
-
-  for (const candidate of candidates) {
-    const v2 =
-      cvssSummaryFromRecord(candidate, "V2Score", "V2Vector") ??
-      cvssSummaryFromRecord(candidate, "v2Score", "v2Vector");
-    if (v2) return v2;
-  }
-
-  return null;
-};
-
 export const FindingDetailContent = ({
   id,
   compact = false,
@@ -143,7 +112,6 @@ export const FindingDetailContent = ({
   const [tab, setTab] = useState(0);
   const [eventFilter, setEventFilter] = useState<EventCategory>("all");
   const [evidenceExpanded, setEvidenceExpanded] = useState(false);
-  const [trivyEvidenceExpanded, setTrivyEvidenceExpanded] = useState(false);
 
   // User permissions
   const user = getCurrentUser();
@@ -206,21 +174,9 @@ export const FindingDetailContent = ({
     ? (data as any).occurrences
     : [];
   const hasOccurrences = occurrences.length > 0;
-  const evidencePayload = data?.evidence;
   const semgrepEvidence =
-    evidencePayload &&
-    isRecord(evidencePayload) &&
-    "scannerType" in evidencePayload &&
-    evidencePayload.scannerType === "semgrep"
-      ? (evidencePayload as SemgrepEvidence)
-      : null;
-  const trivyEvidence =
-    evidencePayload &&
-    isRecord(evidencePayload) &&
-    "tool" in evidencePayload &&
-    toStringValue((evidencePayload as Record<string, unknown>).tool) === "trivy" &&
-    toStringValue((evidencePayload as Record<string, unknown>).type) === "sca"
-      ? (evidencePayload as TrivyEvidence)
+    data?.evidence && (data.evidence as SemgrepEvidence).scannerType === "semgrep"
+      ? (data.evidence as SemgrepEvidence)
       : null;
   const intelSummary = data?.intel_summary ?? null;
   const intelDetails = data?.intel_details ?? null;
@@ -254,12 +210,6 @@ export const FindingDetailContent = ({
     Boolean(category) ||
     Boolean(subcategory) ||
     references.length > 0;
-  const hasSemgrepEvidence = Boolean(semgrepEvidence);
-  const hasTrivyEvidence = Boolean(trivyEvidence);
-  const occurrencesTabIndex = 1 + (hasSemgrepEvidence ? 1 : 0) + (hasTrivyEvidence ? 1 : 0);
-  const commentsTabIndex = occurrencesTabIndex + 1;
-  const eventsTabIndex = commentsTabIndex + 1;
-  const duplicatesTabIndex = eventsTabIndex + 1;
 
   // Loading state
   if (loading) {
@@ -420,8 +370,7 @@ export const FindingDetailContent = ({
         allowScrollButtonsMobile
       >
         <Tab label="Описание" />
-        {hasSemgrepEvidence ? <Tab label="Источник (Semgrep)" /> : null}
-        {hasTrivyEvidence ? <Tab label="Источник (Trivy)" /> : null}
+        {semgrepEvidence ? <Tab label="Источник (Semgrep)" /> : null}
         <Tab label={`Occurrences${hasOccurrences ? ` (${occurrences.length})` : ""}`} />
         <Tab label={`Комментарии (${data.comments?.length ?? 0})`} />
         <Tab label={`История (${data.events?.length ?? 0})`} />
@@ -701,103 +650,8 @@ export const FindingDetailContent = ({
         </TabPanel>
       )}
 
-      {/* Tab: Trivy Evidence */}
-      {trivyEvidence && (
-        <TabPanel value={tab} index={hasSemgrepEvidence ? 2 : 1}>
-          <Section title="Источник (Trivy)" dense={compact}>
-            <Stack spacing={1.2}>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>
-                  Vulnerability ID
-                </Typography>
-                <Typography variant="body2">{trivyEvidence.vulnerabilityId || "—"}</Typography>
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>
-                  Package
-                </Typography>
-                <Typography variant="body2">{trivyEvidence.pkgName || "—"}</Typography>
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>
-                  Installed Version
-                </Typography>
-                <Typography variant="body2">{trivyEvidence.installedVersion || "—"}</Typography>
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>
-                  Fixed Version
-                </Typography>
-                <Typography variant="body2">{trivyEvidence.fixedVersion || "—"}</Typography>
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>
-                  Target
-                </Typography>
-                <Typography variant="body2">{trivyEvidence.target || "—"}</Typography>
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>
-                  Severity (raw)
-                </Typography>
-                <Typography variant="body2">{trivyEvidence.severityRaw || "—"}</Typography>
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>
-                  Primary URL
-                </Typography>
-                {trivyEvidence.primaryUrl && isProbablyUrl(trivyEvidence.primaryUrl) ? (
-                  <MuiLink href={trivyEvidence.primaryUrl} target="_blank" rel="noreferrer">
-                    {trivyEvidence.primaryUrl}
-                  </MuiLink>
-                ) : (
-                  <Typography variant="body2">{trivyEvidence.primaryUrl || "—"}</Typography>
-                )}
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>
-                  CVSS
-                </Typography>
-                <Typography variant="body2">
-                  {extractCvssSummary(trivyEvidence.cvss) || "—"}
-                </Typography>
-              </Stack>
-              <Stack spacing={0.5}>
-                <Typography variant="caption" color="text.secondary">
-                  References
-                </Typography>
-                {trivyEvidence.references && trivyEvidence.references.length > 0 ? (
-                  <Stack spacing={0.5}>
-                    {trivyEvidence.references.map((ref) => (
-                      <MuiLink key={ref} href={ref} target="_blank" rel="noreferrer">
-                        {ref}
-                      </MuiLink>
-                    ))}
-                  </Stack>
-                ) : (
-                  <Typography variant="body2">—</Typography>
-                )}
-              </Stack>
-
-              <Box>
-                <Button size="small" onClick={() => setTrivyEvidenceExpanded((prev) => !prev)}>
-                  {trivyEvidenceExpanded ? "Скрыть JSON" : "Показать JSON"}
-                </Button>
-                <Collapse in={trivyEvidenceExpanded} timeout="auto" unmountOnExit>
-                  <CodeBlock
-                    code={JSON.stringify(trivyEvidence, null, 2)}
-                    language="json"
-                    maxHeight={300}
-                  />
-                </Collapse>
-              </Box>
-            </Stack>
-          </Section>
-        </TabPanel>
-      )}
-
       {/* Tab: Occurrences */}
-      <TabPanel value={tab} index={occurrencesTabIndex}>
+      <TabPanel value={tab} index={semgrepEvidence ? 2 : 1}>
         <Section title="Occurrences / Repeats" dense={compact}>
           {!hasOccurrences ? (
             <Typography variant="body2" color="text.secondary">
@@ -897,7 +751,7 @@ export const FindingDetailContent = ({
       </TabPanel>
 
       {/* Tab: Comments */}
-      <TabPanel value={tab} index={commentsTabIndex}>
+      <TabPanel value={tab} index={semgrepEvidence ? 3 : 2}>
         <Section title="Комментарии" dense={compact}>
           <Stack spacing={1.2}>
             {(data.comments ?? []).length === 0 && (
@@ -952,7 +806,7 @@ export const FindingDetailContent = ({
       </TabPanel>
 
       {/* Tab: Events History */}
-      <TabPanel value={tab} index={eventsTabIndex}>
+      <TabPanel value={tab} index={semgrepEvidence ? 4 : 3}>
         <Section title="История изменений" dense={compact}>
           <ToggleButtonGroup
             exclusive
@@ -978,7 +832,7 @@ export const FindingDetailContent = ({
 
       {/* Tab: Duplicates */}
       {data.duplicates && (
-        <TabPanel value={tab} index={duplicatesTabIndex}>
+        <TabPanel value={tab} index={semgrepEvidence ? 5 : 4}>
           <Section title="Дубликаты" dense={compact}>
             {data.duplicates.master.id !== data.id ? (
               <Stack spacing={1}>
