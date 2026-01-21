@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"lotus-warden/backend/internal/dedup"
@@ -31,12 +32,14 @@ type ImportResult struct {
 
 // ImportParams contains parameters for importing findings
 type ImportParams struct {
-	Scanner      string
-	Report       []byte
-	ProductID    *uuid.UUID
-	EngagementID *uuid.UUID
-	CreatedBy    *uuid.UUID
-	Callbacks    *ImportCallbacks
+	Scanner       string
+	Report        []byte
+	SourceType    string
+	SourceVersion *string
+	ProductID     *uuid.UUID
+	EngagementID  *uuid.UUID
+	CreatedBy     *uuid.UUID
+	Callbacks     *ImportCallbacks
 }
 
 // ImportCallbacks contains optional callback functions for import events
@@ -59,12 +62,15 @@ type ImportCallbacks struct {
 // This is the unified implementation used by both scan_upload handler and analysis_worker.
 func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*ImportResult, error) {
 	checksum := ComputeChecksum(params.Report)
+	sourceType := normalizeSourceType(params.SourceType)
 
 	importJob := &models.ImportJob{
-		Scanner:   params.Scanner,
-		Status:    models.ImportJobQueued,
-		Checksum:  checksum,
-		CreatedBy: params.CreatedBy,
+		Scanner:       params.Scanner,
+		SourceType:    &sourceType,
+		SourceVersion: params.SourceVersion,
+		Status:        models.ImportJobQueued,
+		Checksum:      checksum,
+		CreatedBy:     params.CreatedBy,
 	}
 	if params.ProductID != nil {
 		importJob.ProductID = params.ProductID
@@ -93,12 +99,14 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	}
 
 	scan := &models.ScanResult{
-		EngagementID: params.EngagementID,
-		ProductID:    params.ProductID,
-		UploaderID:   params.CreatedBy,
-		ImportJobID:  &importJob.ID,
-		Scanner:      params.Scanner,
-		RawReport:    params.Report,
+		EngagementID:  params.EngagementID,
+		ProductID:     params.ProductID,
+		UploaderID:    params.CreatedBy,
+		ImportJobID:   &importJob.ID,
+		Scanner:       params.Scanner,
+		SourceType:    &sourceType,
+		SourceVersion: params.SourceVersion,
+		RawReport:     params.Report,
 	}
 	if err := storage.CreateScanResult(ctx, db, scan); err != nil {
 		finishedAt := time.Now().UTC()
@@ -114,12 +122,14 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 
 	for _, finding := range findings {
 		result, err := processFinding(ctx, db, processFindingParams{
-			finding:     finding,
-			scanner:     params.Scanner,
-			productID:   params.ProductID,
-			scanID:      scan.ID,
-			importJobID: importJob.ID,
-			seenAt:      seenAt,
+			finding:       finding,
+			scanner:       params.Scanner,
+			sourceType:    &sourceType,
+			sourceVersion: params.SourceVersion,
+			productID:     params.ProductID,
+			scanID:        scan.ID,
+			importJobID:   importJob.ID,
+			seenAt:        seenAt,
 		})
 		if err != nil {
 			return nil, err
@@ -195,12 +205,14 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 }
 
 type processFindingParams struct {
-	finding     parser.Finding
-	scanner     string
-	productID   *uuid.UUID
-	scanID      uuid.UUID
-	importJobID uuid.UUID
-	seenAt      time.Time
+	finding       parser.Finding
+	scanner       string
+	sourceType    *string
+	sourceVersion *string
+	productID     *uuid.UUID
+	scanID        uuid.UUID
+	importJobID   uuid.UUID
+	seenAt        time.Time
 }
 
 type processFindingResult struct {
@@ -227,18 +239,32 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 
 	if !found {
 		// Create new finding
+		evidence, err := marshalJSONMap(params.finding.Evidence)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		rawData, err := marshalJSONMap(params.finding.RawData)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
 		model := &models.Finding{
-			ScanResultID: &params.scanID,
-			ProductID:    params.productID,
-			Fingerprint:  fingerprint,
-			Title:        params.finding.Title,
-			Description:  params.finding.Description,
-			Severity:     params.finding.Severity,
-			Status:       models.StatusNew,
-			ImportJobID:  &params.importJobID,
-			FirstSeenAt:  params.seenAt,
-			LastSeenAt:   params.seenAt,
-			RepeatCount:  0,
+			ScanResultID:  &params.scanID,
+			ProductID:     params.productID,
+			Fingerprint:   fingerprint,
+			Title:         params.finding.Title,
+			Description:   params.finding.Description,
+			Severity:      params.finding.Severity,
+			Status:        models.StatusNew,
+			ImportJobID:   &params.importJobID,
+			FirstSeenAt:   params.seenAt,
+			LastSeenAt:    params.seenAt,
+			RepeatCount:   0,
+			SourceType:    params.sourceType,
+			SourceVersion: params.sourceVersion,
+			Evidence:      evidence,
+			RawData:       rawData,
 		}
 		if err := storage.CreateFindingTx(ctx, tx, model); err != nil {
 			_ = tx.Rollback()
@@ -251,19 +277,33 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 	}
 
 	// Create duplicate finding
+	evidence, err := marshalJSONMap(params.finding.Evidence)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	rawData, err := marshalJSONMap(params.finding.RawData)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
 	duplicate := &models.Finding{
-		ScanResultID: &params.scanID,
-		ProductID:    params.productID,
-		Fingerprint:  fingerprint,
-		Title:        params.finding.Title,
-		Description:  params.finding.Description,
-		Severity:     params.finding.Severity,
-		Status:       models.StatusDuplicate,
-		DuplicateID:  &masterID,
-		ImportJobID:  &params.importJobID,
-		FirstSeenAt:  params.seenAt,
-		LastSeenAt:   params.seenAt,
-		RepeatCount:  0,
+		ScanResultID:  &params.scanID,
+		ProductID:     params.productID,
+		Fingerprint:   fingerprint,
+		Title:         params.finding.Title,
+		Description:   params.finding.Description,
+		Severity:      params.finding.Severity,
+		Status:        models.StatusDuplicate,
+		DuplicateID:   &masterID,
+		ImportJobID:   &params.importJobID,
+		FirstSeenAt:   params.seenAt,
+		LastSeenAt:    params.seenAt,
+		RepeatCount:   0,
+		SourceType:    params.sourceType,
+		SourceVersion: params.sourceVersion,
+		Evidence:      evidence,
+		RawData:       rawData,
 	}
 	if err := storage.CreateFindingTx(ctx, tx, duplicate); err != nil {
 		_ = tx.Rollback()
@@ -327,6 +367,25 @@ func findExistingMaster(ctx context.Context, tx *sql.Tx, fingerprint string, pro
 func ComputeChecksum(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func normalizeSourceType(value string) string {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return "scanner"
+	}
+	return strings.ToLower(normalized)
+}
+
+func marshalJSONMap(value map[string]any) (json.RawMessage, error) {
+	if len(value) == 0 {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return encoded, nil
 }
 
 // NullUUIDPtr converts uuid.NullUUID to *uuid.UUID

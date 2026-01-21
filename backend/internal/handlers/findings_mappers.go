@@ -47,6 +47,11 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 		value := item.Scanner.String
 		scannerType = &value
 	}
+	var sourceType *string
+	if item.SourceType.Valid {
+		value := item.SourceType.String
+		sourceType = &value
+	}
 	var lastSeenAt *string
 	if item.LastSeenAt.Valid {
 		value := item.LastSeenAt.Time.Format(timeFormatRFC3339())
@@ -60,6 +65,7 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 		Severity:    item.Severity,
 		Status:      item.Status,
 		ScannerType: scannerType,
+		SourceType:  sourceType,
 		Occurrence:  &occurrence,
 		LastSeenAt:  lastSeenAt,
 		RepeatCount: &repeatCount,
@@ -153,6 +159,26 @@ func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 		value := item.ImportJobID.UUID.String()
 		importJobID = &value
 	}
+	var sourceType *string
+	if item.SourceType.Valid {
+		value := item.SourceType.String
+		sourceType = &value
+	}
+	var sourceVersion *string
+	if item.SourceVersion.Valid {
+		value := item.SourceVersion.String
+		sourceVersion = &value
+	}
+	var endpointMethod *string
+	if item.EndpointMethod.Valid {
+		value := item.EndpointMethod.String
+		endpointMethod = &value
+	}
+	var endpointPath *string
+	if item.EndpointPath.Valid {
+		value := item.EndpointPath.String
+		endpointPath = &value
+	}
 	var description *string
 	if item.Description.Valid {
 		value := item.Description.String
@@ -175,23 +201,27 @@ func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 	}
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
 	return FindingResponse{
-		ID:          item.ID.String(),
-		Title:       item.Title,
-		Description: description,
-		Fingerprint: &item.Fingerprint,
-		Severity:    item.Severity,
-		Status:      item.Status,
-		Occurrence:  &occurrence,
-		FirstSeenAt: firstSeenAt,
-		LastSeenAt:  lastSeenAt,
-		RepeatCount: &repeatCount,
-		ProductID:   productID,
-		ProductName: productName,
-		AssigneeID:  assigneeID,
-		ImportJobID: importJobID,
-		CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339()),
-		UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339()),
-		DeletedAt:   deletedAt,
+		ID:             item.ID.String(),
+		Title:          item.Title,
+		Description:    description,
+		Fingerprint:    &item.Fingerprint,
+		Severity:       item.Severity,
+		Status:         item.Status,
+		SourceType:     sourceType,
+		SourceVersion:  sourceVersion,
+		EndpointMethod: endpointMethod,
+		EndpointPath:   endpointPath,
+		Occurrence:     &occurrence,
+		FirstSeenAt:    firstSeenAt,
+		LastSeenAt:     lastSeenAt,
+		RepeatCount:    &repeatCount,
+		ProductID:      productID,
+		ProductName:    productName,
+		AssigneeID:     assigneeID,
+		ImportJobID:    importJobID,
+		CreatedAt:      item.CreatedAt.Format(timeFormatRFC3339()),
+		UpdatedAt:      item.UpdatedAt.Format(timeFormatRFC3339()),
+		DeletedAt:      deletedAt,
 	}
 }
 
@@ -212,6 +242,26 @@ func mapFindingModel(item models.Finding) FindingResponse {
 		value := item.ImportJobID.String()
 		importJobID = &value
 	}
+	var sourceType *string
+	if item.SourceType != nil {
+		value := *item.SourceType
+		sourceType = &value
+	}
+	var sourceVersion *string
+	if item.SourceVersion != nil {
+		value := *item.SourceVersion
+		sourceVersion = &value
+	}
+	var endpointMethod *string
+	if item.EndpointMethod != nil {
+		value := *item.EndpointMethod
+		endpointMethod = &value
+	}
+	var endpointPath *string
+	if item.EndpointPath != nil {
+		value := *item.EndpointPath
+		endpointPath = &value
+	}
 	var deletedAt *string
 	if item.DeletedAt != nil {
 		value := item.DeletedAt.Format(timeFormatRFC3339())
@@ -220,22 +270,26 @@ func mapFindingModel(item models.Finding) FindingResponse {
 	repeatCount := item.RepeatCount
 	occurrence := computeOccurrenceStatus(repeatCount, item.DuplicateID)
 	return FindingResponse{
-		ID:          item.ID.String(),
-		Title:       item.Title,
-		Description: item.Description,
-		Fingerprint: &item.Fingerprint,
-		Severity:    item.Severity,
-		Status:      item.Status,
-		Occurrence:  &occurrence,
-		FirstSeenAt: stringPointer(item.FirstSeenAt.Format(timeFormatRFC3339())),
-		LastSeenAt:  stringPointer(item.LastSeenAt.Format(timeFormatRFC3339())),
-		RepeatCount: &repeatCount,
-		ProductID:   productID,
-		AssigneeID:  assigneeID,
-		ImportJobID: importJobID,
-		CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339()),
-		UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339()),
-		DeletedAt:   deletedAt,
+		ID:             item.ID.String(),
+		Title:          item.Title,
+		Description:    item.Description,
+		Fingerprint:    &item.Fingerprint,
+		Severity:       item.Severity,
+		Status:         item.Status,
+		SourceType:     sourceType,
+		SourceVersion:  sourceVersion,
+		EndpointMethod: endpointMethod,
+		EndpointPath:   endpointPath,
+		Occurrence:     &occurrence,
+		FirstSeenAt:    stringPointer(item.FirstSeenAt.Format(timeFormatRFC3339())),
+		LastSeenAt:     stringPointer(item.LastSeenAt.Format(timeFormatRFC3339())),
+		RepeatCount:    &repeatCount,
+		ProductID:      productID,
+		AssigneeID:     assigneeID,
+		ImportJobID:    importJobID,
+		CreatedAt:      item.CreatedAt.Format(timeFormatRFC3339()),
+		UpdatedAt:      item.UpdatedAt.Format(timeFormatRFC3339()),
+		DeletedAt:      deletedAt,
 	}
 }
 
@@ -305,6 +359,20 @@ func latestImportedEvidence(events []FindingEventResponse) map[string]interface{
 		return event.Payload
 	}
 	return nil
+}
+
+func decodeEvidencePayload(payload []byte) map[string]interface{} {
+	if len(payload) == 0 {
+		return nil
+	}
+	result := map[string]interface{}{}
+	if err := json.Unmarshal(payload, &result); err != nil {
+		return nil
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // mapFindingOccurrences converts a slice of storage.FindingOccurrenceItem to FindingOccurrenceResponse slice

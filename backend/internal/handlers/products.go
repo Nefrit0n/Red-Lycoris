@@ -23,14 +23,16 @@ type ProductResponse struct {
 	Name              string  `json:"name"`
 	Identifier        *string `json:"identifier,omitempty"`
 	Version           *string `json:"version,omitempty"`
+	AssetCriticality  *string `json:"assetCriticality,omitempty"`
 	LastScanAt        *string `json:"lastScanAt,omitempty"`
 	FindingsOpenCount int     `json:"findingsOpenCount"`
 }
 
 type CreateProductRequest struct {
-	Name       string  `json:"name" validate:"required,min=2"`
-	Identifier *string `json:"identifier,omitempty" validate:"omitempty,max=200"`
-	Version    *string `json:"version,omitempty" validate:"omitempty,max=100"`
+	Name             string  `json:"name" validate:"required,min=2"`
+	Identifier       *string `json:"identifier,omitempty" validate:"omitempty,max=200"`
+	Version          *string `json:"version,omitempty" validate:"omitempty,max=100"`
+	AssetCriticality *string `json:"assetCriticality,omitempty" validate:"omitempty,oneof=low medium high critical"`
 }
 
 func NewProductsHandler(db *sql.DB) *ProductsHandler {
@@ -78,6 +80,9 @@ func (h *ProductsHandler) Create(c *fiber.Ctx) error {
 			product.Slug = slugify(req.Name + "-" + *product.Version)
 		}
 	}
+	if req.AssetCriticality != nil && *req.AssetCriticality != "" {
+		product.AssetCriticality = req.AssetCriticality
+	}
 
 	if err := storage.CreateProduct(c.Context(), h.db, product); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to create product"})
@@ -88,6 +93,7 @@ func (h *ProductsHandler) Create(c *fiber.Ctx) error {
 		Name:              product.Name,
 		Identifier:        product.Identifier,
 		Version:           product.Version,
+		AssetCriticality:  product.AssetCriticality,
 		FindingsOpenCount: 0,
 	}})
 }
@@ -100,13 +106,14 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 
 	row := h.db.QueryRowContext(
 		c.Context(),
-		`SELECT id, name, identifier, version FROM products WHERE id = $1`,
+		`SELECT id, name, identifier, version, asset_criticality FROM products WHERE id = $1`,
 		id,
 	)
 	var product storage.ProductListItem
 	var identifier sql.NullString
 	var version sql.NullString
-	if err := row.Scan(&product.ID, &product.Name, &identifier, &version); err != nil {
+	var assetCriticality sql.NullString
+	if err := row.Scan(&product.ID, &product.Name, &identifier, &version, &assetCriticality); err != nil {
 		if err == sql.ErrNoRows {
 			return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "product not found"})
 		}
@@ -114,6 +121,7 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 	}
 	product.Identifier = identifier
 	product.Version = version
+	product.AssetCriticality = assetCriticality
 
 	response := mapProductListItem(product)
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response})
@@ -130,6 +138,11 @@ func mapProductListItem(item storage.ProductListItem) ProductResponse {
 		value := item.Version.String
 		version = &value
 	}
+	var assetCriticality *string
+	if item.AssetCriticality.Valid {
+		value := item.AssetCriticality.String
+		assetCriticality = &value
+	}
 	var lastScanAt *string
 	if item.LastScanAt.Valid {
 		value := item.LastScanAt.Time.Format(time.RFC3339)
@@ -140,6 +153,7 @@ func mapProductListItem(item storage.ProductListItem) ProductResponse {
 		Name:              item.Name,
 		Identifier:        identifier,
 		Version:           version,
+		AssetCriticality:  assetCriticality,
 		LastScanAt:        lastScanAt,
 		FindingsOpenCount: item.FindingsOpenCount,
 	}

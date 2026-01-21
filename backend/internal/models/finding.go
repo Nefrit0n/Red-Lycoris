@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -26,23 +27,29 @@ const (
 )
 
 type Finding struct {
-	ID           uuid.UUID  `db:"id"`
-	ScanResultID *uuid.UUID `db:"scan_result_id"`
-	ProductID    *uuid.UUID `db:"product_id"`
-	Fingerprint  string     `db:"fingerprint"`
-	Title        string     `db:"title"`
-	Description  *string    `db:"description"`
-	Severity     string     `db:"severity"`
-	Status       string     `db:"status"`
-	DuplicateID  *uuid.UUID `db:"duplicate_id"`
-	AssigneeID   *uuid.UUID `db:"assignee_id"`
-	ImportJobID  *uuid.UUID `db:"import_job_id"`
-	FirstSeenAt  time.Time  `db:"first_seen_at"`
-	LastSeenAt   time.Time  `db:"last_seen_at"`
-	RepeatCount  int        `db:"repeat_count"`
-	CreatedAt    time.Time  `db:"created_at"`
-	UpdatedAt    time.Time  `db:"updated_at"`
-	DeletedAt    *time.Time `db:"deleted_at"`
+	ID             uuid.UUID       `db:"id"`
+	ScanResultID   *uuid.UUID      `db:"scan_result_id"`
+	ProductID      *uuid.UUID      `db:"product_id"`
+	Fingerprint    string          `db:"fingerprint"`
+	Title          string          `db:"title"`
+	Description    *string         `db:"description"`
+	Severity       string          `db:"severity"`
+	Status         string          `db:"status"`
+	DuplicateID    *uuid.UUID      `db:"duplicate_id"`
+	AssigneeID     *uuid.UUID      `db:"assignee_id"`
+	ImportJobID    *uuid.UUID      `db:"import_job_id"`
+	FirstSeenAt    time.Time       `db:"first_seen_at"`
+	LastSeenAt     time.Time       `db:"last_seen_at"`
+	RepeatCount    int             `db:"repeat_count"`
+	SourceType     *string         `db:"source_type"`
+	SourceVersion  *string         `db:"source_version"`
+	EndpointMethod *string         `db:"endpoint_method"`
+	EndpointPath   *string         `db:"endpoint_path"`
+	Evidence       json.RawMessage `db:"evidence"`
+	RawData        json.RawMessage `db:"raw_data"`
+	CreatedAt      time.Time       `db:"created_at"`
+	UpdatedAt      time.Time       `db:"updated_at"`
+	DeletedAt      *time.Time      `db:"deleted_at"`
 }
 
 func (f *Finding) Validate() error {
