@@ -2,7 +2,7 @@ package events
 
 const (
 	IntelStreamName           = "INTEL"
-	IntelSubject              = "intel.*"
+	IntelSubject              = "intel.>"
 	IntelEnrichRequested      = "intel.enrich.requested"
 	IntelEnriched             = "intel.enriched"
 	DefaultIntelSourceVersion = "v1"
