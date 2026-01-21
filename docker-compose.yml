@@ -1,4 +1,6 @@
-# docker-compose.prod.yml
+# docker-compose.yml - Production configuration
+# For development, use: docker compose -f docker-compose.yml -f docker-compose.override.yml up
+# Or simply: docker compose up (override is applied automatically if present)
 
 # Common environment variables using YAML anchors
 x-db-env: &db-env
@@ -74,8 +76,7 @@ services:
   backend:
     build:
       context: ./backend
-      # ВАЖНО: если у тебя нет target "prod" в Dockerfile backend — убери target или замени на существующий
-      target: dev
+      target: runtime
     environment:
       <<: [ *db-env, *object-store-env, *analysis-env, *intel-env ]
       APP_ENV: production
@@ -108,13 +109,10 @@ services:
   analysis-worker:
     build:
       context: ./backend
-      target: dev
-    command: [ "go", "run", "./cmd/analysis_worker" ]
+      target: analysis-worker
     environment:
       <<: [ *db-env, *object-store-env, *analysis-env, *intel-env ]
       NATS_URL: ${NATS_URL:-nats://nats:4222}
-    volumes:
-      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,13 +127,10 @@ services:
   intel-worker:
     build:
       context: ./backend
-      target: dev
-    command: [ "go", "run", "./cmd/intel_worker" ]
+      target: intel-worker
     environment:
       <<: [ *db-env, *intel-env ]
       NATS_URL: ${NATS_URL:-nats://nats:4222}
-    volumes:
-      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
