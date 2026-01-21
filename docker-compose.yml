@@ -43,19 +43,19 @@ x-celery-env: &celery-env
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
 
 services:
+  # ------------------------------------------------------------
+  # Edge / Gateway
+  # ------------------------------------------------------------
   nginx:
     build:
       context: .
       dockerfile: nginx/Dockerfile
     ports:
-      # PROD: наружу только nginx
       - "80:8080" # HTTP -> redirect to HTTPS
       - "443:8443" # HTTPS
     volumes:
-      # Persist TLS certs (autogen on first start, survive restarts/rebuilds)
       - nginx_ssl:/etc/nginx/ssl
     environment:
-      # CN + SAN для self-signed (подставь домен в .env)
       SSL_DOMAIN: ${SSL_DOMAIN:-localhost}
       TLS_SAN: ${TLS_SAN:-DNS:localhost,IP:127.0.0.1}
     depends_on:
@@ -73,6 +73,55 @@ services:
     networks:
       - app-net
 
+  # ------------------------------------------------------------
+  # One-shot init: DB migrations + root user
+  # ------------------------------------------------------------
+  db-migrate:
+    build:
+      context: ./backend
+      target: dev
+    # требуется добавить cmd/migrate (go run ./cmd/migrate)
+    command: [ "go", "run", "./cmd/migrate" ]
+    environment:
+      <<: [ *db-env, *object-store-env, *analysis-env, *intel-env ]
+      APP_ENV: production
+      MIGRATIONS_PATH: /app/migrations
+
+      # root bootstrap (иначе warning и insecure дефолт)
+      ROOT_EMAIL: ${ROOT_EMAIL:-root@localhost}
+      ROOT_PASSWORD: ${ROOT_PASSWORD:-root}
+
+      # чтобы jwt не генерился на лету
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - app-net
+
+  # ------------------------------------------------------------
+  # One-shot init: NATS JetStream streams
+  # ------------------------------------------------------------
+  nats-init:
+    image: natsio/nats-box:latest
+    depends_on:
+      nats:
+        condition: service_healthy
+    command: >
+      sh -lc '
+        nats --server nats://nats:4222 stream add ANALYSIS --subjects "analysis.>" --storage file --retention limits --max-age 168h --defaults || true;
+        nats --server nats://nats:4222 stream add INTEL   --subjects "intel.>"   --storage file --retention limits --max-age 168h --defaults || true;
+      '
+    restart: "no"
+    networks:
+      - app-net
+
+  # ------------------------------------------------------------
+  # Backend API
+  # ------------------------------------------------------------
   backend:
     build:
       context: ./backend
@@ -83,17 +132,24 @@ services:
       APP_PORT: 8080
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
-      MIGRATIONS_PATH: /app/migrations
 
-      # Критично: стабильный секрет, иначе токены умрут при рестартах
+      # ВАЖНО: backend больше не гоняет миграции
+      # MIGRATIONS_PATH: /app/migrations   <-- УБРАЛИ
+
       JWT_SECRET: ${JWT_SECRET}
+      ROOT_EMAIL: ${ROOT_EMAIL:-root@localhost}
+      ROOT_PASSWORD: ${ROOT_PASSWORD:-root}
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      nats-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       nats:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
     healthcheck:
@@ -106,6 +162,9 @@ services:
     networks:
       - app-net
 
+  # ------------------------------------------------------------
+  # Analysis worker
+  # ------------------------------------------------------------
   analysis-worker:
     build:
       context: ./backend
@@ -114,16 +173,23 @@ services:
       <<: [ *db-env, *object-store-env, *analysis-env, *intel-env ]
       NATS_URL: ${NATS_URL:-nats://nats:4222}
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      nats-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       nats:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
     restart: unless-stopped
     networks:
       - app-net
 
+  # ------------------------------------------------------------
+  # Intel worker
+  # ------------------------------------------------------------
   intel-worker:
     build:
       context: ./backend
@@ -132,14 +198,21 @@ services:
       <<: [ *db-env, *intel-env ]
       NATS_URL: ${NATS_URL:-nats://nats:4222}
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      nats-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       nats:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - app-net
 
+  # ------------------------------------------------------------
+  # Python API
+  # ------------------------------------------------------------
   python-api:
     build:
       context: ./python_api
@@ -177,6 +250,9 @@ services:
     networks:
       - app-net
 
+  # ------------------------------------------------------------
+  # Infra
+  # ------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     environment:
@@ -211,7 +287,7 @@ services:
 
   nats:
     image: nats:2.10-alpine
-    command: [ "-js" ]
+    command: [ "-js", "-m", "8222" ]
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz" ]
       interval: 10s
@@ -231,7 +307,9 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: [ "CMD", "mc", "ready", "local" ]
+      # у тебя mc в контейнере minio может отсутствовать
+      # поэтому safer healthcheck через wget на /minio/health/ready
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/minio/health/ready" ]
       interval: 10s
       timeout: 5s
       retries: 5
