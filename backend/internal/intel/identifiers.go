@@ -12,6 +12,7 @@ var (
 	cveRegex  = regexp.MustCompile(`(?i)\bCVE-\d{4}-\d{4,7}\b`)
 	ghsaRegex = regexp.MustCompile(`(?i)\bGHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}\b`)
 	osvRegex  = regexp.MustCompile(`(?i)\bOSV-[a-z0-9\-]{4,}\b`)
+	cweRegex  = regexp.MustCompile(`(?i)\bCWE-\d{1,5}\b`)
 )
 
 func NormalizeIdentifiers(values ...string) []string {
@@ -29,6 +30,9 @@ func NormalizeIdentifiers(values ...string) []string {
 		for _, match := range osvRegex.FindAllString(value, -1) {
 			unique[strings.ToUpper(match)] = struct{}{}
 		}
+		for _, match := range cweRegex.FindAllString(value, -1) {
+			unique[strings.ToUpper(match)] = struct{}{}
+		}
 	}
 	return sortedKeys(unique)
 }
@@ -43,6 +47,10 @@ func IsGHSA(identifier string) bool {
 
 func IsOSV(identifier string) bool {
 	return osvRegex.MatchString(identifier)
+}
+
+func IsCWE(identifier string) bool {
+	return cweRegex.MatchString(identifier)
 }
 
 func ExtractIdentifiersFromFinding(finding parser.Finding) []string {
