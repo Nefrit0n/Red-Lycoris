@@ -48,10 +48,10 @@ CREATE TABLE IF NOT EXISTS vuln_intel (
     source_version  TEXT NOT NULL DEFAULT 'v1',
 
     -- Raw payloads from providers
-    nvd_payload     JSONB,
-    epss_payload    JSONB,
-    kev_payload     JSONB,
-    references      JSONB,
+    nvd_payload             JSONB,
+    epss_payload            JSONB,
+    kev_payload             JSONB,
+    references_payload      JSONB,
 
     -- Extracted scores for quick access
     cvss_score      NUMERIC,
