@@ -23,9 +23,9 @@ func ListFindingsByIDs(ctx context.Context, db *sql.DB, ids []uuid.UUID) ([]Find
 	rows, err := db.QueryContext(
 		ctx,
 		`SELECT id, status, assignee_id, duplicate_id
-		 FROM findings
-		 WHERE id = ANY($1) AND deleted_at IS NULL`,
-		ids,
+		FROM findings
+		WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
+		pqUUIDArray(ids),
 	)
 	if err != nil {
 		return nil, err

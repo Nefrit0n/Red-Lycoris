@@ -307,9 +307,7 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      # у тебя mc в контейнере minio может отсутствовать
-      # поэтому safer healthcheck через wget на /minio/health/ready
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/minio/health/ready" ]
+      test: [ "CMD", "curl", "-fsS", "http://localhost:9000/minio/health/ready" ]
       interval: 10s
       timeout: 5s
       retries: 5
