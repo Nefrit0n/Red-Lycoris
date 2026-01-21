@@ -1,7 +1,7 @@
 import { format, subDays } from "date-fns";
-import { fetchFindings } from "./findings";
+import { fetchFindings } from "../clients/findingsClient";
 import { fetchProducts } from "./products";
-import { fetchImportJobs } from "./importJobs";
+import { fetchImportJobs } from "../clients/importJobsClient";
 import {
   DashboardData,
   DashboardMetrics,

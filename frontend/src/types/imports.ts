@@ -1,6 +1,8 @@
 export interface ImportJob {
   id: string;
   scanner: string;
+  sourceType?: string | null;
+  sourceVersion?: string | null;
   status: string;
   findingsTotal: number;
   findingsNew: number;
