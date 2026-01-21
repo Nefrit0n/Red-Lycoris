@@ -13,6 +13,7 @@ type ProductListItem struct {
 	Name              string
 	Identifier        sql.NullString
 	Version           sql.NullString
+	AssetCriticality  sql.NullString
 	LastScanAt        sql.NullTime
 	FindingsOpenCount int
 }
@@ -29,6 +30,7 @@ func ListProducts(ctx context.Context, db *sql.DB, limit int, offset int) ([]Pro
 		        p.name,
 		        p.identifier,
 		        p.version,
+		        p.asset_criticality,
 		        MAX(sr.created_at) AS last_scan_at,
 		        COUNT(f.id) FILTER (
 		            WHERE f.deleted_at IS NULL
@@ -52,7 +54,7 @@ func ListProducts(ctx context.Context, db *sql.DB, limit int, offset int) ([]Pro
 	for rows.Next() {
 		var item ProductListItem
 		var lastScan sql.NullTime
-		if err := rows.Scan(&item.ID, &item.Name, &item.Identifier, &item.Version, &lastScan, &item.FindingsOpenCount); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Identifier, &item.Version, &item.AssetCriticality, &lastScan, &item.FindingsOpenCount); err != nil {
 			return nil, 0, err
 		}
 		item.LastScanAt = lastScan
