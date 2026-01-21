@@ -8,14 +8,15 @@ import (
 )
 
 type Product struct {
-	ID          uuid.UUID `db:"id"`
-	Name        string    `db:"name"`
-	Slug        string    `db:"slug"`
-	Description *string   `db:"description"`
-	Identifier  *string   `db:"identifier"`
-	Version     *string   `db:"version"`
-	CreatedAt   time.Time `db:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at"`
+	ID               uuid.UUID `db:"id"`
+	Name             string    `db:"name"`
+	Slug             string    `db:"slug"`
+	Description      *string   `db:"description"`
+	Identifier       *string   `db:"identifier"`
+	Version          *string   `db:"version"`
+	AssetCriticality *string   `db:"asset_criticality"`
+	CreatedAt        time.Time `db:"created_at"`
+	UpdatedAt        time.Time `db:"updated_at"`
 }
 
 func (p *Product) Validate() error {
@@ -47,6 +48,14 @@ func (p *Product) Validate() error {
 	if p.Version != nil {
 		if err := validateMaxLen(*p.Version, 100, "version"); err != nil {
 			return err
+		}
+	}
+	if p.AssetCriticality != nil && *p.AssetCriticality != "" {
+		switch *p.AssetCriticality {
+		case SeverityLow, SeverityMedium, SeverityHigh, SeverityCritical:
+			// ok
+		default:
+			return fmt.Errorf("asset_criticality must be one of low, medium, high, critical")
 		}
 	}
 	return nil
