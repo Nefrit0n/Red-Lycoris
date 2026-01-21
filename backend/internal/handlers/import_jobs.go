@@ -6,32 +6,12 @@ import (
 	"strings"
 	"time"
 
+	v1dto "lotus-warden/backend/internal/dto/v1"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
-
-type ImportJobResponse struct {
-	ID                string  `json:"id"`
-	Scanner           string  `json:"scanner"`
-	SourceType        *string `json:"sourceType,omitempty"`
-	SourceVersion     *string `json:"sourceVersion,omitempty"`
-	Status            string  `json:"status"`
-	FindingsTotal     int     `json:"findingsTotal"`
-	FindingsNew       int     `json:"findingsNew"`
-	DuplicatesTotal   int     `json:"duplicatesTotal"`
-	Checksum          string  `json:"checksum"`
-	CreatedAt         string  `json:"createdAt"`
-	StartedAt         *string `json:"startedAt,omitempty"`
-	FinishedAt        *string `json:"finishedAt,omitempty"`
-	ProductID         *string `json:"productId,omitempty"`
-	ProductName       *string `json:"productName,omitempty"`
-	ProductVersion    *string `json:"productVersion,omitempty"`
-	ProductIdentifier *string `json:"productIdentifier,omitempty"`
-	CreatedBy         *string `json:"createdBy,omitempty"`
-	ErrorMessage      *string `json:"errorMessage,omitempty"`
-}
 
 type ImportJobsHandler struct {
 	db *sql.DB
@@ -75,7 +55,7 @@ func (h *ImportJobsHandler) List(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch import jobs"})
 	}
 
-	response := make([]ImportJobResponse, 0, len(items))
+	response := make([]v1dto.ImportJob, 0, len(items))
 	for _, item := range items {
 		response = append(response, mapImportJobListItem(item))
 	}
@@ -101,7 +81,7 @@ func (h *ImportJobsHandler) Get(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})
 }
 
-func mapImportJobListItem(item storage.ImportJobListItem) ImportJobResponse {
+func mapImportJobListItem(item storage.ImportJobListItem) v1dto.ImportJob {
 	var startedAt *string
 	if item.StartedAt.Valid {
 		value := item.StartedAt.Time.Format(time.RFC3339)
@@ -147,7 +127,7 @@ func mapImportJobListItem(item storage.ImportJobListItem) ImportJobResponse {
 		value := item.SourceVersion.String
 		sourceVersion = &value
 	}
-	return ImportJobResponse{
+	return v1dto.ImportJob{
 		ID:                item.ID.String(),
 		Scanner:           item.Scanner,
 		SourceType:        sourceType,
@@ -168,7 +148,7 @@ func mapImportJobListItem(item storage.ImportJobListItem) ImportJobResponse {
 	}
 }
 
-func mapImportJobDetail(item storage.ImportJobDetail) ImportJobResponse {
+func mapImportJobDetail(item storage.ImportJobDetail) v1dto.ImportJob {
 	resp := mapImportJobListItem(item.ImportJobListItem)
 	if item.ErrorMessage.Valid {
 		message := item.ErrorMessage.String
