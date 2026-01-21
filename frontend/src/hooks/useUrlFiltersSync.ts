@@ -94,6 +94,42 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
   const [hydrated, setHydrated] = useState(false);
   const [filters, setFilters] = useState<FiltersState>(defaultFilters);
 
+  const areFiltersEqual = (left: FiltersState, right: FiltersState) =>
+    left.page === right.page &&
+    left.pageSize === right.pageSize &&
+    left.productId === right.productId &&
+    left.searchInput === right.searchInput &&
+    left.importJobId === right.importJobId &&
+    left.filterSeverity === right.filterSeverity &&
+    left.filterStatus === right.filterStatus &&
+    left.filterOccurrence === right.filterOccurrence &&
+    left.filterScannerType === right.filterScannerType &&
+    left.dateFrom === right.dateFrom &&
+    left.dateTo === right.dateTo &&
+    left.showRepeats === right.showRepeats &&
+    left.sortField === right.sortField &&
+    left.sortOrder === right.sortOrder &&
+    left.selectedFindingId === right.selectedFindingId;
+
+  const normalizeSearchParams = (search: string) => {
+    const params = new URLSearchParams(search);
+    const normalizedEntries: Array<[string, string]> = [];
+
+    params.forEach((value, key) => {
+      const normalizedKey = key === 'productId' ? 'product' : key;
+      normalizedEntries.push([normalizedKey, value]);
+    });
+
+    normalizedEntries.sort(([keyA, valueA], [keyB, valueB]) => {
+      if (keyA === keyB) {
+        return valueA.localeCompare(valueB);
+      }
+      return keyA.localeCompare(keyB);
+    });
+
+    return normalizedEntries;
+  };
+
   // URL -> State (on mount and when URL changes)
   useEffect(() => {
     const search = location.search;
@@ -134,7 +170,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
 
     const selectedFindingId = getUrlParam(search, 'selected') || null;
 
-    setFilters({
+    const nextFilters = {
       page,
       pageSize,
       productId: productIdParam,
@@ -154,7 +190,9 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       sortField,
       sortOrder,
       selectedFindingId,
-    });
+    };
+
+    setFilters((prev) => (areFiltersEqual(prev, nextFilters) ? prev : nextFilters));
 
     setHydrated(true);
   }, [location.search]);
@@ -182,9 +220,16 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       selected: filters.selectedFindingId || undefined,
     });
 
-    const currentSearch = location.search.replace(/^\?/, '');
+    const currentSearchParams = normalizeSearchParams(location.search);
+    const nextSearchParams = normalizeSearchParams(params);
+    const shouldNavigate =
+      currentSearchParams.length !== nextSearchParams.length ||
+      currentSearchParams.some(([key, value], index) => {
+        const [nextKey, nextValue] = nextSearchParams[index];
+        return key !== nextKey || value !== nextValue;
+      });
 
-    if (params !== currentSearch) {
+    if (shouldNavigate) {
       navigate(
         {
           pathname: location.pathname,

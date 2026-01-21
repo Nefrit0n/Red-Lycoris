@@ -24,26 +24,30 @@ type FindingsHandler struct {
 // Response types
 
 type FindingResponse struct {
-	ID           string                `json:"id"`
-	Title        string                `json:"title"`
-	Description  *string               `json:"description,omitempty"`
-	Fingerprint  *string               `json:"fingerprint,omitempty"`
-	Severity     string                `json:"severity"`
-	Status       string                `json:"status"`
-	ScannerType  *string               `json:"scannerType,omitempty"`
-	Occurrence   *string               `json:"occurrenceStatus,omitempty"`
-	FirstSeenAt  *string               `json:"firstSeenAt,omitempty"`
-	LastSeenAt   *string               `json:"lastSeenAt,omitempty"`
-	RepeatCount  *int                  `json:"repeatCount,omitempty"`
-	ProductID    *string               `json:"productId,omitempty"`
-	ProductName  *string               `json:"productName,omitempty"`
-	AssigneeID   *string               `json:"assigneeId,omitempty"`
-	Owner        *OwnerResponse        `json:"owner,omitempty"`
-	ImportJobID  *string               `json:"importJobId,omitempty"`
-	CreatedAt    string                `json:"createdAt"`
-	UpdatedAt    string                `json:"updatedAt"`
-	DeletedAt    *string               `json:"deletedAt,omitempty"`
-	IntelSummary *IntelSummaryResponse `json:"intel_summary,omitempty"`
+	ID             string                `json:"id"`
+	Title          string                `json:"title"`
+	Description    *string               `json:"description,omitempty"`
+	Fingerprint    *string               `json:"fingerprint,omitempty"`
+	Severity       string                `json:"severity"`
+	Status         string                `json:"status"`
+	ScannerType    *string               `json:"scannerType,omitempty"`
+	SourceType     *string               `json:"sourceType,omitempty"`
+	SourceVersion  *string               `json:"sourceVersion,omitempty"`
+	EndpointMethod *string               `json:"endpointMethod,omitempty"`
+	EndpointPath   *string               `json:"endpointPath,omitempty"`
+	Occurrence     *string               `json:"occurrenceStatus,omitempty"`
+	FirstSeenAt    *string               `json:"firstSeenAt,omitempty"`
+	LastSeenAt     *string               `json:"lastSeenAt,omitempty"`
+	RepeatCount    *int                  `json:"repeatCount,omitempty"`
+	ProductID      *string               `json:"productId,omitempty"`
+	ProductName    *string               `json:"productName,omitempty"`
+	AssigneeID     *string               `json:"assigneeId,omitempty"`
+	Owner          *OwnerResponse        `json:"owner,omitempty"`
+	ImportJobID    *string               `json:"importJobId,omitempty"`
+	CreatedAt      string                `json:"createdAt"`
+	UpdatedAt      string                `json:"updatedAt"`
+	DeletedAt      *string               `json:"deletedAt,omitempty"`
+	IntelSummary   *IntelSummaryResponse `json:"intel_summary,omitempty"`
 }
 
 type OwnerResponse struct {
@@ -169,6 +173,7 @@ type BulkActionFilters struct {
 	Status           string  `json:"status,omitempty"`
 	OccurrenceStatus string  `json:"occurrenceStatus,omitempty"`
 	ScannerType      string  `json:"scannerType,omitempty"`
+	SourceType       string  `json:"sourceType,omitempty"`
 	Query            string  `json:"q,omitempty"`
 	ImportJobID      *string `json:"import_job_id,omitempty" validate:"omitempty,uuid4"`
 	DateFrom         *string `json:"dateFrom,omitempty"`
@@ -312,6 +317,10 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 
 	mappedEvents := mapFindingEvents(events)
 	mappedFinding := mapFindingDetail(*finding)
+	evidence := decodeEvidencePayload(finding.Evidence)
+	if evidence == nil {
+		evidence = latestImportedEvidence(mappedEvents)
+	}
 	if summary, ok := intelSummaryMap[masterID]; ok {
 		mappedFinding.IntelSummary = mapIntelSummary(summary)
 	}
@@ -322,7 +331,7 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		Events:          mappedEvents,
 		Occurrences:     mapFindingOccurrences(occurrences),
 		Duplicates:      mapDuplicateGroup(duplicates),
-		Evidence:        latestImportedEvidence(mappedEvents),
+		Evidence:        evidence,
 		IntelDetails:    mapIntelDetail(intelDetail),
 	}
 
