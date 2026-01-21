@@ -2,6 +2,7 @@ package parser
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -499,6 +500,235 @@ func TestParseSemgrepEmptyResults(t *testing.T) {
 	}
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings, got %d", len(findings))
+	}
+}
+
+func TestParseSemgrepReportWithMetadata(t *testing.T) {
+	payload := map[string]any{
+		"results": []any{
+			map[string]any{
+				"check_id": "python.django.security.injection.sql-injection",
+				"path":     "app/views.py",
+				"start": map[string]any{
+					"line":   42,
+					"col":    10,
+					"offset": 1234,
+				},
+				"end": map[string]any{
+					"line":   42,
+					"col":    50,
+					"offset": 1274,
+				},
+				"extra": map[string]any{
+					"message":     "Detected SQL injection via string concatenation",
+					"severity":    "ERROR",
+					"fingerprint": "abc123def456",
+					"engine_kind": "OSS",
+					"lines":       "query = \"SELECT * FROM users WHERE id=\" + user_id",
+					"fix":         "query = \"SELECT * FROM users WHERE id=%s\", (user_id,)",
+					"metadata": map[string]any{
+						"category":    "security",
+						"subcategory": []string{"vuln", "audit"},
+						"technology":  []string{"django", "python"},
+						"cwe": []string{
+							"CWE-89: Improper Neutralization of Special Elements used in an SQL Command",
+						},
+						"owasp": []string{
+							"A03:2021 - Injection",
+							"A01:2017 - Injection",
+						},
+						"references": []string{
+							"https://owasp.org/Top10/A03_2021-Injection/",
+							"https://cwe.mitre.org/data/definitions/89.html",
+						},
+						"confidence":          "HIGH",
+						"likelihood":          "HIGH",
+						"impact":              "HIGH",
+						"vulnerability_class": []string{"SQL Injection"},
+						"license":             "MIT",
+						"source":              "https://semgrep.dev/r/python.django.security.injection.sql-injection",
+						"shortlink":           "https://sg.run/AbCd",
+						"cwe2022-top25":       true,
+					},
+				},
+			},
+		},
+		"paths": map[string]any{
+			"scanned": []string{"app/views.py"},
+		},
+		"version": "1.56.0",
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	findings, err := ParseReport("semgrep", raw)
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+
+	f := findings[0]
+
+	// Basic fields
+	if f.RuleID != "python.django.security.injection.sql-injection" {
+		t.Fatalf("expected rule id, got %s", f.RuleID)
+	}
+	if f.Severity != "high" {
+		t.Fatalf("expected severity high (ERROR maps to high), got %s", f.Severity)
+	}
+	if f.Location != "app/views.py:42" {
+		t.Fatalf("expected location app/views.py:42, got %s", f.Location)
+	}
+
+	// Check RawData contains metadata
+	if f.RawData == nil {
+		t.Fatal("expected raw_data to be populated")
+	}
+	if f.RawData["fingerprint"] != "abc123def456" {
+		t.Fatalf("expected fingerprint in raw_data, got %v", f.RawData["fingerprint"])
+	}
+	if f.RawData["category"] != "security" {
+		t.Fatalf("expected category security, got %v", f.RawData["category"])
+	}
+	if f.RawData["confidence"] != "HIGH" {
+		t.Fatalf("expected confidence HIGH, got %v", f.RawData["confidence"])
+	}
+
+	// Check CWE in RawData
+	cwe, ok := f.RawData["cwe"].([]string)
+	if !ok || len(cwe) != 1 {
+		t.Fatalf("expected cwe with 1 item, got %v", f.RawData["cwe"])
+	}
+	if !strings.Contains(cwe[0], "CWE-89") {
+		t.Fatalf("expected CWE-89, got %s", cwe[0])
+	}
+
+	// Check OWASP in RawData
+	owasp, ok := f.RawData["owasp"].([]string)
+	if !ok || len(owasp) != 2 {
+		t.Fatalf("expected owasp with 2 items, got %v", f.RawData["owasp"])
+	}
+
+	// Check Evidence
+	if f.Evidence == nil {
+		t.Fatal("expected evidence to be populated")
+	}
+	if f.Evidence["fix"] != "query = \"SELECT * FROM users WHERE id=%s\", (user_id,)" {
+		t.Fatalf("expected fix suggestion in evidence, got %v", f.Evidence["fix"])
+	}
+	if f.Evidence["code"] != "query = \"SELECT * FROM users WHERE id=\" + user_id" {
+		t.Fatalf("expected code snippet in evidence, got %v", f.Evidence["code"])
+	}
+
+	// Check security classification in evidence
+	evidenceCwe, ok := f.Evidence["cwe"].([]string)
+	if !ok || len(evidenceCwe) != 1 {
+		t.Fatalf("expected cwe in evidence, got %v", f.Evidence["cwe"])
+	}
+	if f.Evidence["confidence"] != "HIGH" {
+		t.Fatalf("expected confidence in evidence, got %v", f.Evidence["confidence"])
+	}
+}
+
+func TestParseSemgrepReportWithFixRegex(t *testing.T) {
+	payload := map[string]any{
+		"results": []any{
+			map[string]any{
+				"check_id": "javascript.express.security.audit.xss.mustache-escape.template-unescaped",
+				"path":     "app/templates/user.html",
+				"start": map[string]any{
+					"line": 15,
+				},
+				"extra": map[string]any{
+					"message":  "Unescaped template variable",
+					"severity": "WARNING",
+					"fix_regex": map[string]any{
+						"regex":       "\\{\\{\\{(.+?)\\}\\}\\}",
+						"replacement": "{{$1}}",
+						"count":       1,
+					},
+				},
+			},
+		},
+		"paths": map[string]any{
+			"scanned": []string{"app/templates/user.html"},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	findings, err := ParseReport("semgrep", raw)
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+
+	f := findings[0]
+
+	if f.Evidence == nil {
+		t.Fatal("expected evidence to be populated")
+	}
+
+	fixRegex, ok := f.Evidence["fix_regex"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected fix_regex in evidence, got %v", f.Evidence["fix_regex"])
+	}
+	if fixRegex["regex"] != "\\{\\{\\{(.+?)\\}\\}\\}" {
+		t.Fatalf("expected fix_regex.regex, got %v", fixRegex["regex"])
+	}
+	if fixRegex["replacement"] != "{{$1}}" {
+		t.Fatalf("expected fix_regex.replacement, got %v", fixRegex["replacement"])
+	}
+}
+
+func TestParseSemgrepIgnoredFinding(t *testing.T) {
+	payload := map[string]any{
+		"results": []any{
+			map[string]any{
+				"check_id": "generic.secrets.security.detected-api-key",
+				"path":     "config.py",
+				"start": map[string]any{
+					"line": 5,
+				},
+				"extra": map[string]any{
+					"message":    "API key detected",
+					"severity":   "ERROR",
+					"is_ignored": true,
+				},
+			},
+		},
+		"paths": map[string]any{
+			"scanned": []string{"config.py"},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	findings, err := ParseReport("semgrep", raw)
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+
+	f := findings[0]
+
+	if f.RawData == nil {
+		t.Fatal("expected raw_data to be populated")
+	}
+	if f.RawData["is_ignored"] != true {
+		t.Fatalf("expected is_ignored=true in raw_data, got %v", f.RawData["is_ignored"])
 	}
 }
 
