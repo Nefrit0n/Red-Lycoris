@@ -354,7 +354,7 @@ const getSemgrepEvidence = (finding: Finding): SemgrepEvidence | null => {
   return evidence;
 };
 
-const buildLocationLabel = (finding: Finding, evidence: SemgrepEvidence | null) => {
+const buildLocationLabel = (evidence: SemgrepEvidence | null) => {
   const path = isNonEmptyString(evidence?.path) ? evidence?.path : null;
   const startLine =
     typeof evidence?.start?.line === "number" && evidence.start.line > 0
@@ -382,11 +382,6 @@ const buildLocationLabel = (finding: Finding, evidence: SemgrepEvidence | null) 
     }
     return path;
   }
-
-  if (isNonEmptyString(finding.location)) {
-    return finding.location;
-  }
-
   return "";
 };
 
@@ -740,16 +735,14 @@ export default function FindingsTable({
               const ageDays = getAgeDays(f.firstSeenAt || f.createdAt);
               const showAgeWarning = ageDays >= 30;
               const evidence = getSemgrepEvidence(f);
-              const locationLabel = buildLocationLabel(f, evidence);
+              const locationLabel = buildLocationLabel(evidence);
               const primaryLabel = locationLabel || f.title;
 
               const ruleId: string | null = isNonEmptyString(evidence?.ruleId)
                 ? evidence.ruleId
-                : isNonEmptyString(f.ruleId)
-                  ? f.ruleId
-                  : isNonEmptyString((f as any).rule_id)
-                    ? (f as any).rule_id
-                    : null;
+                : isNonEmptyString((f as any).rule_id)
+                  ? (f as any).rule_id
+                  : null;
 
               const shouldShowRule =
                 ruleId !== null &&

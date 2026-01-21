@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchFindings } from '../api/findings';
-import { ApiError } from '../api/http';
+import { fetchFindings } from '../clients/findingsClient';
+import { ApiError } from '../clients/httpClient';
 import { Finding } from '../types/findings';
 import { normalizeDateFrom, normalizeDateTo } from '../utils/urlHelpers';
 import { FiltersState } from './useUrlFiltersSync';
