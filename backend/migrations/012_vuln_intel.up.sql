@@ -1,4 +1,13 @@
+-- 012_vuln_intel.up.sql
+
+-- gen_random_uuid() требует pgcrypto
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 BEGIN;
+
+-- ============================================================
+-- 1) Evidence / Raw data для findings
+-- ============================================================
 
 ALTER TABLE findings
     ADD COLUMN IF NOT EXISTS evidence JSONB;
@@ -11,6 +20,10 @@ COMMENT ON COLUMN findings.evidence IS
 
 COMMENT ON COLUMN findings.raw_data IS
     'Raw parsed scanner payload for debugging and future enrichment';
+
+-- ============================================================
+-- 2) Vulnerability intelligence (обогащение CVE / SCA)
+-- ============================================================
 
 CREATE TABLE IF NOT EXISTS vulnerability_intel (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,9 +39,7 @@ CREATE TABLE IF NOT EXISTS vulnerability_intel (
 
     -- содержимое
     description      TEXT,
-    references       JSONB,
-
-    -- даты
+    references_json  JSONB,                   -- !!! НЕ "references"
     published_at     TIMESTAMPTZ,
     modified_at      TIMESTAMPTZ,
 
@@ -41,11 +52,19 @@ CREATE TABLE IF NOT EXISTS vulnerability_intel (
 COMMENT ON TABLE vulnerability_intel IS
     'Normalized vulnerability intelligence (CVE, GHSA)';
 
+-- ============================================================
+-- 3) Link findings -> vulnerability_intel (optional)
+-- ============================================================
+
 ALTER TABLE findings
     ADD COLUMN IF NOT EXISTS vulnerability_intel_id UUID;
 
 COMMENT ON COLUMN findings.vulnerability_intel_id IS
     'Reference to vulnerability_intel (optional, async populated)';
+
+-- ============================================================
+-- 4) Индексы
+-- ============================================================
 
 CREATE INDEX IF NOT EXISTS idx_findings_vulnerability_intel_id
     ON findings (vulnerability_intel_id);
