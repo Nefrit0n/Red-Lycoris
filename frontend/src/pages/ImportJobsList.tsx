@@ -17,7 +17,7 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchImportJobs } from "../api/importJobs";
+import { fetchImportJobs } from "../clients/importJobsClient";
 import PaginationControl from "../components/PaginationControl";
 import { ImportJob } from "../types/imports";
 

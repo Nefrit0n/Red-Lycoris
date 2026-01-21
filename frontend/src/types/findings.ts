@@ -19,15 +19,18 @@ export interface Finding {
   id: string;
   title: string;
   description?: string | null;
-  ruleId?: string | null;
-  location?: string | null;
+  fingerprint?: string | null;
   productId?: string | null;
   productName?: string | null;
   assigneeId?: string | null;
   owner?: FindingOwner | null;
   importJobId?: string | null;
   scannerType?: string | null;
-  evidence?: SemgrepEvidence | null;
+  sourceType?: string | null;
+  sourceVersion?: string | null;
+  endpointMethod?: string | null;
+  endpointPath?: string | null;
+  evidence?: FindingEvidence | null;
   severity: FindingSeverity;
   status: FindingStatus;
   occurrenceStatus?: FindingOccurrenceStatus | null;
@@ -79,6 +82,10 @@ export interface FindingDetail {
   fingerprint?: string | null;
   severity: FindingSeverity;
   status: FindingStatus;
+  sourceType?: string | null;
+  sourceVersion?: string | null;
+  endpointMethod?: string | null;
+  endpointPath?: string | null;
   occurrenceStatus?: FindingOccurrenceStatus | null;
   firstSeenAt?: string | null;
   lastSeenAt?: string | null;
@@ -95,7 +102,7 @@ export interface FindingDetail {
   events: FindingEvent[];
   occurrences?: FindingOccurrence[];
   duplicates?: FindingDuplicateGroup | null;
-  evidence?: SemgrepEvidence | null;
+  evidence?: FindingEvidence | null;
   intel_summary?: IntelSummary | null;
   intel_details?: IntelDetail | null;
 }
@@ -152,7 +159,7 @@ export interface FindingOccurrence {
   id: string;
   importJobId?: string | null;
   seenAt: string;
-  status: FindingStatus;
+  status: string;
   scannerType?: string | null;
   snippet?: string | null;
 }
@@ -164,12 +171,14 @@ export interface FindingNeighbors {
   total: number;
 }
 
+export type FindingEvidence = Record<string, unknown>;
+
 export interface SemgrepEvidenceRange {
   line?: number;
   col?: number;
 }
 
-export interface SemgrepEvidence {
+export interface SemgrepEvidence extends FindingEvidence {
   scannerType?: string | null;
   ruleId?: string | null;
   path?: string | null;
