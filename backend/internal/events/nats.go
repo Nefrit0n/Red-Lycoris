@@ -3,6 +3,8 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -20,36 +22,84 @@ type Publisher struct {
 }
 
 func NewPublisher(url string) (*Publisher, error) {
-	nc, err := nats.Connect(url)
+	nc, err := nats.Connect(
+		url,
+		nats.Name("lotus-warden"),
+		nats.Timeout(5*time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(1*time.Second),
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	js, err := nc.JetStream()
 	if err != nil {
 		nc.Close()
 		return nil, err
 	}
-	_, err = js.AddStream(&nats.StreamConfig{
+
+	// Важно: не просто AddStream. Если stream уже есть, но subjects другие — делаем UpdateStream.
+	if err := ensureStream(js, &nats.StreamConfig{
 		Name:      AnalysisStreamName,
 		Subjects:  []string{AnalysisSubject},
 		Retention: nats.LimitsPolicy,
 		MaxAge:    7 * 24 * time.Hour,
-	})
-	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
+	}); err != nil {
 		nc.Close()
-		return nil, err
+		return nil, fmt.Errorf("ensure stream %s failed: %w", AnalysisStreamName, err)
 	}
-	_, err = js.AddStream(&nats.StreamConfig{
+
+	if err := ensureStream(js, &nats.StreamConfig{
 		Name:      IntelStreamName,
 		Subjects:  []string{IntelSubject},
 		Retention: nats.LimitsPolicy,
 		MaxAge:    7 * 24 * time.Hour,
-	})
-	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
+	}); err != nil {
 		nc.Close()
-		return nil, err
+		return nil, fmt.Errorf("ensure stream %s failed: %w", IntelStreamName, err)
 	}
+
 	return &Publisher{nc: nc, js: js}, nil
+}
+
+func ensureStream(js nats.JetStreamContext, desired *nats.StreamConfig) error {
+	info, err := js.StreamInfo(desired.Name)
+	if err != nil {
+		if err == nats.ErrStreamNotFound {
+			_, err := js.AddStream(desired)
+			return err
+		}
+		return err
+	}
+
+	// Stream существует — проверяем, совпадает ли важная конфигурация.
+	current := info.Config
+	if sameStringSet(current.Subjects, desired.Subjects) &&
+		current.Retention == desired.Retention &&
+		current.MaxAge == desired.MaxAge {
+		return nil
+	}
+
+	_, err = js.UpdateStream(desired)
+	return err
+}
+
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	aa := append([]string(nil), a...)
+	bb := append([]string(nil), b...)
+	sort.Strings(aa)
+	sort.Strings(bb)
+	for i := range aa {
+		if aa[i] != bb[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *Publisher) Close() {
@@ -71,6 +121,4 @@ func (p *Publisher) PublishJSON(ctx context.Context, subject string, payload any
 	return err
 }
 
-func (p *Publisher) JetStream() nats.JetStreamContext {
-	return p.js
-}
+func (p *Publisher) JetStream() nats.JetStreamContext { return p.js }

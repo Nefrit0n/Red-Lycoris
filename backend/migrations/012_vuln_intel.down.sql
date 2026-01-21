@@ -1,3 +1,5 @@
+-- 012_vuln_intel.down.sql
+
 BEGIN;
 
 DROP INDEX IF EXISTS idx_findings_vulnerability_intel_id;
