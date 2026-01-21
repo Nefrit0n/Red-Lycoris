@@ -25,7 +25,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { fetchImportJobDetail } from "../api/importJobs";
+import { fetchImportJobDetail } from "../clients/importJobsClient";
 import { ImportJobDetail as ImportJobDetailType } from "../types/imports";
 
 const STATUS_CONFIG: Record<

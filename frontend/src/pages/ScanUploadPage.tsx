@@ -28,9 +28,9 @@ import HistoryIcon from "@mui/icons-material/History";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchFindingDetail, fetchFindings } from "../api/findings";
+import { fetchFindingDetail, fetchFindings } from "../clients/findingsClient";
 import { uploadScan, UploadScanResponse } from "../api/scans";
-import { Finding, SemgrepEvidence } from "../types/findings";
+import { Finding, FindingEvidence, SemgrepEvidence } from "../types/findings";
 import DragDropUpload from "../components/DragDropUpload";
 
 interface UploadHistoryItem extends UploadScanResponse {
@@ -43,7 +43,7 @@ const HISTORY_KEY = "lotus_warden_upload_history";
 const LAST_UPLOAD_KEY = "lotus_warden_last_upload";
 
 interface FindingPreview extends Finding {
-  evidence?: SemgrepEvidence | null;
+  evidence?: FindingEvidence | null;
 }
 
 const STEPS = ["Выбор файла", "Настройка", "Загрузка", "Результаты"];
@@ -64,6 +64,15 @@ const SCANNER_INFO: Record<string, { name: string; description: string; formats:
     description: "DAST сканер веб-приложений",
     formats: "JSON",
   },
+};
+
+const getSemgrepEvidence = (evidence?: FindingEvidence | null): SemgrepEvidence | null => {
+  if (!evidence || typeof evidence !== "object") return null;
+  const scannerType = (evidence as Record<string, unknown>).scannerType;
+  if (typeof scannerType === "string" && scannerType !== "semgrep") {
+    return null;
+  }
+  return evidence as SemgrepEvidence;
 };
 
 const ScanUploadPage = () => {
@@ -485,8 +494,9 @@ const ScanUploadPage = () => {
                   {previewFindings.length > 0 && (
                     <Stack spacing={1}>
                       {previewFindings.map((finding) => {
-                        const path = finding.evidence?.path || "";
-                        const startLine = finding.evidence?.start?.line;
+                        const semgrepEvidence = getSemgrepEvidence(finding.evidence);
+                        const path = semgrepEvidence?.path || "";
+                        const startLine = semgrepEvidence?.start?.line;
                         return (
                           <Paper
                             key={finding.id}

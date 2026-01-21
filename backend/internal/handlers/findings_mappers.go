@@ -3,14 +3,15 @@ package handlers
 import (
 	"encoding/json"
 
+	v1dto "lotus-warden/backend/internal/dto/v1"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/google/uuid"
 )
 
-// mapFindingListItem converts storage.FindingListItem to FindingResponse
-func mapFindingListItem(item storage.FindingListItem) FindingResponse {
+// mapFindingListItem converts storage.FindingListItem to DTO Finding
+func mapFindingListItem(item storage.FindingListItem) v1dto.Finding {
 	var productID *string
 	if item.ProductID.Valid {
 		value := item.ProductID.UUID.String()
@@ -26,9 +27,9 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 		value := item.AssigneeID.UUID.String()
 		assigneeID = &value
 	}
-	var owner *OwnerResponse
+	var owner *v1dto.Owner
 	if item.AssigneeID.Valid && item.AssigneeName.Valid {
-		owner = &OwnerResponse{
+		owner = &v1dto.Owner{
 			ID:   item.AssigneeID.UUID.String(),
 			Name: item.AssigneeName.String,
 		}
@@ -59,7 +60,7 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 	}
 	repeatCount := item.RepeatCount
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
-	return FindingResponse{
+	return v1dto.Finding{
 		ID:          item.ID.String(),
 		Title:       item.Title,
 		Severity:    item.Severity,
@@ -79,22 +80,22 @@ func mapFindingListItem(item storage.FindingListItem) FindingResponse {
 	}
 }
 
-func mapIntelSummary(summary storage.IntelSummary) *IntelSummaryResponse {
+func mapIntelSummary(summary storage.IntelSummary) *v1dto.IntelSummary {
 	if len(summary.Identifiers) == 0 {
 		return nil
 	}
-	resp := &IntelSummaryResponse{
+	resp := &v1dto.IntelSummary{
 		Identifiers: summary.Identifiers,
 		KEV:         summary.KEV,
 	}
 	if summary.CVSSScore != nil || summary.CVSSVersion != nil {
-		resp.CVSS = &IntelCVSSResponse{
+		resp.CVSS = &v1dto.IntelCVSS{
 			Score:   summary.CVSSScore,
 			Version: summary.CVSSVersion,
 		}
 	}
 	if summary.EPSSScore != nil || summary.EPSSPercentile != nil {
-		resp.EPSS = &IntelEPSSResponse{
+		resp.EPSS = &v1dto.IntelEPSS{
 			Score:      summary.EPSSScore,
 			Percentile: summary.EPSSPercentile,
 		}
@@ -106,20 +107,20 @@ func mapIntelSummary(summary storage.IntelSummary) *IntelSummaryResponse {
 	return resp
 }
 
-func mapIntelDetail(detail *storage.IntelDetail) *IntelDetailResponse {
+func mapIntelDetail(detail *storage.IntelDetail) *v1dto.IntelDetail {
 	if detail == nil {
 		return nil
 	}
-	resp := &IntelDetailResponse{
+	resp := &v1dto.IntelDetail{
 		Identifiers: detail.Identifiers,
 		NVD:         detail.NVD,
 		EPSS:        detail.EPSS,
 		KEV:         detail.KEV,
 	}
 	if len(detail.References) > 0 {
-		resp.References = make([]IntelReferenceResponse, 0, len(detail.References))
+		resp.References = make([]v1dto.IntelReference, 0, len(detail.References))
 		for _, ref := range detail.References {
-			resp.References = append(resp.References, IntelReferenceResponse{
+			resp.References = append(resp.References, v1dto.IntelReference{
 				Title: ref.Title,
 				URL:   ref.URL,
 			})
@@ -132,8 +133,8 @@ func mapIntelDetail(detail *storage.IntelDetail) *IntelDetailResponse {
 	return resp
 }
 
-// mapFindingDetail converts storage.FindingDetail to FindingResponse
-func mapFindingDetail(item storage.FindingDetail) FindingResponse {
+// mapFindingDetail converts storage.FindingDetail to DTO Finding
+func mapFindingDetail(item storage.FindingDetail) v1dto.Finding {
 	var productID *string
 	if item.ProductID.Valid {
 		value := item.ProductID.UUID.String()
@@ -200,7 +201,7 @@ func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 		duplicateID = &item.DuplicateID.UUID
 	}
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
-	return FindingResponse{
+	return v1dto.Finding{
 		ID:             item.ID.String(),
 		Title:          item.Title,
 		Description:    description,
@@ -225,8 +226,8 @@ func mapFindingDetail(item storage.FindingDetail) FindingResponse {
 	}
 }
 
-// mapFindingModel converts models.Finding to FindingResponse
-func mapFindingModel(item models.Finding) FindingResponse {
+// mapFindingModel converts models.Finding to DTO Finding
+func mapFindingModel(item models.Finding) v1dto.Finding {
 	var productID *string
 	if item.ProductID != nil {
 		value := item.ProductID.String()
@@ -269,7 +270,7 @@ func mapFindingModel(item models.Finding) FindingResponse {
 	}
 	repeatCount := item.RepeatCount
 	occurrence := computeOccurrenceStatus(repeatCount, item.DuplicateID)
-	return FindingResponse{
+	return v1dto.Finding{
 		ID:             item.ID.String(),
 		Title:          item.Title,
 		Description:    item.Description,
@@ -293,9 +294,9 @@ func mapFindingModel(item models.Finding) FindingResponse {
 	}
 }
 
-// mapFindingComments converts a slice of storage.FindingCommentItem to FindingCommentResponse slice
-func mapFindingComments(items []storage.FindingCommentItem) []FindingCommentResponse {
-	comments := make([]FindingCommentResponse, 0, len(items))
+// mapFindingComments converts a slice of storage.FindingCommentItem to DTO FindingComment slice
+func mapFindingComments(items []storage.FindingCommentItem) []v1dto.FindingComment {
+	comments := make([]v1dto.FindingComment, 0, len(items))
 	for _, item := range items {
 		var authorID *string
 		if item.AuthorID.Valid {
@@ -307,7 +308,7 @@ func mapFindingComments(items []storage.FindingCommentItem) []FindingCommentResp
 			value := item.AuthorUsername.String
 			author = &value
 		}
-		comments = append(comments, FindingCommentResponse{
+		comments = append(comments, v1dto.FindingComment{
 			ID:        item.ID.String(),
 			AuthorID:  authorID,
 			Author:    author,
@@ -318,9 +319,9 @@ func mapFindingComments(items []storage.FindingCommentItem) []FindingCommentResp
 	return comments
 }
 
-// mapFindingEvents converts a slice of storage.FindingEventItem to FindingEventResponse slice
-func mapFindingEvents(items []storage.FindingEventItem) []FindingEventResponse {
-	events := make([]FindingEventResponse, 0, len(items))
+// mapFindingEvents converts a slice of storage.FindingEventItem to DTO FindingEvent slice
+func mapFindingEvents(items []storage.FindingEventItem) []v1dto.FindingEvent {
+	events := make([]v1dto.FindingEvent, 0, len(items))
 	for _, item := range items {
 		var actorID *string
 		if item.ActorID.Valid {
@@ -336,7 +337,7 @@ func mapFindingEvents(items []storage.FindingEventItem) []FindingEventResponse {
 		if len(item.Payload) > 0 {
 			_ = json.Unmarshal(item.Payload, &payload)
 		}
-		events = append(events, FindingEventResponse{
+		events = append(events, v1dto.FindingEvent{
 			ID:        item.ID.String(),
 			ActorID:   actorID,
 			Actor:     actor,
@@ -348,7 +349,7 @@ func mapFindingEvents(items []storage.FindingEventItem) []FindingEventResponse {
 	return events
 }
 
-func latestImportedEvidence(events []FindingEventResponse) map[string]interface{} {
+func latestImportedEvidence(events []v1dto.FindingEvent) map[string]interface{} {
 	for _, event := range events {
 		if event.EventType != "finding.imported" {
 			continue
@@ -375,9 +376,9 @@ func decodeEvidencePayload(payload []byte) map[string]interface{} {
 	return result
 }
 
-// mapFindingOccurrences converts a slice of storage.FindingOccurrenceItem to FindingOccurrenceResponse slice
-func mapFindingOccurrences(items []storage.FindingOccurrenceItem) []FindingOccurrenceResponse {
-	response := make([]FindingOccurrenceResponse, 0, len(items))
+// mapFindingOccurrences converts a slice of storage.FindingOccurrenceItem to DTO FindingOccurrence slice
+func mapFindingOccurrences(items []storage.FindingOccurrenceItem) []v1dto.FindingOccurrence {
+	response := make([]v1dto.FindingOccurrence, 0, len(items))
 	for _, item := range items {
 		var importJobID *string
 		if item.ImportJobID.Valid {
@@ -394,7 +395,7 @@ func mapFindingOccurrences(items []storage.FindingOccurrenceItem) []FindingOccur
 			value := item.Description.String
 			snippet = &value
 		}
-		response = append(response, FindingOccurrenceResponse{
+		response = append(response, v1dto.FindingOccurrence{
 			ID:          item.ID.String(),
 			ImportJobID: importJobID,
 			SeenAt:      item.SeenAt.Format(timeFormatRFC3339()),
@@ -406,16 +407,16 @@ func mapFindingOccurrences(items []storage.FindingOccurrenceItem) []FindingOccur
 	return response
 }
 
-// mapDuplicateGroup converts storage.DuplicateGroup to DuplicateGroupResponse
-func mapDuplicateGroup(group *storage.DuplicateGroup) *DuplicateGroupResponse {
+// mapDuplicateGroup converts storage.DuplicateGroup to DTO DuplicateGroup
+func mapDuplicateGroup(group *storage.DuplicateGroup) *v1dto.DuplicateGroup {
 	if group == nil {
 		return nil
 	}
-	duplicates := make([]FindingResponse, 0, len(group.Duplicates))
+	duplicates := make([]v1dto.Finding, 0, len(group.Duplicates))
 	for _, item := range group.Duplicates {
 		duplicates = append(duplicates, mapFindingDetail(item))
 	}
-	return &DuplicateGroupResponse{
+	return &v1dto.DuplicateGroup{
 		Master:     mapFindingDetail(group.Master),
 		Duplicates: duplicates,
 	}
