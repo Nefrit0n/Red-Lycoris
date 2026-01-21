@@ -4,9 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net/url"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
+)
+
+const (
+	defaultRecentLimit          = 200
+	maxRecentLimit              = 1000
+	maxIdentifiersPerFinding    = 500
+	maxIdentifierLen            = 128
+	maxRefsPerDetail            = 200
+	maxRefURLLen                = 2048
+	maxLastErrorLen             = 2000
+	maxReferencesPayloadBytes   = 1 << 20 // 1MB safety cap
 )
 
 type IntelSummary struct {
@@ -55,32 +70,110 @@ type VulnIntelStatus struct {
 	NextRetryAt     sql.NullTime
 }
 
+// --- helpers
+
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+func sanitizeIdentifier(raw string) (string, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" || len(s) > maxIdentifierLen {
+		return "", false
+	}
+	// быстрый отсев “мусора”: контрольные/пробельные внутри оставим как есть,
+	// но хотя бы уберём совсем неадекватные кейсы
+	return s, true
+}
+
+func isSafeHTTPURL(raw string) bool {
+	if raw == "" || len(raw) > maxRefURLLen {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	if u.Host == "" {
+		return false
+	}
+	return true
+}
+
+func truncateString(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max]
+}
+
+func uuidStrings(ids []uuid.UUID) []string {
+	out := make([]string, len(ids))
+	for i := range ids {
+		out[i] = ids[i].String()
+	}
+	return out
+}
+
+// --- data ops
+
+// FIX: batch insert + лимиты (защита от DoS по базе)
 func UpsertFindingIdentifiers(ctx context.Context, db *sql.DB, findingID uuid.UUID, identifiers []string) error {
 	if len(identifiers) == 0 {
 		return nil
 	}
-	query := `
-		INSERT INTO finding_vuln_identifiers (finding_id, identifier)
-		VALUES ($1, $2)
-		ON CONFLICT (finding_id, identifier) DO NOTHING`
-	for _, identifier := range identifiers {
-		if _, err := db.ExecContext(ctx, query, findingID, identifier); err != nil {
-			return err
+
+	// sanitize + dedup + clamp
+	uniq := make(map[string]struct{}, len(identifiers))
+	clean := make([]string, 0, len(identifiers))
+	for _, id := range identifiers {
+		if s, ok := sanitizeIdentifier(id); ok {
+			if _, exists := uniq[s]; !exists {
+				uniq[s] = struct{}{}
+				clean = append(clean, s)
+			}
+		}
+		if len(clean) >= maxIdentifiersPerFinding {
+			break
 		}
 	}
-	return nil
+	if len(clean) == 0 {
+		return nil
+	}
+
+	// one roundtrip instead of N
+	query := `
+		INSERT INTO finding_vuln_identifiers (finding_id, identifier)
+		SELECT $1, x
+		FROM UNNEST($2::text[]) AS x
+		ON CONFLICT (finding_id, identifier) DO NOTHING
+	`
+	_, err := db.ExecContext(ctx, query, findingID, pq.Array(clean))
+	return err
 }
 
 func ListRecentIdentifiers(ctx context.Context, db *sql.DB, productID *uuid.UUID, limit int) ([]string, error) {
 	if limit <= 0 {
-		limit = 200
+		limit = defaultRecentLimit
 	}
+	limit = clampInt(limit, 1, maxRecentLimit)
+
 	query := `
 		SELECT fvi.identifier
 		FROM finding_vuln_identifiers fvi
 		JOIN findings f ON f.id = fvi.finding_id
 		WHERE f.deleted_at IS NULL`
-	args := []interface{}{}
+	args := []any{}
+
 	if productID != nil {
 		query += " AND f.product_id = $1"
 		args = append(args, *productID)
@@ -90,13 +183,14 @@ func ListRecentIdentifiers(ctx context.Context, db *sql.DB, productID *uuid.UUID
 		query += " GROUP BY fvi.identifier ORDER BY MAX(fvi.created_at) DESC LIMIT $1"
 		args = append(args, limit)
 	}
+
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var identifiers []string
+	identifiers := make([]string, 0, limit)
 	for rows.Next() {
 		var identifier string
 		if err := rows.Scan(&identifier); err != nil {
@@ -107,10 +201,12 @@ func ListRecentIdentifiers(ctx context.Context, db *sql.DB, productID *uuid.UUID
 	return identifiers, rows.Err()
 }
 
+// FIX: pq.Array + явный каст uuid[] + pq.Array(&slice) при Scan. :contentReference[oaicite:2]{index=2}
 func GetIntelSummaries(ctx context.Context, db *sql.DB, findingIDs []uuid.UUID) (map[uuid.UUID]IntelSummary, error) {
 	if len(findingIDs) == 0 {
 		return map[uuid.UUID]IntelSummary{}, nil
 	}
+
 	query := `
 		SELECT
 			fvi.finding_id,
@@ -123,10 +219,10 @@ func GetIntelSummaries(ctx context.Context, db *sql.DB, findingIDs []uuid.UUID) 
 			MAX(vi.last_refreshed_at) AS last_refreshed_at
 		FROM finding_vuln_identifiers fvi
 		LEFT JOIN vuln_intel vi ON vi.identifier = fvi.identifier
-		WHERE fvi.finding_id = ANY($1)
+		WHERE fvi.finding_id = ANY($1::uuid[])
 		GROUP BY fvi.finding_id`
 
-	rows, err := db.QueryContext(ctx, query, findingIDs)
+	rows, err := db.QueryContext(ctx, query, pq.Array(uuidStrings(findingIDs)))
 	if err != nil {
 		return nil, err
 	}
@@ -142,9 +238,10 @@ func GetIntelSummaries(ctx context.Context, db *sql.DB, findingIDs []uuid.UUID) 
 		var epssPercentile sql.NullFloat64
 		var kev bool
 		var lastRefreshedAt sql.NullTime
+
 		if err := rows.Scan(
 			&findingID,
-			&identifiers,
+			pq.Array(&identifiers),
 			&cvssScore,
 			&cvssVersion,
 			&epssScore,
@@ -154,35 +251,36 @@ func GetIntelSummaries(ctx context.Context, db *sql.DB, findingIDs []uuid.UUID) 
 		); err != nil {
 			return nil, err
 		}
-		summary := IntelSummary{
-			Identifiers: identifiers,
-			KEV:         kev,
-		}
+
+		summary := IntelSummary{Identifiers: identifiers, KEV: kev}
 		if cvssScore.Valid {
-			value := cvssScore.Float64
-			summary.CVSSScore = &value
+			v := cvssScore.Float64
+			summary.CVSSScore = &v
 		}
 		if cvssVersion.Valid {
-			value := cvssVersion.String
-			summary.CVSSVersion = &value
+			v := cvssVersion.String
+			summary.CVSSVersion = &v
 		}
 		if epssScore.Valid {
-			value := epssScore.Float64
-			summary.EPSSScore = &value
+			v := epssScore.Float64
+			summary.EPSSScore = &v
 		}
 		if epssPercentile.Valid {
-			value := epssPercentile.Float64
-			summary.EPSSPercentile = &value
+			v := epssPercentile.Float64
+			summary.EPSSPercentile = &v
 		}
 		if lastRefreshedAt.Valid {
-			value := lastRefreshedAt.Time
-			summary.LastRefreshedAt = &value
+			v := lastRefreshedAt.Time
+			summary.LastRefreshedAt = &v
 		}
+
 		results[findingID] = summary
 	}
 	return results, rows.Err()
 }
 
+// FIX: references -> references_payload (избавляемся от keyword/несоответствия схемы) :contentReference[oaicite:3]{index=3}
+// FIX: лимиты на references payload + фильтрация URL + cap по количеству
 func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*IntelDetail, error) {
 	query := `
 		SELECT
@@ -190,7 +288,7 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 			vi.nvd_payload,
 			vi.epss_payload,
 			vi.kev_payload,
-			vi.references,
+			vi.references_payload,
 			vi.updated_at
 		FROM finding_vuln_identifiers fvi
 		LEFT JOIN vuln_intel vi ON vi.identifier = fvi.identifier
@@ -207,8 +305,10 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 		EPSS: map[string]json.RawMessage{},
 		KEV:  map[string]json.RawMessage{},
 	}
+	seenID := map[string]struct{}{}
 	referenceMap := map[string]IntelReference{}
 	var latestUpdated time.Time
+
 	for rows.Next() {
 		var identifier string
 		var nvdPayload []byte
@@ -216,6 +316,7 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 		var kevPayload []byte
 		var referencesPayload []byte
 		var updatedAt sql.NullTime
+
 		if err := rows.Scan(
 			&identifier,
 			&nvdPayload,
@@ -226,7 +327,12 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 		); err != nil {
 			return nil, err
 		}
-		detail.Identifiers = append(detail.Identifiers, identifier)
+
+		if _, ok := seenID[identifier]; !ok {
+			seenID[identifier] = struct{}{}
+			detail.Identifiers = append(detail.Identifiers, identifier)
+		}
+
 		if len(nvdPayload) > 0 {
 			detail.NVD[identifier] = json.RawMessage(nvdPayload)
 		}
@@ -236,28 +342,45 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 		if len(kevPayload) > 0 {
 			detail.KEV[identifier] = json.RawMessage(kevPayload)
 		}
-		if len(referencesPayload) > 0 {
+
+		// safety: не парсим гигантский мусор
+		if len(referencesPayload) > 0 && len(referencesPayload) <= maxReferencesPayloadBytes {
 			var refs []IntelReference
 			if err := json.Unmarshal(referencesPayload, &refs); err == nil {
 				for _, ref := range refs {
-					referenceMap[ref.URL] = ref
+					if len(referenceMap) >= maxRefsPerDetail {
+						break
+					}
+					if isSafeHTTPURL(ref.URL) {
+						referenceMap[ref.URL] = ref
+					}
 				}
 			}
 		}
+
 		if updatedAt.Valid && updatedAt.Time.After(latestUpdated) {
 			latestUpdated = updatedAt.Time
 		}
 	}
+
 	if len(detail.Identifiers) == 0 {
 		return nil, nil
 	}
 	if !latestUpdated.IsZero() {
-		value := latestUpdated
-		detail.UpdatedAt = &value
+		v := latestUpdated
+		detail.UpdatedAt = &v
 	}
-	for _, ref := range referenceMap {
-		detail.References = append(detail.References, ref)
+
+	// stable output (чтобы фронт/тесты не “плясали”)
+	urls := make([]string, 0, len(referenceMap))
+	for u := range referenceMap {
+		urls = append(urls, u)
 	}
+	sort.Strings(urls)
+	for _, u := range urls {
+		detail.References = append(detail.References, referenceMap[u])
+	}
+
 	return detail, rows.Err()
 }
 
@@ -277,14 +400,40 @@ func GetVulnIntelStatus(ctx context.Context, db *sql.DB, identifier string) (*Vu
 	return &status, nil
 }
 
+// FIX: references -> references_payload (и не используем keyword) :contentReference[oaicite:4]{index=4}
+// FIX: кап по ошибке + чистка ссылок (scheme)
 func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) error {
-	referencesJSON, err := json.Marshal(record.References)
+	// harden references
+	cleanRefs := make([]IntelReference, 0, len(record.References))
+	seen := map[string]struct{}{}
+	for _, r := range record.References {
+		if len(cleanRefs) >= maxRefsPerDetail {
+			break
+		}
+		if !isSafeHTTPURL(r.URL) {
+			continue
+		}
+		if _, ok := seen[r.URL]; ok {
+			continue
+		}
+		seen[r.URL] = struct{}{}
+		cleanRefs = append(cleanRefs, r)
+	}
+
+	referencesJSON, err := json.Marshal(cleanRefs)
 	if err != nil {
 		return err
 	}
+
+	var lastErr *string
+	if record.LastError != nil {
+		v := truncateString(*record.LastError, maxLastErrorLen)
+		lastErr = &v
+	}
+
 	query := `
 		INSERT INTO vuln_intel (
-			identifier, source_version, nvd_payload, epss_payload, kev_payload, references,
+			identifier, source_version, nvd_payload, epss_payload, kev_payload, references_payload,
 			cvss_score, cvss_version, epss_score, epss_percentile, kev,
 			last_refreshed_at, next_retry_at, last_error, updated_at
 		) VALUES (
@@ -297,7 +446,7 @@ func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) er
 			nvd_payload = EXCLUDED.nvd_payload,
 			epss_payload = EXCLUDED.epss_payload,
 			kev_payload = EXCLUDED.kev_payload,
-			references = EXCLUDED.references,
+			references_payload = EXCLUDED.references_payload,
 			cvss_score = EXCLUDED.cvss_score,
 			cvss_version = EXCLUDED.cvss_version,
 			epss_score = EXCLUDED.epss_score,
@@ -316,18 +465,19 @@ func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) er
 		nullRawMessage(record.KEVPayload),
 		nullRawMessage(referencesJSON),
 		nullFloatPtr(record.CVSSScore),
-		nullStringPtr(record.CVSSVersion),
+		anyStringPtr(record.CVSSVersion),
 		nullFloatPtr(record.EPSSScore),
 		nullFloatPtr(record.EPSSPercentile),
 		record.KEV,
 		nullTimePtr(record.LastRefreshedAt),
 		nullTimePtr(record.NextRetryAt),
-		nullStringPtr(record.LastError),
+		anyStringPtr(lastErr),
 	)
 	return err
 }
 
 func UpdateVulnIntelError(ctx context.Context, db *sql.DB, identifier string, sourceVersion string, lastError string, nextRetryAt time.Time) error {
+	lastError = truncateString(lastError, maxLastErrorLen)
 	query := `
 		INSERT INTO vuln_intel (identifier, source_version, last_error, next_retry_at, updated_at)
 		VALUES ($1, $2, $3, $4, NOW())
