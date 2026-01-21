@@ -8,15 +8,17 @@ import (
 )
 
 type ScanResult struct {
-	ID           uuid.UUID       `db:"id"`
-	EngagementID *uuid.UUID      `db:"engagement_id"`
-	ProductID    *uuid.UUID      `db:"product_id"`
-	UploaderID   *uuid.UUID      `db:"uploader_id"`
-	ImportJobID  *uuid.UUID      `db:"import_job_id"`
-	Scanner      string          `db:"scanner"`
-	RawReport    json.RawMessage `db:"raw_report"`
-	ProcessedAt  time.Time       `db:"processed_at"`
-	CreatedAt    time.Time       `db:"created_at"`
+	ID            uuid.UUID       `db:"id"`
+	EngagementID  *uuid.UUID      `db:"engagement_id"`
+	ProductID     *uuid.UUID      `db:"product_id"`
+	UploaderID    *uuid.UUID      `db:"uploader_id"`
+	ImportJobID   *uuid.UUID      `db:"import_job_id"`
+	Scanner       string          `db:"scanner"`
+	SourceType    *string         `db:"source_type"`
+	SourceVersion *string         `db:"source_version"`
+	RawReport     json.RawMessage `db:"raw_report"`
+	ProcessedAt   time.Time       `db:"processed_at"`
+	CreatedAt     time.Time       `db:"created_at"`
 }
 
 func (s *ScanResult) Validate() error {

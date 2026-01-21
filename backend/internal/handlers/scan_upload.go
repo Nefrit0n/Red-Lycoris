@@ -201,6 +201,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 	result, err := importing.ImportFindings(c.Context(), h.db, importing.ImportParams{
 		Scanner:      req.ScannerType,
 		Report:       req.ReportBytes,
+		SourceType:   "scanner",
 		ProductID:    productID,
 		EngagementID: req.EngagementID,
 		CreatedBy:    uploaderID,
