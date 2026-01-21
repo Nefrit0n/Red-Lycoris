@@ -2,13 +2,12 @@
 
 BEGIN;
 
-DROP INDEX IF EXISTS idx_findings_vulnerability_intel_id;
-DROP INDEX IF EXISTS idx_vuln_intel_vulnerability_id;
+DROP INDEX IF EXISTS idx_vuln_intel_next_retry;
+DROP INDEX IF EXISTS idx_vuln_intel_identifier;
+DROP TABLE IF EXISTS vuln_intel;
 
-ALTER TABLE findings
-    DROP COLUMN IF EXISTS vulnerability_intel_id;
-
-DROP TABLE IF EXISTS vulnerability_intel;
+DROP INDEX IF EXISTS idx_finding_vuln_identifiers_identifier;
+DROP TABLE IF EXISTS finding_vuln_identifiers;
 
 ALTER TABLE findings
     DROP COLUMN IF EXISTS raw_data;
