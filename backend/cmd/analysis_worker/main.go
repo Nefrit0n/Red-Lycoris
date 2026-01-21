@@ -231,6 +231,7 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 			importResult, importErr = importing.ImportFindings(ctx, db, importing.ImportParams{
 				Scanner:      scanner,
 				Report:       bytes,
+				SourceType:   "scanner",
 				ProductID:    importing.NullUUIDPtr(job.ProductID),
 				EngagementID: importing.NullUUIDPtr(job.EngagementID),
 				CreatedBy:    importing.NullUUIDPtr(job.CreatedBy),

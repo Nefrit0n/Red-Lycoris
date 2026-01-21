@@ -56,14 +56,15 @@ func CreateProduct(ctx context.Context, db *sql.DB, product *models.Product) err
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO products (id, name, slug, description, identifier, version, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO products (id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		product.ID,
 		product.Name,
 		product.Slug,
 		nullStringPtr(product.Description),
 		nullStringPtr(product.Identifier),
 		nullStringPtr(product.Version),
+		nullStringPtr(product.AssetCriticality),
 		product.CreatedAt,
 		product.UpdatedAt,
 	)
@@ -73,7 +74,7 @@ func CreateProduct(ctx context.Context, db *sql.DB, product *models.Product) err
 func FindProductByIdentifier(ctx context.Context, db *sql.DB, identifier string) (*models.Product, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, name, slug, description, identifier, version, created_at, updated_at
+		`SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
 		 FROM products
 		 WHERE identifier = $1
 		 LIMIT 1`,
@@ -86,7 +87,7 @@ func FindProductByNameVersion(ctx context.Context, db *sql.DB, name string, vers
 	if version == nil {
 		row := db.QueryRowContext(
 			ctx,
-			`SELECT id, name, slug, description, identifier, version, created_at, updated_at
+			`SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
 			 FROM products
 			 WHERE name = $1 AND version IS NULL
 			 LIMIT 1`,
@@ -97,7 +98,7 @@ func FindProductByNameVersion(ctx context.Context, db *sql.DB, name string, vers
 
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, name, slug, description, identifier, version, created_at, updated_at
+		`SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
 		 FROM products
 		 WHERE name = $1 AND version = $2
 		 LIMIT 1`,
@@ -110,7 +111,7 @@ func FindProductByNameVersion(ctx context.Context, db *sql.DB, name string, vers
 func FindProductBySlug(ctx context.Context, db *sql.DB, slug string) (*models.Product, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, name, slug, description, identifier, version, created_at, updated_at
+		`SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
 		 FROM products
 		 WHERE slug = $1
 		 LIMIT 1`,
@@ -151,14 +152,16 @@ func CreateScanResult(ctx context.Context, db *sql.DB, scanResult *models.ScanRe
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO scan_results (id, engagement_id, product_id, uploader_id, import_job_id, scanner, raw_report, processed_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		`INSERT INTO scan_results (id, engagement_id, product_id, uploader_id, import_job_id, scanner, source_type, source_version, raw_report, processed_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		scanResult.ID,
 		anyUUIDPtr(scanResult.EngagementID),
 		anyUUIDPtr(scanResult.ProductID),
 		anyUUIDPtr(scanResult.UploaderID),
 		anyUUIDPtr(scanResult.ImportJobID),
 		scanResult.Scanner,
+		anyStringPtr(scanResult.SourceType),
+		anyStringPtr(scanResult.SourceVersion),
 		anyRawJSON(scanResult.RawReport),
 		scanResult.ProcessedAt,
 		scanResult.CreatedAt,
@@ -184,8 +187,8 @@ func createFindingWithExecer(ctx context.Context, ex execer, finding *models.Fin
 
 	_, err := ex.ExecContext(
 		ctx,
-		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
 		finding.ID,
 		anyUUIDPtr(finding.ScanResultID),
 		anyUUIDPtr(finding.ProductID),
@@ -200,6 +203,12 @@ func createFindingWithExecer(ctx context.Context, ex execer, finding *models.Fin
 		finding.FirstSeenAt,
 		finding.LastSeenAt,
 		finding.RepeatCount,
+		anyStringPtr(finding.SourceType),
+		anyStringPtr(finding.SourceVersion),
+		anyStringPtr(finding.EndpointMethod),
+		anyStringPtr(finding.EndpointPath),
+		anyRawJSON(finding.Evidence),
+		anyRawJSON(finding.RawData),
 		finding.CreatedAt,
 		finding.UpdatedAt,
 	)
@@ -246,6 +255,7 @@ func scanProductRow(row *sql.Row) (*models.Product, error) {
 	var description sql.NullString
 	var identifier sql.NullString
 	var version sql.NullString
+	var assetCriticality sql.NullString
 
 	if err := row.Scan(
 		&product.ID,
@@ -254,6 +264,7 @@ func scanProductRow(row *sql.Row) (*models.Product, error) {
 		&description,
 		&identifier,
 		&version,
+		&assetCriticality,
 		&product.CreatedAt,
 		&product.UpdatedAt,
 	); err != nil {
@@ -271,6 +282,9 @@ func scanProductRow(row *sql.Row) (*models.Product, error) {
 	}
 	if version.Valid {
 		product.Version = &version.String
+	}
+	if assetCriticality.Valid {
+		product.AssetCriticality = &assetCriticality.String
 	}
 
 	return &product, nil

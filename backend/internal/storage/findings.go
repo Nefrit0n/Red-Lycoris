@@ -28,26 +28,33 @@ type FindingListItem struct {
 	RepeatCount  int
 	DuplicateID  uuid.NullUUID
 	Scanner      sql.NullString
+	SourceType   sql.NullString
 }
 
 type FindingDetail struct {
-	ID          uuid.UUID
-	Title       string
-	Description sql.NullString
-	Fingerprint string
-	Severity    string
-	Status      string
-	ProductID   uuid.NullUUID
-	ProductName sql.NullString
-	AssigneeID  uuid.NullUUID
-	ImportJobID uuid.NullUUID
-	FirstSeenAt sql.NullTime
-	LastSeenAt  sql.NullTime
-	RepeatCount int
-	DuplicateID uuid.NullUUID
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	DeletedAt   sql.NullTime
+	ID             uuid.UUID
+	Title          string
+	Description    sql.NullString
+	Fingerprint    string
+	Severity       string
+	Status         string
+	ProductID      uuid.NullUUID
+	ProductName    sql.NullString
+	AssigneeID     uuid.NullUUID
+	ImportJobID    uuid.NullUUID
+	FirstSeenAt    sql.NullTime
+	LastSeenAt     sql.NullTime
+	RepeatCount    int
+	DuplicateID    uuid.NullUUID
+	SourceType     sql.NullString
+	SourceVersion  sql.NullString
+	EndpointMethod sql.NullString
+	EndpointPath   sql.NullString
+	Evidence       []byte
+	RawData        []byte
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	DeletedAt      sql.NullTime
 }
 
 type FindingFilters struct {
@@ -55,6 +62,7 @@ type FindingFilters struct {
 	Status           string
 	OccurrenceStatus string
 	ScannerType      string
+	SourceType       string
 	ProductID        *uuid.UUID
 	ImportJobID      *uuid.UUID
 	Query            string
@@ -113,6 +121,11 @@ func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []
 	if filters.ScannerType != "" {
 		args = append(args, filters.ScannerType)
 		whereClause += fmt.Sprintf(" AND sr.scanner = $%d", startIndex+len(args))
+	}
+
+	if filters.SourceType != "" {
+		args = append(args, filters.SourceType)
+		whereClause += fmt.Sprintf(" AND f.source_type = $%d", startIndex+len(args))
 	}
 
 	if filters.OccurrenceStatus != "" {
@@ -188,7 +201,8 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			f.created_at, f.updated_at,
 			f.last_seen_at, f.repeat_count,
 			f.duplicate_id,
-			sr.scanner
+			sr.scanner,
+			f.source_type
 		FROM findings f
 		LEFT JOIN products p ON p.id = f.product_id
 		LEFT JOIN users u ON u.id = f.assignee_id
@@ -229,6 +243,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.RepeatCount,
 			&item.DuplicateID,
 			&item.Scanner,
+			&item.SourceType,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -314,6 +329,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 			f.product_id, p.name,
 			f.assignee_id, f.import_job_id,
 			f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id,
+			f.source_type, f.source_version, f.endpoint_method, f.endpoint_path, f.evidence, f.raw_data,
 			f.created_at, f.updated_at, f.deleted_at
 		 FROM findings f
 		 LEFT JOIN products p ON p.id = f.product_id
@@ -337,6 +353,12 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		&detail.LastSeenAt,
 		&detail.RepeatCount,
 		&detail.DuplicateID,
+		&detail.SourceType,
+		&detail.SourceVersion,
+		&detail.EndpointMethod,
+		&detail.EndpointPath,
+		&detail.Evidence,
+		&detail.RawData,
 		&detail.CreatedAt,
 		&detail.UpdatedAt,
 		&detail.DeletedAt,
@@ -436,7 +458,7 @@ func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateF
 		UPDATE findings
 		SET %s
 		WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at, deleted_at`,
+		RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
 		strings.Join(setClauses, ", "),
 		len(args),
 	)
@@ -460,7 +482,7 @@ func SoftDeleteFinding(ctx context.Context, db *sql.DB, id uuid.UUID) (*models.F
 		`UPDATE findings
 		 SET deleted_at = $1, updated_at = $1
 		 WHERE id = $2 AND deleted_at IS NULL
-		 RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, created_at, updated_at, deleted_at`,
+		 RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
 		now,
 		id,
 	)
@@ -485,6 +507,12 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 	var importJobID uuid.NullUUID
 	var description sql.NullString
 	var deletedAt sql.NullTime
+	var sourceType sql.NullString
+	var sourceVersion sql.NullString
+	var endpointMethod sql.NullString
+	var endpointPath sql.NullString
+	var evidence []byte
+	var rawData []byte
 
 	if err := row.Scan(
 		&finding.ID,
@@ -501,6 +529,12 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 		&finding.FirstSeenAt,
 		&finding.LastSeenAt,
 		&finding.RepeatCount,
+		&sourceType,
+		&sourceVersion,
+		&endpointMethod,
+		&endpointPath,
+		&evidence,
+		&rawData,
 		&finding.CreatedAt,
 		&finding.UpdatedAt,
 		&deletedAt,
@@ -531,6 +565,28 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 	if importJobID.Valid {
 		value := importJobID.UUID
 		finding.ImportJobID = &value
+	}
+	if sourceType.Valid {
+		value := sourceType.String
+		finding.SourceType = &value
+	}
+	if sourceVersion.Valid {
+		value := sourceVersion.String
+		finding.SourceVersion = &value
+	}
+	if endpointMethod.Valid {
+		value := endpointMethod.String
+		finding.EndpointMethod = &value
+	}
+	if endpointPath.Valid {
+		value := endpointPath.String
+		finding.EndpointPath = &value
+	}
+	if len(evidence) > 0 {
+		finding.Evidence = evidence
+	}
+	if len(rawData) > 0 {
+		finding.RawData = rawData
 	}
 	if deletedAt.Valid {
 		value := deletedAt.Time
