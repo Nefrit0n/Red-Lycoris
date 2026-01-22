@@ -23,7 +23,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { fetchProducts, fetchProductsWithStats } from "../api/products";
 import PaginationControl from "../components/PaginationControl";
 import ProductCard, { ProductCardData } from "../components/ProductCard";
-import { Product, ProductWithStats } from "../types/products";
+import { ProductWithStats } from "../types/products";
 
 type ViewMode = "table" | "cards";
 

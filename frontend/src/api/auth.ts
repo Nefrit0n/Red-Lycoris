@@ -5,11 +5,9 @@ import {
 } from "../types/auth";
 import {
   clearToken,
-  getJsonHeaders,
-  getAuthHeaders,
   setToken,
-  parseApiResponse,
 } from "./http";
+import { ApiError, request } from "./client";
 
 const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
 const USER_PROFILE_KEY = "lotus_warden_user_profile";
@@ -20,24 +18,25 @@ const USER_PROFILE_KEY = "lotus_warden_user_profile";
 export const login = async (
   payload: LoginRequest
 ): Promise<LoginResponse> => {
-  const response = await fetch("/api/v1/auth/login", {
-    method: "POST",
-    headers: getJsonHeaders(),
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Неверный логин или пароль");
+  let result: LoginResponse;
+  try {
+    result = await request<LoginResponse>("/api/v1/auth/login", {
+      method: "POST",
+      body: payload,
+      json: true,
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.status === 401) {
+        throw new Error("Неверный логин или пароль");
+      }
+      if (error.status === 403) {
+        throw new Error("Доступ запрещён");
+      }
+      throw new Error(`Ошибка входа (${error.status})`);
     }
-    if (response.status === 403) {
-      throw new Error("Доступ запрещён");
-    }
-    throw new Error(`Ошибка входа (${response.status})`);
+    throw error;
   }
-
-  // parseApiResponse уже разворачивает { success, data }
-  const result = await parseApiResponse<LoginResponse>(response);
 
   // Явная проверка контракта (fail-fast)
   if (!result.token) {
@@ -61,23 +60,25 @@ export const login = async (
 export const changePassword = async (
   payload: ChangePasswordRequest
 ): Promise<void> => {
-  const response = await fetch("/api/v1/auth/change-password", {
-    method: "POST",
-    headers: getJsonHeaders(),
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Сессия истекла");
+  let result: { token?: string };
+  try {
+    result = await request<{ token?: string }>("/api/v1/auth/change-password", {
+      method: "POST",
+      body: payload,
+      json: true,
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.status === 401) {
+        throw new Error("Сессия истекла");
+      }
+      if (error.status === 403) {
+        throw new Error("Требуется смена пароля");
+      }
+      throw new Error(`Ошибка смены пароля (${error.status})`);
     }
-    if (response.status === 403) {
-      throw new Error("Требуется смена пароля");
-    }
-    throw new Error(`Ошибка смены пароля (${response.status})`);
+    throw error;
   }
-
-  const result = await parseApiResponse<{ token?: string }>(response);
   if (result?.token) {
     setToken(result.token);
   }
@@ -88,9 +89,8 @@ export const changePassword = async (
  * Logout
  */
 export const logout = async (): Promise<void> => {
-  await fetch("/api/v1/auth/logout", {
+  await request<void>("/api/v1/auth/logout", {
     method: "POST",
-    headers: getAuthHeaders(),
   });
 
   clearToken();

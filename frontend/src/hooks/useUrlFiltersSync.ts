@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Finding,
+  FindingListItemDTO,
   FindingOccurrenceStatus,
   FindingSeverity,
   FindingStatus,
@@ -39,7 +39,7 @@ export interface FiltersState {
   showRepeats: boolean;
 
   // Sorting
-  sortField: keyof Finding;
+  sortField: keyof FindingListItemDTO;
   sortOrder: 'asc' | 'desc';
 
   // Drawer
@@ -59,7 +59,7 @@ export interface FiltersActions {
   setDateFrom: (value: string) => void;
   setDateTo: (value: string) => void;
   setShowRepeats: (value: boolean) => void;
-  setSortField: (value: keyof Finding) => void;
+  setSortField: (value: keyof FindingListItemDTO) => void;
   setSortOrder: (value: 'asc' | 'desc') => void;
   setSelectedFindingId: (value: string | null) => void;
   resetFilters: () => void;
@@ -153,7 +153,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     const showRepeats = includeRepeats || canonicalOnly === 'false';
 
     const sortFieldParam = getUrlParam(search, 'sortField', 'lastSeenAt');
-    const allowedSortFields: Array<keyof Finding> = [
+    const allowedSortFields: Array<keyof FindingListItemDTO> = [
       'title',
       'productName',
       'severity',
@@ -162,8 +162,8 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       'createdAt',
       'updatedAt',
     ];
-    const sortField = allowedSortFields.includes(sortFieldParam as keyof Finding)
-      ? (sortFieldParam as keyof Finding)
+    const sortField = allowedSortFields.includes(sortFieldParam as keyof FindingListItemDTO)
+      ? (sortFieldParam as keyof FindingListItemDTO)
       : 'lastSeenAt';
 
     const sortOrder = getUrlParam(search, 'sortOrder') === 'asc' ? 'asc' : 'desc';

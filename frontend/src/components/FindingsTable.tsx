@@ -36,11 +36,10 @@ import { ReactNode, useCallback, useMemo, useState } from "react";
 import SecurityIcon from "@mui/icons-material/Security";
 import { Link } from "react-router-dom";
 import {
-  Finding,
+  FindingListItemDTO,
   FindingOccurrenceStatus,
   FindingSeverity,
   FindingStatus,
-  SemgrepEvidence,
 } from "../types/findings";
 
 /**
@@ -185,13 +184,13 @@ const statusConfig: Record<FindingStatus, {
 // т.к. repeat/age badges теперь используют кастомную стилизацию
 
 interface FindingsTableProps {
-  data: Finding[];
+  data: FindingListItemDTO[];
   selectedIds: string[];
-  sortField: keyof Finding;
+  sortField: keyof FindingListItemDTO;
   sortOrder: "asc" | "desc";
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (id: string) => void;
-  onSortChange: (field: keyof Finding) => void;
+  onSortChange: (field: keyof FindingListItemDTO) => void;
   loading: boolean;
   errorMessage: string | null;
   onRetry: () => void;
@@ -223,14 +222,14 @@ interface FindingsTableProps {
 interface FindingGroup {
   title: string;
   shortTitle: string;
-  findings: Finding[];
+  findings: FindingListItemDTO[];
   highestSeverity: FindingSeverity;
   statuses: Set<FindingStatus>;
 }
 
 // Функция для группировки findings по title
-const groupFindingsByTitle = (findings: Finding[]): FindingGroup[] => {
-  const groups = new Map<string, Finding[]>();
+const groupFindingsByTitle = (findings: FindingListItemDTO[]): FindingGroup[] => {
+  const groups = new Map<string, FindingListItemDTO[]>();
 
   findings.forEach(f => {
     const key = f.title;
@@ -340,49 +339,6 @@ const formatSmartTitle = (title: string): { display: string; isShortened: boolea
   }
 
   return { display: title, isShortened: false };
-};
-
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0;
-
-const getSemgrepEvidence = (finding: Finding): SemgrepEvidence | null => {
-  const evidence = finding.evidence;
-  if (!evidence || typeof evidence !== "object") return null;
-  if (isNonEmptyString(evidence.scannerType) && evidence.scannerType !== "semgrep") {
-    return null;
-  }
-  return evidence;
-};
-
-const buildLocationLabel = (evidence: SemgrepEvidence | null) => {
-  const path = isNonEmptyString(evidence?.path) ? evidence?.path : null;
-  const startLine =
-    typeof evidence?.start?.line === "number" && evidence.start.line > 0
-      ? evidence.start.line
-      : null;
-  const startCol =
-    typeof evidence?.start?.col === "number" && evidence.start.col > 0
-      ? evidence.start.col
-      : null;
-  const endLine =
-    typeof evidence?.end?.line === "number" && evidence.end.line > 0 ? evidence.end.line : null;
-  const endCol =
-    typeof evidence?.end?.col === "number" && evidence.end.col > 0 ? evidence.end.col : null;
-
-  if (path) {
-    const startLabel = startLine
-      ? `${startLine}${startCol ? `:${startCol}` : ""}`
-      : "";
-    const endLabel = endLine ? `${endLine}${endCol ? `:${endCol}` : ""}` : "";
-    if (startLabel && endLabel) {
-      return `${path}:${startLabel} → ${endLabel}`;
-    }
-    if (startLabel) {
-      return `${path}:${startLabel}`;
-    }
-    return path;
-  }
-  return "";
 };
 
 const buildFindingLink = (id: string, returnTo: string) => {
@@ -734,26 +690,10 @@ export default function FindingsTable({
               const lastSeenAt = f.lastSeenAt || f.updatedAt;
               const ageDays = getAgeDays(f.firstSeenAt || f.createdAt);
               const showAgeWarning = ageDays >= 30;
-              const evidence = getSemgrepEvidence(f);
-              const locationLabel = buildLocationLabel(evidence);
-              const primaryLabel = locationLabel || f.title;
-
-              const ruleId: string | null = isNonEmptyString(evidence?.ruleId)
-                ? evidence.ruleId
-                : isNonEmptyString((f as any).rule_id)
-                  ? (f as any).rule_id
-                  : null;
-
-              const shouldShowRule =
-                ruleId !== null &&
-                ruleId.trim() !== primaryLabel.trim() &&
-                !primaryLabel.includes(ruleId);
-
-              const message = isNonEmptyString(evidence?.message)
-                ? evidence?.message
-                : isNonEmptyString(f.description)
-                  ? f.description
-                  : null;
+              const primaryLabel = f.title;
+              const ruleId: string | null = null;
+              const shouldShowRule = false;
+              const message: string | null = null;
               const intelSummary = f.intel_summary;
               const cvssScore =
                 typeof intelSummary?.cvss?.score === "number"
