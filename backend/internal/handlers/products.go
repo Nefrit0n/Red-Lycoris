@@ -3,8 +3,9 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
-	"time"
 
+	v1dto "lotus-warden/backend/internal/dto/v1"
+	v1mapper "lotus-warden/backend/internal/mapper/v1"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/storage"
 
@@ -16,16 +17,6 @@ import (
 type ProductsHandler struct {
 	db        *sql.DB
 	validator *validator.Validate
-}
-
-type ProductResponse struct {
-	ID                string  `json:"id"`
-	Name              string  `json:"name"`
-	Identifier        *string `json:"identifier,omitempty"`
-	Version           *string `json:"version,omitempty"`
-	AssetCriticality  *string `json:"assetCriticality,omitempty"`
-	LastScanAt        *string `json:"lastScanAt,omitempty"`
-	FindingsOpenCount int     `json:"findingsOpenCount"`
 }
 
 type CreateProductRequest struct {
@@ -51,9 +42,9 @@ func (h *ProductsHandler) List(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch products"})
 	}
 
-	response := make([]ProductResponse, 0, len(items))
+	response := make([]v1dto.ProductListItemDTO, 0, len(items))
 	for _, item := range items {
-		response = append(response, mapProductListItem(item))
+		response = append(response, v1mapper.ProductListItem(item))
 	}
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response, "total": total})
 }
@@ -88,14 +79,7 @@ func (h *ProductsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to create product"})
 	}
 
-	return c.Status(http.StatusCreated).JSON(fiber.Map{"success": true, "data": ProductResponse{
-		ID:                product.ID.String(),
-		Name:              product.Name,
-		Identifier:        product.Identifier,
-		Version:           product.Version,
-		AssetCriticality:  product.AssetCriticality,
-		FindingsOpenCount: 0,
-	}})
+	return c.Status(http.StatusCreated).JSON(fiber.Map{"success": true, "data": v1mapper.ProductDetail(*product, 0, nil)})
 }
 
 func (h *ProductsHandler) Get(c *fiber.Ctx) error {
@@ -123,38 +107,6 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 	product.Version = version
 	product.AssetCriticality = assetCriticality
 
-	response := mapProductListItem(product)
+	response := v1mapper.ProductDetailFromListItem(product)
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response})
-}
-
-func mapProductListItem(item storage.ProductListItem) ProductResponse {
-	var identifier *string
-	if item.Identifier.Valid {
-		value := item.Identifier.String
-		identifier = &value
-	}
-	var version *string
-	if item.Version.Valid {
-		value := item.Version.String
-		version = &value
-	}
-	var assetCriticality *string
-	if item.AssetCriticality.Valid {
-		value := item.AssetCriticality.String
-		assetCriticality = &value
-	}
-	var lastScanAt *string
-	if item.LastScanAt.Valid {
-		value := item.LastScanAt.Time.Format(time.RFC3339)
-		lastScanAt = &value
-	}
-	return ProductResponse{
-		ID:                item.ID.String(),
-		Name:              item.Name,
-		Identifier:        identifier,
-		Version:           version,
-		AssetCriticality:  assetCriticality,
-		LastScanAt:        lastScanAt,
-		FindingsOpenCount: item.FindingsOpenCount,
-	}
 }

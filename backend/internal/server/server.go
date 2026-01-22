@@ -15,7 +15,9 @@ import (
 )
 
 func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) *fiber.App {
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		BodyLimit: 12 << 20,
+	})
 	app.Use(requestid.New())
 	app.Use(logger.New(logger.Config{
 		Format: "${time} ${status} ${latency} ${method} ${path} request_id=${locals:requestid}\n",
