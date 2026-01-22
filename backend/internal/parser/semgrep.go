@@ -158,6 +158,11 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 		if meta.CweTop25_2021 {
 			rawData["cwe_top25_2021"] = true
 		}
+
+		// Semgrep "asvs" может быть bool / object / array — храним как raw JSON
+		if len(meta.ASVS) > 0 && string(meta.ASVS) != "null" {
+			rawData["asvs"] = meta.ASVS
+		}
 	}
 
 	return rawData
@@ -199,24 +204,58 @@ type semgrepExtra struct {
 	FixRegex    *semgrepFixRegex `json:"fix_regex"`
 }
 
+// stringList умеет принимать как ["a","b"], так и "a"
+type stringList []string
+
+func (s *stringList) UnmarshalJSON(data []byte) error {
+	data = []byte(strings.TrimSpace(string(data)))
+	if len(data) == 0 || string(data) == "null" {
+		*s = nil
+		return nil
+	}
+
+	// Try array of strings
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*s = arr
+		return nil
+	}
+
+	// Try single string
+	var one string
+	if err := json.Unmarshal(data, &one); err == nil {
+		one = strings.TrimSpace(one)
+		if one == "" {
+			*s = nil
+			return nil
+		}
+		*s = []string{one}
+		return nil
+	}
+
+	// Unknown type -> ignore softly (do not break parsing)
+	*s = nil
+	return nil
+}
+
 type semgrepMetadata struct {
 	Category           string          `json:"category"`
-	Subcategory        []string        `json:"subcategory"`
-	Technology         []string        `json:"technology"`
-	Cwe                []string        `json:"cwe"`
-	Owasp              []string        `json:"owasp"`
-	References         []string        `json:"references"`
+	Subcategory        stringList      `json:"subcategory"`
+	Technology         stringList      `json:"technology"`
+	Cwe                stringList      `json:"cwe"`
+	Owasp              stringList      `json:"owasp"`
+	References         stringList      `json:"references"`
 	Confidence         string          `json:"confidence"`
 	Likelihood         string          `json:"likelihood"`
 	Impact             string          `json:"impact"`
-	VulnerabilityClass []string        `json:"vulnerability_class"`
+	VulnerabilityClass stringList      `json:"vulnerability_class"`
 	License            string          `json:"license"`
 	Source             string          `json:"source"`
 	Shortlink          string          `json:"shortlink"`
 	CweTop25           bool            `json:"cwe2022-top25"`
 	CweTop25_2021      bool            `json:"cwe2021-top25"`
-	OwaspTop10         bool            `json:"asvs"`
-	Raw                json.RawMessage `json:"-"` // Store full metadata for extensibility
+	ASVS               json.RawMessage `json:"asvs"` // может быть bool/object/array
+	Raw                json.RawMessage `json:"-"`    // Store full metadata for extensibility
 }
 
 func (m *semgrepMetadata) UnmarshalJSON(data []byte) error {
@@ -334,6 +373,9 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		}
 		if len(meta.References) > 0 {
 			evidence["references"] = meta.References
+		}
+		if len(meta.ASVS) > 0 && string(meta.ASVS) != "null" {
+			evidence["asvs"] = meta.ASVS
 		}
 	}
 
