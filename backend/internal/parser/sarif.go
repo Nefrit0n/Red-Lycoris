@@ -116,3 +116,17 @@ func mapSarifLevel(level string) string {
 		return "low"
 	}
 }
+
+type SarifParser struct{}
+
+func (p *SarifParser) ScannerType() string {
+	return "sarif"
+}
+
+func (p *SarifParser) CanParse(data []byte) bool {
+	return canParseSarif(data)
+}
+
+func (p *SarifParser) Parse(data []byte) ([]Finding, error) {
+	return parseSarif(data, "")
+}
