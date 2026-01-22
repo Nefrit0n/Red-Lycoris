@@ -2,17 +2,12 @@ import {
   ApiResponse,
   BulkUpdateResponse,
   FetchFindingsParams,
-  Finding,
-  FindingDetail,
+  FindingListItemDTO,
+  FindingDetailDTO,
   FindingNeighbors,
   FindingStatus,
 } from "../types/findings";
-import {
-  getAuthHeaders,
-  getJsonHeaders,
-  parseApiResponse,
-  parseListApiResponse,
-} from "./http";
+import { request, requestList } from "./client";
 
 export const fetchFindings = async (
   params: FetchFindingsParams,
@@ -50,33 +45,17 @@ export const fetchFindings = async (
   if (params.sortField) searchParams.set("sortField", String(params.sortField));
   if (params.sortOrder) searchParams.set("sortOrder", params.sortOrder);
 
-  const response = await fetch(`/api/v1/findings?${searchParams.toString()}`, {
-    method: "GET",
+  return requestList<FindingListItemDTO>("/api/v1/findings", {
     signal,
-    headers: getAuthHeaders(),
+    query: searchParams,
   });
-
-  // parseListApiResponse сам:
-  // - корректно распарсит data/items/success.data и т.п.
-  // - кинет нормальную ошибку на 401/403
-  return parseListApiResponse<Finding>(response);
 };
 
 export const fetchFindingDetail = async (
   id: string,
   signal?: AbortSignal
 ): Promise<FindingDetail> => {
-  const response = await fetch(`/api/v1/findings/${id}`, {
-    method: "GET",
-    signal,
-    headers: getAuthHeaders(),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Не удалось загрузить детали уязвимости (${response.status})`);
-  }
-
-  return parseApiResponse<FindingDetail>(response);
+  return request<FindingDetailDTO>(`/api/v1/findings/${id}`, { signal });
 };
 
 export const updateFindingStatus = async (
@@ -84,18 +63,12 @@ export const updateFindingStatus = async (
   status: FindingStatus,
   signal?: AbortSignal
 ): Promise<FindingDetail> => {
-  const response = await fetch(`/api/v1/findings/${id}`, {
+  return request<FindingDetailDTO>(`/api/v1/findings/${id}`, {
     method: "PATCH",
     signal,
-    headers: getJsonHeaders(),
-    body: JSON.stringify({ status }),
+    body: { status },
+    json: true,
   });
-
-  if (!response.ok) {
-    throw new Error(`Не удалось обновить статус (${response.status})`);
-  }
-
-  return parseApiResponse<FindingDetail>(response);
 };
 
 export const addFindingComment = async (
@@ -103,18 +76,12 @@ export const addFindingComment = async (
   body: string,
   signal?: AbortSignal
 ): Promise<void> => {
-  const response = await fetch(`/api/v1/findings/${id}/comments`, {
+  await request<void>(`/api/v1/findings/${id}/comments`, {
     method: "POST",
     signal,
-    headers: getJsonHeaders(),
-    body: JSON.stringify({ body }),
+    body: { body },
+    json: true,
   });
-
-  if (!response.ok) {
-    throw new Error(`Не удалось добавить комментарий (${response.status})`);
-  }
-
-  await parseApiResponse(response);
 };
 
 export const fetchFindingNeighbors = async (
@@ -122,18 +89,10 @@ export const fetchFindingNeighbors = async (
   queryParams: string,
   signal?: AbortSignal
 ): Promise<FindingNeighbors> => {
-  const query = queryParams ? `?${queryParams}` : "";
-  const response = await fetch(`/api/v1/findings/${id}/neighbors${query}`, {
-    method: "GET",
+  return request<FindingNeighbors>(`/api/v1/findings/${id}/neighbors`, {
     signal,
-    headers: getAuthHeaders(),
+    query: queryParams ? new URLSearchParams(queryParams) : undefined,
   });
-
-  if (!response.ok) {
-    throw new Error(`Не удалось загрузить соседние находки (${response.status})`);
-  }
-
-  return parseApiResponse<FindingNeighbors>(response);
 };
 
 export const bulkUpdateFindings = async (payload: {
@@ -155,15 +114,9 @@ export const bulkUpdateFindings = async (payload: {
   action: "set_status" | "assign" | "dismiss";
   payload: Record<string, unknown>;
 }): Promise<BulkUpdateResponse> => {
-  const response = await fetch("/api/v1/findings/bulk", {
+  return request<BulkUpdateResponse>("/api/v1/findings/bulk", {
     method: "POST",
-    headers: getJsonHeaders(),
-    body: JSON.stringify(payload),
+    body: payload,
+    json: true,
   });
-
-  if (!response.ok) {
-    throw new Error(`Не удалось выполнить массовое действие (${response.status})`);
-  }
-
-  return parseApiResponse<BulkUpdateResponse>(response);
 };

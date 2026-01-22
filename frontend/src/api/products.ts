@@ -1,27 +1,24 @@
-import { Product, ProductWithStats, ProductDetail } from "../types/products";
-import { getAuthHeaders, parseListApiResponse } from "./http";
+import {
+  ProductDetailDTO,
+  ProductDetailView,
+  ProductListItemDTO,
+  ProductWithStats,
+} from "../types/products";
+import { ImportJobListItemDTO } from "../types/imports";
+import { request, requestList, requestWithMeta } from "./client";
 
 export const fetchProducts = async (
   limit: number,
   offset: number,
   signal?: AbortSignal
-): Promise<{ data: Product[]; total: number }> => {
-  const searchParams = new URLSearchParams({
-    limit: String(limit),
-    offset: String(offset),
-  });
-
-  const response = await fetch(`/api/v1/products?${searchParams.toString()}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
+): Promise<{ data: ProductListItemDTO[]; total: number }> => {
+  return requestList<ProductListItemDTO>("/api/v1/products", {
     signal,
+    query: {
+      limit,
+      offset,
+    },
   });
-
-  if (!response.ok && response.status !== 401 && response.status !== 403) {
-    throw new Error(`Не удалось загрузить список продуктов (${response.status})`);
-  }
-
-  return parseListApiResponse<Product>(response);
 };
 
 export const fetchProductsWithStats = async (
@@ -29,55 +26,14 @@ export const fetchProductsWithStats = async (
   offset: number,
   signal?: AbortSignal
 ): Promise<{ data: ProductWithStats[]; total: number }> => {
-  // Fetch base products
   const productsResponse = await fetchProducts(limit, offset, signal);
 
-  // For each product, fetch stats (we'll mock severity breakdown for now)
-  // In production, this would be a separate API endpoint or included in the products response
-  const productsWithStats: ProductWithStats[] = await Promise.all(
-    productsResponse.data.map(async (product) => {
-      try {
-        // Try to fetch findings stats for this product
-        const statsResponse = await fetch(
-          `/api/v1/findings?productId=${product.id}&limit=1`,
-          {
-            method: "GET",
-            headers: getAuthHeaders(),
-            signal,
-          }
-        );
-
-        if (statsResponse.ok) {
-          const statsJson = await statsResponse.json();
-          const severityCounts = statsJson.meta?.severityCounts;
-
-          if (severityCounts) {
-            return {
-              ...product,
-              severityBreakdown: {
-                critical: severityCounts.critical || 0,
-                high: severityCounts.high || 0,
-                medium: severityCounts.medium || 0,
-                low: severityCounts.low || 0,
-                info: severityCounts.info || 0,
-              },
-              trend: "flat" as const,
-              trendValue: 0,
-            };
-          }
-        }
-      } catch {
-        // Ignore errors and return product without stats
-      }
-
-      return {
-        ...product,
-        severityBreakdown: undefined,
-        trend: "flat" as const,
-        trendValue: 0,
-      };
-    })
-  );
+  const productsWithStats: ProductWithStats[] = productsResponse.data.map((product) => ({
+    ...product,
+    severityBreakdown: undefined,
+    trend: "flat",
+    trendValue: 0,
+  }));
 
   return {
     data: productsWithStats,
@@ -88,82 +44,42 @@ export const fetchProductsWithStats = async (
 export const fetchProductDetail = async (
   productId: string,
   signal?: AbortSignal
-): Promise<ProductDetail> => {
-  const response = await fetch(`/api/v1/products/${productId}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
+): Promise<ProductDetailView> => {
+  const product = await request<ProductDetailDTO>(`/api/v1/products/${productId}`, {
     signal,
   });
 
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error("Продукт не найден");
-    }
-    throw new Error(`Не удалось загрузить продукт (${response.status})`);
-  }
-
-  const product = await response.json();
-
-  // Fetch findings stats for this product
-  let severityBreakdown;
+  let recentScans: ProductDetailView["recentScans"];
   try {
-    const statsResponse = await fetch(
-      `/api/v1/findings?productId=${productId}&limit=1`,
+    const scansResponse = await requestWithMeta<{ data: ImportJobListItemDTO[] }>(
+      "/api/v1/import-jobs",
       {
-        method: "GET",
-        headers: getAuthHeaders(),
         signal,
+        query: {
+          productId,
+          limit: 5,
+          offset: 0,
+        },
       }
     );
-
-    if (statsResponse.ok) {
-      const statsJson = await statsResponse.json();
-      const severityCounts = statsJson.meta?.severityCounts;
-      if (severityCounts) {
-        severityBreakdown = {
-          critical: severityCounts.critical || 0,
-          high: severityCounts.high || 0,
-          medium: severityCounts.medium || 0,
-          low: severityCounts.low || 0,
-          info: severityCounts.info || 0,
-        };
-      }
-    }
-  } catch {
-    // Ignore
-  }
-
-  // Fetch recent scans (import jobs) for this product
-  let recentScans;
-  try {
-    const scansResponse = await fetch(
-      `/api/v1/import-jobs?productId=${productId}&limit=5`,
-      {
-        method: "GET",
-        headers: getAuthHeaders(),
-        signal,
-      }
-    );
-
-    if (scansResponse.ok) {
-      const scansJson = await scansResponse.json();
-      recentScans = scansJson.data?.map((scan: any) => ({
+    if (Array.isArray(scansResponse.data)) {
+      recentScans = scansResponse.data.map((scan) => ({
         id: scan.id,
-        scannerType: scan.scannerType || "unknown",
-        status: scan.status || "unknown",
+        scanner: scan.scanner,
+        status: scan.status,
         createdAt: scan.createdAt,
-        findingsCount: scan.findingsCount || 0,
+        findingsNew: scan.findingsNew,
       }));
     }
   } catch {
-    // Ignore
+    // ignore
   }
 
   return {
     ...product,
-    severityBreakdown,
+    severityBreakdown: undefined,
     recentScans,
-    trend: "flat" as const,
+    trend: "flat",
     trendValue: 0,
     totalScans: 0,
     findingsFixedCount: 0,
