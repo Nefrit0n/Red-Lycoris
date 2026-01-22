@@ -1,0 +1,61 @@
+{
+  "id": "7d7a2d3e-48bf-4b2c-80c4-9e9f0f6b2d10",
+  "title": "SQL injection in search endpoint",
+  "description": "User input is concatenated directly into SQL query.",
+  "fingerprint": "sast:sql-injection:search",
+  "severity": "critical",
+  "status": "under_review",
+  "scannerType": "semgrep",
+  "occurrenceStatus": "repeat",
+  "firstSeenAt": "2024-03-10T09:00:00Z",
+  "lastSeenAt": "2024-03-18T08:10:00Z",
+  "repeatCount": 5,
+  "productId": "59e1e604-f0d7-4f86-8d7f-6b0c4d6e32c1",
+  "productName": "Payments API",
+  "assigneeId": "ac48a6c8-2c34-4f84-9b51-2b9e0ef3a2cb",
+  "owner": {
+    "id": "ac48a6c8-2c34-4f84-9b51-2b9e0ef3a2cb",
+    "name": "Victor Lee"
+  },
+  "importJobId": "d47c9d8a-875d-45f2-98ef-bf8da4a33ac3",
+  "createdAt": "2024-03-10T09:00:00Z",
+  "updatedAt": "2024-03-18T08:10:00Z",
+  "category": "SAST",
+  "sourceType": "source",
+  "sourceVersion": "3.4.5",
+  "endpointMethod": "GET",
+  "endpointPath": "/api/v1/search",
+  "details": {
+    "ruleId": "go.sql.injection",
+    "filePath": "internal/search/handler.go",
+    "startLine": 88,
+    "endLine": 96,
+    "snippet": "db.Query(\"SELECT * FROM items WHERE name = '\" + q + \"'\")",
+    "message": "Avoid string concatenation in SQL queries.",
+    "cwe": ["CWE-89"],
+    "owasp": ["A03:2021"]
+  },
+  "comments": [],
+  "events": [],
+  "occurrences": [
+    {
+      "id": "7a8dc0d4-42ce-4f21-9e90-5f3f9a9a4d11",
+      "importJobId": "d47c9d8a-875d-45f2-98ef-bf8da4a33ac3",
+      "seenAt": "2024-03-18T08:10:00Z",
+      "status": "repeat",
+      "scannerType": "semgrep",
+      "snippet": "db.Query(\"SELECT * FROM items WHERE name = '\" + q + \"'\")"
+    }
+  ],
+  "evidence": {
+    "traceId": "3d0a6b2c-5b4e-4ad8-9f01-6b0f4f1b80ff"
+  },
+  "intel_details": {
+    "identifiers": [],
+    "nvd": {},
+    "epss": {},
+    "kev": {},
+    "references": [],
+    "updated_at": "2024-03-18T08:00:00Z"
+  }
+}
