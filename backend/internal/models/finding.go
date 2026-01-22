@@ -20,6 +20,9 @@ const (
 	CategorySCA     = "SCA"
 	CategorySecrets = "SECRETS"
 	CategoryConfig  = "CONFIG"
+	CategoryDAST    = "DAST"
+	CategoryLicense = "LICENSE"
+	CategoryUnknown = "UNKNOWN"
 )
 
 const (
@@ -77,10 +80,10 @@ func (f *Finding) Validate() error {
 	}
 
 	switch f.Category {
-	case CategorySAST, CategorySCA, CategorySecrets, CategoryConfig:
+	case CategorySAST, CategorySCA, CategorySecrets, CategoryConfig, CategoryDAST, CategoryLicense, CategoryUnknown:
 		// ok
 	default:
-		return fmt.Errorf("category must be one of SAST, SCA, SECRETS, CONFIG")
+		return fmt.Errorf("category must be one of SAST, SCA, SECRETS, CONFIG, DAST, LICENSE, UNKNOWN")
 	}
 
 	switch f.Severity {
