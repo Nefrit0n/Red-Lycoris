@@ -260,7 +260,8 @@ export const FindingDetailContent = ({
   const occurrencesIndex = tabIndex++;
   const commentsIndex = tabIndex++;
   const historyIndex = tabIndex++;
-  const duplicatesIndex = data.duplicates ? tabIndex++ : null;
+  const duplicatesIndex = data?.duplicates ? tabIndex++ : null;
+
 
   // Loading state
   if (loading) {
@@ -499,76 +500,75 @@ export const FindingDetailContent = ({
           epssScore !== null ||
           kevFlag ||
           intelReferences.length > 0) && (
-          <Section title="Vulnerability Intelligence" dense={compact}>
-            {intelIdentifiers.length > 0 && (
-              <Stack spacing={1.2}>
-                <Typography variant="caption" color="text.secondary">
-                  Identifiers
-                </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  {intelIdentifiers.map((identifier) => (
+            <Section title="Vulnerability Intelligence" dense={compact}>
+              {intelIdentifiers.length > 0 && (
+                <Stack spacing={1.2}>
+                  <Typography variant="caption" color="text.secondary">
+                    Identifiers
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    {intelIdentifiers.map((identifier) => (
+                      <Chip
+                        key={identifier}
+                        label={identifier}
+                        variant="outlined"
+                        size="small"
+                        onClick={() => handleCopyValue(identifier)}
+                        icon={<ContentCopyIcon fontSize="inherit" />}
+                        sx={{ cursor: "pointer" }}
+                      />
+                    ))}
+                  </Stack>
+                </Stack>
+              )}
+
+              {(cvssScore !== null || epssScore !== null || kevFlag) && (
+                <Stack direction="row" spacing={2} sx={{ mt: 2, flexWrap: "wrap" }}>
+                  {cvssScore !== null && (
                     <Chip
-                      key={identifier}
-                      label={identifier}
-                      variant="outlined"
+                      label={`CVSS${cvssVersion ? ` v${cvssVersion}` : ""}: ${cvssScore.toFixed(1)}`}
+                      color={cvssScore >= 9 ? "error" : cvssScore >= 7 ? "warning" : "success"}
                       size="small"
-                      onClick={() => handleCopyValue(identifier)}
-                      icon={<ContentCopyIcon fontSize="inherit" />}
-                      sx={{ cursor: "pointer" }}
                     />
-                  ))}
+                  )}
+                  {epssScore !== null && (
+                    <Chip
+                      label={`EPSS: ${(epssScore * 100).toFixed(2)}%${epssPercentile !== null
+                          ? ` (p${(epssPercentile * 100).toFixed(1)})`
+                          : ""
+                        }`}
+                      color="primary"
+                      size="small"
+                      variant="outlined"
+                    />
+                  )}
+                  {kevFlag && (
+                    <Chip label="KEV" color="error" size="small" variant="outlined" />
+                  )}
                 </Stack>
-              </Stack>
-            )}
+              )}
 
-            {(cvssScore !== null || epssScore !== null || kevFlag) && (
-              <Stack direction="row" spacing={2} sx={{ mt: 2, flexWrap: "wrap" }}>
-                {cvssScore !== null && (
-                  <Chip
-                    label={`CVSS${cvssVersion ? ` v${cvssVersion}` : ""}: ${cvssScore.toFixed(1)}`}
-                    color={cvssScore >= 9 ? "error" : cvssScore >= 7 ? "warning" : "success"}
-                    size="small"
-                  />
-                )}
-                {epssScore !== null && (
-                  <Chip
-                    label={`EPSS: ${(epssScore * 100).toFixed(2)}%${
-                      epssPercentile !== null
-                        ? ` (p${(epssPercentile * 100).toFixed(1)})`
-                        : ""
-                    }`}
-                    color="primary"
-                    size="small"
-                    variant="outlined"
-                  />
-                )}
-                {kevFlag && (
-                  <Chip label="KEV" color="error" size="small" variant="outlined" />
-                )}
-              </Stack>
-            )}
-
-            {intelReferences.length > 0 && (
-              <Stack spacing={0.5} sx={{ mt: 2 }}>
-                <Typography variant="caption" color="text.secondary">
-                  References
-                </Typography>
-                <Stack spacing={0.5}>
-                  {intelReferences.map((ref) => (
-                    <Stack key={ref.url} direction="row" alignItems="center" spacing={1}>
-                      <MuiLink href={ref.url} target="_blank" rel="noreferrer">
-                        {ref.title || ref.url}
-                      </MuiLink>
-                      <IconButton size="small" onClick={() => handleCopyValue(ref.url)}>
-                        <ContentCopyIcon fontSize="inherit" />
-                      </IconButton>
-                    </Stack>
-                  ))}
+              {intelReferences.length > 0 && (
+                <Stack spacing={0.5} sx={{ mt: 2 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    References
+                  </Typography>
+                  <Stack spacing={0.5}>
+                    {intelReferences.map((ref) => (
+                      <Stack key={ref.url} direction="row" alignItems="center" spacing={1}>
+                        <MuiLink href={ref.url} target="_blank" rel="noreferrer">
+                          {ref.title || ref.url}
+                        </MuiLink>
+                        <IconButton size="small" onClick={() => handleCopyValue(ref.url)}>
+                          <ContentCopyIcon fontSize="inherit" />
+                        </IconButton>
+                      </Stack>
+                    ))}
+                  </Stack>
                 </Stack>
-              </Stack>
-            )}
-          </Section>
-        )}
+              )}
+            </Section>
+          )}
 
         {canEdit && (
           <Box sx={{ mt: 2 }}>
@@ -713,14 +713,12 @@ export const FindingDetailContent = ({
                 <Typography variant="body2">
                   {semgrepEvidence.path || "—"}
                   {semgrepEvidence.start?.line
-                    ? `:${semgrepEvidence.start.line}${
-                        semgrepEvidence.start.col ? `:${semgrepEvidence.start.col}` : ""
-                      }`
+                    ? `:${semgrepEvidence.start.line}${semgrepEvidence.start.col ? `:${semgrepEvidence.start.col}` : ""
+                    }`
                     : ""}
                   {semgrepEvidence.end?.line
-                    ? ` → ${semgrepEvidence.end.line}${
-                        semgrepEvidence.end.col ? `:${semgrepEvidence.end.col}` : ""
-                      }`
+                    ? ` → ${semgrepEvidence.end.line}${semgrepEvidence.end.col ? `:${semgrepEvidence.end.col}` : ""
+                    }`
                     : ""}
                 </Typography>
               </Stack>
@@ -746,9 +744,9 @@ export const FindingDetailContent = ({
                   highlightLines={
                     semgrepEvidence.start?.line && semgrepEvidence.end?.line
                       ? Array.from(
-                          { length: semgrepEvidence.end.line - semgrepEvidence.start.line + 1 },
-                          (_, i) => semgrepEvidence.start!.line + i
-                        )
+                        { length: semgrepEvidence.end.line - semgrepEvidence.start.line + 1 },
+                        (_, i) => semgrepEvidence.start!.line + i
+                      )
                       : undefined
                   }
                 />
