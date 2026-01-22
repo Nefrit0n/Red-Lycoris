@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchFindings } from '../clients/findingsClient';
-import { ApiError } from '../clients/httpClient';
-import { Finding } from '../types/findings';
+import { fetchFindings } from "../api/findings";
+import { ApiError } from "../api/client";
+import { FindingListItemDTO } from "../types/findings";
 import { normalizeDateFrom, normalizeDateTo } from '../utils/urlHelpers';
 import { FiltersState } from './useUrlFiltersSync';
 import useDebouncedValue from './useDebouncedValue';
@@ -12,7 +12,7 @@ interface UseFindingsDataOptions {
 }
 
 interface UseFindingsDataResult {
-  data: Finding[];
+  data: FindingListItemDTO[];
   total: number;
   loading: boolean;
   error: string | null;
@@ -25,7 +25,7 @@ interface UseFindingsDataResult {
  * Handles loading, error states, and debounced search
  */
 export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): UseFindingsDataResult {
-  const [data, setData] = useState<Finding[]>([]);
+  const [data, setData] = useState<FindingListItemDTO[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
