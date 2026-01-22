@@ -64,9 +64,12 @@ func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
 }
 
 func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVulnerability) Finding {
-	titleBase := strings.TrimSpace(vuln.Title)
-	if titleBase == "" {
-		titleBase = vuln.VulnerabilityID
+	title := buildTrivyVulnTitle(vuln)
+
+	// Location includes package name and version for better identification
+	location := strings.TrimSpace(result.Target)
+	if location == "" {
+		location = vuln.PkgName
 	}
 
 	title := titleBase
@@ -86,7 +89,7 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 			title = fmt.Sprintf("%s: %s", shortPkg, titleBase)
 		}
 	}
-	
+
 	// Location includes package name and version for better identification
 	location := strings.TrimSpace(result.Target)
 	if location == "" {
