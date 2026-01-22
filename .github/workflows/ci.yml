@@ -69,6 +69,127 @@ jobs:
         working-directory: backend
         run: go test ./...
 
+  contracts:
+    name: Contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lotus_warden
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      nats:
+        image: nats:2.10-alpine
+        ports:
+          - 4222:4222
+      minio:
+        image: minio/minio:RELEASE.2024-01-18T22-51-28Z
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd="curl -f http://localhost:9000/minio/health/live"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        command: server /data --console-address ":9001"
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: lotus_warden
+      DB_SSLMODE: disable
+      NATS_URL: nats://localhost:4222
+      OBJECT_STORE_ENDPOINT: localhost:9000
+      OBJECT_STORE_ACCESS_KEY: minioadmin
+      OBJECT_STORE_SECRET_KEY: minioadmin
+      OBJECT_STORE_BUCKET: lotus-warden
+      OBJECT_STORE_USE_SSL: false
+      ROOT_EMAIL: root@localhost
+      ROOT_PASSWORD: root
+      JWT_SECRET: contract-test-secret
+      APP_PORT: 8080
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Install contract test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install schemathesis jsonschema
+
+      - name: Run migrations
+        working-directory: backend
+        run: go run ./cmd/migrate
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:9000/minio/health/live > /dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Start backend
+        working-directory: backend
+        run: |
+          go run ./cmd/server > /tmp/backend.log 2>&1 &
+          echo $! > /tmp/backend.pid
+
+      - name: Wait for backend
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080/health > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Backend did not become healthy"
+          cat /tmp/backend.log
+          exit 1
+
+      - name: Validate contract fixtures
+        run: python scripts/contracts/validate_fixtures.py
+
+      - name: Run Schemathesis
+        run: scripts/contracts/run_schemathesis.sh
+
+      - name: OpenAPI backward compatibility
+        run: |
+          go install github.com/tufin/oasdiff/cmd/oasdiff@latest
+          scripts/contracts/check_openapi_compat.sh
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
