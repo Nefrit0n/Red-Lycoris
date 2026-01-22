@@ -105,6 +105,9 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 		"type":    "vulnerability",
 		"package": vuln.PkgName,
 	}
+	if strings.HasPrefix(strings.ToLower(vuln.PkgID), "pkg:") {
+		rawData["purl"] = vuln.PkgID
+	}
 	if vuln.PrimaryURL != "" {
 		rawData["url"] = vuln.PrimaryURL
 	}
@@ -165,9 +168,10 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 	}
 
 	// Build Evidence with actionable information
-	evidence := buildVulnerabilityEvidence(vuln)
+	evidence := buildVulnerabilityEvidence(result, vuln)
 
 	return Finding{
+		Category:    models.CategorySCA,
 		Title:       title,
 		Description: descPtr,
 		Severity:    mapTrivySeverity(vuln.Severity),
@@ -178,23 +182,48 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 	}
 }
 
-func buildVulnerabilityEvidence(vuln trivyVulnerability) map[string]any {
+func buildVulnerabilityEvidence(result trivyResult, vuln trivyVulnerability) map[string]any {
 	evidence := map[string]any{
 		"scannerType": "trivy",
 		"findingType": "vulnerability",
+		"category":    models.CategorySCA,
 	}
 
 	if vuln.PkgName != "" {
-		evidence["package"] = vuln.PkgName
+		evidence["pkgName"] = vuln.PkgName
 	}
 	if vuln.InstalledVersion != "" {
-		evidence["installed_version"] = vuln.InstalledVersion
+		evidence["installedVersion"] = vuln.InstalledVersion
 	}
 	if vuln.FixedVersion != "" {
-		evidence["fixed_version"] = vuln.FixedVersion
+		evidence["fixedVersion"] = vuln.FixedVersion
 	}
 	if vuln.Status != "" {
 		evidence["status"] = vuln.Status
+	}
+	if vuln.VulnerabilityID != "" {
+		evidence["vulnerabilityId"] = vuln.VulnerabilityID
+	}
+	if vuln.Severity != "" {
+		evidence["severity"] = vuln.Severity
+	}
+	if vuln.PrimaryURL != "" {
+		evidence["primaryUrl"] = vuln.PrimaryURL
+	}
+	if len(vuln.References) > 0 {
+		evidence["references"] = vuln.References
+	}
+	if result.Target != "" {
+		evidence["target"] = result.Target
+	}
+	if result.Type != "" {
+		evidence["ecosystem"] = result.Type
+	}
+	if result.Class != "" {
+		evidence["class"] = result.Class
+	}
+	if strings.HasPrefix(strings.ToLower(vuln.PkgID), "pkg:") {
+		evidence["purl"] = vuln.PkgID
 	}
 
 	// Include CVSS data if available
@@ -280,6 +309,7 @@ func (p *TrivyParser) buildSecretFinding(result trivyResult, secret trivySecret)
 	}
 
 	return Finding{
+		Category: models.CategorySecrets,
 		Title:    secret.Title,
 		Severity: mapTrivySeverity(secret.Severity),
 		Location: location,
@@ -397,6 +427,7 @@ func (p *TrivyParser) buildMisconfigurationFinding(result trivyResult, misconf t
 	}
 
 	return Finding{
+		Category:    models.CategoryConfig,
 		Title:       title,
 		Description: descPtr,
 		Severity:    mapTrivySeverity(misconf.Severity),
@@ -454,6 +485,7 @@ func (p *TrivyParser) buildLicenseFinding(result trivyResult, license trivyLicen
 	}
 
 	return Finding{
+		Category: models.CategoryConfig,
 		Title:    title,
 		Severity: mapTrivySeverity(license.Severity),
 		Location: location,
@@ -480,37 +512,37 @@ type trivyReport struct {
 }
 
 type trivyResult struct {
-	Target            string                     `json:"Target"`
-	Class             string                     `json:"Class"`
-	Type              string                     `json:"Type"`
-	Vulnerabilities   []trivyVulnerability       `json:"Vulnerabilities"`
-	Secrets           []trivySecret              `json:"Secrets"`
-	Misconfigurations []trivyMisconfiguration    `json:"Misconfigurations"`
-	Licenses          []trivyLicense             `json:"Licenses"`
+	Target            string                  `json:"Target"`
+	Class             string                  `json:"Class"`
+	Type              string                  `json:"Type"`
+	Vulnerabilities   []trivyVulnerability    `json:"Vulnerabilities"`
+	Secrets           []trivySecret           `json:"Secrets"`
+	Misconfigurations []trivyMisconfiguration `json:"Misconfigurations"`
+	Licenses          []trivyLicense          `json:"Licenses"`
 }
 
 type trivyVulnerability struct {
-	VulnerabilityID  string              `json:"VulnerabilityID"`
-	VendorIDs        []string            `json:"VendorIDs"`
-	PkgID            string              `json:"PkgID"`
-	PkgName          string              `json:"PkgName"`
-	PkgPath          string              `json:"PkgPath"`
-	InstalledVersion string              `json:"InstalledVersion"`
-	FixedVersion     string              `json:"FixedVersion"`
-	Status           string              `json:"Status"`
-	Title            string              `json:"Title"`
-	Description      string              `json:"Description"`
-	Severity         string              `json:"Severity"`
-	SeveritySource   string              `json:"SeveritySource"`
-	PrimaryURL       string              `json:"PrimaryURL"`
-	References       []string            `json:"References"`
-	CweIDs           []string            `json:"CweIDs"`
+	VulnerabilityID  string               `json:"VulnerabilityID"`
+	VendorIDs        []string             `json:"VendorIDs"`
+	PkgID            string               `json:"PkgID"`
+	PkgName          string               `json:"PkgName"`
+	PkgPath          string               `json:"PkgPath"`
+	InstalledVersion string               `json:"InstalledVersion"`
+	FixedVersion     string               `json:"FixedVersion"`
+	Status           string               `json:"Status"`
+	Title            string               `json:"Title"`
+	Description      string               `json:"Description"`
+	Severity         string               `json:"Severity"`
+	SeveritySource   string               `json:"SeveritySource"`
+	PrimaryURL       string               `json:"PrimaryURL"`
+	References       []string             `json:"References"`
+	CweIDs           []string             `json:"CweIDs"`
 	CVSS             map[string]trivyCVSS `json:"CVSS"`
-	VendorSeverity   map[string]int      `json:"VendorSeverity"`
-	PublishedDate    string              `json:"PublishedDate"`
-	LastModifiedDate string              `json:"LastModifiedDate"`
-	Layer            *trivyLayer         `json:"Layer"`
-	DataSource       *trivyDataSource    `json:"DataSource"`
+	VendorSeverity   map[string]int       `json:"VendorSeverity"`
+	PublishedDate    string               `json:"PublishedDate"`
+	LastModifiedDate string               `json:"LastModifiedDate"`
+	Layer            *trivyLayer          `json:"Layer"`
+	DataSource       *trivyDataSource     `json:"DataSource"`
 }
 
 type trivyCVSS struct {
@@ -532,13 +564,13 @@ type trivyDataSource struct {
 }
 
 type trivySecret struct {
-	RuleID    string `json:"RuleID"`
-	Category  string `json:"Category"`
-	Severity  string `json:"Severity"`
-	Title     string `json:"Title"`
-	StartLine int    `json:"StartLine"`
-	EndLine   int    `json:"EndLine"`
-	Match     string `json:"Match"`
+	RuleID    string     `json:"RuleID"`
+	Category  string     `json:"Category"`
+	Severity  string     `json:"Severity"`
+	Title     string     `json:"Title"`
+	StartLine int        `json:"StartLine"`
+	EndLine   int        `json:"EndLine"`
+	Match     string     `json:"Match"`
 	Code      *trivyCode `json:"Code"`
 }
 
@@ -554,40 +586,40 @@ type trivyCodeLine struct {
 }
 
 type trivyMisconfiguration struct {
-	Type        string       `json:"Type"`
-	ID          string       `json:"ID"`
-	AVDID       string       `json:"AVDID"`
-	Title       string       `json:"Title"`
-	Description string       `json:"Description"`
-	Message     string       `json:"Message"`
-	Namespace   string       `json:"Namespace"`
-	Query       string       `json:"Query"`
-	Resolution  string       `json:"Resolution"`
-	Severity    string       `json:"Severity"`
-	PrimaryURL  string       `json:"PrimaryURL"`
-	References  []string     `json:"References"`
-	Status      string       `json:"Status"`
-	Layer       *trivyLayer  `json:"Layer"`
+	Type          string              `json:"Type"`
+	ID            string              `json:"ID"`
+	AVDID         string              `json:"AVDID"`
+	Title         string              `json:"Title"`
+	Description   string              `json:"Description"`
+	Message       string              `json:"Message"`
+	Namespace     string              `json:"Namespace"`
+	Query         string              `json:"Query"`
+	Resolution    string              `json:"Resolution"`
+	Severity      string              `json:"Severity"`
+	PrimaryURL    string              `json:"PrimaryURL"`
+	References    []string            `json:"References"`
+	Status        string              `json:"Status"`
+	Layer         *trivyLayer         `json:"Layer"`
 	CauseMetadata *trivyCauseMetadata `json:"CauseMetadata"`
 }
 
 type trivyCauseMetadata struct {
-	Resource  string `json:"Resource"`
-	Provider  string `json:"Provider"`
-	Service   string `json:"Service"`
-	StartLine int    `json:"StartLine"`
-	EndLine   int    `json:"EndLine"`
+	Resource  string     `json:"Resource"`
+	Provider  string     `json:"Provider"`
+	Service   string     `json:"Service"`
+	StartLine int        `json:"StartLine"`
+	EndLine   int        `json:"EndLine"`
 	Code      *trivyCode `json:"Code"`
 }
 
 type trivyLicense struct {
-	Severity   string `json:"Severity"`
-	Category   string `json:"Category"`
-	PkgName    string `json:"PkgName"`
-	FilePath   string `json:"FilePath"`
-	Name       string `json:"Name"`
+	Severity   string  `json:"Severity"`
+	Category   string  `json:"Category"`
+	PkgName    string  `json:"PkgName"`
+	FilePath   string  `json:"FilePath"`
+	Name       string  `json:"Name"`
 	Confidence float64 `json:"Confidence"`
-	Link       string `json:"Link"`
+	Link       string  `json:"Link"`
 }
 
 // ---------- Helpers ----------

@@ -17,6 +17,7 @@ type FindingListItem struct {
 	Title        string
 	Severity     string
 	Status       string
+	Category     string
 	ProductID    uuid.NullUUID
 	ProductName  sql.NullString
 	AssigneeID   uuid.NullUUID
@@ -38,6 +39,7 @@ type FindingDetail struct {
 	Fingerprint    string
 	Severity       string
 	Status         string
+	Category       string
 	ProductID      uuid.NullUUID
 	ProductName    sql.NullString
 	AssigneeID     uuid.NullUUID
@@ -195,6 +197,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 	listQuery := fmt.Sprintf(`
 		SELECT
 			f.id, f.title, f.severity, f.status,
+			f.category,
 			f.product_id, p.name,
 			f.assignee_id, u.username,
 			f.import_job_id,
@@ -232,6 +235,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.Title,
 			&item.Severity,
 			&item.Status,
+			&item.Category,
 			&item.ProductID,
 			&item.ProductName,
 			&item.AssigneeID,
@@ -326,6 +330,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		ctx,
 		`SELECT
 			f.id, f.title, f.description, f.fingerprint, f.severity, f.status,
+			f.category,
 			f.product_id, p.name,
 			f.assignee_id, f.import_job_id,
 			f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id,
@@ -345,6 +350,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		&detail.Fingerprint,
 		&detail.Severity,
 		&detail.Status,
+		&detail.Category,
 		&detail.ProductID,
 		&detail.ProductName,
 		&detail.AssigneeID,
@@ -458,7 +464,7 @@ func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateF
 		UPDATE findings
 		SET %s
 		WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
+		RETURNING id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
 		strings.Join(setClauses, ", "),
 		len(args),
 	)
@@ -482,7 +488,7 @@ func SoftDeleteFinding(ctx context.Context, db *sql.DB, id uuid.UUID) (*models.F
 		`UPDATE findings
 		 SET deleted_at = $1, updated_at = $1
 		 WHERE id = $2 AND deleted_at IS NULL
-		 RETURNING id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
+		 RETURNING id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
 		now,
 		id,
 	)
@@ -519,6 +525,7 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 		&scanResultID,
 		&productID,
 		&finding.Fingerprint,
+		&finding.Category,
 		&finding.Title,
 		&description,
 		&finding.Severity,

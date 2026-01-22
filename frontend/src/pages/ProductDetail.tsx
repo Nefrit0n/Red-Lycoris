@@ -32,8 +32,10 @@ import {
   Tooltip as RechartsTooltip,
 } from "recharts";
 import { fetchProductDetail } from "../api/products";
+import { downloadSbom, listSboms, uploadSbom } from "../api/sbom";
 import { Section } from "../components/Section";
 import { ProductDetail as ProductDetailType } from "../types/products";
+import { SbomItem } from "../types/sbom";
 
 const SEVERITY_COLORS = {
   critical: "#f44336",
@@ -240,12 +242,25 @@ const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans
   );
 };
 
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, index);
+  return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+};
+
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<ProductDetailType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sboms, setSboms] = useState<SbomItem[]>([]);
+  const [sbomLoading, setSbomLoading] = useState(false);
+  const [sbomError, setSbomError] = useState<string | null>(null);
+  const [sbomUploading, setSbomUploading] = useState(false);
+  const [sbomUploadError, setSbomUploadError] = useState<string | null>(null);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
@@ -271,6 +286,46 @@ const ProductDetailPage = () => {
     fetchData(controller.signal);
     return () => controller.abort();
   }, [fetchData]);
+
+  const fetchSboms = useCallback(async () => {
+    if (!id) return;
+    setSbomLoading(true);
+    setSbomError(null);
+    try {
+      const items = await listSboms(id);
+      setSboms(items);
+    } catch (err) {
+      setSbomError(err instanceof Error ? err.message : "Не удалось загрузить SBOM");
+    } finally {
+      setSbomLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchSboms();
+  }, [fetchSboms]);
+
+  const handleSbomUpload = async (file: File) => {
+    if (!id) return;
+    setSbomUploading(true);
+    setSbomUploadError(null);
+    try {
+      await uploadSbom(id, file);
+      await fetchSboms();
+    } catch (err) {
+      setSbomUploadError(err instanceof Error ? err.message : "Не удалось загрузить SBOM");
+    } finally {
+      setSbomUploading(false);
+    }
+  };
+
+  const handleSbomDownload = async (item: SbomItem) => {
+    try {
+      await downloadSbom(item.id, item.originalFilename);
+    } catch (err) {
+      setSbomError(err instanceof Error ? err.message : "Не удалось скачать SBOM");
+    }
+  };
 
   if (!id) {
     return (
@@ -440,6 +495,103 @@ const ProductDetailPage = () => {
               >
                 Запустить новый скан
               </Button>
+            </Stack>
+          </Section>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={3} sx={{ mt: 1 }}>
+        <Grid item xs={12}>
+          <Section title="SBOM">
+            <Stack spacing={2}>
+              <Typography variant="body2" color="text.secondary">
+                Поддерживаемые форматы: CycloneDX, SPDX, SPDX JSON.
+              </Typography>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+                <Button variant="contained" component="label" disabled={sbomUploading}>
+                  {sbomUploading ? "Загрузка..." : "Загрузить SBOM"}
+                  <input
+                    type="file"
+                    hidden
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        handleSbomUpload(file);
+                      }
+                      event.target.value = "";
+                    }}
+                  />
+                </Button>
+                <Button variant="outlined" onClick={fetchSboms} disabled={sbomLoading}>
+                  Обновить список
+                </Button>
+              </Stack>
+              {sbomUploadError && <Alert severity="error">{sbomUploadError}</Alert>}
+              {sbomError && <Alert severity="error">{sbomError}</Alert>}
+              {sbomLoading ? (
+                <Box display="flex" justifyContent="center" py={2}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : sboms.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  SBOM пока не загружены.
+                </Typography>
+              ) : (
+                <Box sx={{ overflowX: "auto" }}>
+                  <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
+                    <Box component="thead">
+                      <Box component="tr" sx={{ textAlign: "left" }}>
+                        {["Файл", "Формат", "Размер", "SHA256", "Дата", ""].map((label) => (
+                          <Box
+                            key={label}
+                            component="th"
+                            style={{
+                              fontWeight: 600,
+                              fontSize: 12,
+                              padding: "10px 8px",
+                              borderBottom: "1px solid rgba(0,0,0,0.08)",
+                            }}
+                          >
+                            {label}
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                    <Box component="tbody">
+                      {sboms.map((item) => (
+                        <Box key={item.id} component="tr">
+                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                            {item.originalFilename}
+                          </Box>
+                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                            {item.format}
+                          </Box>
+                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                            {formatBytes(item.sizeBytes)}
+                          </Box>
+                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                            <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+                              {item.sha256}
+                            </Typography>
+                          </Box>
+                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString("ru-RU") : "—"}
+                          </Box>
+                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => handleSbomDownload(item)}
+                            >
+                              Скачать
+                            </Button>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                </Box>
+              )}
             </Stack>
           </Section>
         </Grid>

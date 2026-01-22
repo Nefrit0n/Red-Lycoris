@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"lotus-warden/backend/internal/models"
 )
 
 func TestParseTrivyReport(t *testing.T) {
@@ -41,6 +43,63 @@ func TestParseTrivyReport(t *testing.T) {
 	}
 	if findings[0].Severity != "high" {
 		t.Fatalf("expected severity normalized, got %s", findings[0].Severity)
+	}
+}
+
+func TestParseTrivyReportScaEvidenceFixedVersionOptional(t *testing.T) {
+	payload := map[string]any{
+		"ArtifactName": "billing-api",
+		"Results": []any{
+			map[string]any{
+				"Target": "app",
+				"Type":   "npm",
+				"Vulnerabilities": []any{
+					map[string]any{
+						"VulnerabilityID":  "GHSA-xxxx-xxxx-xxxx",
+						"PkgName":          "lodash",
+						"InstalledVersion": "4.17.20",
+						"FixedVersion":     "",
+						"Severity":         "MEDIUM",
+						"PrimaryURL":       "https://github.com/advisories/GHSA-xxxx-xxxx-xxxx",
+					},
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	findings, err := ParseReport("trivy", raw)
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+
+	f := findings[0]
+	if f.Category != models.CategorySCA {
+		t.Fatalf("expected category SCA, got %s", f.Category)
+	}
+	if f.Evidence == nil {
+		t.Fatal("expected evidence")
+	}
+	if f.Evidence["pkgName"] != "lodash" {
+		t.Fatalf("expected pkgName in evidence, got %v", f.Evidence["pkgName"])
+	}
+	if f.Evidence["installedVersion"] != "4.17.20" {
+		t.Fatalf("expected installedVersion in evidence, got %v", f.Evidence["installedVersion"])
+	}
+	if _, ok := f.Evidence["fixedVersion"]; ok {
+		t.Fatalf("expected fixedVersion to be omitted when empty")
+	}
+	if f.Evidence["vulnerabilityId"] != "GHSA-xxxx-xxxx-xxxx" {
+		t.Fatalf("expected vulnerabilityId in evidence, got %v", f.Evidence["vulnerabilityId"])
+	}
+	if f.Evidence["primaryUrl"] != "https://github.com/advisories/GHSA-xxxx-xxxx-xxxx" {
+		t.Fatalf("expected primaryUrl in evidence, got %v", f.Evidence["primaryUrl"])
 	}
 }
 
@@ -125,11 +184,11 @@ func TestParseTrivyReportWithExtendedFields(t *testing.T) {
 	if f.Evidence == nil {
 		t.Fatal("expected evidence to be populated")
 	}
-	if f.Evidence["installed_version"] != "2.25.0" {
-		t.Fatalf("expected evidence installed_version, got %v", f.Evidence["installed_version"])
+	if f.Evidence["installedVersion"] != "2.25.0" {
+		t.Fatalf("expected evidence installedVersion, got %v", f.Evidence["installedVersion"])
 	}
-	if f.Evidence["fixed_version"] != "2.28.0" {
-		t.Fatalf("expected evidence fixed_version, got %v", f.Evidence["fixed_version"])
+	if f.Evidence["fixedVersion"] != "2.28.0" {
+		t.Fatalf("expected evidence fixedVersion, got %v", f.Evidence["fixedVersion"])
 	}
 
 	// Check CWE IDs are in RawData
