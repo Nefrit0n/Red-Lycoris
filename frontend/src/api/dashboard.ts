@@ -12,7 +12,6 @@ import {
   RecentActivityItem,
 } from "../types/dashboard";
 import { Finding, FindingSeverity, FindingStatus } from "../types/findings";
-import { normalizeDateFrom } from "../utils/urlHelpers";
 
 const OPEN_STATUSES: FindingStatus[] = ["new", "under_review", "confirmed"];
 const SEVERITIES: FindingSeverity[] = ["critical", "high", "medium", "low"];
@@ -56,7 +55,7 @@ export const fetchDashboardData = async (signal?: AbortSignal): Promise<Dashboar
         limit: 100,
         offset: 0,
         filterStatus: "mitigated",
-        dateFrom: normalizeDateFrom(format(subDays(new Date(), 7), "dd-MM-yyyy")),
+        dateFrom: format(subDays(new Date(), 7), "dd-MM-yyyy"),
       },
       signal
     ),
