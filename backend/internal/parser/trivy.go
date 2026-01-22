@@ -71,31 +71,6 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 	if location == "" {
 		location = vuln.PkgName
 	}
-
-	title := titleBase
-	pkg := strings.TrimSpace(vuln.PkgName)
-	if pkg != "" {
-		// Try to keep the table title compact: "runc" instead of "github.com/opencontainers/runc"
-		shortPkg := pkg
-		if idx := strings.LastIndex(pkg, "/"); idx >= 0 && idx < len(pkg)-1 {
-			shortPkg = pkg[idx+1:]
-		}
-
-		lowerTitle := strings.ToLower(titleBase)
-		lowerPkg := strings.ToLower(pkg)
-		lowerShort := strings.ToLower(shortPkg)
-
-		if !strings.HasPrefix(lowerTitle, lowerPkg+":") && !strings.HasPrefix(lowerTitle, lowerShort+":") {
-			title = fmt.Sprintf("%s: %s", shortPkg, titleBase)
-		}
-	}
-
-	// Location includes package name and version for better identification
-	location := strings.TrimSpace(result.Target)
-	if location == "" {
-		location = vuln.PkgName
-	}
-
 	if vuln.PkgPath != "" {
 		location = vuln.PkgPath
 	}
@@ -190,6 +165,7 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 		Evidence:    evidence,
 	}
 }
+
 
 func buildVulnerabilityEvidence(result trivyResult, vuln trivyVulnerability) map[string]any {
 	evidence := map[string]any{
@@ -573,8 +549,9 @@ func buildTrivyVulnTitle(v trivyVulnerability) string {
 	// Но npm scoped пакеты типа @babel/core НЕ режем
 	pkgLabel := pkgFull
 	if pkgLabel != "" && !strings.HasPrefix(pkgLabel, "@") {
-		if idx := strings.LastIndex(pkgLabel, "/"); idx >= 0 && idx < len(pkgLabel)-1 {
-			pkgLabel = pkgLabel[idx+1:]
+		parts := strings.Split(pkgLabel, "/")
+		if len(parts) >= 2 {
+			pkgLabel = parts[len(parts)-2] + "/" + parts[len(parts)-1]
 		}
 	}
 
