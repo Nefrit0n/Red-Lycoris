@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"lotus-warden/backend/internal/models"
 )
 
 type TextParser struct {
@@ -30,6 +32,7 @@ func (p *TextParser) Parse(data []byte) ([]Finding, error) {
 	description := content
 	return []Finding{
 		{
+			Category:    models.CategorySAST,
 			Title:       "Unstructured report",
 			Description: &description,
 			Severity:    "low",

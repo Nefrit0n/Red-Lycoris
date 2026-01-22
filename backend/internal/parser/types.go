@@ -1,6 +1,7 @@
 package parser
 
 type Finding struct {
+	Category    string         `json:"category"`
 	Title       string         `json:"title"`
 	Description *string        `json:"description,omitempty"`
 	Severity    string         `json:"severity"`

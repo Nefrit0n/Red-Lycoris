@@ -10,6 +10,7 @@ import (
 	"lotus-warden/backend/internal/config"
 	"lotus-warden/backend/internal/dedup"
 	"lotus-warden/backend/internal/middleware"
+	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/parser"
 	"lotus-warden/backend/internal/server"
 
@@ -101,7 +102,31 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count"}))
 
 	mock.ExpectExec("INSERT INTO findings").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintOne, "SQL Injection", sqlmock.AnyArg(), "high", "new", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), 0, sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			fingerprintOne,
+			models.CategorySCA,
+			"SQL Injection",
+			sqlmock.AnyArg(),
+			"high",
+			"new",
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			0,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -111,7 +136,31 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count"}).AddRow(duplicateID, 2))
 
 	mock.ExpectExec("INSERT INTO findings").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), fingerprintTwo, "XSS", sqlmock.AnyArg(), "medium", "duplicate", duplicateID, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), 0, sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			fingerprintTwo,
+			models.CategorySCA,
+			"XSS",
+			sqlmock.AnyArg(),
+			"medium",
+			"duplicate",
+			duplicateID,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			0,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("UPDATE findings").
 		WithArgs(3, sqlmock.AnyArg(), duplicateID).
