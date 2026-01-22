@@ -419,6 +419,47 @@
           }
         }
       }
+    },
+    "/api/v1/products/{id}": {
+      "get": {
+        "summary": "Get product",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -827,6 +868,18 @@
           },
           "intel_summary": {
             "$ref": "#/components/schemas/IntelSummary"
+          },
+          "sourceVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "endpointMethod": {
+            "type": "string",
+            "nullable": true
+          },
+          "endpointPath": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -1374,6 +1427,73 @@
             "nullable": true
           }
         }
+      },
+      "FindingListItemDTO": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FindingResponse"
+          }
+        ]
+      },
+      "FindingDetailDTO": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FindingDetailSAST"
+          },
+          {
+            "$ref": "#/components/schemas/FindingDetailSCA"
+          },
+          {
+            "$ref": "#/components/schemas/FindingDetailSecrets"
+          },
+          {
+            "$ref": "#/components/schemas/FindingDetailConfig"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "category",
+          "mapping": {
+            "SAST": "#/components/schemas/FindingDetailSAST",
+            "SCA": "#/components/schemas/FindingDetailSCA",
+            "SECRETS": "#/components/schemas/FindingDetailSecrets",
+            "CONFIG": "#/components/schemas/FindingDetailConfig"
+          }
+        }
+      },
+      "ProductListItemDTO": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProductResponse"
+          }
+        ]
+      },
+      "ProductDetailDTO": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProductResponse"
+          }
+        ]
+      },
+      "ImportJobStatusDTO": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ImportJobResponse"
+          }
+        ]
+      },
+      "MetricsTimeSeriesDTO": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MetricsTimeSeries"
+          }
+        ]
+      },
+      "MetricsBreakdownDTO": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MetricsBreakdown"
+          }
+        ]
       }
     }
   }
