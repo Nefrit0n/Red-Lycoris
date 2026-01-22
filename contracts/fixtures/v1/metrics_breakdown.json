@@ -1,0 +1,38 @@
+{
+  "severity": [
+    {
+      "severity": "critical",
+      "count": 4
+    },
+    {
+      "severity": "high",
+      "count": 7
+    },
+    {
+      "severity": "medium",
+      "count": 12
+    },
+    {
+      "severity": "low",
+      "count": 15
+    }
+  ],
+  "category": [
+    {
+      "category": "SCA",
+      "count": 18
+    },
+    {
+      "category": "SAST",
+      "count": 10
+    },
+    {
+      "category": "SECRETS",
+      "count": 5
+    },
+    {
+      "category": "CONFIG",
+      "count": 5
+    }
+  ]
+}
