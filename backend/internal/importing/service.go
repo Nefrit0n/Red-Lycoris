@@ -9,10 +9,12 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
 	"lotus-warden/backend/internal/dedup"
+	"lotus-warden/backend/internal/importing/plugins"
 	"lotus-warden/backend/internal/intel"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/parser"
@@ -87,7 +89,17 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 		params.Callbacks.OnImportStarted(importJob.ID)
 	}
 
-	findings, err := parser.ParseReport(params.Scanner, params.Report)
+	if len(params.Report) == 0 {
+		finishedAt := time.Now().UTC()
+		errMsg := "report is required"
+		_ = storage.UpdateImportJobStatus(ctx, db, importJob.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		if params.Callbacks != nil && params.Callbacks.OnImportFailed != nil {
+			params.Callbacks.OnImportFailed(importJob.ID, errors.New(errMsg))
+		}
+		return nil, errors.New(errMsg)
+	}
+
+	plugin, reportVersion, err := plugins.DefaultRegistry().GetBestMatch(params.Scanner, params.Report)
 	if err != nil {
 		finishedAt := time.Now().UTC()
 		errMsg := err.Error()
@@ -96,6 +108,47 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 			params.Callbacks.OnImportFailed(importJob.ID, err)
 		}
 		return nil, err
+	}
+
+	parsedFindings, err := plugin.Parse(params.Report)
+	if err != nil {
+		finishedAt := time.Now().UTC()
+		errMsg := err.Error()
+		_ = storage.UpdateImportJobStatus(ctx, db, importJob.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		if params.Callbacks != nil && params.Callbacks.OnImportFailed != nil {
+			params.Callbacks.OnImportFailed(importJob.ID, err)
+		}
+		return nil, err
+	}
+
+	if reportVersion == "" {
+		reportVersion = "unknown"
+	}
+
+	canonicalFindings, err := plugin.Normalize(parsedFindings, reportVersion)
+	if err != nil {
+		finishedAt := time.Now().UTC()
+		errMsg := err.Error()
+		_ = storage.UpdateImportJobStatus(ctx, db, importJob.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		if params.Callbacks != nil && params.Callbacks.OnImportFailed != nil {
+			params.Callbacks.OnImportFailed(importJob.ID, err)
+		}
+		return nil, err
+	}
+
+	if len(canonicalFindings) == 0 && json.Valid(params.Report) && !strings.EqualFold(params.Scanner, "semgrep") {
+		finishedAt := time.Now().UTC()
+		errMsg := "report contains no findings"
+		_ = storage.UpdateImportJobStatus(ctx, db, importJob.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
+		if params.Callbacks != nil && params.Callbacks.OnImportFailed != nil {
+			params.Callbacks.OnImportFailed(importJob.ID, errors.New(errMsg))
+		}
+		return nil, errors.New(errMsg)
+	}
+
+	findings := make([]parser.Finding, 0, len(canonicalFindings))
+	for _, finding := range canonicalFindings {
+		findings = append(findings, canonicalToFinding(finding))
 	}
 
 	scan := &models.ScanResult{
@@ -120,7 +173,8 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	seenAt := time.Now().UTC()
 	identifierSet := map[string]struct{}{}
 
-	for _, finding := range findings {
+	for i, finding := range findings {
+		canonical := canonicalFindings[i]
 		result, err := processFinding(ctx, db, processFindingParams{
 			finding:       finding,
 			scanner:       params.Scanner,
@@ -156,7 +210,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 			}
 		}
 
-		identifiers := intel.ExtractIdentifiersFromFinding(finding)
+		identifiers := mergeIdentifiers(canonical.Identifiers, intel.ExtractIdentifiersFromFinding(finding))
 		if len(identifiers) > 0 {
 			targetID := result.finding.ID
 			if !result.isNew {
@@ -198,7 +252,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	return &ImportResult{
 		ImportJobID: importJob.ID,
 		ScanID:      scan.ID,
-		Total:       len(findings),
+		Total:       len(canonicalFindings),
 		New:         createdFindings,
 		Duplicates:  duplicates,
 	}, nil
@@ -347,6 +401,47 @@ func resolveFindingCategory(finding parser.Finding) string {
 		return finding.Category
 	}
 	return models.CategorySAST
+}
+
+func canonicalToFinding(finding plugins.CanonicalFinding) parser.Finding {
+	category := strings.TrimSpace(finding.Category)
+	if category == "" {
+		category = strings.TrimSpace(finding.Kind)
+	}
+	rawData := finding.RawData
+	if rawData == nil {
+		rawData = map[string]any{}
+	}
+	return parser.Finding{
+		Category:    category,
+		Title:       finding.Title,
+		Description: finding.Description,
+		Severity:    finding.Severity,
+		Location:    finding.Location,
+		RuleID:      finding.RuleID,
+		RawData:     rawData,
+		Evidence:    finding.Evidence,
+	}
+}
+
+func mergeIdentifiers(primary []string, additional []string) []string {
+	if len(primary) == 0 && len(additional) == 0 {
+		return nil
+	}
+	set := map[string]struct{}{}
+	merged := make([]string, 0, len(primary)+len(additional))
+	for _, identifier := range append(primary, additional...) {
+		normalized := strings.TrimSpace(identifier)
+		if normalized == "" {
+			continue
+		}
+		if _, ok := set[normalized]; ok {
+			continue
+		}
+		set[normalized] = struct{}{}
+		merged = append(merged, normalized)
+	}
+	return merged
 }
 
 type scaExtraction struct {
