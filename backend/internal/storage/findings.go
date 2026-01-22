@@ -25,6 +25,7 @@ type FindingListItem struct {
 	ImportJobID  uuid.NullUUID
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	FirstSeenAt  sql.NullTime
 	LastSeenAt   sql.NullTime
 	RepeatCount  int
 	DuplicateID  uuid.NullUUID
@@ -202,7 +203,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			f.assignee_id, u.username,
 			f.import_job_id,
 			f.created_at, f.updated_at,
-			f.last_seen_at, f.repeat_count,
+			f.first_seen_at, f.last_seen_at, f.repeat_count,
 			f.duplicate_id,
 			sr.scanner,
 			f.source_type
@@ -243,6 +244,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.ImportJobID,
 			&item.CreatedAt,
 			&item.UpdatedAt,
+			&item.FirstSeenAt,
 			&item.LastSeenAt,
 			&item.RepeatCount,
 			&item.DuplicateID,
