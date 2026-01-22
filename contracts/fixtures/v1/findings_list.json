@@ -1,0 +1,61 @@
+[
+  {
+    "id": "3cbb5f0b-8a36-4cdb-95d7-8a0b5cf25b6f",
+    "title": "Outdated OpenSSL dependency",
+    "severity": "high",
+    "status": "confirmed",
+    "category": "SCA",
+    "scannerType": "trivy",
+    "sourceType": "sbom",
+    "occurrenceStatus": "new",
+    "firstSeenAt": "2024-03-12T10:12:54Z",
+    "lastSeenAt": "2024-03-18T08:05:12Z",
+    "repeatCount": 2,
+    "productId": "59e1e604-f0d7-4f86-8d7f-6b0c4d6e32c1",
+    "productName": "Payments API",
+    "assigneeId": "6e56a3f3-4628-4b49-9d21-7da8c5d9c1a2",
+    "owner": {
+      "id": "6e56a3f3-4628-4b49-9d21-7da8c5d9c1a2",
+      "name": "Alice Johnson"
+    },
+    "importJobId": "f6a4f6c2-6a5d-4c2b-9c0b-4b1f7a0b69a5",
+    "createdAt": "2024-03-12T10:12:54Z",
+    "updatedAt": "2024-03-18T08:05:12Z",
+    "intel_summary": {
+      "identifiers": ["CVE-2023-12345"],
+      "cvss": {
+        "score": 8.2,
+        "version": "3.1"
+      },
+      "epss": {
+        "score": 0.42,
+        "percentile": 0.91
+      },
+      "kev": false,
+      "last_refreshed_at": "2024-03-18T08:00:00Z"
+    }
+  },
+  {
+    "id": "0d88b63e-7e79-4f65-9c0b-098a2a5f52f1",
+    "title": "SQL injection in search endpoint",
+    "severity": "critical",
+    "status": "under_review",
+    "category": "SAST",
+    "scannerType": "semgrep",
+    "sourceType": "source",
+    "occurrenceStatus": "repeat",
+    "firstSeenAt": "2024-03-10T09:00:00Z",
+    "lastSeenAt": "2024-03-18T08:10:00Z",
+    "repeatCount": 5,
+    "productId": "59e1e604-f0d7-4f86-8d7f-6b0c4d6e32c1",
+    "productName": "Payments API",
+    "assigneeId": "ac48a6c8-2c34-4f84-9b51-2b9e0ef3a2cb",
+    "owner": {
+      "id": "ac48a6c8-2c34-4f84-9b51-2b9e0ef3a2cb",
+      "name": "Victor Lee"
+    },
+    "importJobId": "d47c9d8a-875d-45f2-98ef-bf8da4a33ac3",
+    "createdAt": "2024-03-10T09:00:00Z",
+    "updatedAt": "2024-03-18T08:10:00Z"
+  }
+]
