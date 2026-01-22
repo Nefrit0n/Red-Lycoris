@@ -1,4 +1,4 @@
-import { getAuthHeaders, parseApiResponse } from "./http";
+import { request } from "./client";
 
 export interface UploadScanRequest {
   file: File;
@@ -35,16 +35,9 @@ export const uploadScan = async (
     formData.append("product_identifier", payload.productIdentifier);
   }
 
-  const response = await fetch("/api/v1/scans/upload", {
+  return request<UploadScanResponse>("/api/v1/scans/upload", {
     method: "POST",
-    headers: getAuthHeaders(), // ❗ ONLY AUTH
     body: formData,
+    json: false,
   });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Upload failed (${response.status}): ${text}`);
-  }
-
-  return parseApiResponse<UploadScanResponse>(response);
 };
