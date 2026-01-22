@@ -2,32 +2,62 @@ package v1
 
 import "encoding/json"
 
-type Finding struct {
-	ID             string        `json:"id"`
-	Title          string        `json:"title"`
-	Description    *string       `json:"description,omitempty"`
-	Fingerprint    *string       `json:"fingerprint,omitempty"`
-	Severity       string        `json:"severity"`
-	Status         string        `json:"status"`
-	Category       string        `json:"category"`
-	ScannerType    *string       `json:"scannerType,omitempty"`
-	SourceType     *string       `json:"sourceType,omitempty"`
-	SourceVersion  *string       `json:"sourceVersion,omitempty"`
-	EndpointMethod *string       `json:"endpointMethod,omitempty"`
-	EndpointPath   *string       `json:"endpointPath,omitempty"`
-	Occurrence     *string       `json:"occurrenceStatus,omitempty"`
-	FirstSeenAt    *string       `json:"firstSeenAt,omitempty"`
-	LastSeenAt     *string       `json:"lastSeenAt,omitempty"`
-	RepeatCount    *int          `json:"repeatCount,omitempty"`
-	ProductID      *string       `json:"productId,omitempty"`
-	ProductName    *string       `json:"productName,omitempty"`
-	AssigneeID     *string       `json:"assigneeId,omitempty"`
-	Owner          *Owner        `json:"owner,omitempty"`
-	ImportJobID    *string       `json:"importJobId,omitempty"`
-	CreatedAt      string        `json:"createdAt"`
-	UpdatedAt      string        `json:"updatedAt"`
-	DeletedAt      *string       `json:"deletedAt,omitempty"`
-	IntelSummary   *IntelSummary `json:"intel_summary,omitempty"`
+type FindingListItemDTO struct {
+	ID           string        `json:"id"`
+	Title        string        `json:"title"`
+	Severity     string        `json:"severity"`
+	Status       string        `json:"status"`
+	Category     string        `json:"category"`
+	ScannerType  *string       `json:"scannerType,omitempty"`
+	SourceType   *string       `json:"sourceType,omitempty"`
+	Occurrence   *string       `json:"occurrenceStatus,omitempty"`
+	FirstSeenAt  *string       `json:"firstSeenAt,omitempty"`
+	LastSeenAt   *string       `json:"lastSeenAt,omitempty"`
+	RepeatCount  *int          `json:"repeatCount,omitempty"`
+	ProductID    *string       `json:"productId,omitempty"`
+	ProductName  *string       `json:"productName,omitempty"`
+	AssigneeID   *string       `json:"assigneeId,omitempty"`
+	Owner        *Owner        `json:"owner,omitempty"`
+	ImportJobID  *string       `json:"importJobId,omitempty"`
+	CreatedAt    string        `json:"createdAt"`
+	UpdatedAt    string        `json:"updatedAt"`
+	IntelSummary *IntelSummary `json:"intel_summary,omitempty"`
+}
+
+type FindingDetailsSAST struct {
+	RuleID    *string  `json:"ruleId,omitempty"`
+	FilePath  *string  `json:"filePath,omitempty"`
+	StartLine *int     `json:"startLine,omitempty"`
+	EndLine   *int     `json:"endLine,omitempty"`
+	Snippet   *string  `json:"snippet,omitempty"`
+	Message   *string  `json:"message,omitempty"`
+	CWE       []string `json:"cwe,omitempty"`
+	OWASP     []string `json:"owasp,omitempty"`
+}
+
+type FindingDetailsSCA struct {
+	PkgName          string   `json:"pkgName"`
+	InstalledVersion string   `json:"installedVersion"`
+	FixedVersion     *string  `json:"fixedVersion,omitempty"`
+	VulnerabilityID  string   `json:"vulnerabilityId"`
+	PrimaryURL       *string  `json:"primaryUrl,omitempty"`
+	Ecosystem        *string  `json:"ecosystem,omitempty"`
+	Purl             *string  `json:"purl,omitempty"`
+	References       []string `json:"references,omitempty"`
+	RawSeverity      *string  `json:"rawSeverity,omitempty"`
+}
+
+type FindingDetailsSecrets struct {
+	RuleID   *string `json:"ruleId,omitempty"`
+	FilePath *string `json:"filePath,omitempty"`
+	Snippet  *string `json:"snippet,omitempty"`
+	Message  *string `json:"message,omitempty"`
+}
+
+type FindingDetailsConfig struct {
+	RuleID   *string `json:"ruleId,omitempty"`
+	FilePath *string `json:"filePath,omitempty"`
+	Message  *string `json:"message,omitempty"`
 }
 
 type Owner struct {
@@ -52,16 +82,27 @@ type FindingEvent struct {
 	CreatedAt string                 `json:"createdAt"`
 }
 
-type FindingDetail struct {
-	Finding
-	Comments     []FindingComment       `json:"comments"`
-	Events       []FindingEvent         `json:"events"`
-	Occurrences  []FindingOccurrence    `json:"occurrences"`
-	Duplicates   *DuplicateGroup        `json:"duplicates,omitempty"`
-	Evidence     map[string]interface{} `json:"evidence,omitempty"`
-	ScaDetails   *ScaDetails            `json:"scaDetails,omitempty"`
-	IntelDetails *IntelDetail           `json:"intel_details,omitempty"`
+type FindingDetailDTO struct {
+	FindingListItemDTO
+	Description    *string                `json:"description,omitempty"`
+	Fingerprint    *string                `json:"fingerprint,omitempty"`
+	SourceType     *string                `json:"sourceType,omitempty"`
+	SourceVersion  *string                `json:"sourceVersion,omitempty"`
+	EndpointMethod *string                `json:"endpointMethod,omitempty"`
+	EndpointPath   *string                `json:"endpointPath,omitempty"`
+	Evidence       map[string]interface{} `json:"evidence,omitempty"`
+	Details        interface{}            `json:"details,omitempty"`
+	ScaDetails     *ScaDetails            `json:"scaDetails,omitempty"`
+	IntelDetails   *IntelDetail           `json:"intel_details,omitempty"`
+	Comments       []FindingComment       `json:"comments,omitempty"`
+	Events         []FindingEvent         `json:"events,omitempty"`
+	Occurrences    []FindingOccurrence    `json:"occurrences,omitempty"`
+	Duplicates     *DuplicateGroup        `json:"duplicates,omitempty"`
+	DeletedAt      *string                `json:"deletedAt,omitempty"`
 }
+
+type Finding = FindingListItemDTO
+type FindingDetail = FindingDetailDTO
 
 type ScaDetails struct {
 	ComponentName    string   `json:"componentName"`
