@@ -551,7 +551,57 @@ func redactTrivySecretRaw(raw map[string]any) map[string]any {
 	return raw
 }
 
-// redactSecret masks potential secret values while preserving pattern for identification
+const maxFindingTitleLen = 200
+
+func buildTrivyVulnTitle(v trivyVulnerability) string {
+	base := strings.TrimSpace(v.Title)
+	if base == "" {
+		base = strings.TrimSpace(v.VulnerabilityID)
+	}
+	if base == "" {
+		base = "Trivy vulnerability"
+	}
+
+	ver := strings.TrimSpace(v.InstalledVersion)
+	if ver == "" {
+		return truncateRunes(base, maxFindingTitleLen)
+	}
+
+	pkgFull := strings.TrimSpace(v.PkgName)
+
+	// Короткое имя для go modules: github.com/opencontainers/runc -> runc
+	// Но npm scoped пакеты типа @babel/core НЕ режем
+	pkgLabel := pkgFull
+	if pkgLabel != "" && !strings.HasPrefix(pkgLabel, "@") {
+		if idx := strings.LastIndex(pkgLabel, "/"); idx >= 0 && idx < len(pkgLabel)-1 {
+			pkgLabel = pkgLabel[idx+1:]
+		}
+	}
+
+	if pkgLabel == "" {
+		return truncateRunes(base, maxFindingTitleLen)
+	}
+
+	// Если Trivy title уже начинается с "pkg:" — вставляем @ver внутрь
+	lb := strings.ToLower(base)
+	lp := strings.ToLower(pkgLabel)
+	if strings.HasPrefix(lb, lp+":") {
+		rest := base[len(pkgLabel):] // включает ":" и дальше
+		return truncateRunes(fmt.Sprintf("%s@%s%s", pkgLabel, ver, rest), maxFindingTitleLen)
+	}
+
+	// Иначе просто префиксим
+	return truncateRunes(fmt.Sprintf("%s@%s: %s", pkgLabel, ver, base), maxFindingTitleLen)
+}
+
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
+}
+
 func redactSecret(s string) string {
 	if len(s) <= 8 {
 		return "***REDACTED***"
