@@ -1,7 +1,7 @@
 import { Autocomplete, CircularProgress, TextField } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { fetchProducts } from "../api/products";
-import { Product } from "../types/products";
+import { ProductListItemDTO } from "../types/products";
 
 interface ProductAutocompleteProps {
   value: string;
@@ -13,7 +13,7 @@ interface ProductAutocompleteProps {
  * Handles product selection with autocomplete functionality
  */
 export const ProductAutocomplete = ({ value, onChange }: ProductAutocompleteProps) => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductListItemDTO[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productInput, setProductInput] = useState("");
 
@@ -64,7 +64,7 @@ export const ProductAutocomplete = ({ value, onChange }: ProductAutocompleteProp
   }, [productLabel]);
 
   return (
-    <Autocomplete<Product, false, true, true>
+    <Autocomplete<ProductListItemDTO, false, true, true>
       options={products}
       value={selectedProduct}
       inputValue={productInput}

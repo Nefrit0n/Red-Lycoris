@@ -1,17 +1,17 @@
 import { format, subDays } from "date-fns";
-import { fetchFindings } from "../clients/findingsClient";
+import { fetchFindings } from "./findings";
 import { fetchProducts } from "./products";
-import { fetchImportJobs } from "../clients/importJobsClient";
+import { fetchImportJobs } from "./importJobs";
 import {
   DashboardData,
-  DashboardMetrics,
+  DashboardMetricsDTO,
   SeverityDistribution,
   StatusDistribution,
   TrendPoint,
   ProductRisk,
   RecentActivityItem,
 } from "../types/dashboard";
-import { Finding, FindingSeverity, FindingStatus } from "../types/findings";
+import { FindingListItemDTO, FindingSeverity, FindingStatus } from "../types/findings";
 
 const OPEN_STATUSES: FindingStatus[] = ["new", "under_review", "confirmed"];
 const SEVERITIES: FindingSeverity[] = ["critical", "high", "medium", "low"];
@@ -79,7 +79,7 @@ export const fetchDashboardData = async (signal?: AbortSignal): Promise<Dashboar
     criticalHighFindings.map((f) => f.productId).filter(Boolean)
   );
 
-  const metrics: DashboardMetrics = {
+  const metrics: DashboardMetricsDTO = {
     totalOpenFindings: openFindings.length,
     criticalHighFindings: criticalHighFindings.length,
     fixedThisWeek: mitigatedFindings.length,
@@ -120,7 +120,7 @@ export const fetchDashboardData = async (signal?: AbortSignal): Promise<Dashboar
 /**
  * Calculate findings trend over last 30 days
  */
-function calculateTrend(findings: Finding[]): TrendPoint[] {
+function calculateTrend(findings: FindingListItemDTO[]): TrendPoint[] {
   const today = new Date();
   const trend: TrendPoint[] = [];
 
@@ -155,7 +155,7 @@ function calculateTrend(findings: Finding[]): TrendPoint[] {
  * Calculate top products by risk score
  */
 function calculateTopProducts(
-  findings: Finding[],
+  findings: FindingListItemDTO[],
   products: Array<{ id: string; name: string; identifier?: string }>
 ): ProductRisk[] {
   const productMap = new Map<string, ProductRisk>();
@@ -208,7 +208,7 @@ function calculateTopProducts(
  * Build recent activity feed
  */
 function buildRecentActivity(
-  findings: Finding[],
+  findings: FindingListItemDTO[],
   importJobs: Array<{
     id: string;
     scanner: string;

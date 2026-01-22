@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { bulkUpdateFindings } from '../clients/findingsClient';
+import { bulkUpdateFindings } from "../api/findings";
 import { Finding, FindingStatus } from '../types/findings';
 import { FiltersState } from './useUrlFiltersSync';
 import { normalizeDateFrom, normalizeDateTo } from '../utils/urlHelpers';
