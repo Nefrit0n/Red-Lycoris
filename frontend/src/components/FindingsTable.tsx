@@ -709,6 +709,7 @@ export default function FindingsTable({
                   ? intelSummary?.epss?.percentile
                   : null;
               const isKev = Boolean(intelSummary?.kev);
+              const isSca = f.category === "SCA";
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
@@ -993,12 +994,34 @@ export default function FindingsTable({
                         </Typography>
                       )}
 
-                      {(cvssScore !== null || epssScore !== null || isKev) && (
+                      {(cvssScore !== null || epssScore !== null || isKev || isSca) && (
                         <Stack
                           direction="row"
                           spacing={0.75}
                           sx={{ alignItems: "center", flexWrap: "wrap", mt: 0.25 }}
                         >
+                          {isSca && (
+                            <Tooltip title="Software Composition Analysis (dependencies)">
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                  px: 1,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 700,
+                                  fontSize: "0.7rem",
+                                  bgcolor: "rgba(158, 158, 158, 0.16)",
+                                  color: "rgba(255, 255, 255, 0.78)",
+                                  border: "1px solid rgba(255, 255, 255, 0.14)",
+                                }}
+                              >
+                                <SecurityIcon sx={{ fontSize: 14 }} />
+                                SCA
+                              </Box>
+                            </Tooltip>
+                          )}
                           {cvssScore !== null && (
                             <Tooltip
                               title={`CVSS${cvssVersion ? ` v${cvssVersion}` : ""}: ${cvssScore.toFixed(
