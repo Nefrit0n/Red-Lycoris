@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
@@ -86,6 +87,15 @@ func validateFindingStatus(status string) error {
 		return nil
 	default:
 		return fmt.Errorf("invalid status")
+	}
+}
+
+func validateFindingCategory(category string) error {
+	switch category {
+	case models.CategorySAST, models.CategorySCA, models.CategorySecrets, models.CategoryConfig:
+		return nil
+	default:
+		return fmt.Errorf("invalid category")
 	}
 }
 

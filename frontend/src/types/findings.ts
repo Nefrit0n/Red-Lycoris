@@ -9,6 +9,7 @@ export type FindingStatus =
   | "mitigated"
   | "duplicate";
 export type FindingOccurrenceStatus = "NEW" | "REPEAT";
+export type FindingCategory = "SAST" | "SCA" | "SECRETS" | "CONFIG";
 
 export interface FindingOwner {
   id: string;
@@ -33,6 +34,7 @@ export interface Finding {
   evidence?: FindingEvidence | null;
   severity: FindingSeverity;
   status: FindingStatus;
+  category: FindingCategory;
   occurrenceStatus?: FindingOccurrenceStatus | null;
   firstSeenAt?: string | null;
   lastSeenAt?: string | null;
@@ -82,6 +84,7 @@ export interface FindingDetail {
   fingerprint?: string | null;
   severity: FindingSeverity;
   status: FindingStatus;
+  category: FindingCategory;
   sourceType?: string | null;
   sourceVersion?: string | null;
   endpointMethod?: string | null;
@@ -103,8 +106,21 @@ export interface FindingDetail {
   occurrences?: FindingOccurrence[];
   duplicates?: FindingDuplicateGroup | null;
   evidence?: FindingEvidence | null;
+  scaDetails?: ScaDetails | null;
   intel_summary?: IntelSummary | null;
   intel_details?: IntelDetail | null;
+}
+
+export interface ScaDetails {
+  componentName: string;
+  ecosystem?: string | null;
+  purl?: string | null;
+  installedVersion: string;
+  fixedVersion?: string | null;
+  vulnerabilityId: string;
+  primaryUrl?: string | null;
+  references?: string[] | null;
+  rawSeverity?: string | null;
 }
 
 export interface IntelSummary {
