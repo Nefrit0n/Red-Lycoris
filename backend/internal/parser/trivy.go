@@ -34,8 +34,7 @@ func (p *TrivyParser) CanParse(data []byte) bool {
 	}
 
 	for _, r := range report.Results {
-		if len(r.Vulnerabilities) > 0 || len(r.Secrets) > 0 ||
-			len(r.Misconfigurations) > 0 || len(r.Licenses) > 0 {
+		if len(r.Vulnerabilities) > 0 {
 			return true
 		}
 	}
@@ -55,24 +54,9 @@ func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
 	findings := make([]Finding, 0)
 
 	for _, result := range report.Results {
-		// ---------- Vulnerabilities ----------
+		// SCA only (Vulnerabilities). Secrets/Misconfig/Licenses игнорим на этом этапе.
 		for _, vuln := range result.Vulnerabilities {
 			findings = append(findings, p.buildVulnerabilityFinding(result, vuln))
-		}
-
-		// ---------- Secrets ----------
-		for _, secret := range result.Secrets {
-			findings = append(findings, p.buildSecretFinding(result, secret))
-		}
-
-		// ---------- Misconfigurations ----------
-		for _, misconf := range result.Misconfigurations {
-			findings = append(findings, p.buildMisconfigurationFinding(result, misconf))
-		}
-
-		// ---------- Licenses ----------
-		for _, license := range result.Licenses {
-			findings = append(findings, p.buildLicenseFinding(result, license))
 		}
 	}
 
@@ -80,16 +64,35 @@ func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
 }
 
 func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVulnerability) Finding {
-	title := strings.TrimSpace(vuln.Title)
-	if title == "" {
-		title = vuln.VulnerabilityID
+	titleBase := strings.TrimSpace(vuln.Title)
+	if titleBase == "" {
+		titleBase = vuln.VulnerabilityID
 	}
 
+	title := titleBase
+	pkg := strings.TrimSpace(vuln.PkgName)
+	if pkg != "" {
+		// Try to keep the table title compact: "runc" instead of "github.com/opencontainers/runc"
+		shortPkg := pkg
+		if idx := strings.LastIndex(pkg, "/"); idx >= 0 && idx < len(pkg)-1 {
+			shortPkg = pkg[idx+1:]
+		}
+
+		lowerTitle := strings.ToLower(titleBase)
+		lowerPkg := strings.ToLower(pkg)
+		lowerShort := strings.ToLower(shortPkg)
+
+		if !strings.HasPrefix(lowerTitle, lowerPkg+":") && !strings.HasPrefix(lowerTitle, lowerShort+":") {
+			title = fmt.Sprintf("%s: %s", shortPkg, titleBase)
+		}
+	}
+	
 	// Location includes package name and version for better identification
 	location := strings.TrimSpace(result.Target)
 	if location == "" {
 		location = vuln.PkgName
 	}
+
 	if vuln.PkgPath != "" {
 		location = vuln.PkgPath
 	}
