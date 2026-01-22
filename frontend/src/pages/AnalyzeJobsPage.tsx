@@ -32,10 +32,10 @@ import {
 } from "../api/analysisJobs";
 import { fetchProducts } from "../api/products";
 import PaginationControl from "../components/PaginationControl";
-import { Product } from "../types/products";
+import { ProductListItemDTO } from "../types/products";
 
 const AnalyzeJobsPage = () => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductListItemDTO[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [engagementId, setEngagementId] = useState<string>("");
   const [archive, setArchive] = useState<File | null>(null);

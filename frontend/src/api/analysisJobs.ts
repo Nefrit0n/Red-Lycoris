@@ -1,4 +1,4 @@
-import { getAuthHeaders, parseApiResponse, parseListApiResponse } from "./http";
+import { request, requestBlob, requestList } from "./client";
 
 export interface AnalysisJob {
   id: string;
@@ -45,22 +45,14 @@ export const fetchAnalysisJobs = async (
     offset: String(offset),
   });
 
-  const response = await fetch(`/api/v1/analysis-jobs?${searchParams.toString()}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
+  return requestList<AnalysisJob>("/api/v1/analysis-jobs", {
     signal,
+    query: searchParams,
   });
-
-  return parseListApiResponse<AnalysisJob>(response);
 };
 
 export const fetchAnalysisJob = async (id: string): Promise<AnalysisJob> => {
-  const response = await fetch(`/api/v1/analysis-jobs/${id}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
-
-  return parseApiResponse<AnalysisJob>(response);
+  return request<AnalysisJob>(`/api/v1/analysis-jobs/${id}`);
 };
 
 export const createAnalysisJob = async (
@@ -76,28 +68,16 @@ export const createAnalysisJob = async (
     formData.append("scanners", payload.scanners.join(","));
   }
 
-  const response = await fetch("/api/v1/analysis-jobs", {
+  return request<CreateAnalysisJobResponse>("/api/v1/analysis-jobs", {
     method: "POST",
-    headers: getAuthHeaders(),
     body: formData,
+    json: false,
   });
-
-  return parseApiResponse<CreateAnalysisJobResponse>(response);
 };
 
 export const downloadAnalysisArtifact = async (
   jobId: string,
   artifact: "semgrep" | "trivy"
 ): Promise<Blob> => {
-  const response = await fetch(`/api/v1/analysis-jobs/${jobId}/artifacts/${artifact}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || "Artifact not ready");
-  }
-
-  return response.blob();
+  return requestBlob(`/api/v1/analysis-jobs/${jobId}/artifacts/${artifact}`);
 };
