@@ -2,7 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Lotus Warden API",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "description": "Stable API contracts for v1. Responses are additive-only (new optional fields). Request bodies ignore unknown fields; clients must avoid unknown fields on PUT replace operations."
   },
   "paths": {
     "/api/v1/scans/upload": {
@@ -578,6 +579,25 @@
           "errorMessage": {
             "type": "string",
             "nullable": true
+          },
+          "sourceType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "progress": {
+            "type": "integer"
+          },
+          "errorSummary": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -606,6 +626,14 @@
           },
           "findingsOpenCount": {
             "type": "integer"
+          },
+          "assetCriticality": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -783,6 +811,22 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "SAST",
+              "SCA",
+              "SECRETS",
+              "CONFIG"
+            ]
+          },
+          "sourceType": {
+            "type": "string",
+            "nullable": true
+          },
+          "intel_summary": {
+            "$ref": "#/components/schemas/IntelSummary"
           }
         }
       },
@@ -801,6 +845,155 @@
         }
       },
       "FindingDetailResponse": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FindingDetailSAST"
+          },
+          {
+            "$ref": "#/components/schemas/FindingDetailSCA"
+          },
+          {
+            "$ref": "#/components/schemas/FindingDetailSecrets"
+          },
+          {
+            "$ref": "#/components/schemas/FindingDetailConfig"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "category",
+          "mapping": {
+            "SAST": "#/components/schemas/FindingDetailSAST",
+            "SCA": "#/components/schemas/FindingDetailSCA",
+            "SECRETS": "#/components/schemas/FindingDetailSecrets",
+            "CONFIG": "#/components/schemas/FindingDetailConfig"
+          }
+        }
+      },
+      "FindingDetailsSAST": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "startLine": {
+            "type": "integer",
+            "nullable": true
+          },
+          "endLine": {
+            "type": "integer",
+            "nullable": true
+          },
+          "snippet": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "cwe": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "owasp": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FindingDetailsSCA": {
+        "type": "object",
+        "properties": {
+          "pkgName": {
+            "type": "string"
+          },
+          "installedVersion": {
+            "type": "string"
+          },
+          "fixedVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "vulnerabilityId": {
+            "type": "string"
+          },
+          "primaryUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "ecosystem": {
+            "type": "string",
+            "nullable": true
+          },
+          "purl": {
+            "type": "string",
+            "nullable": true
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rawSeverity": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "pkgName",
+          "installedVersion",
+          "vulnerabilityId"
+        ]
+      },
+      "FindingDetailsSecrets": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "snippet": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FindingDetailsConfig": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FindingDetailSAST": {
         "allOf": [
           {
             "$ref": "#/components/schemas/FindingResponse"
@@ -808,6 +1001,9 @@
           {
             "type": "object",
             "properties": {
+              "details": {
+                "$ref": "#/components/schemas/FindingDetailsSAST"
+              },
               "comments": {
                 "type": "array",
                 "items": {
@@ -828,10 +1024,356 @@
               },
               "duplicates": {
                 "$ref": "#/components/schemas/DuplicateGroup"
+              },
+              "evidence": {
+                "type": "object"
+              },
+              "scaDetails": {
+                "$ref": "#/components/schemas/ScaDetails"
+              },
+              "intel_details": {
+                "$ref": "#/components/schemas/IntelDetail"
               }
             }
           }
         ]
+      },
+      "FindingDetailSCA": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FindingResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "details": {
+                "$ref": "#/components/schemas/FindingDetailsSCA"
+              },
+              "comments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingComment"
+                }
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingEvent"
+                }
+              },
+              "occurrences": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingOccurrence"
+                }
+              },
+              "duplicates": {
+                "$ref": "#/components/schemas/DuplicateGroup"
+              },
+              "evidence": {
+                "type": "object"
+              },
+              "scaDetails": {
+                "$ref": "#/components/schemas/ScaDetails"
+              },
+              "intel_details": {
+                "$ref": "#/components/schemas/IntelDetail"
+              }
+            }
+          }
+        ]
+      },
+      "FindingDetailSecrets": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FindingResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "details": {
+                "$ref": "#/components/schemas/FindingDetailsSecrets"
+              },
+              "comments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingComment"
+                }
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingEvent"
+                }
+              },
+              "occurrences": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingOccurrence"
+                }
+              },
+              "duplicates": {
+                "$ref": "#/components/schemas/DuplicateGroup"
+              },
+              "evidence": {
+                "type": "object"
+              },
+              "scaDetails": {
+                "$ref": "#/components/schemas/ScaDetails"
+              },
+              "intel_details": {
+                "$ref": "#/components/schemas/IntelDetail"
+              }
+            }
+          }
+        ]
+      },
+      "FindingDetailConfig": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FindingResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "details": {
+                "$ref": "#/components/schemas/FindingDetailsConfig"
+              },
+              "comments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingComment"
+                }
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingEvent"
+                }
+              },
+              "occurrences": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FindingOccurrence"
+                }
+              },
+              "duplicates": {
+                "$ref": "#/components/schemas/DuplicateGroup"
+              },
+              "evidence": {
+                "type": "object"
+              },
+              "scaDetails": {
+                "$ref": "#/components/schemas/ScaDetails"
+              },
+              "intel_details": {
+                "$ref": "#/components/schemas/IntelDetail"
+              }
+            }
+          }
+        ]
+      },
+      "MetricsTimeSeriesPoint": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "MetricsTimeSeries": {
+        "type": "object",
+        "properties": {
+          "interval": {
+            "type": "string"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsTimeSeriesPoint"
+            }
+          }
+        }
+      },
+      "MetricsSeverityBreakdownItem": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "MetricsCategoryBreakdownItem": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "MetricsBreakdown": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsSeverityBreakdownItem"
+            }
+          },
+          "category": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsCategoryBreakdownItem"
+            }
+          }
+        }
+      },
+      "ScaDetails": {
+        "type": "object",
+        "properties": {
+          "componentName": {
+            "type": "string"
+          },
+          "ecosystem": {
+            "type": "string",
+            "nullable": true
+          },
+          "purl": {
+            "type": "string",
+            "nullable": true
+          },
+          "installedVersion": {
+            "type": "string"
+          },
+          "fixedVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "vulnerabilityId": {
+            "type": "string"
+          },
+          "primaryUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rawSeverity": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "IntelCVSS": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "number",
+            "format": "float",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "IntelEPSS": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "number",
+            "format": "float",
+            "nullable": true
+          },
+          "percentile": {
+            "type": "number",
+            "format": "float",
+            "nullable": true
+          }
+        }
+      },
+      "IntelSummary": {
+        "type": "object",
+        "properties": {
+          "identifiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cvss": {
+            "$ref": "#/components/schemas/IntelCVSS"
+          },
+          "epss": {
+            "$ref": "#/components/schemas/IntelEPSS"
+          },
+          "kev": {
+            "type": "boolean"
+          },
+          "last_refreshed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "IntelReference": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "IntelDetail": {
+        "type": "object",
+        "properties": {
+          "identifiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nvd": {
+            "type": "object"
+          },
+          "epss": {
+            "type": "object"
+          },
+          "kev": {
+            "type": "object"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntelReference"
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
       }
     }
   }
