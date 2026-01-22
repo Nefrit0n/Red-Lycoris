@@ -12,6 +12,10 @@ type TextParser struct {
 	scannerType string
 }
 
+func NewTextParser(scannerType string) *TextParser {
+	return &TextParser{scannerType: scannerType}
+}
+
 func (p *TextParser) ScannerType() string {
 	return p.scannerType
 }
