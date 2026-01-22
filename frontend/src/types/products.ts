@@ -1,13 +1,20 @@
-export interface Product {
+export interface ProductListItemDTO {
   id: string;
   name: string;
   identifier?: string | null;
   version?: string | null;
+  assetCriticality?: string | null;
   lastScanAt?: string | null;
   findingsOpenCount: number;
 }
 
-export interface ProductWithStats extends Product {
+export interface ProductDetailDTO extends ProductListItemDTO {
+  description?: string | null;
+}
+
+export type ProductDTO = ProductListItemDTO;
+
+export interface ProductWithStats extends ProductListItemDTO {
   severityBreakdown?: {
     critical: number;
     high: number;
@@ -19,19 +26,18 @@ export interface ProductWithStats extends Product {
   trendValue?: number;
   recentScans?: {
     id: string;
-    scannerType: string;
+    scanner: string;
     status: string;
     createdAt: string;
-    findingsCount: number;
+    findingsNew: number;
   }[];
 }
 
-export interface ProductDetail extends ProductWithStats {
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
+export interface ProductDetailView extends ProductDetailDTO, ProductWithStats {
   totalScans: number;
   findingsFixedCount: number;
   findingsFalsePositiveCount: number;
 }
 
+export type Product = ProductListItemDTO;
+export type ProductDetail = ProductDetailView;

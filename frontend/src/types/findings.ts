@@ -11,27 +11,21 @@ export type FindingStatus =
 export type FindingOccurrenceStatus = "NEW" | "REPEAT";
 export type FindingCategory = "SAST" | "SCA" | "SECRETS" | "CONFIG";
 
-export interface FindingOwner {
+export interface FindingOwnerDTO {
   id: string;
   name: string;
 }
 
-export interface Finding {
+export interface FindingListItemDTO {
   id: string;
   title: string;
-  description?: string | null;
-  fingerprint?: string | null;
   productId?: string | null;
   productName?: string | null;
   assigneeId?: string | null;
-  owner?: FindingOwner | null;
+  owner?: FindingOwnerDTO | null;
   importJobId?: string | null;
   scannerType?: string | null;
   sourceType?: string | null;
-  sourceVersion?: string | null;
-  endpointMethod?: string | null;
-  endpointPath?: string | null;
-  evidence?: FindingEvidence | null;
   severity: FindingSeverity;
   status: FindingStatus;
   category: FindingCategory;
@@ -45,7 +39,7 @@ export interface Finding {
 }
 
 export interface ApiResponse {
-  data: Finding[];
+  data: FindingListItemDTO[];
   total: number;
 }
 
@@ -64,7 +58,7 @@ export interface FetchFindingsParams {
   canonicalOnly?: boolean;
   includeRepeats?: boolean;
   importJobId?: string;
-  sortField?: keyof Finding | "";
+  sortField?: keyof FindingListItemDTO | "";
   sortOrder?: "asc" | "desc" | "";
 }
 
@@ -77,39 +71,97 @@ export interface BulkUpdateResponse {
   }>;
 }
 
-export interface FindingDetail {
-  id: string;
-  title: string;
+export interface FindingDetailsSAST {
+  ruleId?: string | null;
+  filePath?: string | null;
+  startLine?: number | null;
+  endLine?: number | null;
+  snippet?: string | null;
+  message?: string | null;
+  cwe?: string[] | null;
+  owasp?: string[] | null;
+}
+
+export interface FindingDetailsSCA {
+  pkgName: string;
+  installedVersion: string;
+  fixedVersion?: string | null;
+  vulnerabilityId: string;
+  primaryUrl?: string | null;
+  ecosystem?: string | null;
+  purl?: string | null;
+  references?: string[] | null;
+  rawSeverity?: string | null;
+}
+
+export interface FindingDetailsSecrets {
+  ruleId?: string | null;
+  filePath?: string | null;
+  snippet?: string | null;
+  message?: string | null;
+}
+
+export interface FindingDetailsConfig {
+  ruleId?: string | null;
+  filePath?: string | null;
+  message?: string | null;
+}
+
+export type FindingDetails =
+  | FindingDetailsSAST
+  | FindingDetailsSCA
+  | FindingDetailsSecrets
+  | FindingDetailsConfig;
+
+export interface FindingDetailBaseDTO extends FindingListItemDTO {
   description?: string | null;
   fingerprint?: string | null;
-  severity: FindingSeverity;
-  status: FindingStatus;
-  category: FindingCategory;
-  sourceType?: string | null;
   sourceVersion?: string | null;
   endpointMethod?: string | null;
   endpointPath?: string | null;
-  occurrenceStatus?: FindingOccurrenceStatus | null;
-  firstSeenAt?: string | null;
-  lastSeenAt?: string | null;
-  repeatCount?: number | null;
-  productId?: string | null;
-  productName?: string | null;
-  assigneeId?: string | null;
-  owner?: FindingOwner | null;
-  importJobId?: string | null;
-  createdAt: string;
-  updatedAt: string;
   deletedAt?: string | null;
   comments: FindingComment[];
   events: FindingEvent[];
   occurrences?: FindingOccurrence[];
   duplicates?: FindingDuplicateGroup | null;
   evidence?: FindingEvidence | null;
+  details?: FindingDetails | null;
   scaDetails?: ScaDetails | null;
   intel_summary?: IntelSummary | null;
   intel_details?: IntelDetail | null;
 }
+
+export interface FindingDetailSASTDTO extends FindingDetailBaseDTO {
+  category: "SAST";
+  details?: FindingDetailsSAST | null;
+}
+
+export interface FindingDetailSCADTO extends FindingDetailBaseDTO {
+  category: "SCA";
+  details?: FindingDetailsSCA | null;
+}
+
+export interface FindingDetailSecretsDTO extends FindingDetailBaseDTO {
+  category: "SECRETS";
+  details?: FindingDetailsSecrets | null;
+}
+
+export interface FindingDetailConfigDTO extends FindingDetailBaseDTO {
+  category: "CONFIG";
+  details?: FindingDetailsConfig | null;
+}
+
+export interface FindingDetailUnknownDTO extends FindingDetailBaseDTO {
+  category: string;
+  details?: unknown | null;
+}
+
+export type FindingDetailDTO =
+  | FindingDetailSASTDTO
+  | FindingDetailSCADTO
+  | FindingDetailSecretsDTO
+  | FindingDetailConfigDTO
+  | FindingDetailUnknownDTO;
 
 export interface ScaDetails {
   componentName: string;
@@ -167,8 +219,8 @@ export interface FindingEvent {
 }
 
 export interface FindingDuplicateGroup {
-  master: Finding;
-  duplicates: Finding[];
+  master: FindingListItemDTO;
+  duplicates: FindingListItemDTO[];
 }
 
 export interface FindingOccurrence {
@@ -205,3 +257,6 @@ export interface SemgrepEvidence extends FindingEvidence {
   code?: string | null;
   metadata?: Record<string, unknown> | null;
 }
+
+export type Finding = FindingListItemDTO;
+export type FindingDetail = FindingDetailDTO;
