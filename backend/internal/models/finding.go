@@ -16,6 +16,13 @@ const (
 )
 
 const (
+	CategorySAST    = "SAST"
+	CategorySCA     = "SCA"
+	CategorySecrets = "SECRETS"
+	CategoryConfig  = "CONFIG"
+)
+
+const (
 	StatusNew           = "new"
 	StatusUnderReview   = "under_review"
 	StatusConfirmed     = "confirmed"
@@ -31,6 +38,7 @@ type Finding struct {
 	ScanResultID   *uuid.UUID      `db:"scan_result_id"`
 	ProductID      *uuid.UUID      `db:"product_id"`
 	Fingerprint    string          `db:"fingerprint"`
+	Category       string          `db:"category"`
 	Title          string          `db:"title"`
 	Description    *string         `db:"description"`
 	Severity       string          `db:"severity"`
@@ -68,6 +76,13 @@ func (f *Finding) Validate() error {
 		return fmt.Errorf("fingerprint is required")
 	}
 
+	switch f.Category {
+	case CategorySAST, CategorySCA, CategorySecrets, CategoryConfig:
+		// ok
+	default:
+		return fmt.Errorf("category must be one of SAST, SCA, SECRETS, CONFIG")
+	}
+
 	switch f.Severity {
 	case SeverityLow, SeverityMedium, SeverityHigh, SeverityCritical:
 		// ok
@@ -93,6 +108,9 @@ func (f *Finding) Validate() error {
 func (f *Finding) PrepareForInsert() {
 	if f.ID == uuid.Nil {
 		f.ID = uuid.New()
+	}
+	if f.Category == "" {
+		f.Category = CategorySAST
 	}
 	if f.CreatedAt.IsZero() {
 		f.CreatedAt = time.Now().UTC()

@@ -9,6 +9,7 @@ type Finding struct {
 	Fingerprint    *string       `json:"fingerprint,omitempty"`
 	Severity       string        `json:"severity"`
 	Status         string        `json:"status"`
+	Category       string        `json:"category"`
 	ScannerType    *string       `json:"scannerType,omitempty"`
 	SourceType     *string       `json:"sourceType,omitempty"`
 	SourceVersion  *string       `json:"sourceVersion,omitempty"`
@@ -58,7 +59,20 @@ type FindingDetail struct {
 	Occurrences  []FindingOccurrence    `json:"occurrences"`
 	Duplicates   *DuplicateGroup        `json:"duplicates,omitempty"`
 	Evidence     map[string]interface{} `json:"evidence,omitempty"`
+	ScaDetails   *ScaDetails            `json:"scaDetails,omitempty"`
 	IntelDetails *IntelDetail           `json:"intel_details,omitempty"`
+}
+
+type ScaDetails struct {
+	ComponentName    string   `json:"componentName"`
+	Ecosystem        *string  `json:"ecosystem,omitempty"`
+	Purl             *string  `json:"purl,omitempty"`
+	InstalledVersion string   `json:"installedVersion"`
+	FixedVersion     *string  `json:"fixedVersion,omitempty"`
+	VulnerabilityID  string   `json:"vulnerabilityId"`
+	PrimaryURL       *string  `json:"primaryUrl,omitempty"`
+	References       []string `json:"references,omitempty"`
+	RawSeverity      *string  `json:"rawSeverity,omitempty"`
 }
 
 type FindingOccurrence struct {

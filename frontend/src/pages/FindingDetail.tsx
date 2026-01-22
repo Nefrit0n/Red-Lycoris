@@ -42,7 +42,7 @@ import {
   ALL_STATUSES,
 } from "../utils/findingConstants";
 import { formatDateRu, EventCategory } from "../utils/findingFormatters";
-import { FindingComment, SemgrepEvidence } from "../types/findings";
+import { FindingComment, ScaDetails, SemgrepEvidence } from "../types/findings";
 
 type FindingDetailContentProps = {
   id: string;
@@ -63,6 +63,42 @@ const toStringValue = (value: unknown): string | null => {
     return String(value);
   }
   return null;
+};
+
+const extractEvidenceValue = (evidence: Record<string, unknown> | null | undefined, key: string) => {
+  if (!evidence || typeof evidence !== "object") return null;
+  const value = evidence[key];
+  return toStringValue(value);
+};
+
+const extractEvidenceArray = (evidence: Record<string, unknown> | null | undefined, key: string) => {
+  if (!evidence || typeof evidence !== "object") return null;
+  const value = evidence[key];
+  if (!Array.isArray(value)) return null;
+  const values = value
+    .map((item) => (typeof item === "string" ? item : null))
+    .filter((item): item is string => Boolean(item));
+  return values.length > 0 ? values : null;
+};
+
+const buildScaDetailsFromEvidence = (
+  evidence: Record<string, unknown> | null | undefined
+): ScaDetails | null => {
+  const componentName = extractEvidenceValue(evidence, "pkgName");
+  const installedVersion = extractEvidenceValue(evidence, "installedVersion");
+  const vulnerabilityId = extractEvidenceValue(evidence, "vulnerabilityId");
+  if (!componentName || !installedVersion || !vulnerabilityId) return null;
+  return {
+    componentName,
+    installedVersion,
+    vulnerabilityId,
+    fixedVersion: extractEvidenceValue(evidence, "fixedVersion"),
+    primaryUrl: extractEvidenceValue(evidence, "primaryUrl"),
+    references: extractEvidenceArray(evidence, "references"),
+    ecosystem: extractEvidenceValue(evidence, "ecosystem"),
+    purl: extractEvidenceValue(evidence, "purl"),
+    rawSeverity: extractEvidenceValue(evidence, "severity"),
+  };
 };
 
 const extractStringFromRecord = (value: Record<string, unknown>): string | null => {
@@ -210,6 +246,21 @@ export const FindingDetailContent = ({
     Boolean(category) ||
     Boolean(subcategory) ||
     references.length > 0;
+
+  const scaDetails =
+    data?.category === "SCA"
+      ? (data?.scaDetails as ScaDetails | null) ?? buildScaDetailsFromEvidence(data?.evidence)
+      : null;
+  const hasScaDetails = Boolean(scaDetails);
+
+  let tabIndex = 0;
+  const descriptionIndex = tabIndex++;
+  const scaIndex = hasScaDetails ? tabIndex++ : null;
+  const semgrepIndex = semgrepEvidence ? tabIndex++ : null;
+  const occurrencesIndex = tabIndex++;
+  const commentsIndex = tabIndex++;
+  const historyIndex = tabIndex++;
+  const duplicatesIndex = data.duplicates ? tabIndex++ : null;
 
   // Loading state
   if (loading) {
@@ -370,6 +421,7 @@ export const FindingDetailContent = ({
         allowScrollButtonsMobile
       >
         <Tab label="Описание" />
+        {hasScaDetails ? <Tab label="SCA" /> : null}
         {semgrepEvidence ? <Tab label="Источник (Semgrep)" /> : null}
         <Tab label={`Occurrences${hasOccurrences ? ` (${occurrences.length})` : ""}`} />
         <Tab label={`Комментарии (${data.comments?.length ?? 0})`} />
@@ -378,7 +430,7 @@ export const FindingDetailContent = ({
       </Tabs>
 
       {/* Tab: Description */}
-      <TabPanel value={tab} index={0}>
+      <TabPanel value={tab} index={descriptionIndex}>
         <Section
           title="Описание"
           dense={compact}
@@ -563,9 +615,89 @@ export const FindingDetailContent = ({
         )}
       </TabPanel>
 
+      {/* Tab: SCA */}
+      {hasScaDetails && scaDetails && scaIndex !== null && (
+        <TabPanel value={tab} index={scaIndex}>
+          <Section title="SCA" dense={compact}>
+            <Stack spacing={1.2}>
+              <Stack direction="row" gap={1} alignItems="center">
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                  Package
+                </Typography>
+                <Typography variant="body2">{scaDetails.componentName}</Typography>
+                {scaDetails.purl && (
+                  <Tooltip title="Скопировать PURL">
+                    <IconButton size="small" onClick={() => handleCopyValue(scaDetails.purl ?? "")}>
+                      <ContentCopyIcon fontSize="inherit" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Stack>
+              <Stack direction="row" gap={1}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                  Installed version
+                </Typography>
+                <Typography variant="body2">{scaDetails.installedVersion}</Typography>
+              </Stack>
+              <Stack direction="row" gap={1}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                  Fixed version
+                </Typography>
+                <Typography variant="body2">{scaDetails.fixedVersion || "—"}</Typography>
+              </Stack>
+              <Stack direction="row" gap={1} alignItems="center">
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                  Vulnerability ID
+                </Typography>
+                <Typography variant="body2">{scaDetails.vulnerabilityId}</Typography>
+                <Tooltip title="Скопировать">
+                  <IconButton
+                    size="small"
+                    onClick={() => handleCopyValue(scaDetails.vulnerabilityId)}
+                  >
+                    <ContentCopyIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+              <Stack direction="row" gap={1} alignItems="center">
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                  Primary URL
+                </Typography>
+                {scaDetails.primaryUrl ? (
+                  <MuiLink href={scaDetails.primaryUrl} target="_blank" rel="noreferrer">
+                    {scaDetails.primaryUrl}
+                  </MuiLink>
+                ) : (
+                  <Typography variant="body2">—</Typography>
+                )}
+              </Stack>
+              {scaDetails.references && scaDetails.references.length > 0 && (
+                <Stack spacing={0.5}>
+                  <Typography variant="caption" color="text.secondary">
+                    References
+                  </Typography>
+                  <Stack spacing={0.5}>
+                    {scaDetails.references.map((ref) => (
+                      <Stack key={ref} direction="row" alignItems="center" spacing={1}>
+                        <MuiLink href={ref} target="_blank" rel="noreferrer">
+                          {ref}
+                        </MuiLink>
+                        <IconButton size="small" onClick={() => handleCopyValue(ref)}>
+                          <ContentCopyIcon fontSize="inherit" />
+                        </IconButton>
+                      </Stack>
+                    ))}
+                  </Stack>
+                </Stack>
+              )}
+            </Stack>
+          </Section>
+        </TabPanel>
+      )}
+
       {/* Tab: Semgrep Evidence */}
-      {semgrepEvidence && (
-        <TabPanel value={tab} index={1}>
+      {semgrepEvidence && semgrepIndex !== null && (
+        <TabPanel value={tab} index={semgrepIndex}>
           <Section title="Источник (Semgrep)" dense={compact}>
             <Stack spacing={1.2}>
               <Stack direction="row" gap={1}>
@@ -651,7 +783,7 @@ export const FindingDetailContent = ({
       )}
 
       {/* Tab: Occurrences */}
-      <TabPanel value={tab} index={semgrepEvidence ? 2 : 1}>
+      <TabPanel value={tab} index={occurrencesIndex}>
         <Section title="Occurrences / Repeats" dense={compact}>
           {!hasOccurrences ? (
             <Typography variant="body2" color="text.secondary">
@@ -751,7 +883,7 @@ export const FindingDetailContent = ({
       </TabPanel>
 
       {/* Tab: Comments */}
-      <TabPanel value={tab} index={semgrepEvidence ? 3 : 2}>
+      <TabPanel value={tab} index={commentsIndex}>
         <Section title="Комментарии" dense={compact}>
           <Stack spacing={1.2}>
             {(data.comments ?? []).length === 0 && (
@@ -806,7 +938,7 @@ export const FindingDetailContent = ({
       </TabPanel>
 
       {/* Tab: Events History */}
-      <TabPanel value={tab} index={semgrepEvidence ? 4 : 3}>
+      <TabPanel value={tab} index={historyIndex}>
         <Section title="История изменений" dense={compact}>
           <ToggleButtonGroup
             exclusive
@@ -831,8 +963,8 @@ export const FindingDetailContent = ({
       </TabPanel>
 
       {/* Tab: Duplicates */}
-      {data.duplicates && (
-        <TabPanel value={tab} index={semgrepEvidence ? 5 : 4}>
+      {data.duplicates && duplicatesIndex !== null && (
+        <TabPanel value={tab} index={duplicatesIndex}>
           <Section title="Дубликаты" dense={compact}>
             {data.duplicates.master.id !== data.id ? (
               <Stack spacing={1}>

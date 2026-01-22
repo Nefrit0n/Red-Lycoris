@@ -65,6 +65,7 @@ func mapFindingListItem(item storage.FindingListItem) v1dto.Finding {
 		Title:       item.Title,
 		Severity:    item.Severity,
 		Status:      item.Status,
+		Category:    item.Category,
 		ScannerType: scannerType,
 		SourceType:  sourceType,
 		Occurrence:  &occurrence,
@@ -131,6 +132,76 @@ func mapIntelDetail(detail *storage.IntelDetail) *v1dto.IntelDetail {
 		resp.UpdatedAt = &value
 	}
 	return resp
+}
+
+func mapScaDetail(detail *storage.ScaFindingDetail, evidence map[string]interface{}) *v1dto.ScaDetails {
+	if detail == nil {
+		return nil
+	}
+	var ecosystem *string
+	if detail.Ecosystem.Valid {
+		value := detail.Ecosystem.String
+		ecosystem = &value
+	}
+	var purl *string
+	if detail.Purl.Valid {
+		value := detail.Purl.String
+		purl = &value
+	}
+	var fixedVersion *string
+	if detail.FixedVersion.Valid {
+		value := detail.FixedVersion.String
+		fixedVersion = &value
+	}
+	var primaryURL *string
+	if detail.PrimaryURL.Valid {
+		value := detail.PrimaryURL.String
+		primaryURL = &value
+	}
+	var rawSeverity *string
+	if detail.RawSeverity.Valid {
+		value := detail.RawSeverity.String
+		rawSeverity = &value
+	}
+
+	references := extractStringSlice(evidence, "references")
+
+	return &v1dto.ScaDetails{
+		ComponentName:    detail.ComponentName,
+		Ecosystem:        ecosystem,
+		Purl:             purl,
+		InstalledVersion: detail.InstalledVersion,
+		FixedVersion:     fixedVersion,
+		VulnerabilityID:  detail.VulnerabilityID,
+		PrimaryURL:       primaryURL,
+		References:       references,
+		RawSeverity:      rawSeverity,
+	}
+}
+
+func extractStringSlice(data map[string]interface{}, key string) []string {
+	if len(data) == 0 {
+		return nil
+	}
+	value, ok := data[key]
+	if !ok {
+		return nil
+	}
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []interface{}:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if str, ok := item.(string); ok && str != "" {
+				values = append(values, str)
+			}
+		}
+		if len(values) > 0 {
+			return values
+		}
+	}
+	return nil
 }
 
 // mapFindingDetail converts storage.FindingDetail to DTO Finding
@@ -208,6 +279,7 @@ func mapFindingDetail(item storage.FindingDetail) v1dto.Finding {
 		Fingerprint:    &item.Fingerprint,
 		Severity:       item.Severity,
 		Status:         item.Status,
+		Category:       item.Category,
 		SourceType:     sourceType,
 		SourceVersion:  sourceVersion,
 		EndpointMethod: endpointMethod,
@@ -277,6 +349,7 @@ func mapFindingModel(item models.Finding) v1dto.Finding {
 		Fingerprint:    &item.Fingerprint,
 		Severity:       item.Severity,
 		Status:         item.Status,
+		Category:       item.Category,
 		SourceType:     sourceType,
 		SourceVersion:  sourceVersion,
 		EndpointMethod: endpointMethod,

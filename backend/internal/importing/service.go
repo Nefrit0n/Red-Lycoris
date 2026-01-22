@@ -253,6 +253,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 			ScanResultID:  &params.scanID,
 			ProductID:     params.productID,
 			Fingerprint:   fingerprint,
+			Category:      resolveFindingCategory(params.finding),
 			Title:         params.finding.Title,
 			Description:   params.finding.Description,
 			Severity:      params.finding.Severity,
@@ -267,6 +268,10 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 			RawData:       rawData,
 		}
 		if err := storage.CreateFindingTx(ctx, tx, model); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		if err := createScaRecordIfNeeded(ctx, tx, model.ID, params.finding); err != nil {
 			_ = tx.Rollback()
 			return nil, err
 		}
@@ -291,6 +296,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		ScanResultID:  &params.scanID,
 		ProductID:     params.productID,
 		Fingerprint:   fingerprint,
+		Category:      resolveFindingCategory(params.finding),
 		Title:         params.finding.Title,
 		Description:   params.finding.Description,
 		Severity:      params.finding.Severity,
@@ -306,6 +312,10 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		RawData:       rawData,
 	}
 	if err := storage.CreateFindingTx(ctx, tx, duplicate); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := createScaRecordIfNeeded(ctx, tx, duplicate.ID, params.finding); err != nil {
 		_ = tx.Rollback()
 		return nil, err
 	}
@@ -330,6 +340,121 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		return nil, err
 	}
 	return &processFindingResult{isNew: false, finding: duplicate, masterID: masterID}, nil
+}
+
+func resolveFindingCategory(finding parser.Finding) string {
+	if finding.Category != "" {
+		return finding.Category
+	}
+	return models.CategorySAST
+}
+
+type scaExtraction struct {
+	ComponentName    string
+	Ecosystem        *string
+	Purl             *string
+	InstalledVersion string
+	FixedVersion     *string
+	VulnerabilityID  string
+	PrimaryURL       *string
+	RawSeverity      *string
+}
+
+func createScaRecordIfNeeded(ctx context.Context, tx *sql.Tx, findingID uuid.UUID, finding parser.Finding) error {
+	extracted := extractScaDetails(finding)
+	if extracted == nil {
+		return nil
+	}
+	componentID, err := storage.UpsertScaComponentTx(ctx, tx, extracted.ComponentName, extracted.Ecosystem, extracted.Purl)
+	if err != nil {
+		return err
+	}
+	detail := storage.ScaFindingDetail{
+		FindingID:        findingID,
+		ComponentID:      componentID,
+		InstalledVersion: extracted.InstalledVersion,
+		VulnerabilityID:  extracted.VulnerabilityID,
+		FixedVersion:     toNullString(extracted.FixedVersion),
+		PrimaryURL:       toNullString(extracted.PrimaryURL),
+		RawSeverity:      toNullString(extracted.RawSeverity),
+	}
+	return storage.CreateScaFindingTx(ctx, tx, detail)
+}
+
+func extractScaDetails(finding parser.Finding) *scaExtraction {
+	if !strings.EqualFold(finding.Category, models.CategorySCA) {
+		return nil
+	}
+	component := firstNonEmptyString(
+		extractString(finding.Evidence, "pkgName"),
+		extractString(finding.Evidence, "package"),
+		extractString(finding.RawData, "package"),
+	)
+	installedVersion := firstNonEmptyString(
+		extractString(finding.Evidence, "installedVersion"),
+		extractString(finding.Evidence, "installed_version"),
+		extractString(finding.RawData, "installed_version"),
+	)
+	vulnerabilityID := firstNonEmptyString(
+		extractString(finding.Evidence, "vulnerabilityId"),
+		extractString(finding.Evidence, "vulnerability_id"),
+		finding.RuleID,
+	)
+	if component == "" || installedVersion == "" || vulnerabilityID == "" {
+		return nil
+	}
+	ecosystem := extractOptionalString(finding.Evidence, "ecosystem")
+	purl := extractOptionalString(finding.Evidence, "purl")
+	fixedVersion := extractOptionalString(finding.Evidence, "fixedVersion")
+	primaryURL := extractOptionalString(finding.Evidence, "primaryUrl")
+	rawSeverity := extractOptionalString(finding.Evidence, "severity")
+
+	return &scaExtraction{
+		ComponentName:    component,
+		Ecosystem:        ecosystem,
+		Purl:             purl,
+		InstalledVersion: installedVersion,
+		FixedVersion:     fixedVersion,
+		VulnerabilityID:  vulnerabilityID,
+		PrimaryURL:       primaryURL,
+		RawSeverity:      rawSeverity,
+	}
+}
+
+func extractString(data map[string]any, key string) string {
+	if data == nil {
+		return ""
+	}
+	if value, ok := data[key]; ok {
+		if str, ok := value.(string); ok {
+			return strings.TrimSpace(str)
+		}
+	}
+	return ""
+}
+
+func extractOptionalString(data map[string]any, key string) *string {
+	value := extractString(data, key)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func toNullString(value *string) sql.NullString {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: strings.TrimSpace(*value), Valid: true}
 }
 
 // findExistingMaster looks for an existing master finding with the same fingerprint.

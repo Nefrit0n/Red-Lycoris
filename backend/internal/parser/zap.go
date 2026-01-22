@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"lotus-warden/backend/internal/models"
 )
 
 type ZapParser struct{}
@@ -58,6 +60,7 @@ func (p *ZapParser) Parse(data []byte) ([]Finding, error) {
 				descPtr = &desc
 			}
 			findings = append(findings, Finding{
+				Category:    models.CategoryConfig,
 				Title:       alert.Alert,
 				Description: descPtr,
 				Severity:    mapZapSeverity(alert.RiskCode, alert.RiskDesc),

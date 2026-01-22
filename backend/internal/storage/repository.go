@@ -180,19 +180,20 @@ func CreateFindingTx(ctx context.Context, tx *sql.Tx, finding *models.Finding) e
 }
 
 func createFindingWithExecer(ctx context.Context, ex execer, finding *models.Finding) error {
+	finding.PrepareForInsert()
 	if err := finding.Validate(); err != nil {
 		return err
 	}
-	finding.PrepareForInsert()
 
 	_, err := ex.ExecContext(
 		ctx,
-		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
+		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
 		finding.ID,
 		anyUUIDPtr(finding.ScanResultID),
 		anyUUIDPtr(finding.ProductID),
 		finding.Fingerprint,
+		finding.Category,
 		finding.Title,
 		nullStringPtr(finding.Description),
 		finding.Severity,
