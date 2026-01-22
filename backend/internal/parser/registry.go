@@ -50,6 +50,7 @@ var defaultRegistry = func() *Registry {
 	registry.Register(&TrivyParser{})
 	registry.Register(&ZapParser{})
 	registry.Register(&SemgrepParser{})
+	registry.Register(&SarifParser{})
 	registry.Register(&TextParser{scannerType: "trivy"})
 	registry.Register(&TextParser{scannerType: "zap"})
 	registry.Register(&TextParser{scannerType: "semgrep"})
