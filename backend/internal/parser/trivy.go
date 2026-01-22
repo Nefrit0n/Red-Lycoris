@@ -108,6 +108,9 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 		"type":    "vulnerability",
 		"package": vuln.PkgName,
 	}
+	if rawSource := decodeTrivyRaw(vuln.Raw); len(rawSource) > 0 {
+		rawData["source"] = rawSource
+	}
 	if strings.HasPrefix(strings.ToLower(vuln.PkgID), "pkg:") {
 		rawData["purl"] = vuln.PkgID
 	}
@@ -272,6 +275,9 @@ func (p *TrivyParser) buildSecretFinding(result trivyResult, secret trivySecret)
 		"type":     "secret",
 		"category": secret.Category,
 	}
+	if rawSource := decodeTrivyRaw(secret.Raw); len(rawSource) > 0 {
+		rawData["source"] = redactTrivySecretRaw(rawSource)
+	}
 	if secret.StartLine > 0 || secret.EndLine > 0 {
 		rawData["lines"] = fmt.Sprintf("%d-%d", secret.StartLine, secret.EndLine)
 	}
@@ -349,6 +355,9 @@ func (p *TrivyParser) buildMisconfigurationFinding(result trivyResult, misconf t
 
 	rawData := map[string]any{
 		"type": "misconfiguration",
+	}
+	if rawSource := decodeTrivyRaw(misconf.Raw); len(rawSource) > 0 {
+		rawData["source"] = rawSource
 	}
 	if misconf.Type != "" {
 		rawData["misconf_type"] = misconf.Type
@@ -456,6 +465,9 @@ func (p *TrivyParser) buildLicenseFinding(result trivyResult, license trivyLicen
 		"type":         "license",
 		"license_name": license.Name,
 	}
+	if rawSource := decodeTrivyRaw(license.Raw); len(rawSource) > 0 {
+		rawData["source"] = rawSource
+	}
 	if license.Category != "" {
 		rawData["category"] = license.Category
 	}
@@ -496,6 +508,44 @@ func (p *TrivyParser) buildLicenseFinding(result trivyResult, license trivyLicen
 		RawData:  rawData,
 		Evidence: evidence,
 	}
+}
+
+func decodeTrivyRaw(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil
+	}
+	return decoded
+}
+
+func redactTrivySecretRaw(raw map[string]any) map[string]any {
+	if raw == nil {
+		return nil
+	}
+	if match, ok := raw["Match"].(string); ok {
+		raw["Match"] = redactSecret(match)
+	}
+	code, ok := raw["Code"].(map[string]any)
+	if !ok {
+		return raw
+	}
+	lines, ok := code["Lines"].([]any)
+	if !ok {
+		return raw
+	}
+	for _, entry := range lines {
+		line, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if content, ok := line["Content"].(string); ok {
+			line["Content"] = redactSecret(content)
+		}
+	}
+	return raw
 }
 
 // redactSecret masks potential secret values while preserving pattern for identification
@@ -546,6 +596,18 @@ type trivyVulnerability struct {
 	LastModifiedDate string               `json:"LastModifiedDate"`
 	Layer            *trivyLayer          `json:"Layer"`
 	DataSource       *trivyDataSource     `json:"DataSource"`
+	Raw              json.RawMessage      `json:"-"`
+}
+
+func (v *trivyVulnerability) UnmarshalJSON(data []byte) error {
+	type alias trivyVulnerability
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*v = trivyVulnerability(decoded)
+	v.Raw = append(v.Raw[:0], data...)
+	return nil
 }
 
 type trivyCVSS struct {
@@ -567,14 +629,26 @@ type trivyDataSource struct {
 }
 
 type trivySecret struct {
-	RuleID    string     `json:"RuleID"`
-	Category  string     `json:"Category"`
-	Severity  string     `json:"Severity"`
-	Title     string     `json:"Title"`
-	StartLine int        `json:"StartLine"`
-	EndLine   int        `json:"EndLine"`
-	Match     string     `json:"Match"`
-	Code      *trivyCode `json:"Code"`
+	RuleID    string          `json:"RuleID"`
+	Category  string          `json:"Category"`
+	Severity  string          `json:"Severity"`
+	Title     string          `json:"Title"`
+	StartLine int             `json:"StartLine"`
+	EndLine   int             `json:"EndLine"`
+	Match     string          `json:"Match"`
+	Code      *trivyCode      `json:"Code"`
+	Raw       json.RawMessage `json:"-"`
+}
+
+func (s *trivySecret) UnmarshalJSON(data []byte) error {
+	type alias trivySecret
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*s = trivySecret(decoded)
+	s.Raw = append(s.Raw[:0], data...)
+	return nil
 }
 
 type trivyCode struct {
@@ -604,6 +678,18 @@ type trivyMisconfiguration struct {
 	Status        string              `json:"Status"`
 	Layer         *trivyLayer         `json:"Layer"`
 	CauseMetadata *trivyCauseMetadata `json:"CauseMetadata"`
+	Raw           json.RawMessage     `json:"-"`
+}
+
+func (m *trivyMisconfiguration) UnmarshalJSON(data []byte) error {
+	type alias trivyMisconfiguration
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*m = trivyMisconfiguration(decoded)
+	m.Raw = append(m.Raw[:0], data...)
+	return nil
 }
 
 type trivyCauseMetadata struct {
@@ -616,13 +702,25 @@ type trivyCauseMetadata struct {
 }
 
 type trivyLicense struct {
-	Severity   string  `json:"Severity"`
-	Category   string  `json:"Category"`
-	PkgName    string  `json:"PkgName"`
-	FilePath   string  `json:"FilePath"`
-	Name       string  `json:"Name"`
-	Confidence float64 `json:"Confidence"`
-	Link       string  `json:"Link"`
+	Severity   string          `json:"Severity"`
+	Category   string          `json:"Category"`
+	PkgName    string          `json:"PkgName"`
+	FilePath   string          `json:"FilePath"`
+	Name       string          `json:"Name"`
+	Confidence float64         `json:"Confidence"`
+	Link       string          `json:"Link"`
+	Raw        json.RawMessage `json:"-"`
+}
+
+func (l *trivyLicense) UnmarshalJSON(data []byte) error {
+	type alias trivyLicense
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*l = trivyLicense(decoded)
+	l.Raw = append(l.Raw[:0], data...)
+	return nil
 }
 
 // ---------- Helpers ----------
