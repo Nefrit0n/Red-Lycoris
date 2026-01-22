@@ -110,6 +110,9 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 	// Extract metadata fields
 	if r.Extra.Metadata != nil {
 		meta := r.Extra.Metadata
+		if len(meta.Raw) > 0 {
+			rawData["metadata_raw"] = meta.Raw
+		}
 		if meta.Category != "" {
 			rawData["category"] = meta.Category
 		}
@@ -214,6 +217,17 @@ type semgrepMetadata struct {
 	CweTop25_2021      bool            `json:"cwe2021-top25"`
 	OwaspTop10         bool            `json:"asvs"`
 	Raw                json.RawMessage `json:"-"` // Store full metadata for extensibility
+}
+
+func (m *semgrepMetadata) UnmarshalJSON(data []byte) error {
+	type alias semgrepMetadata
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*m = semgrepMetadata(decoded)
+	m.Raw = append(m.Raw[:0], data...)
+	return nil
 }
 
 type semgrepFixRegex struct {

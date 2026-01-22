@@ -10,13 +10,15 @@ type parserPlugin struct {
 	parser         parser.Parser
 	detectVersion  func([]byte) string
 	detectionScore int
+	normalizer     func([]parser.Finding, string) ([]CanonicalFinding, error)
 }
 
-func newParserPlugin(parser parser.Parser, detectVersion func([]byte) string, detectionScore int) ImportPlugin {
+func newParserPlugin(parser parser.Parser, detectVersion func([]byte) string, detectionScore int, normalizer func([]parser.Finding, string) ([]CanonicalFinding, error)) ImportPlugin {
 	return &parserPlugin{
 		parser:         parser,
 		detectVersion:  detectVersion,
 		detectionScore: detectionScore,
+		normalizer:     normalizer,
 	}
 }
 
@@ -40,6 +42,9 @@ func (p *parserPlugin) Parse(data []byte) ([]parser.Finding, error) {
 }
 
 func (p *parserPlugin) Normalize(in []parser.Finding, reportVersion string) ([]CanonicalFinding, error) {
+	if p.normalizer != nil {
+		return p.normalizer(in, reportVersion)
+	}
 	return normalizeFindings(in)
 }
 
