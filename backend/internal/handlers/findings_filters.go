@@ -70,18 +70,18 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 
 	// Parse date range
 	if raw := strings.TrimSpace(c.Query("dateFrom")); raw != "" {
-		parsed, err := time.Parse(time.RFC3339, raw)
+		parsed, err := parseDateParam(raw, false)
 		if err != nil {
-			return nil, fmt.Errorf("invalid dateFrom")
+			return nil, err
 		}
-		params.DateFrom = &parsed
+		params.DateFrom = parsed
 	}
 	if raw := strings.TrimSpace(c.Query("dateTo")); raw != "" {
-		parsed, err := time.Parse(time.RFC3339, raw)
+		parsed, err := parseDateParam(raw, true)
 		if err != nil {
-			return nil, fmt.Errorf("invalid dateTo")
+			return nil, err
 		}
-		params.DateTo = &parsed
+		params.DateTo = parsed
 	}
 
 	return params, nil
