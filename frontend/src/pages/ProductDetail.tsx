@@ -224,14 +224,14 @@ const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans
           </Box>
           <Box sx={{ flex: 1 }}>
             <Typography variant="body2" fontWeight={500}>
-              {scan.scannerType}
+            {scan.scanner}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {new Date(scan.createdAt).toLocaleString("ru-RU")}
             </Typography>
           </Box>
           <Chip
-            label={`${scan.findingsCount} находок`}
+            label={`${scan.findingsNew} новых`}
             size="small"
             variant="outlined"
             sx={{ fontSize: "0.7rem" }}

@@ -18,7 +18,7 @@ import {
 } from "@mui/icons-material";
 import { useState } from "react";
 import { FindingStatus } from "../types/findings";
-import { updateFindingStatus } from "../clients/findingsClient";
+import { updateFindingStatus } from "../api/findings";
 
 interface InlineStatusSelectProps {
   findingId: string;

@@ -1,13 +1,10 @@
-import { getAuthHeaders, parseApiResponse } from "./http";
+import { request, requestBlob } from "./client";
 import { SbomItem } from "../types/sbom";
 
 export const listSboms = async (productId: string): Promise<SbomItem[]> => {
-  const response = await fetch(`/api/v1/sbom?productId=${encodeURIComponent(productId)}`, {
-    headers: {
-      ...getAuthHeaders(),
-    },
+  return request<SbomItem[]>("/api/v1/sbom", {
+    query: { productId },
   });
-  return parseApiResponse<SbomItem[]>(response);
 };
 
 export const uploadSbom = async (productId: string, file: File): Promise<SbomItem> => {
@@ -15,26 +12,15 @@ export const uploadSbom = async (productId: string, file: File): Promise<SbomIte
   formData.append("productId", productId);
   formData.append("file", file);
 
-  const response = await fetch("/api/v1/sbom/upload", {
+  return request<SbomItem>("/api/v1/sbom/upload", {
     method: "POST",
-    headers: {
-      ...getAuthHeaders(),
-    },
     body: formData,
+    json: false,
   });
-  return parseApiResponse<SbomItem>(response);
 };
 
 export const downloadSbom = async (id: string, filename: string): Promise<void> => {
-  const response = await fetch(`/api/v1/sbom/${id}/download`, {
-    headers: {
-      ...getAuthHeaders(),
-    },
-  });
-  if (!response.ok) {
-    throw new Error("Failed to download SBOM");
-  }
-  const blob = await response.blob();
+  const blob = await requestBlob(`/api/v1/sbom/${id}/download`);
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

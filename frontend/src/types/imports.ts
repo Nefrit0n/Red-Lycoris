@@ -1,9 +1,10 @@
-export interface ImportJob {
+export interface ImportJobListItemDTO {
   id: string;
   scanner: string;
   sourceType?: string | null;
   sourceVersion?: string | null;
   status: string;
+  progress: number;
   findingsTotal: number;
   findingsNew: number;
   duplicatesTotal: number;
@@ -18,6 +19,15 @@ export interface ImportJob {
   createdBy?: string | null;
 }
 
-export interface ImportJobDetail extends ImportJob {
-  errorMessage?: string | null;
+export interface ImportJobErrorSummaryDTO {
+  message: string;
 }
+
+export interface ImportJobDetailDTO extends ImportJobListItemDTO {
+  errorMessage?: string | null;
+  errorSummary?: ImportJobErrorSummaryDTO | null;
+}
+
+export type ImportJobDTO = ImportJobDetailDTO;
+export type ImportJob = ImportJobListItemDTO;
+export type ImportJobDetail = ImportJobDetailDTO;

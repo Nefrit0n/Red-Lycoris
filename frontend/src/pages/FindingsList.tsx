@@ -38,7 +38,7 @@ import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
-import { Finding } from "../types/findings";
+import { FindingListItemDTO } from "../types/findings";
 
 import { FindingDetailContent } from "./FindingDetail";
 
@@ -99,7 +99,7 @@ const FindingsList = () => {
   }, [location.pathname, location.search]);
 
   const handleSortChange = useCallback(
-    (field: keyof Finding) => {
+    (field: keyof FindingListItemDTO) => {
       if (filters.sortField === field) {
         actions.setSortOrder(filters.sortOrder === "asc" ? "desc" : "asc");
       } else {

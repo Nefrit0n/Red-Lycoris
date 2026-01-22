@@ -17,12 +17,12 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchImportJobs } from "../clients/importJobsClient";
+import { fetchImportJobs } from "../api/importJobs";
 import PaginationControl from "../components/PaginationControl";
-import { ImportJob } from "../types/imports";
+import { ImportJobListItemDTO } from "../types/imports";
 
 const ImportJobsList = () => {
-  const [data, setData] = useState<ImportJob[]>([]);
+  const [data, setData] = useState<ImportJobListItemDTO[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

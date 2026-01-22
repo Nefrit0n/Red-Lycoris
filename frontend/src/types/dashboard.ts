@@ -1,10 +1,40 @@
-import { FindingSeverity, FindingStatus } from "./findings";
+import { FindingCategory, FindingSeverity, FindingStatus } from "./findings";
 
-export interface DashboardMetrics {
+export interface DashboardMetricsDTO {
   totalOpenFindings: number;
   criticalHighFindings: number;
   fixedThisWeek: number;
   productsAtRisk: number;
+}
+
+export interface MetricsTimeSeriesPointDTO {
+  timestamp: string;
+  count: number;
+}
+
+export interface MetricsTimeSeriesDTO {
+  interval: string;
+  series: MetricsTimeSeriesPointDTO[];
+}
+
+export interface MetricsSeverityBreakdownItemDTO {
+  severity: FindingSeverity;
+  count: number;
+}
+
+export interface MetricsCategoryBreakdownItemDTO {
+  category: FindingCategory;
+  count: number;
+}
+
+export interface MetricsBreakdownDTO {
+  severity: MetricsSeverityBreakdownItemDTO[];
+  category: MetricsCategoryBreakdownItemDTO[];
+}
+
+export interface MetricsDTO {
+  timeSeries: MetricsTimeSeriesDTO;
+  breakdown: MetricsBreakdownDTO;
 }
 
 export interface SeverityDistribution {
@@ -45,7 +75,7 @@ export interface RecentActivityItem {
 }
 
 export interface DashboardData {
-  metrics: DashboardMetrics;
+  metrics: DashboardMetricsDTO;
   severityDistribution: SeverityDistribution[];
   statusDistribution: StatusDistribution[];
   trend: TrendPoint[];

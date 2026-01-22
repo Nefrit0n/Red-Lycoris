@@ -35,6 +35,7 @@ import { useFindingStatus } from "../hooks/useFindingStatus";
 import { useFindingComments } from "../hooks/useFindingComments";
 import { useFindingNeighbors } from "../hooks/useFindingNeighbors";
 import { useKeyboardNavigation } from "../hooks/useKeyboardNavigation";
+import { resolveFindingDetails } from "../utils/findingDetails";
 import {
   SEVERITY_STYLES,
   STATUS_COLORS,
@@ -42,7 +43,7 @@ import {
   ALL_STATUSES,
 } from "../utils/findingConstants";
 import { formatDateRu, EventCategory } from "../utils/findingFormatters";
-import { FindingComment, ScaDetails, SemgrepEvidence } from "../types/findings";
+import { FindingComment, SemgrepEvidence } from "../types/findings";
 
 type FindingDetailContentProps = {
   id: string;
@@ -63,42 +64,6 @@ const toStringValue = (value: unknown): string | null => {
     return String(value);
   }
   return null;
-};
-
-const extractEvidenceValue = (evidence: Record<string, unknown> | null | undefined, key: string) => {
-  if (!evidence || typeof evidence !== "object") return null;
-  const value = evidence[key];
-  return toStringValue(value);
-};
-
-const extractEvidenceArray = (evidence: Record<string, unknown> | null | undefined, key: string) => {
-  if (!evidence || typeof evidence !== "object") return null;
-  const value = evidence[key];
-  if (!Array.isArray(value)) return null;
-  const values = value
-    .map((item) => (typeof item === "string" ? item : null))
-    .filter((item): item is string => Boolean(item));
-  return values.length > 0 ? values : null;
-};
-
-const buildScaDetailsFromEvidence = (
-  evidence: Record<string, unknown> | null | undefined
-): ScaDetails | null => {
-  const componentName = extractEvidenceValue(evidence, "pkgName");
-  const installedVersion = extractEvidenceValue(evidence, "installedVersion");
-  const vulnerabilityId = extractEvidenceValue(evidence, "vulnerabilityId");
-  if (!componentName || !installedVersion || !vulnerabilityId) return null;
-  return {
-    componentName,
-    installedVersion,
-    vulnerabilityId,
-    fixedVersion: extractEvidenceValue(evidence, "fixedVersion"),
-    primaryUrl: extractEvidenceValue(evidence, "primaryUrl"),
-    references: extractEvidenceArray(evidence, "references"),
-    ecosystem: extractEvidenceValue(evidence, "ecosystem"),
-    purl: extractEvidenceValue(evidence, "purl"),
-    rawSeverity: extractEvidenceValue(evidence, "severity"),
-  };
 };
 
 const extractStringFromRecord = (value: Record<string, unknown>): string | null => {
@@ -135,8 +100,6 @@ const toStringArray = (value: unknown): string[] => {
 };
 
 const uniq = (values: string[]) => Array.from(new Set(values));
-
-const isProbablyUrl = (value: string) => /^https?:\/\//i.test(value);
 
 export const FindingDetailContent = ({
   id,
@@ -206,9 +169,7 @@ export const FindingDetailContent = ({
   };
 
   // Extract occurrences
-  const occurrences: any[] = Array.isArray((data as any)?.occurrences)
-    ? (data as any).occurrences
-    : [];
+  const occurrences = Array.isArray(data?.occurrences) ? data.occurrences : [];
   const hasOccurrences = occurrences.length > 0;
   const semgrepEvidence =
     data?.evidence && (data.evidence as SemgrepEvidence).scannerType === "semgrep"
@@ -247,15 +208,16 @@ export const FindingDetailContent = ({
     Boolean(subcategory) ||
     references.length > 0;
 
-  const scaDetails =
-    data?.category === "SCA"
-      ? (data?.scaDetails as ScaDetails | null) ?? buildScaDetailsFromEvidence(data?.evidence)
-      : null;
-  const hasScaDetails = Boolean(scaDetails);
+  const resolvedDetails = data ? resolveFindingDetails(data) : { category: "UNKNOWN", details: null };
+  const scaDetails = resolvedDetails.category === "SCA" ? resolvedDetails.details : null;
+  const sastDetails = resolvedDetails.category === "SAST" ? resolvedDetails.details : null;
+  const showScaTab = resolvedDetails.category === "SCA";
+  const showSastTab = resolvedDetails.category === "SAST";
 
   let tabIndex = 0;
   const descriptionIndex = tabIndex++;
-  const scaIndex = hasScaDetails ? tabIndex++ : null;
+  const scaIndex = showScaTab ? tabIndex++ : null;
+  const sastIndex = showSastTab ? tabIndex++ : null;
   const semgrepIndex = semgrepEvidence ? tabIndex++ : null;
   const occurrencesIndex = tabIndex++;
   const commentsIndex = tabIndex++;
@@ -297,26 +259,26 @@ export const FindingDetailContent = ({
     data.productName ? (
       <Chip key="prod" label={`Продукт: ${data.productName}`} size="small" variant="outlined" />
     ) : null,
-    (data as any).occurrenceStatus ? (
+    data.occurrenceStatus ? (
       <Chip
         key="occ"
-        label={`Occurrence: ${(data as any).occurrenceStatus}`}
+        label={`Occurrence: ${data.occurrenceStatus}`}
         size="small"
         variant="outlined"
       />
     ) : null,
-    typeof (data as any).repeatCount === "number" ? (
+    typeof data.repeatCount === "number" ? (
       <Chip
         key="rep"
-        label={`Repeats: ${(data as any).repeatCount}`}
+        label={`Repeats: ${data.repeatCount}`}
         size="small"
         variant="outlined"
       />
     ) : null,
-    (data as any).lastSeenAt ? (
+    data.lastSeenAt ? (
       <Chip
         key="last"
-        label={`Last seen: ${formatDateRu((data as any).lastSeenAt)}`}
+        label={`Last seen: ${formatDateRu(data.lastSeenAt)}`}
         size="small"
         variant="outlined"
       />
@@ -421,7 +383,8 @@ export const FindingDetailContent = ({
         allowScrollButtonsMobile
       >
         <Tab label="Описание" />
-        {hasScaDetails ? <Tab label="SCA" /> : null}
+        {showScaTab ? <Tab label="SCA" /> : null}
+        {showSastTab ? <Tab label="SAST" /> : null}
         {semgrepEvidence ? <Tab label="Источник (Semgrep)" /> : null}
         <Tab label={`Occurrences${hasOccurrences ? ` (${occurrences.length})` : ""}`} />
         <Tab label={`Комментарии (${data.comments?.length ?? 0})`} />
@@ -616,83 +579,137 @@ export const FindingDetailContent = ({
       </TabPanel>
 
       {/* Tab: SCA */}
-      {hasScaDetails && scaDetails && scaIndex !== null && (
+      {showScaTab && scaIndex !== null && (
         <TabPanel value={tab} index={scaIndex}>
           <Section title="SCA" dense={compact}>
-            <Stack spacing={1.2}>
-              <Stack direction="row" gap={1} alignItems="center">
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
-                  Package
-                </Typography>
-                <Typography variant="body2">{scaDetails.componentName}</Typography>
-                {scaDetails.purl && (
-                  <Tooltip title="Скопировать PURL">
-                    <IconButton size="small" onClick={() => handleCopyValue(scaDetails.purl ?? "")}>
+            {scaDetails ? (
+              <Stack spacing={1.2}>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Package
+                  </Typography>
+                  <Typography variant="body2">{scaDetails.pkgName}</Typography>
+                  {scaDetails.purl && (
+                    <Tooltip title="Скопировать PURL">
+                      <IconButton size="small" onClick={() => handleCopyValue(scaDetails.purl ?? "")}>
+                        <ContentCopyIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Stack>
+                <Stack direction="row" gap={1}>
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Installed version
+                  </Typography>
+                  <Typography variant="body2">{scaDetails.installedVersion}</Typography>
+                </Stack>
+                <Stack direction="row" gap={1}>
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Fixed version
+                  </Typography>
+                  <Typography variant="body2">{scaDetails.fixedVersion || "—"}</Typography>
+                </Stack>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Vulnerability ID
+                  </Typography>
+                  <Typography variant="body2">{scaDetails.vulnerabilityId}</Typography>
+                  <Tooltip title="Скопировать">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleCopyValue(scaDetails.vulnerabilityId)}
+                    >
                       <ContentCopyIcon fontSize="inherit" />
                     </IconButton>
                   </Tooltip>
-                )}
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
-                  Installed version
-                </Typography>
-                <Typography variant="body2">{scaDetails.installedVersion}</Typography>
-              </Stack>
-              <Stack direction="row" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
-                  Fixed version
-                </Typography>
-                <Typography variant="body2">{scaDetails.fixedVersion || "—"}</Typography>
-              </Stack>
-              <Stack direction="row" gap={1} alignItems="center">
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
-                  Vulnerability ID
-                </Typography>
-                <Typography variant="body2">{scaDetails.vulnerabilityId}</Typography>
-                <Tooltip title="Скопировать">
-                  <IconButton
-                    size="small"
-                    onClick={() => handleCopyValue(scaDetails.vulnerabilityId)}
-                  >
-                    <ContentCopyIcon fontSize="inherit" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-              <Stack direction="row" gap={1} alignItems="center">
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
-                  Primary URL
-                </Typography>
-                {scaDetails.primaryUrl ? (
-                  <MuiLink href={scaDetails.primaryUrl} target="_blank" rel="noreferrer">
-                    {scaDetails.primaryUrl}
-                  </MuiLink>
-                ) : (
-                  <Typography variant="body2">—</Typography>
-                )}
-              </Stack>
-              {scaDetails.references && scaDetails.references.length > 0 && (
-                <Stack spacing={0.5}>
-                  <Typography variant="caption" color="text.secondary">
-                    References
-                  </Typography>
-                  <Stack spacing={0.5}>
-                    {scaDetails.references.map((ref) => (
-                      <Stack key={ref} direction="row" alignItems="center" spacing={1}>
-                        <MuiLink href={ref} target="_blank" rel="noreferrer">
-                          {ref}
-                        </MuiLink>
-                        <IconButton size="small" onClick={() => handleCopyValue(ref)}>
-                          <ContentCopyIcon fontSize="inherit" />
-                        </IconButton>
-                      </Stack>
-                    ))}
-                  </Stack>
                 </Stack>
-              )}
-            </Stack>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Primary URL
+                  </Typography>
+                  {scaDetails.primaryUrl ? (
+                    <MuiLink href={scaDetails.primaryUrl} target="_blank" rel="noreferrer">
+                      {scaDetails.primaryUrl}
+                    </MuiLink>
+                  ) : (
+                    <Typography variant="body2">—</Typography>
+                  )}
+                </Stack>
+                {scaDetails.references && scaDetails.references.length > 0 && (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      References
+                    </Typography>
+                    <Stack spacing={0.5}>
+                      {scaDetails.references.map((ref) => (
+                        <Stack key={ref} direction="row" alignItems="center" spacing={1}>
+                          <MuiLink href={ref} target="_blank" rel="noreferrer">
+                            {ref}
+                          </MuiLink>
+                          <IconButton size="small" onClick={() => handleCopyValue(ref)}>
+                            <ContentCopyIcon fontSize="inherit" />
+                          </IconButton>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </Stack>
+                )}
+              </Stack>
+            ) : (
+              <Alert severity="warning">SCA details недоступны для этой находки.</Alert>
+            )}
           </Section>
         </TabPanel>
+      )}
+
+      {/* Tab: SAST */}
+      {showSastTab && sastIndex !== null && (
+        <TabPanel value={tab} index={sastIndex}>
+          <Section title="SAST" dense={compact}>
+            {sastDetails ? (
+              <Stack spacing={1.2}>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Rule
+                  </Typography>
+                  <Typography variant="body2">{sastDetails.ruleId || "—"}</Typography>
+                </Stack>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    File
+                  </Typography>
+                  <Typography variant="body2">{sastDetails.filePath || "—"}</Typography>
+                </Stack>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Range
+                  </Typography>
+                  <Typography variant="body2">
+                    {sastDetails.startLine && sastDetails.endLine
+                      ? `${sastDetails.startLine}–${sastDetails.endLine}`
+                      : "—"}
+                  </Typography>
+                </Stack>
+                <Stack spacing={0.5}>
+                  <Typography variant="caption" color="text.secondary">
+                    Snippet
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                    {sastDetails.snippet || "—"}
+                  </Typography>
+                </Stack>
+              </Stack>
+            ) : (
+              <Alert severity="warning">SAST details недоступны для этой находки.</Alert>
+            )}
+          </Section>
+        </TabPanel>
+      )}
+
+      {resolvedDetails.category === "UNKNOWN" && (
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          Unsupported/Unknown category для отображения деталей.
+        </Alert>
       )}
 
       {/* Tab: Semgrep Evidence */}

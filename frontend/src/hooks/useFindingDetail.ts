@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchFindingDetail } from "../clients/findingsClient";
-import { FindingDetail } from "../types/findings";
+import { fetchFindingDetail } from "../api/findings";
+import { FindingDetailDTO } from "../types/findings";
 
 interface UseFindingDetailResult {
-  data: FindingDetail | null;
+  data: FindingDetailDTO | null;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -13,7 +13,7 @@ interface UseFindingDetailResult {
  * Custom hook for fetching finding detail
  */
 export function useFindingDetail(id: string): UseFindingDetailResult {
-  const [data, setData] = useState<FindingDetail | null>(null);
+  const [data, setData] = useState<FindingDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

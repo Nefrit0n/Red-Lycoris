@@ -28,9 +28,9 @@ import HistoryIcon from "@mui/icons-material/History";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchFindingDetail, fetchFindings } from "../clients/findingsClient";
+import { fetchFindingDetail, fetchFindings } from "../api/findings";
 import { uploadScan, UploadScanResponse } from "../api/scans";
-import { Finding, FindingEvidence, SemgrepEvidence } from "../types/findings";
+import { FindingListItemDTO, FindingEvidence, SemgrepEvidence } from "../types/findings";
 import DragDropUpload from "../components/DragDropUpload";
 
 interface UploadHistoryItem extends UploadScanResponse {
@@ -42,7 +42,7 @@ interface UploadHistoryItem extends UploadScanResponse {
 const HISTORY_KEY = "lotus_warden_upload_history";
 const LAST_UPLOAD_KEY = "lotus_warden_last_upload";
 
-interface FindingPreview extends Finding {
+interface FindingPreview extends FindingListItemDTO {
   evidence?: FindingEvidence | null;
 }
 

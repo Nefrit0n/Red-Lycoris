@@ -1,5 +1,5 @@
 import { ImportJob, ImportJobDetail } from "../types/imports";
-import { getAuthHeaders, parseApiResponse, parseApiResponseWithMeta } from "./http";
+import { request, requestWithMeta } from "./client";
 
 export const fetchImportJobs = async (
   params: {
@@ -11,34 +11,19 @@ export const fetchImportJobs = async (
   },
   signal?: AbortSignal
 ): Promise<{ data: ImportJob[]; total: number }> => {
-  const searchParams = new URLSearchParams({
-    limit: params.limit.toString(),
-    offset: params.offset.toString(),
-  });
-  if (params.productId) {
-    searchParams.set("productId", params.productId);
-  }
-  if (params.scanner) {
-    searchParams.set("scanner", params.scanner);
-  }
-  if (params.status) {
-    searchParams.set("status", params.status);
-  }
-
-  const response = await fetch(`/api/v1/import-jobs?${searchParams}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error("Не удалось загрузить список импортов");
-  }
-
-  const payload = await parseApiResponseWithMeta<{
+  const payload = await requestWithMeta<{
     data: ImportJob[];
     total: number;
-  }>(response);
+  }>("/api/v1/import-jobs", {
+    signal,
+    query: {
+      limit: params.limit,
+      offset: params.offset,
+      productId: params.productId,
+      scanner: params.scanner,
+      status: params.status,
+    },
+  });
 
   return {
     data: Array.isArray(payload.data) ? payload.data : [],
@@ -50,15 +35,5 @@ export const fetchImportJobDetail = async (
   id: string,
   signal?: AbortSignal
 ): Promise<ImportJobDetail> => {
-  const response = await fetch(`/api/v1/import-jobs/${id}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error("Не удалось загрузить детали импорта");
-  }
-
-  return parseApiResponse<ImportJobDetail>(response);
+  return request<ImportJobDetail>(`/api/v1/import-jobs/${id}`, { signal });
 };
