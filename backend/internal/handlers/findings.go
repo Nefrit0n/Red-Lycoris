@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	v1dto "lotus-warden/backend/internal/dto/v1"
+	v1mapper "lotus-warden/backend/internal/mapper/v1"
 	"lotus-warden/backend/internal/middleware"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/storage"
@@ -127,11 +128,11 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch intel summaries"})
 	}
 
-	response := make([]v1dto.Finding, 0, len(items))
+	response := make([]v1dto.FindingListItemDTO, 0, len(items))
 	for _, item := range items {
-		mapped := mapFindingListItem(item)
+		mapped := v1mapper.FindingListItem(item)
 		if summary, ok := intelSummaries[item.ID]; ok {
-			mapped.IntelSummary = mapIntelSummary(summary)
+			mapped.IntelSummary = v1mapper.IntelSummary(summary)
 		}
 		response = append(response, mapped)
 	}
@@ -206,25 +207,33 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch intel summary"})
 	}
 
-	mappedEvents := mapFindingEvents(events)
-	mappedFinding := mapFindingDetail(*finding)
-	evidence := decodeEvidencePayload(finding.Evidence)
+	mappedEvents := v1mapper.FindingEvents(events)
+	mappedFinding := v1mapper.FindingDetail(*finding)
+	evidence := v1mapper.DecodeEvidencePayload(finding.Evidence)
 	if evidence == nil {
-		evidence = latestImportedEvidence(mappedEvents)
+		evidence = v1mapper.LatestImportedEvidence(mappedEvents)
 	}
 	if summary, ok := intelSummaryMap[masterID]; ok {
-		mappedFinding.IntelSummary = mapIntelSummary(summary)
+		mappedFinding.IntelSummary = v1mapper.IntelSummary(summary)
 	}
 
-	resp := v1dto.FindingDetail{
-		Finding:      mappedFinding,
-		Comments:     mapFindingComments(comments),
-		Events:       mappedEvents,
-		Occurrences:  mapFindingOccurrences(occurrences),
-		Duplicates:   mapDuplicateGroup(duplicates),
-		Evidence:     evidence,
-		ScaDetails:   mapScaDetail(scaDetail, evidence),
-		IntelDetails: mapIntelDetail(intelDetail),
+	resp := v1dto.FindingDetailDTO{
+		FindingListItemDTO: mappedFinding.FindingListItemDTO,
+		Description:        mappedFinding.Description,
+		Fingerprint:        mappedFinding.Fingerprint,
+		SourceType:         mappedFinding.SourceType,
+		SourceVersion:      mappedFinding.SourceVersion,
+		EndpointMethod:     mappedFinding.EndpointMethod,
+		EndpointPath:       mappedFinding.EndpointPath,
+		DeletedAt:          mappedFinding.DeletedAt,
+		Comments:           v1mapper.FindingComments(comments),
+		Events:             mappedEvents,
+		Occurrences:        v1mapper.FindingOccurrences(occurrences),
+		Duplicates:         v1mapper.DuplicateGroup(duplicates),
+		Evidence:           evidence,
+		Details:            v1mapper.FindingCategoryDetails(mappedFinding.Category, evidence, scaDetail),
+		ScaDetails:         v1mapper.ScaDetail(scaDetail, evidence),
+		IntelDetails:       v1mapper.IntelDetail(intelDetail),
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})
@@ -354,7 +363,7 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 
 	return c.Status(http.StatusCreated).JSON(fiber.Map{
 		"success": true,
-		"data":    mapFindingModel(*finding),
+		"data":    v1mapper.FindingFromModel(*finding),
 	})
 }
 
@@ -481,7 +490,7 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapFindingModel(*updated)})
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": v1mapper.FindingFromModel(*updated)})
 }
 
 // Delete soft deletes a finding
@@ -524,7 +533,7 @@ func (h *FindingsHandler) Delete(c *fiber.Ctx) error {
 		"meta":       auditMetadataFromContext(c),
 	})
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapFindingModel(*deleted)})
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": v1mapper.FindingFromModel(*deleted)})
 }
 
 // AddComment adds a comment to a finding
@@ -589,7 +598,7 @@ func (h *FindingsHandler) GetDuplicates(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": mapDuplicateGroup(group)})
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": v1mapper.DuplicateGroup(group)})
 }
 
 // MakeMaster promotes a duplicate finding to be the master of its group

@@ -1,11 +1,12 @@
 package v1
 
-type ImportJob struct {
+type ImportJobListItemDTO struct {
 	ID                string  `json:"id"`
 	Scanner           string  `json:"scanner"`
 	SourceType        *string `json:"sourceType,omitempty"`
 	SourceVersion     *string `json:"sourceVersion,omitempty"`
 	Status            string  `json:"status"`
+	Progress          int     `json:"progress"`
 	FindingsTotal     int     `json:"findingsTotal"`
 	FindingsNew       int     `json:"findingsNew"`
 	DuplicatesTotal   int     `json:"duplicatesTotal"`
@@ -18,5 +19,16 @@ type ImportJob struct {
 	ProductVersion    *string `json:"productVersion,omitempty"`
 	ProductIdentifier *string `json:"productIdentifier,omitempty"`
 	CreatedBy         *string `json:"createdBy,omitempty"`
-	ErrorMessage      *string `json:"errorMessage,omitempty"`
 }
+
+type ImportJobErrorSummary struct {
+	Message string `json:"message"`
+}
+
+type ImportJobDetailDTO struct {
+	ImportJobListItemDTO
+	ErrorMessage *string                `json:"errorMessage,omitempty"`
+	ErrorSummary *ImportJobErrorSummary `json:"errorSummary,omitempty"`
+}
+
+type ImportJob = ImportJobDetailDTO

@@ -27,7 +27,7 @@ func TestFindingsListDefaultsToCanonical(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM findings.*duplicate_id IS NULL").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery("SELECT f.id.*duplicate_id IS NULL").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "severity", "status", "product_id", "name", "assignee_id", "username", "import_job_id", "created_at", "updated_at", "last_seen_at", "repeat_count", "duplicate_id", "scanner", "source_type"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "severity", "status", "category", "product_id", "name", "assignee_id", "username", "import_job_id", "created_at", "updated_at", "first_seen_at", "last_seen_at", "repeat_count", "duplicate_id", "scanner", "source_type"}))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
 		UserID: uuid.New().String(),

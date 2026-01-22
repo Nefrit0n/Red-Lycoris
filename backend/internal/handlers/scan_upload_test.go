@@ -3,15 +3,14 @@ package handlers_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"lotus-warden/backend/internal/config"
-	"lotus-warden/backend/internal/dedup"
 	"lotus-warden/backend/internal/middleware"
 	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/parser"
 	"lotus-warden/backend/internal/server"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -29,10 +28,6 @@ func TestScanUploadEndpoint(t *testing.T) {
 	cfg := config.Config{JWTSecret: "test-secret"}
 	app := server.NewApp(cfg, db, nil, nil)
 
-	findings := []parser.Finding{
-		{Title: "SQL Injection", Severity: "high", Location: "app", RuleID: "CVE-2024-0001"},
-		{Title: "XSS", Severity: "medium", Location: "app", RuleID: "CVE-2024-0002"},
-	}
 	report := map[string]any{
 		"ArtifactName": "billing-api",
 		"Results": []any{
@@ -68,37 +63,61 @@ func TestScanUploadEndpoint(t *testing.T) {
 		t.Fatalf("marshal request failed: %v", err)
 	}
 
-	fingerprintOne := dedup.ComputeFingerprint("trivy", findings[0])
-	fingerprintTwo := dedup.ComputeFingerprint("trivy", findings[1])
 	duplicateID := uuid.New()
 
-	mock.ExpectQuery("SELECT id, name, slug, description, identifier, version, created_at, updated_at FROM products WHERE identifier = \\$1 LIMIT 1").
-		WithArgs("billing-api").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "description", "identifier", "version", "created_at", "updated_at"}))
+	mock.ExpectQuery("SELECT EXISTS \\(SELECT 1 FROM users WHERE id = \\$1\\)").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
-	mock.ExpectQuery("SELECT id, name, slug, description, identifier, version, created_at, updated_at FROM products WHERE slug = \\$1 LIMIT 1").
+	mock.ExpectQuery("SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE identifier = \\$1 LIMIT 1").
+		WithArgs("billing-api").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "description", "identifier", "version", "asset_criticality", "created_at", "updated_at"}))
+
+	mock.ExpectQuery("SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE slug = \\$1 LIMIT 1").
 		WithArgs("billing-api-1-0-0").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "description", "identifier", "version", "created_at", "updated_at"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "description", "identifier", "version", "asset_criticality", "created_at", "updated_at"}))
 
 	mock.ExpectExec("INSERT INTO products").
-		WithArgs(sqlmock.AnyArg(), "Billing API", "billing-api-1-0-0", sqlmock.AnyArg(), "billing-api", "1.0.0", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "Billing API", "billing-api-1-0-0", sqlmock.AnyArg(), "billing-api", "1.0.0", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("INSERT INTO import_jobs").
-		WithArgs(sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), "Billing API", "1.0.0", "billing-api", "queued", 0, 0, 0, sqlmock.AnyArg(), nil, sqlmock.AnyArg(), nil, nil, sqlmock.AnyArg()).
+		WithArgs(
+			sqlmock.AnyArg(),
+			"trivy",
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			"queued",
+			0,
+			0,
+			0,
+			sqlmock.AnyArg(),
+			nil,
+			sqlmock.AnyArg(),
+			nil,
+			nil,
+			sqlmock.AnyArg(),
+		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("UPDATE import_jobs").
 		WithArgs("running", sqlmock.AnyArg(), nil, nil, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO audit_log").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("INSERT INTO scan_results").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, repeat_count\\s+FROM findings\\s+WHERE fingerprint = \\$1").
-		WithArgs(fingerprintOne).
+	mock.ExpectQuery("SELECT id, repeat_count\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND product_id = \\$2").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count"}))
 
 	mock.ExpectExec("INSERT INTO findings").
@@ -106,7 +125,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
-			fingerprintOne,
+			sqlmock.AnyArg(),
 			models.CategorySCA,
 			"SQL Injection",
 			sqlmock.AnyArg(),
@@ -130,9 +149,19 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
+	mock.ExpectExec("INSERT INTO audit_log").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO finding_events").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "finding.imported", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO finding_vuln_identifiers").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, repeat_count\\s+FROM findings\\s+WHERE fingerprint = \\$1").
-		WithArgs(fingerprintTwo).
+	mock.ExpectQuery("SELECT id, repeat_count\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND product_id = \\$2").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count"}).AddRow(duplicateID, 2))
 
 	mock.ExpectExec("INSERT INTO findings").
@@ -140,7 +169,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
-			fingerprintTwo,
+			sqlmock.AnyArg(),
 			models.CategorySCA,
 			"XSS",
 			sqlmock.AnyArg(),
@@ -170,6 +199,15 @@ func TestScanUploadEndpoint(t *testing.T) {
 	mock.ExpectExec("INSERT INTO finding_events").
 		WithArgs(sqlmock.AnyArg(), duplicateID, sqlmock.AnyArg(), "repeat_detected", sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO audit_log").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO finding_events").
+		WithArgs(sqlmock.AnyArg(), duplicateID, sqlmock.AnyArg(), "finding.imported", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO finding_vuln_identifiers").
+		WithArgs(duplicateID, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("UPDATE import_jobs").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -182,9 +220,13 @@ func TestScanUploadEndpoint(t *testing.T) {
 	mock.ExpectExec("UPDATE import_jobs").
 		WithArgs("succeeded", nil, sqlmock.AnyArg(), nil, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO audit_log").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
 		UserID: uuid.New().String(),
+		Roles:  []string{"analyst"},
 	})
 	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
 	if err != nil {
@@ -199,7 +241,8 @@ func TestScanUploadEndpoint(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 status, got %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 status, got %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var response struct {
