@@ -64,9 +64,10 @@ func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
 }
 
 func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVulnerability) Finding {
+	// ВАЖНО: title для списка — строго "pkg@version" (без ": ..." дальше)
 	title := buildTrivyVulnTitle(vuln)
 
-	// Location includes package name and version for better identification
+	// Location — где нашли (target/path), fallback на пакет
 	location := strings.TrimSpace(result.Target)
 	if location == "" {
 		location = vuln.PkgName
@@ -165,6 +166,7 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 		Evidence:    evidence,
 	}
 }
+
 
 
 func buildVulnerabilityEvidence(result trivyResult, vuln trivyVulnerability) map[string]any {
@@ -529,46 +531,70 @@ func redactTrivySecretRaw(raw map[string]any) map[string]any {
 
 const maxFindingTitleLen = 200
 
+
 func buildTrivyVulnTitle(v trivyVulnerability) string {
-	base := strings.TrimSpace(v.Title)
-	if base == "" {
-		base = strings.TrimSpace(v.VulnerabilityID)
-	}
-	if base == "" {
-		base = "Trivy vulnerability"
-	}
-
-	ver := strings.TrimSpace(v.InstalledVersion)
-	if ver == "" {
-		return truncateRunes(base, maxFindingTitleLen)
-	}
-
-	pkgFull := strings.TrimSpace(v.PkgName)
-
-	// Короткое имя для go modules: github.com/opencontainers/runc -> runc
-	// Но npm scoped пакеты типа @babel/core НЕ режем
-	pkgLabel := pkgFull
-	if pkgLabel != "" && !strings.HasPrefix(pkgLabel, "@") {
-		parts := strings.Split(pkgLabel, "/")
-		if len(parts) >= 2 {
-			pkgLabel = parts[len(parts)-2] + "/" + parts[len(parts)-1]
+	// 1) Пытаемся собрать из PkgID (обычно он уже "pkg@ver")
+	// Пример из Trivy: "github.com/opencontainers/runc@v1.2.6"
+	pkgID := strings.TrimSpace(v.PkgID)
+	if pkgID != "" && strings.Contains(pkgID, "@") {
+		at := strings.LastIndex(pkgID, "@")
+		pkgPart := strings.TrimSpace(pkgID[:at])
+		verPart := strings.TrimSpace(pkgID[at+1:])
+		pkgLabel := trivyPkgLabel(pkgPart)
+		if pkgLabel != "" && verPart != "" {
+			return truncateRunes(fmt.Sprintf("%s@%s", pkgLabel, verPart), maxFindingTitleLen)
 		}
 	}
 
+	// 2) Fallback: PkgName + InstalledVersion
+	pkgLabel := trivyPkgLabel(strings.TrimSpace(v.PkgName))
+	ver := strings.TrimSpace(v.InstalledVersion)
+
 	if pkgLabel == "" {
+		// совсем крайний случай
+		base := strings.TrimSpace(v.VulnerabilityID)
+		if base == "" {
+			base = "Trivy vulnerability"
+		}
 		return truncateRunes(base, maxFindingTitleLen)
 	}
 
-	// Если Trivy title уже начинается с "pkg:" — вставляем @ver внутрь
-	lb := strings.ToLower(base)
-	lp := strings.ToLower(pkgLabel)
-	if strings.HasPrefix(lb, lp+":") {
-		rest := base[len(pkgLabel):] // включает ":" и дальше
-		return truncateRunes(fmt.Sprintf("%s@%s%s", pkgLabel, ver, rest), maxFindingTitleLen)
+	if ver == "" {
+		return truncateRunes(pkgLabel, maxFindingTitleLen)
 	}
 
-	// Иначе просто префиксим
-	return truncateRunes(fmt.Sprintf("%s@%s: %s", pkgLabel, ver, base), maxFindingTitleLen)
+	// РОВНО "pkg@ver" — и точка
+	return truncateRunes(fmt.Sprintf("%s@%s", pkgLabel, ver), maxFindingTitleLen)
+}
+
+// Делает "читабельный" лейбл пакета:
+// - github.com/opencontainers/runc -> opencontainers/runc
+// - golang.org/x/net -> x/net
+// - npm scoped "@babel/core" не трогаем
+// - "clean-css" оставляем как есть
+func trivyPkgLabel(pkg string) string {
+	pkg = strings.TrimSpace(pkg)
+	if pkg == "" {
+		return ""
+	}
+	if strings.HasPrefix(pkg, "@") {
+		return pkg // npm scoped пакеты не режем
+	}
+
+	parts := strings.Split(pkg, "/")
+	if len(parts) == 0 {
+		return pkg
+	}
+
+	// если первый сегмент похож на домен (есть точка) — выкидываем его
+	if len(parts) >= 2 && strings.Contains(parts[0], ".") {
+		parts = parts[1:]
+	}
+
+	if len(parts) >= 2 {
+		return parts[len(parts)-2] + "/" + parts[len(parts)-1]
+	}
+	return parts[0]
 }
 
 func truncateRunes(s string, max int) string {

@@ -173,3 +173,43 @@ func userIDFromContext(c *fiber.Ctx) *uuid.UUID {
 
 	return nil
 }
+
+func parseDateParam(raw string, endOfDay bool) (*time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	layouts := []string{
+		time.RFC3339,
+		"2006-01-02", // ISO date
+		"02-01-2006", // DD-MM-YYYY
+		"02.01.2006",
+		"02/01/2006",
+	}
+
+	for _, l := range layouts {
+		t, err := time.Parse(l, raw)
+		if err != nil {
+			continue
+		}
+
+		// Date-only layouts → normalize to start/end of day in UTC
+		if l != time.RFC3339 {
+			base := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+			if endOfDay {
+				base = base.Add(24*time.Hour - time.Nanosecond)
+			}
+			return &base, nil
+		}
+
+		// RFC3339 → keep timestamp meaning, normalize to UTC for consistency
+		u := t.UTC()
+		return &u, nil
+	}
+
+	return nil, fmt.Errorf(
+		"invalid date format %q: expected RFC3339 or YYYY-MM-DD (also accepts DD-MM-YYYY)",
+		raw,
+	)
+}
