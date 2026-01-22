@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"lotus-warden/backend/internal/models"
 )
 
 type sarifReport struct {
@@ -87,6 +89,7 @@ func parseSarif(data []byte, toolName string) ([]Finding, error) {
 			}
 
 			findings = append(findings, Finding{
+				Category: models.CategorySAST,
 				Title:    result.Message.Text,
 				Severity: mapSarifLevel(result.Level),
 				Location: location,

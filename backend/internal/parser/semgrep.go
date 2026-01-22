@@ -78,6 +78,7 @@ func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
 	evidence := buildSemgrepEvidence(r)
 
 	return Finding{
+		Category:    models.CategorySAST,
 		Title:       title,
 		Description: descPtr,
 		Severity:    mapSemgrepSeverity(r.Extra.Severity),
@@ -158,7 +159,6 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 
 	return rawData
 }
-
 
 type semgrepReport struct {
 	Results []semgrepResult `json:"results"`

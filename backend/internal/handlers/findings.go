@@ -28,6 +28,7 @@ type CreateFindingRequest struct {
 	Description *string `json:"description,omitempty" validate:"omitempty,max=2000"`
 	Severity    string  `json:"severity" validate:"required"`
 	Status      string  `json:"status,omitempty"`
+	Category    *string `json:"category,omitempty"`
 	ProductID   string  `json:"productId" validate:"required,uuid4"`
 }
 
@@ -192,6 +193,10 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch occurrences"})
 	}
+	scaDetail, err := storage.GetScaFindingDetail(c.Context(), h.db, masterID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch sca details"})
+	}
 	intelDetail, err := storage.GetIntelDetail(c.Context(), h.db, masterID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch intel details"})
@@ -218,6 +223,7 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		Occurrences:  mapFindingOccurrences(occurrences),
 		Duplicates:   mapDuplicateGroup(duplicates),
 		Evidence:     evidence,
+		ScaDetails:   mapScaDetail(scaDetail, evidence),
 		IntelDetails: mapIntelDetail(intelDetail),
 	}
 
@@ -300,6 +306,14 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 	}
 
+	category := models.CategorySAST
+	if req.Category != nil && strings.TrimSpace(*req.Category) != "" {
+		category = strings.TrimSpace(*req.Category)
+		if err := validateFindingCategory(category); err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+		}
+	}
+
 	status := strings.TrimSpace(req.Status)
 	if status == "" {
 		status = "new"
@@ -315,6 +329,7 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 		Description: req.Description,
 		Severity:    req.Severity,
 		Status:      status,
+		Category:    category,
 		Fingerprint: uuid.NewString(),
 	}
 

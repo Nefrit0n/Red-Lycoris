@@ -42,6 +42,7 @@ func ExampleCRUD(ctx context.Context, db *sql.DB) error {
 	finding := &models.Finding{
 		ScanResultID: &scanResult.ID,
 		Fingerprint:  "example-fingerprint",
+		Category:     models.CategorySAST,
 		Title:        "SQL injection",
 		Description:  &findingDescription,
 		Severity:     "high",
