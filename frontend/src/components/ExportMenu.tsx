@@ -12,11 +12,11 @@ import {
   Code as JsonIcon,
 } from "@mui/icons-material";
 import { useState } from "react";
-import { Finding } from "../types/findings";
+import { FindingListItemDTO } from "../types/findings";
 import { SEVERITY_STYLES, STATUS_LABELS } from "../utils/findingConstants";
 
 interface ExportMenuProps {
-  data: Finding[];
+  data: FindingListItemDTO[];
   filename?: string;
   disabled?: boolean;
 }

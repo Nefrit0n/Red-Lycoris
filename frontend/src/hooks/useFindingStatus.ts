@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { updateFindingStatus } from "../clients/findingsClient";
+import { updateFindingStatus } from "../api/findings";
 import { FindingDetail, FindingStatus } from "../types/findings";
 
 type StatusState = "idle" | "saving" | "saved" | "error";
