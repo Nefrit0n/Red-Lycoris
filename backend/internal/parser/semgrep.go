@@ -90,7 +90,8 @@ func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
 
 // buildSemgrepTitle extracts a readable short title from check_id.
 // Takes last 2 unique segments (from right), keeps order:
-//   a.b.security.run-shell-injection.run-shell-injection -> security: run-shell-injection
+//
+//	a.b.security.run-shell-injection.run-shell-injection -> security: run-shell-injection
 func buildSemgrepTitle(checkID string) string {
 	checkID = strings.TrimSpace(checkID)
 	if checkID == "" {
@@ -135,9 +136,6 @@ func buildSemgrepLocation(path string, line int, col int) string {
 	if line <= 0 {
 		return path
 	}
-	if col > 0 {
-		return fmt.Sprintf("%s:%d:%d", path, line, col)
-	}
 	return fmt.Sprintf("%s:%d", path, line)
 }
 
@@ -175,19 +173,19 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 			rawData["category"] = meta.Category
 		}
 		if len(meta.Subcategory) > 0 {
-			rawData["subcategory"] = meta.Subcategory
+			rawData["subcategory"] = []string(meta.Subcategory)
 		}
 		if len(meta.Technology) > 0 {
-			rawData["technology"] = meta.Technology
+			rawData["technology"] = []string(meta.Technology)
 		}
 		if len(meta.Cwe) > 0 {
-			rawData["cwe"] = meta.Cwe
+			rawData["cwe"] = []string(meta.Cwe)
 			if ids := extractCweIDs(meta.Cwe); len(ids) > 0 {
 				rawData["cwe_ids"] = ids
 			}
 		}
 		if len(meta.Owasp) > 0 {
-			rawData["owasp"] = meta.Owasp
+			rawData["owasp"] = []string(meta.Owasp)
 		}
 		if len(meta.References) > 0 {
 			rawData["references"] = meta.References
@@ -202,7 +200,7 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 			rawData["impact"] = meta.Impact
 		}
 		if len(meta.VulnerabilityClass) > 0 {
-			rawData["vulnerability_class"] = meta.VulnerabilityClass
+			rawData["vulnerability_class"] = []string(meta.VulnerabilityClass)
 		}
 		if meta.License != "" {
 			rawData["license"] = meta.License
@@ -366,8 +364,8 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		"category":    models.CategorySAST,
 
 		// каноничные ключи (как Trivy-стиль / как DTO)
-		"ruleId":    strings.TrimSpace(r.CheckID),
-		"filePath":  strings.TrimSpace(r.Path),
+		"ruleId":   strings.TrimSpace(r.CheckID),
+		"filePath": strings.TrimSpace(r.Path),
 	}
 
 	// message
@@ -404,11 +402,13 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		evidence["fix"] = r.Extra.Fix
 	}
 	if r.Extra.FixRegex != nil {
-		evidence["fixRegex"] = map[string]any{
+		fixRegex := map[string]any{
 			"regex":       r.Extra.FixRegex.Regex,
 			"replacement": r.Extra.FixRegex.Replacement,
 			"count":       r.Extra.FixRegex.Count,
 		}
+		evidence["fix_regex"] = fixRegex
+		evidence["fixRegex"] = fixRegex
 	}
 
 	// meta derived fields + primaryUrl
@@ -503,7 +503,6 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 
 	return evidence
 }
-
 
 func semgrepLinesToSnippet(raw json.RawMessage) string {
 	if len(raw) == 0 || string(raw) == "null" {

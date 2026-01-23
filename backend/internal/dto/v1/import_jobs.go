@@ -11,6 +11,7 @@ type ImportJobListItemDTO struct {
 	FindingsTotal     int     `json:"findingsTotal"`
 	FindingsNew       int     `json:"findingsNew"`
 	DuplicatesTotal   int     `json:"duplicatesTotal"`
+	GateFailed        bool    `json:"gateFailed"`
 	Checksum          string  `json:"checksum"`
 	CreatedAt         string  `json:"createdAt"`
 	StartedAt         *string `json:"startedAt,omitempty"`
