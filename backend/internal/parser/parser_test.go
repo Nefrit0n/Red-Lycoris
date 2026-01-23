@@ -103,6 +103,58 @@ func TestParseTrivyReportScaEvidenceFixedVersionOptional(t *testing.T) {
 	}
 }
 
+func TestParseTrivyReportScaRequiredFields(t *testing.T) {
+	payload := map[string]any{
+		"ArtifactName": "service",
+		"Results": []any{
+			map[string]any{
+				"Target": "app",
+				"Type":   "gomod",
+				"Vulnerabilities": []any{
+					map[string]any{
+						"VulnerabilityID":  "CVE-2024-9999",
+						"PkgName":          "example.com/pkg",
+						"InstalledVersion": "1.2.3",
+						"Severity":         "LOW",
+					},
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	findings, err := ParseReport("trivy", raw)
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+
+	f := findings[0]
+	if f.RuleID != "CVE-2024-9999" {
+		t.Fatalf("expected rule id CVE-2024-9999, got %s", f.RuleID)
+	}
+	if f.Severity != "low" {
+		t.Fatalf("expected severity low, got %s", f.Severity)
+	}
+	if f.Evidence["pkgName"] != "example.com/pkg" {
+		t.Fatalf("expected pkgName in evidence, got %v", f.Evidence["pkgName"])
+	}
+	if f.Evidence["installedVersion"] != "1.2.3" {
+		t.Fatalf("expected installedVersion in evidence, got %v", f.Evidence["installedVersion"])
+	}
+	if f.Evidence["vulnerabilityId"] != "CVE-2024-9999" {
+		t.Fatalf("expected vulnerabilityId in evidence, got %v", f.Evidence["vulnerabilityId"])
+	}
+	if f.Evidence["severity"] != "LOW" {
+		t.Fatalf("expected severity in evidence, got %v", f.Evidence["severity"])
+	}
+}
+
 func TestParseTrivyReportWithExtendedFields(t *testing.T) {
 	payload := map[string]any{
 		"ArtifactName": "myapp:latest",
@@ -198,194 +250,6 @@ func TestParseTrivyReportWithExtendedFields(t *testing.T) {
 	}
 }
 
-func TestParseTrivyMisconfigurations(t *testing.T) {
-	payload := map[string]any{
-		"ArtifactName": ".",
-		"Results": []any{
-			map[string]any{
-				"Target": "Dockerfile",
-				"Class":  "config",
-				"Type":   "dockerfile",
-				"Misconfigurations": []any{
-					map[string]any{
-						"Type":        "Dockerfile Security Check",
-						"ID":          "DS002",
-						"AVDID":       "AVD-DS-0002",
-						"Title":       "Image user should not be 'root'",
-						"Description": "Running as root may give unnecessary privileges",
-						"Message":     "Specify at least 1 USER command in Dockerfile",
-						"Severity":    "HIGH",
-						"Resolution":  "Add 'USER <non root user>' line to the Dockerfile",
-						"PrimaryURL":  "https://avd.aquasec.com/misconfig/ds002",
-						"References":  []string{"https://docs.docker.com/develop/dev-best-practices/"},
-						"Status":      "FAIL",
-						"CauseMetadata": map[string]any{
-							"Provider":  "dockerfile",
-							"Service":   "general",
-							"StartLine": 1,
-							"EndLine":   10,
-						},
-					},
-				},
-			},
-		},
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
-	}
-
-	findings, err := ParseReport("trivy", raw)
-	if err != nil {
-		t.Fatalf("parse report: %v", err)
-	}
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(findings))
-	}
-
-	f := findings[0]
-
-	if f.Title != "Image user should not be 'root'" {
-		t.Fatalf("unexpected title: %s", f.Title)
-	}
-	if f.RuleID != "DS002" {
-		t.Fatalf("expected rule id DS002, got %s", f.RuleID)
-	}
-	if f.Severity != "high" {
-		t.Fatalf("expected severity high, got %s", f.Severity)
-	}
-	if f.Location != "Dockerfile:1" {
-		t.Fatalf("expected location Dockerfile:1, got %s", f.Location)
-	}
-
-	// Check RawData
-	if f.RawData["type"] != "misconfiguration" {
-		t.Fatalf("expected type misconfiguration, got %v", f.RawData["type"])
-	}
-
-	// Check Evidence
-	if f.Evidence == nil {
-		t.Fatal("expected evidence to be populated")
-	}
-	if f.Evidence["resolution"] != "Add 'USER <non root user>' line to the Dockerfile" {
-		t.Fatalf("expected resolution in evidence, got %v", f.Evidence["resolution"])
-	}
-}
-
-func TestParseTrivyLicenses(t *testing.T) {
-	payload := map[string]any{
-		"ArtifactName": "myapp",
-		"Results": []any{
-			map[string]any{
-				"Target": "package.json",
-				"Class":  "license",
-				"Licenses": []any{
-					map[string]any{
-						"Severity":   "HIGH",
-						"Category":   "restricted",
-						"PkgName":    "gpl-library",
-						"FilePath":   "node_modules/gpl-library/LICENSE",
-						"Name":       "GPL-3.0",
-						"Confidence": 0.95,
-						"Link":       "https://spdx.org/licenses/GPL-3.0.html",
-					},
-				},
-			},
-		},
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
-	}
-
-	findings, err := ParseReport("trivy", raw)
-	if err != nil {
-		t.Fatalf("parse report: %v", err)
-	}
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(findings))
-	}
-
-	f := findings[0]
-
-	if f.Title != "GPL-3.0 in gpl-library" {
-		t.Fatalf("unexpected title: %s", f.Title)
-	}
-	if f.Severity != "high" {
-		t.Fatalf("expected severity high, got %s", f.Severity)
-	}
-	if f.Location != "node_modules/gpl-library/LICENSE" {
-		t.Fatalf("expected location to be file path, got %s", f.Location)
-	}
-	if f.RuleID != "license-gpl-3.0" {
-		t.Fatalf("expected rule id license-gpl-3.0, got %s", f.RuleID)
-	}
-
-	// Check RawData
-	if f.RawData["type"] != "license" {
-		t.Fatalf("expected type license, got %v", f.RawData["type"])
-	}
-	if f.RawData["category"] != "restricted" {
-		t.Fatalf("expected category restricted, got %v", f.RawData["category"])
-	}
-}
-
-func TestParseTrivySecrets(t *testing.T) {
-	payload := map[string]any{
-		"ArtifactName": "myapp",
-		"Results": []any{
-			map[string]any{
-				"Target": "config/settings.py",
-				"Class":  "secret",
-				"Secrets": []any{
-					map[string]any{
-						"RuleID":    "aws-access-key-id",
-						"Category":  "AWS",
-						"Severity":  "CRITICAL",
-						"Title":     "AWS Access Key ID",
-						"StartLine": 42,
-						"EndLine":   42,
-						"Match":     "AKIAIOSFODNN7EXAMPLE",
-					},
-				},
-			},
-		},
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
-	}
-
-	findings, err := ParseReport("trivy", raw)
-	if err != nil {
-		t.Fatalf("parse report: %v", err)
-	}
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(findings))
-	}
-
-	f := findings[0]
-
-	if f.Title != "AWS Access Key ID" {
-		t.Fatalf("unexpected title: %s", f.Title)
-	}
-	if f.Severity != "critical" {
-		t.Fatalf("expected severity critical, got %s", f.Severity)
-	}
-	if f.Location != "config/settings.py:42" {
-		t.Fatalf("expected location with line number, got %s", f.Location)
-	}
-
-	// Check that match is redacted in evidence
-	if f.Evidence != nil {
-		if match, ok := f.Evidence["match_pattern"].(string); ok {
-			if match == "AKIAIOSFODNN7EXAMPLE" {
-				t.Fatal("expected match to be redacted")
-			}
-		}
-	}
-}
-
 func TestParseTrivyMixedResults(t *testing.T) {
 	payload := map[string]any{
 		"ArtifactName": "myapp:latest",
@@ -400,34 +264,6 @@ func TestParseTrivyMixedResults(t *testing.T) {
 						"PkgName":         "pkg1",
 					},
 				},
-				"Secrets": []any{
-					map[string]any{
-						"RuleID":    "generic-api-key",
-						"Title":     "Secret 1",
-						"Severity":  "CRITICAL",
-						"StartLine": 10,
-					},
-				},
-			},
-			map[string]any{
-				"Target": "Dockerfile",
-				"Misconfigurations": []any{
-					map[string]any{
-						"ID":       "DS001",
-						"Title":    "Misconfig 1",
-						"Severity": "MEDIUM",
-					},
-				},
-			},
-			map[string]any{
-				"Target": "package.json",
-				"Licenses": []any{
-					map[string]any{
-						"Name":     "MIT",
-						"PkgName":  "pkg2",
-						"Severity": "LOW",
-					},
-				},
 			},
 		},
 	}
@@ -441,32 +277,12 @@ func TestParseTrivyMixedResults(t *testing.T) {
 		t.Fatalf("parse report: %v", err)
 	}
 
-	// Should have 4 findings: 1 vuln + 1 secret + 1 misconfig + 1 license
-	if len(findings) != 4 {
-		t.Fatalf("expected 4 findings, got %d", len(findings))
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
 
-	// Count by type
-	typeCount := map[string]int{}
-	for _, f := range findings {
-		if f.RawData != nil {
-			if t, ok := f.RawData["type"].(string); ok {
-				typeCount[t]++
-			}
-		}
-	}
-
-	if typeCount["vulnerability"] != 1 {
-		t.Fatalf("expected 1 vulnerability, got %d", typeCount["vulnerability"])
-	}
-	if typeCount["secret"] != 1 {
-		t.Fatalf("expected 1 secret, got %d", typeCount["secret"])
-	}
-	if typeCount["misconfiguration"] != 1 {
-		t.Fatalf("expected 1 misconfiguration, got %d", typeCount["misconfiguration"])
-	}
-	if typeCount["license"] != 1 {
-		t.Fatalf("expected 1 license, got %d", typeCount["license"])
+	if findings[0].RuleID != "CVE-2024-0001" {
+		t.Fatalf("expected vulnerability finding, got %s", findings[0].RuleID)
 	}
 }
 
@@ -831,13 +647,7 @@ func TestParseSarifReport(t *testing.T) {
 	}
 
 	findings, err := ParseReport("trivy", raw)
-	if err != nil {
-		t.Fatalf("parse report: %v", err)
-	}
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(findings))
-	}
-	if findings[0].Severity != "medium" {
-		t.Fatalf("expected severity medium, got %s", findings[0].Severity)
+	if err == nil {
+		t.Fatalf("expected sarif report to be unsupported, got %d findings", len(findings))
 	}
 }
