@@ -1,5 +1,6 @@
 {
   "id": "9df44c42-4ea2-4e7b-8e5e-7d1c507a815a",
+  "tenantId": "0a8f9b7c-22af-4d5e-8b79-2f6f1e8dfc9a",
   "scanner": "trivy",
   "sourceType": "sbom",
   "sourceVersion": "1.0.0",

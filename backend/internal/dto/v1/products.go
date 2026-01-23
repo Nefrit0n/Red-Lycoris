@@ -2,6 +2,7 @@ package v1
 
 type ProductListItemDTO struct {
 	ID                string  `json:"id"`
+	TenantID          *string `json:"tenantId,omitempty"`
 	Name              string  `json:"name"`
 	Identifier        *string `json:"identifier,omitempty"`
 	Version           *string `json:"version,omitempty"`

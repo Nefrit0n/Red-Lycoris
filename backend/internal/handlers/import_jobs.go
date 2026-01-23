@@ -42,7 +42,16 @@ func (h *ImportJobsHandler) List(c *fiber.Ctx) error {
 		}
 		productID = &parsed
 	}
+	var tenantID *uuid.UUID
+	if raw := strings.TrimSpace(c.Query("tenantId")); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid tenantId"})
+		}
+		tenantID = &parsed
+	}
 	filters := storage.ImportJobFilters{
+		TenantID:  tenantID,
 		ProductID: productID,
 		Scanner:   strings.TrimSpace(c.Query("scanner")),
 		Status:    strings.TrimSpace(c.Query("status")),
