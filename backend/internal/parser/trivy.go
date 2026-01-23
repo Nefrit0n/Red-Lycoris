@@ -34,7 +34,7 @@ func (p *TrivyParser) CanParse(data []byte) bool {
 	}
 
 	for _, r := range report.Results {
-		if len(r.Vulnerabilities) > 0 {
+		if len(r.Vulnerabilities) > 0 || len(r.Secrets) > 0 || len(r.Misconfigurations) > 0 || len(r.Licenses) > 0 {
 			return true
 		}
 	}
@@ -54,9 +54,17 @@ func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
 	findings := make([]Finding, 0)
 
 	for _, result := range report.Results {
-		// SCA only (Vulnerabilities). Secrets/Misconfig/Licenses игнорим на этом этапе.
 		for _, vuln := range result.Vulnerabilities {
 			findings = append(findings, p.buildVulnerabilityFinding(result, vuln))
+		}
+		for _, secret := range result.Secrets {
+			findings = append(findings, p.buildSecretFinding(result, secret))
+		}
+		for _, misconf := range result.Misconfigurations {
+			findings = append(findings, p.buildMisconfigurationFinding(result, misconf))
+		}
+		for _, license := range result.Licenses {
+			findings = append(findings, p.buildLicenseFinding(result, license))
 		}
 	}
 
@@ -166,8 +174,6 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 		Evidence:    evidence,
 	}
 }
-
-
 
 func buildVulnerabilityEvidence(result trivyResult, vuln trivyVulnerability) map[string]any {
 	evidence := map[string]any{
@@ -530,7 +536,6 @@ func redactTrivySecretRaw(raw map[string]any) map[string]any {
 }
 
 const maxFindingTitleLen = 200
-
 
 func buildTrivyVulnTitle(v trivyVulnerability) string {
 	// 1) Пытаемся собрать из PkgID (обычно он уже "pkg@ver")

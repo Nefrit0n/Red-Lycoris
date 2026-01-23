@@ -177,8 +177,8 @@ func CreateScanResult(ctx context.Context, db *sql.DB, scanResult *models.ScanRe
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO scan_results (id, tenant_id, engagement_id, product_id, uploader_id, import_job_id, scanner, source_type, source_version, raw_report, processed_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		`INSERT INTO scan_results (id, tenant_id, engagement_id, product_id, uploader_id, import_job_id, scanner, source_type, source_version, raw_report, processed_at, created_at, gate_failed)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		scanResult.ID,
 		anyUUIDPtr(scanResult.TenantID),
 		anyUUIDPtr(scanResult.EngagementID),
@@ -191,6 +191,7 @@ func CreateScanResult(ctx context.Context, db *sql.DB, scanResult *models.ScanRe
 		anyRawJSON(scanResult.RawReport),
 		scanResult.ProcessedAt,
 		scanResult.CreatedAt,
+		scanResult.GateFailed,
 	)
 	return err
 }

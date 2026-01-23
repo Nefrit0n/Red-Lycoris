@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	v1mapper "lotus-warden/backend/internal/mapper/v1"
 	"lotus-warden/backend/internal/middleware"
 	"lotus-warden/backend/internal/models"
+	"lotus-warden/backend/internal/policies"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
@@ -18,8 +20,9 @@ import (
 
 // FindingsHandler handles finding-related HTTP requests
 type FindingsHandler struct {
-	db        *sql.DB
-	validator *validator.Validate
+	db           *sql.DB
+	validator    *validator.Validate
+	policyEngine policies.Evaluator
 }
 
 // Request types
@@ -84,8 +87,8 @@ type BulkPrevStatus struct {
 }
 
 // NewFindingsHandler creates a new FindingsHandler
-func NewFindingsHandler(db *sql.DB) *FindingsHandler {
-	return &FindingsHandler{db: db, validator: validator.New()}
+func NewFindingsHandler(db *sql.DB, policyEngine policies.Evaluator) *FindingsHandler {
+	return &FindingsHandler{db: db, validator: validator.New(), policyEngine: policyEngine}
 }
 
 // List returns a paginated list of findings
@@ -139,7 +142,7 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		response = append(response, mapped)
 	}
 
-		severityCounts, err := storage.CountFindingsBySeverity(
+	severityCounts, err := storage.CountFindingsBySeverity(
 		c.Context(),
 		h.db,
 		filterParams.toStorageFilters(1, 0),
@@ -457,6 +460,83 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 	}
 	if current == nil {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
+	}
+
+	if req.Status != nil && *req.Status != current.Status && h.policyEngine != nil {
+		var fixedVersion *string
+		if strings.EqualFold(current.Category, models.CategorySCA) {
+			if detail, err := storage.GetScaFindingDetail(c.Context(), h.db, current.ID); err == nil && detail != nil && detail.FixedVersion.Valid {
+				value := detail.FixedVersion.String
+				fixedVersion = &value
+			} else if err != nil {
+				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to load SCA details"})
+			}
+		}
+
+		actorID := userIDFromContext(c)
+		event := policies.Event{
+			Type:       "status_change",
+			FromStatus: &current.Status,
+			ToStatus:   req.Status,
+		}
+		if actorID != nil {
+			event.Actor = &policies.Actor{
+				Type: "user",
+				ID:   actorID.String(),
+			}
+		}
+
+		policyCtx := policies.Context{
+			Subject: policies.Subject{
+				Type: "finding",
+				ID:   current.ID.String(),
+			},
+			Event:   event,
+			Finding: buildPolicyFindingFromDetail(current, fixedVersion),
+		}
+		if current.ProductID.Valid {
+			policyCtx.Product = &policies.Product{ID: current.ProductID.UUID.String()}
+		}
+
+		decision, err := h.policyEngine.Evaluate(policyCtx)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "policy evaluation failed"})
+		}
+		inputHash, err := policies.InputHash(policyCtx)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "policy input hash failed"})
+		}
+
+		policyPayload := buildPolicyEventPayload(decision, inputHash, requestIDFromContext(c))
+		policyPayloadJSON, _ := json.Marshal(policyPayload)
+		_ = storage.CreateFindingEventIfNotExists(c.Context(), h.db, &models.FindingEvent{
+			FindingID: current.ID,
+			ActorID:   actorID,
+			EventType: "policy_evaluated",
+			Payload:   policyPayloadJSON,
+		})
+
+		if decision.Outcome == policies.OutcomeFail || policyHasAction(decision, "gate_fail") {
+			blockPayload := fiber.Map{
+				"status": map[string]interface{}{
+					"from": current.Status,
+					"to":   *req.Status,
+				},
+				"policy": policyPayload,
+			}
+			blockPayloadJSON, _ := json.Marshal(blockPayload)
+			_ = storage.CreateFindingEventIfNotExists(c.Context(), h.db, &models.FindingEvent{
+				FindingID: current.ID,
+				ActorID:   actorID,
+				EventType: "status_change_blocked_by_policy",
+				Payload:   blockPayloadJSON,
+			})
+			return c.Status(http.StatusConflict).JSON(fiber.Map{
+				"success":    false,
+				"error":      "status change blocked by policy",
+				"violations": decision.Violations,
+			})
+		}
 	}
 
 	updated, err := storage.UpdateFinding(c.Context(), h.db, id, storage.UpdateFindingParams{
