@@ -24,8 +24,6 @@ func (p *SemgrepParser) CanParse(data []byte) bool {
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return false
 	}
-
-	// semgrep json report has results + paths
 	if _, ok := payload["results"]; !ok {
 		return false
 	}
@@ -53,15 +51,22 @@ func (p *SemgrepParser) Parse(data []byte) ([]Finding, error) {
 }
 
 func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
-	// Title как "Trivy-эталон": читаемое короткое имя правила (а не path)
+	// Title как у Trivy-эталона: стабильный идентификатор (не path)
+	// Пример: yaml.github-actions.security.run-shell-injection.run-shell-injection
+	//      -> security: run-shell-injection
 	title := buildSemgrepTitle(r.CheckID)
-
-	// Location = path:line[:col]
-	location := buildSemgrepLocation(r.Path, r.Start.Line, r.Start.Col)
-	if strings.TrimSpace(location) == "" {
-		location = title
+	if title == "" {
+		title = "semgrep"
 	}
 
+	// Location = path:line:col
+	location := buildSemgrepLocation(r.Path, r.Start.Line, r.Start.Col)
+	if location == "" {
+		// fallback, чтобы не было пусто
+		location = strings.TrimSpace(r.Path)
+	}
+
+	// Description = message
 	desc := strings.TrimSpace(r.Extra.Message)
 	var descPtr *string
 	if desc != "" {
@@ -83,21 +88,19 @@ func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
 	}
 }
 
-// buildSemgrepTitle makes a short readable rule title from check_id.
-// Example:
-//   yaml.github-actions.security.run-shell-injection.run-shell-injection
-// -> security: run-shell-injection
+// buildSemgrepTitle extracts a readable short title from check_id.
+// Takes last 2 unique segments (from right), keeps order:
+//   a.b.security.run-shell-injection.run-shell-injection -> security: run-shell-injection
 func buildSemgrepTitle(checkID string) string {
 	checkID = strings.TrimSpace(checkID)
 	if checkID == "" {
-		return "semgrep"
+		return ""
 	}
-
 	parts := strings.Split(checkID, ".")
-	uniq := make([]string, 0, 2)
-	seen := make(map[string]bool, 4)
 
-	// take last 2 unique segments from the end
+	seen := map[string]bool{}
+	uniq := make([]string, 0, 2)
+
 	for i := len(parts) - 1; i >= 0; i-- {
 		p := strings.TrimSpace(parts[i])
 		if p == "" || seen[p] {
@@ -105,16 +108,19 @@ func buildSemgrepTitle(checkID string) string {
 		}
 		seen[p] = true
 		uniq = append(uniq, p)
-		if len(uniq) >= 2 {
+		if len(uniq) == 2 {
 			break
 		}
 	}
 
-	// reverse
+	// reverse uniq
 	for i, j := 0, len(uniq)-1; i < j; i, j = i+1, j-1 {
 		uniq[i], uniq[j] = uniq[j], uniq[i]
 	}
 
+	if len(uniq) == 0 {
+		return ""
+	}
 	if len(uniq) == 1 {
 		return uniq[0]
 	}
@@ -143,20 +149,6 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 		"check_id":          strings.TrimSpace(r.CheckID),
 	}
 
-	// Location/range hints for debugging/analytics
-	if r.Start.Line > 0 {
-		rawData["start_line"] = r.Start.Line
-	}
-	if r.Start.Col > 0 {
-		rawData["start_col"] = r.Start.Col
-	}
-	if r.End.Line > 0 {
-		rawData["end_line"] = r.End.Line
-	}
-	if r.End.Col > 0 {
-		rawData["end_col"] = r.End.Col
-	}
-
 	if r.Extra.Fingerprint != "" {
 		rawData["fingerprint"] = r.Extra.Fingerprint
 	}
@@ -169,24 +161,13 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 	if r.Extra.IsIgnored {
 		rawData["is_ignored"] = true
 	}
-	if r.Extra.Fix != "" {
-		rawData["fix"] = r.Extra.Fix
-	}
-	if r.Extra.FixRegex != nil {
-		rawData["fix_regex"] = map[string]any{
-			"regex":       r.Extra.FixRegex.Regex,
-			"replacement": r.Extra.FixRegex.Replacement,
-			"count":       r.Extra.FixRegex.Count,
-		}
-	}
 	if len(r.Extra.Metavars) > 0 && string(r.Extra.Metavars) != "null" {
 		rawData["metavars"] = r.Extra.Metavars
 	}
 
-	// Metadata (rich)
+	// Extract metadata fields
 	if r.Extra.Metadata != nil {
 		meta := r.Extra.Metadata
-
 		if len(meta.Raw) > 0 && string(meta.Raw) != "null" {
 			rawData["metadata_raw"] = meta.Raw
 		}
@@ -201,6 +182,9 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 		}
 		if len(meta.Cwe) > 0 {
 			rawData["cwe"] = meta.Cwe
+			if ids := extractCweIDs(meta.Cwe); len(ids) > 0 {
+				rawData["cwe_ids"] = ids
+			}
 		}
 		if len(meta.Owasp) > 0 {
 			rawData["owasp"] = meta.Owasp
@@ -226,18 +210,24 @@ func buildSemgrepRawData(r semgrepResult) map[string]any {
 		if meta.Source != "" {
 			rawData["source"] = meta.Source
 		}
+
+		// url priority: shortlink -> semgrep.url -> source
 		if meta.Shortlink != "" {
 			rawData["url"] = meta.Shortlink
 		} else if meta.SemgrepURL != "" {
 			rawData["url"] = meta.SemgrepURL
+		} else if meta.Source != "" {
+			rawData["url"] = meta.Source
 		}
+
 		if meta.CweTop25 {
 			rawData["cwe_top25_2022"] = true
 		}
 		if meta.CweTop25_2021 {
 			rawData["cwe_top25_2021"] = true
 		}
-		// "asvs" может быть bool/object/array → не типизируем, чтобы не падать
+
+		// asvs can be bool/object/array
 		if len(meta.ASVS) > 0 && string(meta.ASVS) != "null" {
 			rawData["asvs"] = meta.ASVS
 		}
@@ -283,7 +273,7 @@ type semgrepExtra struct {
 	FixRegex        *semgrepFixRegex `json:"fix_regex"`
 }
 
-// stringList accepts both "x" and ["x","y"]
+// stringList accepts ["a","b"] or "a"
 type stringList []string
 
 func (s *stringList) UnmarshalJSON(data []byte) error {
@@ -292,11 +282,13 @@ func (s *stringList) UnmarshalJSON(data []byte) error {
 		*s = nil
 		return nil
 	}
+
 	var arr []string
 	if err := json.Unmarshal(data, &arr); err == nil {
 		*s = arr
 		return nil
 	}
+
 	var one string
 	if err := json.Unmarshal(data, &one); err == nil {
 		one = strings.TrimSpace(one)
@@ -307,6 +299,7 @@ func (s *stringList) UnmarshalJSON(data []byte) error {
 		*s = []string{one}
 		return nil
 	}
+
 	*s = nil
 	return nil
 }
@@ -325,7 +318,7 @@ type semgrepMetadata struct {
 	License            string          `json:"license"`
 	Source             string          `json:"source"`
 	Shortlink          string          `json:"shortlink"`
-	SemgrepURL         string          `json:"semgrep.url"` // есть в примере JSON
+	SemgrepURL         string          `json:"semgrep.url"`
 	CweTop25           bool            `json:"cwe2022-top25"`
 	CweTop25_2021      bool            `json:"cwe2021-top25"`
 	ASVS               json.RawMessage `json:"asvs"` // bool/object/array
@@ -370,8 +363,7 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 	evidence := map[string]any{
 		"scannerType": "semgrep",
 		"findingType": "sast",
-		"category":    models.CategorySAST,
-
+		"category":    models.CategorySAST, // как у Trivy
 		"ruleId":      strings.TrimSpace(r.CheckID),
 		"path":        strings.TrimSpace(r.Path),
 		"severityRaw": strings.TrimSpace(r.Extra.Severity),
@@ -381,8 +373,8 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		evidence["message"] = message
 	}
 
-	// Range
-	if r.Start.Line > 0 || r.Start.Col > 0 {
+	// range
+	if r.Start.Line > 0 || r.Start.Col > 0 || r.Start.Offset > 0 {
 		start := map[string]any{}
 		if r.Start.Line > 0 {
 			start["line"] = r.Start.Line
@@ -390,9 +382,12 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		if r.Start.Col > 0 {
 			start["col"] = r.Start.Col
 		}
+		if r.Start.Offset > 0 {
+			start["offset"] = r.Start.Offset
+		}
 		evidence["start"] = start
 	}
-	if r.End.Line > 0 || r.End.Col > 0 {
+	if r.End.Line > 0 || r.End.Col > 0 || r.End.Offset > 0 {
 		end := map[string]any{}
 		if r.End.Line > 0 {
 			end["line"] = r.End.Line
@@ -400,15 +395,18 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		if r.End.Col > 0 {
 			end["col"] = r.End.Col
 		}
+		if r.End.Offset > 0 {
+			end["offset"] = r.End.Offset
+		}
 		evidence["end"] = end
 	}
 
-	// Code snippet
+	// code snippet
 	if snippet := semgrepLinesToSnippet(r.Extra.Lines); snippet != "" {
 		evidence["code"] = snippet
 	}
 
-	// Fix suggestions
+	// fixes
 	if r.Extra.Fix != "" {
 		evidence["fix"] = r.Extra.Fix
 	}
@@ -420,7 +418,10 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		}
 	}
 
-	// Additional context
+	// extra context
+	if r.Extra.EngineKind != "" {
+		evidence["engineKind"] = r.Extra.EngineKind
+	}
 	if r.Extra.ValidationState != "" {
 		evidence["validationState"] = r.Extra.ValidationState
 	}
@@ -428,16 +429,16 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		evidence["metavars"] = r.Extra.Metavars
 	}
 
-	// METADATA — ключевое для твоего UI + RemediationGuidance
+	// metadata (ключевое)
 	if r.Extra.Metadata != nil {
 		meta := r.Extra.Metadata
 
-		// full object for UI (FindingDetail.tsx ожидает evidence.metadata как объект)
+		// full object for UI / remediation
 		if len(meta.Raw) > 0 && string(meta.Raw) != "null" {
 			evidence["metadata"] = json.RawMessage(meta.Raw)
 		}
 
-		// useful top-level fields (как в Trivy)
+		// primaryUrl как у Trivy
 		if meta.Shortlink != "" {
 			evidence["primaryUrl"] = meta.Shortlink
 		} else if meta.SemgrepURL != "" {
@@ -449,12 +450,40 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		if len(meta.References) > 0 {
 			evidence["references"] = meta.References
 		}
+
+		if len(meta.Cwe) > 0 {
+			evidence["cwe"] = meta.Cwe
+			if ids := extractCweIDs(meta.Cwe); len(ids) > 0 {
+				// как у Trivy
+				evidence["cwe_ids"] = ids
+			}
+		}
+		if len(meta.Owasp) > 0 {
+			evidence["owasp"] = meta.Owasp
+		}
+		if meta.Confidence != "" {
+			evidence["confidence"] = meta.Confidence
+		}
+		if meta.Likelihood != "" {
+			evidence["likelihood"] = meta.Likelihood
+		}
+		if meta.Impact != "" {
+			evidence["impact"] = meta.Impact
+		}
+		if len(meta.VulnerabilityClass) > 0 {
+			evidence["vulnerability_class"] = meta.VulnerabilityClass
+		}
+
+		// asvs raw
+		if len(meta.ASVS) > 0 && string(meta.ASVS) != "null" {
+			evidence["asvs"] = meta.ASVS
+		}
 	}
 
 	// cleanup empty strings
-	for key, value := range evidence {
-		if str, ok := value.(string); ok && strings.TrimSpace(str) == "" {
-			delete(evidence, key)
+	for k, v := range evidence {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) == "" {
+			delete(evidence, k)
 		}
 	}
 
@@ -462,38 +491,38 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 }
 
 func semgrepLinesToSnippet(raw json.RawMessage) string {
-	if len(raw) == 0 {
+	if len(raw) == 0 || string(raw) == "null" {
 		return ""
 	}
 
-	// Most common Semgrep format: string
+	// string
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
-		return normalizeSemgrepSnippet(s)
+		return normalizeSnippet(s)
 	}
 
-	// Sometimes it's []string
+	// []string
 	var arr []string
 	if err := json.Unmarshal(raw, &arr); err == nil {
-		return normalizeSemgrepSnippet(strings.Join(arr, "\n"))
+		return normalizeSnippet(strings.Join(arr, "\n"))
 	}
 
-	// Or an object with "lines"/"content"
+	// object with "lines"/"content"
 	var obj map[string]any
 	if err := json.Unmarshal(raw, &obj); err == nil {
 		if v, ok := obj["lines"].(string); ok {
-			return normalizeSemgrepSnippet(v)
+			return normalizeSnippet(v)
 		}
 		if v, ok := obj["content"].(string); ok {
-			return normalizeSemgrepSnippet(v)
+			return normalizeSnippet(v)
 		}
 	}
 
 	return ""
 }
 
-func normalizeSemgrepSnippet(v string) string {
-	trimmed := strings.TrimSpace(v)
+func normalizeSnippet(s string) string {
+	trimmed := strings.TrimSpace(s)
 	if trimmed == "" {
 		return ""
 	}
@@ -501,4 +530,34 @@ func normalizeSemgrepSnippet(v string) string {
 		return ""
 	}
 	return trimmed
+}
+
+// Extract "CWE-78" from strings like:
+// "CWE-78: Improper Neutralization ..."
+// returns unique IDs.
+func extractCweIDs(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+
+	for _, v := range values {
+		u := strings.ToUpper(v)
+		idx := strings.Index(u, "CWE-")
+		if idx < 0 {
+			continue
+		}
+		rest := u[idx+4:]
+		n := 0
+		for n < len(rest) && rest[n] >= '0' && rest[n] <= '9' {
+			n++
+		}
+		if n == 0 {
+			continue
+		}
+		id := "CWE-" + rest[:n]
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }
