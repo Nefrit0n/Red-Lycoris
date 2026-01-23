@@ -6,13 +6,56 @@ import {
 } from "../types/products";
 import { ImportJobListItemDTO } from "../types/imports";
 import { request, requestList, requestWithMeta } from "./client";
-import { Product, ProductWithStats, ProductDetail } from "../types/products";
-import {
-  getAuthHeaders,
-  parseApiResponse,
-  parseApiResponseWithMeta,
-  parseListApiResponse,
-} from "./http";
+
+type SeverityCounts = {
+  critical?: number;
+  high?: number;
+  medium?: number;
+  low?: number;
+  info?: number;
+};
+
+type FindingsMeta = {
+  severityCounts?: SeverityCounts;
+};
+
+type FindingsListEnvelope = {
+  data: unknown[];
+  total: number;
+  meta?: FindingsMeta;
+};
+
+type ImportJobsEnvelope = {
+  data: ImportJobListItemDTO[];
+  total: number;
+};
+
+const normalizeSeverityBreakdown = (counts?: SeverityCounts) => {
+  if (!counts) return undefined;
+  return {
+    critical: Number(counts.critical || 0),
+    high: Number(counts.high || 0),
+    medium: Number(counts.medium || 0),
+    low: Number(counts.low || 0),
+    info: Number(counts.info || 0),
+  };
+};
+
+const fetchFindingsEnvelope = async (
+  query: Record<string, any>,
+  signal?: AbortSignal
+): Promise<FindingsListEnvelope | null> => {
+  try {
+    const res = await requestWithMeta<FindingsListEnvelope>("/api/v1/findings", {
+      signal,
+      query,
+    });
+    if (!res || !Array.isArray(res.data)) return null;
+    return res;
+  } catch {
+    return null;
+  }
+};
 
 export const fetchProducts = async (
   limit: number,
@@ -21,10 +64,7 @@ export const fetchProducts = async (
 ): Promise<{ data: ProductListItemDTO[]; total: number }> => {
   return requestList<ProductListItemDTO>("/api/v1/products", {
     signal,
-    query: {
-      limit,
-      offset,
-    },
+    query: { limit, offset },
   });
 };
 
@@ -35,12 +75,34 @@ export const fetchProductsWithStats = async (
 ): Promise<{ data: ProductWithStats[]; total: number }> => {
   const productsResponse = await fetchProducts(limit, offset, signal);
 
-  const productsWithStats: ProductWithStats[] = productsResponse.data.map((product) => ({
-    ...product,
-    severityBreakdown: undefined,
-    trend: "flat",
-    trendValue: 0,
-  }));
+  // ⚠️ N+1 (как быстрый workaround). Правильнее — отдельный endpoint /products-with-stats.
+  const productsWithStats: ProductWithStats[] = await Promise.all(
+    productsResponse.data.map(async (product) => {
+      const env = await fetchFindingsEnvelope(
+        {
+          productId: product.id,
+          limit: 1,
+          offset: 0,
+          canonicalOnly: true,
+          includeRepeats: false,
+        },
+        signal
+      );
+
+      const breakdown = normalizeSeverityBreakdown(env?.meta?.severityCounts);
+
+      return {
+        ...product,
+        // если бэк не отдаёт findingsOpenCount в product list item (или отдаёт 0),
+        // то подстрахуем total из findings
+        findingsOpenCount:
+          typeof env?.total === "number" ? env!.total : (product as any).findingsOpenCount ?? 0,
+        severityBreakdown: breakdown,
+        trend: "flat",
+        trendValue: 0,
+      };
+    })
+  );
 
   return {
     data: productsWithStats,
@@ -56,19 +118,68 @@ export const fetchProductDetail = async (
     signal,
   });
 
-  let recentScans: ProductDetailView["recentScans"];
+  // 1) Open findings + severity breakdown (для health + графиков)
+  const openEnv = await fetchFindingsEnvelope(
+    {
+      productId,
+      limit: 1,
+      offset: 0,
+      canonicalOnly: true,
+      includeRepeats: false,
+    },
+    signal
+  );
+
+  const severityBreakdown = normalizeSeverityBreakdown(openEnv?.meta?.severityCounts);
+  const findingsOpenCount =
+    typeof openEnv?.total === "number"
+      ? openEnv.total
+      : (product as any).findingsOpenCount ?? 0;
+
+  // 2) Fixed / False positives (карточки сверху)
+  // В модели бэка “исправлено” = mitigated
+  const mitigatedEnv = await fetchFindingsEnvelope(
+    {
+      productId,
+      status: "mitigated",
+      limit: 1,
+      offset: 0,
+      canonicalOnly: true,
+      includeRepeats: false,
+    },
+    signal
+  );
+
+  const falsePositiveEnv = await fetchFindingsEnvelope(
+    {
+      productId,
+      status: "false_positive",
+      limit: 1,
+      offset: 0,
+      canonicalOnly: true,
+      includeRepeats: false,
+    },
+    signal
+  );
+
+  const findingsFixedCount = typeof mitigatedEnv?.total === "number" ? mitigatedEnv.total : 0;
+  const findingsFalsePositiveCount =
+    typeof falsePositiveEnv?.total === "number" ? falsePositiveEnv.total : 0;
+
+  // 3) Recent scans (import jobs)
+  let recentScans: ProductDetailView["recentScans"] = [];
+  let totalScans = 0;
+
   try {
-    const scansResponse = await requestWithMeta<{ data: ImportJobListItemDTO[] }>(
-      "/api/v1/import-jobs",
-      {
-        signal,
-        query: {
-          productId,
-          limit: 5,
-          offset: 0,
-        },
-      }
-    );
+    const scansResponse = await requestWithMeta<ImportJobsEnvelope>("/api/v1/import-jobs", {
+      signal,
+      query: {
+        productId,
+        limit: 5,
+        offset: 0,
+      },
+    });
+
     if (Array.isArray(scansResponse.data)) {
       recentScans = scansResponse.data.map((scan) => ({
         id: scan.id,
@@ -78,18 +189,30 @@ export const fetchProductDetail = async (
         findingsNew: scan.findingsNew,
       }));
     }
+    if (typeof scansResponse.total === "number") {
+      totalScans = scansResponse.total;
+    } else {
+      totalScans = recentScans.length;
+    }
   } catch {
     // ignore
   }
 
+  // lastScanAt: если бэк не прислал — возьмём по recent scans
+  const lastScanAt =
+    (product as any).lastScanAt ??
+    (recentScans.length > 0 ? recentScans[0].createdAt : undefined);
+
   return {
     ...product,
-    severityBreakdown: undefined,
+    lastScanAt,
+    findingsOpenCount,
+    severityBreakdown,
     recentScans,
     trend: "flat",
     trendValue: 0,
-    totalScans: 0,
-    findingsFixedCount: 0,
-    findingsFalsePositiveCount: 0,
+    totalScans,
+    findingsFixedCount,
+    findingsFalsePositiveCount,
   };
 };
