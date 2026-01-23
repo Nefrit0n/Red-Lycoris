@@ -158,6 +158,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       'productName',
       'severity',
       'status',
+      'slaDueAt',
       'lastSeenAt',
       'createdAt',
       'updatedAt',
