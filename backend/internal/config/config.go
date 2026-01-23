@@ -44,6 +44,11 @@ type Config struct {
 	IntelRefreshInterval     string
 	IntelWorkerConcurrency   int
 	IntelRetryBase           string
+	SLACriticalDuration      string
+	SLAHighDuration          string
+	SLAMediumDuration        string
+	SLALowDuration           string
+	SLABreachCheckInterval   string
 }
 
 func Load() Config {
@@ -81,6 +86,11 @@ func Load() Config {
 		IntelRefreshInterval:     getEnv("INTEL_REFRESH_INTERVAL", "24h"),
 		IntelWorkerConcurrency:   getEnvAsInt("INTEL_WORKER_CONCURRENCY", 4),
 		IntelRetryBase:           getEnv("INTEL_RETRY_BASE", "30m"),
+		SLACriticalDuration:      getEnv("SLA_CRITICAL_DURATION", "168h"),
+		SLAHighDuration:          getEnv("SLA_HIGH_DURATION", "720h"),
+		SLAMediumDuration:        getEnv("SLA_MEDIUM_DURATION", "2160h"),
+		SLALowDuration:           getEnv("SLA_LOW_DURATION", "4320h"),
+		SLABreachCheckInterval:   getEnv("SLA_BREACH_CHECK_INTERVAL", "15m"),
 	}
 }
 

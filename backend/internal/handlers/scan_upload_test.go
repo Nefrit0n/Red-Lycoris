@@ -7,9 +7,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"lotus-warden/backend/internal/handlers"
 	"lotus-warden/backend/internal/models"
+	"lotus-warden/backend/internal/sla"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gofiber/fiber/v2"
@@ -23,6 +25,8 @@ func TestScanUploadEndpoint(t *testing.T) {
 	}
 	defer db.Close()
 
+	now := time.Now().UTC()
+
 	app := fiber.New(fiber.Config{BodyLimit: 12 << 20})
 	userID := uuid.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -30,7 +34,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 		c.Locals("roles", []string{"analyst"})
 		return c.Next()
 	})
-	scanHandler := handlers.NewScanUploadHandler(db, nil, nil)
+	scanHandler := handlers.NewScanUploadHandler(db, nil, nil, sla.DefaultMatrix())
 	app.Post("/api/v1/scans/upload", scanHandler.Handle)
 
 	report := map[string]any{
@@ -123,9 +127,9 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, repeat_count\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND product_id = \\$2").
+	mock.ExpectQuery("SELECT id, repeat_count, severity, first_seen_at, sla_due_at\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND product_id = \\$2").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count", "severity", "first_seen_at", "sla_due_at"}))
 
 	mock.ExpectExec("INSERT INTO findings").
 		WithArgs(
@@ -145,6 +149,11 @@ func TestScanUploadEndpoint(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			0,
+			sqlmock.AnyArg(),
+			false,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
@@ -168,9 +177,9 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, repeat_count\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND product_id = \\$2").
+	mock.ExpectQuery("SELECT id, repeat_count, severity, first_seen_at, sla_due_at\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND product_id = \\$2").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count"}).AddRow(duplicateID, 2))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count", "severity", "first_seen_at", "sla_due_at"}).AddRow(duplicateID, 2, "medium", now, now))
 
 	mock.ExpectExec("INSERT INTO findings").
 		WithArgs(
@@ -190,6 +199,11 @@ func TestScanUploadEndpoint(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			0,
+			sqlmock.AnyArg(),
+			false,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
@@ -235,7 +249,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/v1/scans/upload", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, 5000)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -276,7 +290,7 @@ func TestScanUploadRejectsOversizedReport(t *testing.T) {
 		c.Locals("roles", []string{"analyst"})
 		return c.Next()
 	})
-	scanHandler := handlers.NewScanUploadHandler(db, nil, nil)
+	scanHandler := handlers.NewScanUploadHandler(db, nil, nil, sla.DefaultMatrix())
 	app.Post("/api/v1/scans/upload", scanHandler.Handle)
 
 	largePayload := strings.Repeat("a", 11*1024*1024)
