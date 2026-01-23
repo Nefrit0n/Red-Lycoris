@@ -14,6 +14,7 @@ import (
 	"lotus-warden/backend/internal/importing"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/parser"
+	"lotus-warden/backend/internal/policies"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
@@ -47,16 +48,18 @@ type ScanUploadResponse struct {
 }
 
 type ScanUploadHandler struct {
-	db        *sql.DB
-	validator *validator.Validate
-	publisher *events.Publisher
+	db           *sql.DB
+	validator    *validator.Validate
+	publisher    *events.Publisher
+	policyEngine policies.Evaluator
 }
 
-func NewScanUploadHandler(db *sql.DB, publisher *events.Publisher) *ScanUploadHandler {
+func NewScanUploadHandler(db *sql.DB, publisher *events.Publisher, policyEngine policies.Evaluator) *ScanUploadHandler {
 	return &ScanUploadHandler{
-		db:        db,
-		validator: validator.New(),
-		publisher: publisher,
+		db:           db,
+		validator:    validator.New(),
+		publisher:    publisher,
+		policyEngine: policyEngine,
 	}
 }
 
@@ -200,17 +203,38 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 				Source:      "scan_upload",
 			})
 		},
+		OnPolicyGateFailed: func(subjectType string, subjectID uuid.UUID, decision policies.Decision, inputHash string) {
+			_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
+				ActorID:    uploaderID,
+				ActorType:  "user",
+				Action:     "policy.gate_failed",
+				TargetType: subjectType,
+				TargetID:   stringPointer(subjectID.String()),
+				Scope:      "global",
+			}, map[string]interface{}{
+				"decision":       decision.Outcome,
+				"policy":         decision.Policy,
+				"actions":        decision.Actions,
+				"violations":     decision.Violations,
+				"input_hash":     inputHash,
+				"correlation_id": requestIDFromContext(c),
+				"meta":           auditMeta,
+			})
+		},
 	}
 
 	result, err := importing.ImportFindings(c.Context(), h.db, importing.ImportParams{
-		Scanner:      req.ScannerType,
-		Report:       req.ReportBytes,
-		SourceType:   "scanner",
-		ProductID:    productID,
-		EngagementID: req.EngagementID,
-		CreatedBy:    uploaderID,
-		TenantID:     tenantID,
-		Callbacks:    callbacks,
+		Scanner:       req.ScannerType,
+		Report:        req.ReportBytes,
+		SourceType:    "scanner",
+		ProductID:     productID,
+		EngagementID:  req.EngagementID,
+		CreatedBy:     uploaderID,
+		TenantID:      tenantID,
+		Callbacks:     callbacks,
+		PolicyEngine:  h.policyEngine,
+		PolicyActorID: uploaderID,
+		CorrelationID: requestIDFromContext(c),
 	})
 	if err != nil {
 		if errors.Is(err, parser.ErrUnsupportedFormat) {

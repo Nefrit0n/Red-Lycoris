@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"testing"
 
@@ -24,10 +25,12 @@ func TestFindingsListDefaultsToCanonical(t *testing.T) {
 	cfg := config.Config{JWTSecret: "test-secret"}
 	app := server.NewApp(cfg, db, nil, nil)
 
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM findings.*duplicate_id IS NULL").
+	mock.ExpectQuery("(?s)\\s*SELECT COUNT\\(\\*\\).*duplicate_id IS NULL").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-	mock.ExpectQuery("SELECT f.id.*duplicate_id IS NULL").
+	mock.ExpectQuery("(?s)\\s*SELECT f.id.*duplicate_id IS NULL").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "severity", "status", "category", "product_id", "name", "assignee_id", "username", "import_job_id", "created_at", "updated_at", "first_seen_at", "last_seen_at", "repeat_count", "duplicate_id", "scanner", "source_type"}))
+	mock.ExpectQuery("(?s)\\s*SELECT f.severity, COUNT\\(\\*\\).*duplicate_id IS NULL").
+		WillReturnRows(sqlmock.NewRows([]string{"severity", "count"}))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
 		UserID: uuid.New().String(),
@@ -45,7 +48,11 @@ func TestFindingsListDefaultsToCanonical(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 status, got %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatalf("expected 200 status, got %d: %s (db: %v)", resp.StatusCode, string(body), err)
+		}
+		t.Fatalf("expected 200 status, got %d: %s", resp.StatusCode, string(body))
 	}
 
 	var response struct {

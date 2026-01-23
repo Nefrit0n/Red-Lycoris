@@ -28,6 +28,7 @@ type ImportJob struct {
 	FindingsTotal     int        `db:"findings_total"`
 	FindingsNew       int        `db:"findings_new"`
 	DuplicatesTotal   int        `db:"duplicates_total"`
+	GateFailed        bool       `db:"gate_failed"`
 	Checksum          string     `db:"checksum"`
 	ErrorMessage      *string    `db:"error_message"`
 	CreatedAt         time.Time  `db:"created_at"`
