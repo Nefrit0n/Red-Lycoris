@@ -78,3 +78,51 @@ func CreateFindingEvent(ctx context.Context, db *sql.DB, event *models.FindingEv
 	)
 	return err
 }
+
+func CreateFindingEventIfNotExists(ctx context.Context, db *sql.DB, event *models.FindingEvent) error {
+	if err := event.Validate(); err != nil {
+		return err
+	}
+	event.PrepareForInsert()
+
+	var actorID interface{}
+	if event.ActorID != nil {
+		actorID = *event.ActorID
+	}
+	payload := event.Payload
+	if len(payload) == 0 {
+		payload = []byte("{}")
+	}
+
+	var existingID uuid.UUID
+	err := db.QueryRowContext(
+		ctx,
+		`SELECT id FROM finding_events
+		 WHERE finding_id = $1
+		   AND event_type = $2
+		   AND payload = $3
+		 LIMIT 1`,
+		event.FindingID,
+		event.EventType,
+		payload,
+	).Scan(&existingID)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+
+	_, err = db.ExecContext(
+		ctx,
+		`INSERT INTO finding_events (id, finding_id, actor_id, event_type, payload, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		event.ID,
+		event.FindingID,
+		actorID,
+		event.EventType,
+		payload,
+		event.CreatedAt,
+	)
+	return err
+}

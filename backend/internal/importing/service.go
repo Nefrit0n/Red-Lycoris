@@ -19,6 +19,7 @@ import (
 	"lotus-warden/backend/internal/intel"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/parser"
+	"lotus-warden/backend/internal/policies"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/google/uuid"
@@ -44,6 +45,9 @@ type ImportParams struct {
 	CreatedBy     *uuid.UUID
 	TenantID      *uuid.UUID
 	Callbacks     *ImportCallbacks
+	PolicyEngine  policies.Evaluator
+	PolicyActorID *uuid.UUID
+	CorrelationID *string
 }
 
 // ImportCallbacks contains optional callback functions for import events
@@ -60,6 +64,8 @@ type ImportCallbacks struct {
 	OnImportFailed func(jobID uuid.UUID, err error)
 	// OnImportSucceeded is called when import job succeeds
 	OnImportSucceeded func(jobID uuid.UUID, total, new, duplicates int)
+	// OnPolicyGateFailed is called when a policy gate marks import job or scan result failed
+	OnPolicyGateFailed func(subjectType string, subjectID uuid.UUID, decision policies.Decision, inputHash string)
 }
 
 // ImportFindings parses a security scan report and imports findings with deduplication.
@@ -205,6 +211,23 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 			}
 		}
 
+		if params.PolicyEngine != nil {
+			if err := applyFindingPolicies(ctx, db, policyFindingParams{
+				DecisionEngine: params.PolicyEngine,
+				Finding:        result.finding,
+				ParserFinding:  finding,
+				Scanner:        params.Scanner,
+				SourceType:     &sourceType,
+				SourceVersion:  params.SourceVersion,
+				ProductID:      params.ProductID,
+				ImportJobID:    &importJob.ID,
+				ActorID:        params.PolicyActorID,
+				CorrelationID:  params.CorrelationID,
+			}); err != nil {
+				return nil, err
+			}
+		}
+
 		if len(finding.Evidence) > 0 {
 			targetID := result.finding.ID
 			if !result.isNew {
@@ -236,6 +259,24 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 
 	if err := storage.UpdateImportJobStats(ctx, db, importJob.ID, len(findings), createdFindings, duplicates); err != nil {
 		return nil, err
+	}
+	importJob.FindingsTotal = len(findings)
+	importJob.FindingsNew = createdFindings
+	importJob.DuplicatesTotal = duplicates
+
+	if params.PolicyEngine != nil {
+		if err := applyImportAggregatePolicies(ctx, db, policyAggregateParams{
+			DecisionEngine: params.PolicyEngine,
+			ImportJob:      importJob,
+			ScanResult:     scan,
+			Findings:       findings,
+			ProductID:      params.ProductID,
+			ActorID:        params.PolicyActorID,
+			CorrelationID:  params.CorrelationID,
+			Callbacks:      params.Callbacks,
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	if params.Callbacks != nil && params.Callbacks.OnIdentifiersDetected != nil && len(identifierSet) > 0 {

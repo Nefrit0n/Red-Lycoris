@@ -8,6 +8,8 @@ import (
 	"lotus-warden/backend/internal/handlers"
 	"lotus-warden/backend/internal/middleware"
 	"lotus-warden/backend/internal/objectstore"
+	"lotus-warden/backend/internal/policies"
+	"lotus-warden/backend/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -50,7 +52,10 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured := api.Group("", middleware.RequireJWT(cfg.JWTSecret))
 	secured.Post("/auth/change-password", authHandler.ChangePassword)
 
-	scanHandler := handlers.NewScanUploadHandler(db, publisher)
+	policyRepo := storage.NewPolicyRepository(db)
+	policyEngine := policies.NewEngine(policyRepo)
+
+	scanHandler := handlers.NewScanUploadHandler(db, publisher, policyEngine)
 	secured.Post(
 		"/scans/upload",
 		middleware.AuthorizeRole("analyst", "admin"),
@@ -67,7 +72,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured.Get("/analysis-jobs/:id", analysisHandler.Get)
 	secured.Get("/analysis-jobs/:id/artifacts/:artifact", analysisHandler.DownloadArtifact)
 
-	findingsHandler := handlers.NewFindingsHandler(db)
+	findingsHandler := handlers.NewFindingsHandler(db, policyEngine)
 	secured.Get("/findings", findingsHandler.List)
 	secured.Get("/findings/:id", findingsHandler.Get)
 	secured.Get("/findings/:id/neighbors", findingsHandler.Neighbors)

@@ -174,6 +174,23 @@ func userIDFromContext(c *fiber.Ctx) *uuid.UUID {
 	return nil
 }
 
+func requestIDFromContext(c *fiber.Ctx) *string {
+	if v := c.Locals("requestid"); v != nil {
+		switch value := v.(type) {
+		case string:
+			if value != "" {
+				return &value
+			}
+		case []byte:
+			if len(value) > 0 {
+				str := string(value)
+				return &str
+			}
+		}
+	}
+	return nil
+}
+
 func parseDateParam(raw string, endOfDay bool) (*time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

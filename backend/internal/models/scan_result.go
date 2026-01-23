@@ -20,6 +20,7 @@ type ScanResult struct {
 	RawReport     json.RawMessage `db:"raw_report"`
 	ProcessedAt   time.Time       `db:"processed_at"`
 	CreatedAt     time.Time       `db:"created_at"`
+	GateFailed    bool            `db:"gate_failed"`
 }
 
 func (s *ScanResult) Validate() error {
