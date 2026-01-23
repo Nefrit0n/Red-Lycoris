@@ -363,17 +363,105 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 	evidence := map[string]any{
 		"scannerType": "semgrep",
 		"findingType": "sast",
-		"category":    models.CategorySAST, // как у Trivy
-		"ruleId":      strings.TrimSpace(r.CheckID),
-		"path":        strings.TrimSpace(r.Path),
-		"severityRaw": strings.TrimSpace(r.Extra.Severity),
+		"category":    models.CategorySAST,
+
+		// каноничные ключи (как Trivy-стиль / как DTO)
+		"ruleId":    strings.TrimSpace(r.CheckID),
+		"filePath":  strings.TrimSpace(r.Path),
 	}
 
-	if message := strings.TrimSpace(r.Extra.Message); message != "" {
-		evidence["message"] = message
+	// message
+	if msg := strings.TrimSpace(r.Extra.Message); msg != "" {
+		evidence["message"] = msg
 	}
 
-	// range
+	// start/end (канонично)
+	if r.Start.Line > 0 {
+		evidence["startLine"] = r.Start.Line
+	}
+	if r.End.Line > 0 {
+		evidence["endLine"] = r.End.Line
+	}
+	if r.Start.Col > 0 {
+		evidence["startCol"] = r.Start.Col
+	}
+	if r.End.Col > 0 {
+		evidence["endCol"] = r.End.Col
+	}
+
+	// snippet (канонично)
+	if snippet := semgrepLinesToSnippet(r.Extra.Lines); snippet != "" {
+		evidence["snippet"] = snippet
+	}
+
+	// severity raw
+	if sev := strings.TrimSpace(r.Extra.Severity); sev != "" {
+		evidence["severityRaw"] = sev
+	}
+
+	// fix
+	if r.Extra.Fix != "" {
+		evidence["fix"] = r.Extra.Fix
+	}
+	if r.Extra.FixRegex != nil {
+		evidence["fixRegex"] = map[string]any{
+			"regex":       r.Extra.FixRegex.Regex,
+			"replacement": r.Extra.FixRegex.Replacement,
+			"count":       r.Extra.FixRegex.Count,
+		}
+	}
+
+	// meta derived fields + primaryUrl
+	if r.Extra.Metadata != nil {
+		meta := r.Extra.Metadata
+
+		// primaryUrl приоритет: shortlink -> semgrep.url -> source
+		if meta.Shortlink != "" {
+			evidence["primaryUrl"] = meta.Shortlink
+		} else if meta.SemgrepURL != "" {
+			evidence["primaryUrl"] = meta.SemgrepURL
+		} else if meta.Source != "" {
+			evidence["primaryUrl"] = meta.Source
+		}
+
+		if len(meta.References) > 0 {
+			evidence["references"] = []string(meta.References)
+		}
+		if len(meta.Cwe) > 0 {
+			evidence["cwe"] = []string(meta.Cwe)
+		}
+		if len(meta.Owasp) > 0 {
+			evidence["owasp"] = []string(meta.Owasp)
+		}
+		if meta.Confidence != "" {
+			evidence["confidence"] = meta.Confidence
+		}
+		if meta.Likelihood != "" {
+			evidence["likelihood"] = meta.Likelihood
+		}
+		if meta.Impact != "" {
+			evidence["impact"] = meta.Impact
+		}
+		if len(meta.VulnerabilityClass) > 0 {
+			evidence["vulnerabilityClass"] = []string(meta.VulnerabilityClass)
+		}
+
+		// asvs — как raw json, чтобы не падать
+		if len(meta.ASVS) > 0 && string(meta.ASVS) != "null" {
+			evidence["asvs"] = meta.ASVS
+		}
+
+		// если хочешь “богато” для UI — сохраним metadata целиком
+		if len(meta.Raw) > 0 && string(meta.Raw) != "null" {
+			evidence["metadata"] = json.RawMessage(meta.Raw)
+		}
+	}
+
+	// -------------- Backward compatibility --------------
+	// Старые ключи оставляем, чтобы ничего не сломать:
+	evidence["path"] = strings.TrimSpace(r.Path)
+
+	// start/end object
 	if r.Start.Line > 0 || r.Start.Col > 0 || r.Start.Offset > 0 {
 		start := map[string]any{}
 		if r.Start.Line > 0 {
@@ -401,83 +489,9 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 		evidence["end"] = end
 	}
 
-	// code snippet
+	// code (старый ключ)
 	if snippet := semgrepLinesToSnippet(r.Extra.Lines); snippet != "" {
 		evidence["code"] = snippet
-	}
-
-	// fixes
-	if r.Extra.Fix != "" {
-		evidence["fix"] = r.Extra.Fix
-	}
-	if r.Extra.FixRegex != nil {
-		evidence["fix_regex"] = map[string]any{
-			"regex":       r.Extra.FixRegex.Regex,
-			"replacement": r.Extra.FixRegex.Replacement,
-			"count":       r.Extra.FixRegex.Count,
-		}
-	}
-
-	// extra context
-	if r.Extra.EngineKind != "" {
-		evidence["engineKind"] = r.Extra.EngineKind
-	}
-	if r.Extra.ValidationState != "" {
-		evidence["validationState"] = r.Extra.ValidationState
-	}
-	if len(r.Extra.Metavars) > 0 && string(r.Extra.Metavars) != "null" {
-		evidence["metavars"] = r.Extra.Metavars
-	}
-
-	// metadata (ключевое)
-	if r.Extra.Metadata != nil {
-		meta := r.Extra.Metadata
-
-		// full object for UI / remediation
-		if len(meta.Raw) > 0 && string(meta.Raw) != "null" {
-			evidence["metadata"] = json.RawMessage(meta.Raw)
-		}
-
-		// primaryUrl как у Trivy
-		if meta.Shortlink != "" {
-			evidence["primaryUrl"] = meta.Shortlink
-		} else if meta.SemgrepURL != "" {
-			evidence["primaryUrl"] = meta.SemgrepURL
-		} else if meta.Source != "" {
-			evidence["primaryUrl"] = meta.Source
-		}
-
-		if len(meta.References) > 0 {
-			evidence["references"] = meta.References
-		}
-
-		if len(meta.Cwe) > 0 {
-			evidence["cwe"] = meta.Cwe
-			if ids := extractCweIDs(meta.Cwe); len(ids) > 0 {
-				// как у Trivy
-				evidence["cwe_ids"] = ids
-			}
-		}
-		if len(meta.Owasp) > 0 {
-			evidence["owasp"] = meta.Owasp
-		}
-		if meta.Confidence != "" {
-			evidence["confidence"] = meta.Confidence
-		}
-		if meta.Likelihood != "" {
-			evidence["likelihood"] = meta.Likelihood
-		}
-		if meta.Impact != "" {
-			evidence["impact"] = meta.Impact
-		}
-		if len(meta.VulnerabilityClass) > 0 {
-			evidence["vulnerability_class"] = meta.VulnerabilityClass
-		}
-
-		// asvs raw
-		if len(meta.ASVS) > 0 && string(meta.ASVS) != "null" {
-			evidence["asvs"] = meta.ASVS
-		}
 	}
 
 	// cleanup empty strings
@@ -489,6 +503,7 @@ func buildSemgrepEvidence(r semgrepResult) map[string]any {
 
 	return evidence
 }
+
 
 func semgrepLinesToSnippet(raw json.RawMessage) string {
 	if len(raw) == 0 || string(raw) == "null" {
