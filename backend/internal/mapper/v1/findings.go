@@ -3,6 +3,8 @@ package v1
 import (
 	"database/sql"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 
 	v1dto "lotus-warden/backend/internal/dto/v1"
@@ -487,32 +489,47 @@ func FindingCategoryDetails(category string, evidence map[string]interface{}, sc
 			References:       extractStringSlice(evidence, "references"),
 			RawSeverity:      nullableStringPtr(scaDetail.RawSeverity),
 		}
+
 	case models.CategorySecrets:
 		return &v1dto.FindingDetailsSecrets{
-			RuleID:   stringFromMap(evidence, "ruleId"),
-			FilePath: stringFromMap(evidence, "path"),
-			Snippet:  stringFromMap(evidence, "code"),
-			Message:  stringFromMap(evidence, "message"),
+			RuleID:   firstStringFromMap(evidence, "ruleId", "ruleID", "check_id"),
+			FilePath: firstStringFromMap(evidence, "filePath", "path"),
+			Snippet:  firstStringFromMap(evidence, "snippet", "code"),
+			Message:  firstStringFromMap(evidence, "message"),
 		}
+
 	case models.CategoryConfig:
 		return &v1dto.FindingDetailsConfig{
-			RuleID:   stringFromMap(evidence, "ruleId"),
-			FilePath: stringFromMap(evidence, "path"),
-			Message:  stringFromMap(evidence, "message"),
+			RuleID:   firstStringFromMap(evidence, "ruleId", "ruleID", "check_id"),
+			FilePath: firstStringFromMap(evidence, "filePath", "path"),
+			Message:  firstStringFromMap(evidence, "message"),
 		}
+
 	case models.CategorySAST:
-		startLine := nestedIntFromMap(evidence, "start", "line")
-		endLine := nestedIntFromMap(evidence, "end", "line")
+		// Prefer canonical keys (startLine/endLine/snippet/filePath), fallback to legacy (start.line/end.line/code/path)
+		startLine := firstIntFromMap(evidence, "startLine")
+		if startLine == nil {
+			startLine = nestedIntFromMap(evidence, "start", "line")
+		}
+		endLine := firstIntFromMap(evidence, "endLine")
+		if endLine == nil {
+			endLine = nestedIntFromMap(evidence, "end", "line")
+		}
+
+		cwe := extractStringSlice(evidence, "cwe")
+		owasp := extractStringSlice(evidence, "owasp")
+
 		return &v1dto.FindingDetailsSAST{
-			RuleID:    stringFromMap(evidence, "ruleId"),
-			FilePath:  stringFromMap(evidence, "path"),
+			RuleID:    firstStringFromMap(evidence, "ruleId", "ruleID", "check_id"),
+			FilePath:  firstStringFromMap(evidence, "filePath", "path"),
 			StartLine: startLine,
 			EndLine:   endLine,
-			Snippet:   stringFromMap(evidence, "code"),
-			Message:   stringFromMap(evidence, "message"),
-			CWE:       extractStringSlice(evidence, "cwe"),
-			OWASP:     extractStringSlice(evidence, "owasp"),
+			Snippet:   firstStringFromMap(evidence, "snippet", "code"),
+			Message:   firstStringFromMap(evidence, "message"),
+			CWE:       cwe,
+			OWASP:     owasp,
 		}
+
 	default:
 		return nil
 	}
@@ -559,8 +576,8 @@ func extractStringSlice(data map[string]interface{}, key string) []string {
 	case []interface{}:
 		values := make([]string, 0, len(typed))
 		for _, item := range typed {
-			if str, ok := item.(string); ok && str != "" {
-				values = append(values, str)
+			if str, ok := item.(string); ok && strings.TrimSpace(str) != "" {
+				values = append(values, strings.TrimSpace(str))
 			}
 		}
 		if len(values) > 0 {
@@ -570,18 +587,66 @@ func extractStringSlice(data map[string]interface{}, key string) []string {
 	return nil
 }
 
-func stringFromMap(data map[string]interface{}, key string) *string {
+func firstStringFromMap(data map[string]interface{}, keys ...string) *string {
 	if len(data) == 0 {
 		return nil
 	}
-	value, ok := data[key]
-	if !ok {
-		return nil
-	}
-	if str, ok := value.(string); ok && str != "" {
-		return &str
+	for _, key := range keys {
+		value, ok := data[key]
+		if !ok || value == nil {
+			continue
+		}
+		if str, ok := value.(string); ok {
+			str = strings.TrimSpace(str)
+			if str != "" {
+				return &str
+			}
+		}
 	}
 	return nil
+}
+
+func firstIntFromMap(data map[string]interface{}, keys ...string) *int {
+	if len(data) == 0 {
+		return nil
+	}
+	for _, key := range keys {
+		value, ok := data[key]
+		if !ok || value == nil {
+			continue
+		}
+		if v := intFromAny(value); v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
+func intFromAny(value interface{}) *int {
+	switch typed := value.(type) {
+	case int:
+		return &typed
+	case int32:
+		v := int(typed)
+		return &v
+	case int64:
+		v := int(typed)
+		return &v
+	case float64:
+		v := int(typed)
+		return &v
+	case string:
+		s := strings.TrimSpace(typed)
+		if s == "" {
+			return nil
+		}
+		if i, err := strconv.Atoi(s); err == nil {
+			return &i
+		}
+		return nil
+	default:
+		return nil
+	}
 }
 
 func nestedIntFromMap(data map[string]interface{}, key string, nestedKey string) *int {
@@ -589,11 +654,11 @@ func nestedIntFromMap(data map[string]interface{}, key string, nestedKey string)
 		return nil
 	}
 	raw, ok := data[key]
-	if !ok {
+	if !ok || raw == nil {
 		return nil
 	}
 	child, ok := raw.(map[string]interface{})
-	if !ok {
+	if !ok || child == nil {
 		return nil
 	}
 	return intFromMap(child, nestedKey)
@@ -604,7 +669,7 @@ func intFromMap(data map[string]interface{}, key string) *int {
 		return nil
 	}
 	value, ok := data[key]
-	if !ok {
+	if !ok || value == nil {
 		return nil
 	}
 	switch typed := value.(type) {

@@ -100,3 +100,46 @@ func UpdateProductLastScan(ctx context.Context, db *sql.DB, productID uuid.UUID,
 	)
 	return err
 }
+
+func GetProductListItem(ctx context.Context, db *sql.DB, productID uuid.UUID) (*ProductListItem, error) {
+	row := db.QueryRowContext(
+		ctx,
+		`SELECT p.id,
+		        p.name,
+		        p.identifier,
+		        p.version,
+		        p.asset_criticality,
+		        MAX(sr.created_at) AS last_scan_at,
+		        COUNT(f.id) FILTER (
+		            WHERE f.deleted_at IS NULL
+		              AND f.duplicate_id IS NULL
+		              AND f.status IN ('new', 'under_review', 'confirmed', 'risk_accepted')
+		        ) AS findings_open_count
+		 FROM products p
+		 LEFT JOIN scan_results sr ON sr.product_id = p.id
+		 LEFT JOIN findings f ON f.product_id = p.id
+		 WHERE p.id = $1
+		 GROUP BY p.id`,
+		productID,
+	)
+
+	var item ProductListItem
+	var lastScan sql.NullTime
+	if err := row.Scan(
+		&item.ID,
+		&item.Name,
+		&item.Identifier,
+		&item.Version,
+		&item.AssetCriticality,
+		&lastScan,
+		&item.FindingsOpenCount,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	item.LastScanAt = lastScan
+	return &item, nil
+}

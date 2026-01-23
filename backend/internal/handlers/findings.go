@@ -139,7 +139,23 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		response = append(response, mapped)
 	}
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response, "total": total})
+		severityCounts, err := storage.CountFindingsBySeverity(
+		c.Context(),
+		h.db,
+		filterParams.toStorageFilters(1, 0),
+	)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings stats"})
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"data":    response,
+		"total":   total,
+		"meta": fiber.Map{
+			"severityCounts": severityCounts,
+		},
+	})
 }
 
 // Get returns a single finding by ID
