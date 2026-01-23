@@ -130,13 +130,13 @@ func resolveProductFilter(ctx context.Context, db *sql.DB, productIDParam string
 		return &parsed, nil
 	}
 
-	if product, err := storage.FindProductByIdentifier(ctx, db, productParam); err != nil {
+	if product, err := storage.FindProductByIdentifier(ctx, db, productParam, nil); err != nil {
 		return nil, err
 	} else if product != nil {
 		return &product.ID, nil
 	}
 
-	if product, err := storage.FindProductBySlug(ctx, db, productParam); err != nil {
+	if product, err := storage.FindProductBySlug(ctx, db, productParam, nil); err != nil {
 		return nil, err
 	} else if product != nil {
 		return &product.ID, nil

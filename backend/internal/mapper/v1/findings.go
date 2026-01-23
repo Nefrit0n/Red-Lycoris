@@ -15,6 +15,11 @@ import (
 const timeFormatRFC3339 = time.RFC3339
 
 func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
+	var tenantID *string
+	if item.TenantID.Valid {
+		value := item.TenantID.UUID.String()
+		tenantID = &value
+	}
 	var productID *string
 	if item.ProductID.Valid {
 		value := item.ProductID.UUID.String()
@@ -70,6 +75,7 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
 	return v1dto.FindingListItemDTO{
 		ID:          item.ID.String(),
+		TenantID:    tenantID,
 		Title:       item.Title,
 		Severity:    item.Severity,
 		Status:      item.Status,
@@ -91,6 +97,11 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 }
 
 func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
+	var tenantID *string
+	if item.TenantID.Valid {
+		value := item.TenantID.UUID.String()
+		tenantID = &value
+	}
 	var productID *string
 	if item.ProductID.Valid {
 		value := item.ProductID.UUID.String()
@@ -160,6 +171,7 @@ func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
 	return v1dto.FindingDetailDTO{
 		FindingListItemDTO: v1dto.FindingListItemDTO{
 			ID:          item.ID.String(),
+			TenantID:    tenantID,
 			Title:       item.Title,
 			Severity:    item.Severity,
 			Status:      item.Status,
@@ -186,6 +198,11 @@ func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
 }
 
 func FindingFromModel(item models.Finding) v1dto.FindingDetailDTO {
+	var tenantID *string
+	if item.TenantID != nil {
+		value := item.TenantID.String()
+		tenantID = &value
+	}
 	var productID *string
 	if item.ProductID != nil {
 		value := item.ProductID.String()
@@ -233,6 +250,7 @@ func FindingFromModel(item models.Finding) v1dto.FindingDetailDTO {
 	return v1dto.FindingDetailDTO{
 		FindingListItemDTO: v1dto.FindingListItemDTO{
 			ID:          item.ID.String(),
+			TenantID:    tenantID,
 			Title:       item.Title,
 			Severity:    item.Severity,
 			Status:      item.Status,

@@ -13,6 +13,7 @@ import (
 
 type ImportJobListItem struct {
 	ID                uuid.UUID
+	TenantID          uuid.NullUUID
 	Scanner           string
 	SourceType        sql.NullString
 	SourceVersion     sql.NullString
@@ -65,9 +66,10 @@ func CreateImportJob(ctx context.Context, db *sql.DB, job *models.ImportJob) err
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO import_jobs (id, scanner, source_type, source_version, product_id, product_name, product_version, product_identifier, status, findings_total, findings_new, duplicates_total, checksum, error_message, created_at, started_at, finished_at, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+		`INSERT INTO import_jobs (id, tenant_id, scanner, source_type, source_version, product_id, product_name, product_version, product_identifier, status, findings_total, findings_new, duplicates_total, checksum, error_message, created_at, started_at, finished_at, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
 		job.ID,
+		anyUUIDPtr(job.TenantID),
 		job.Scanner,
 		anyStringPtr(job.SourceType),
 		anyStringPtr(job.SourceVersion),
@@ -92,7 +94,7 @@ func CreateImportJob(ctx context.Context, db *sql.DB, job *models.ImportJob) err
 func GetImportJobByChecksum(ctx context.Context, db *sql.DB, checksum string) (*ImportJobDetail, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, scanner, source_type, source_version, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by, error_message
+		`SELECT id, tenant_id, scanner, source_type, source_version, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by, error_message
 		 FROM import_jobs
 		 WHERE checksum = $1
 		 ORDER BY created_at DESC
@@ -149,6 +151,7 @@ func UpdateImportJobStats(ctx context.Context, db *sql.DB, id uuid.UUID, finding
 }
 
 type ImportJobFilters struct {
+	TenantID  *uuid.UUID
 	ProductID *uuid.UUID
 	Scanner   string
 	Status    string
@@ -159,6 +162,10 @@ type ImportJobFilters struct {
 func ListImportJobs(ctx context.Context, db *sql.DB, filters ImportJobFilters) ([]ImportJobListItem, int, error) {
 	whereClause := "WHERE 1=1"
 	args := []interface{}{}
+	if filters.TenantID != nil {
+		args = append(args, *filters.TenantID)
+		whereClause += " AND tenant_id = $" + itoa(len(args))
+	}
 	if filters.ProductID != nil {
 		args = append(args, *filters.ProductID)
 		whereClause += " AND product_id = $" + itoa(len(args))
@@ -181,7 +188,7 @@ func ListImportJobs(ctx context.Context, db *sql.DB, filters ImportJobFilters) (
 	args = append(args, filters.Limit, filters.Offset)
 	rows, err := db.QueryContext(
 		ctx,
-		`SELECT id, scanner, source_type, source_version, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by
+		`SELECT id, tenant_id, scanner, source_type, source_version, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by
 		 FROM import_jobs
 		 `+whereClause+`
 		 ORDER BY created_at DESC
@@ -198,6 +205,7 @@ func ListImportJobs(ctx context.Context, db *sql.DB, filters ImportJobFilters) (
 		var item ImportJobListItem
 		if err := rows.Scan(
 			&item.ID,
+			&item.TenantID,
 			&item.Scanner,
 			&item.SourceType,
 			&item.SourceVersion,
@@ -228,7 +236,7 @@ func ListImportJobs(ctx context.Context, db *sql.DB, filters ImportJobFilters) (
 func GetImportJobByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*ImportJobDetail, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, scanner, source_type, source_version, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by, error_message
+		`SELECT id, tenant_id, scanner, source_type, source_version, status, findings_total, findings_new, duplicates_total, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by, error_message
 		 FROM import_jobs
 		 WHERE id = $1`,
 		id,
@@ -240,6 +248,7 @@ func scanImportJobDetail(row *sql.Row) (*ImportJobDetail, error) {
 	var item ImportJobDetail
 	if err := row.Scan(
 		&item.ID,
+		&item.TenantID,
 		&item.Scanner,
 		&item.SourceType,
 		&item.SourceVersion,

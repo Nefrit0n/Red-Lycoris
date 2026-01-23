@@ -14,6 +14,7 @@ import (
 
 type FindingListItem struct {
 	ID           uuid.UUID
+	TenantID     uuid.NullUUID
 	Title        string
 	Severity     string
 	Status       string
@@ -35,6 +36,7 @@ type FindingListItem struct {
 
 type FindingDetail struct {
 	ID             uuid.UUID
+	TenantID       uuid.NullUUID
 	Title          string
 	Description    sql.NullString
 	Fingerprint    string
@@ -61,6 +63,7 @@ type FindingDetail struct {
 }
 
 type FindingFilters struct {
+	TenantID         *uuid.UUID
 	Severity         string
 	Status           string
 	OccurrenceStatus string
@@ -90,6 +93,11 @@ func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []
 	// Текущее поведение: если CanonicalOnly=true ИЛИ IncludeRepeats=false => показываем только master.
 	if filters.CanonicalOnly || !filters.IncludeRepeats {
 		whereClause += " AND f.duplicate_id IS NULL"
+	}
+
+	if filters.TenantID != nil {
+		args = append(args, *filters.TenantID)
+		whereClause += fmt.Sprintf(" AND f.tenant_id = $%d", startIndex+len(args))
 	}
 
 	if filters.Severity != "" {
@@ -197,7 +205,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 	// Стабильный ORDER BY: добавляем f.id как tie-breaker.
 	listQuery := fmt.Sprintf(`
 		SELECT
-			f.id, f.title, f.severity, f.status,
+			f.id, f.tenant_id, f.title, f.severity, f.status,
 			f.category,
 			f.product_id, p.name,
 			f.assignee_id, u.username,
@@ -233,6 +241,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		var item FindingListItem
 		if err := rows.Scan(
 			&item.ID,
+			&item.TenantID,
 			&item.Title,
 			&item.Severity,
 			&item.Status,
@@ -331,7 +340,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT
-			f.id, f.title, f.description, f.fingerprint, f.severity, f.status,
+			f.id, f.tenant_id, f.title, f.description, f.fingerprint, f.severity, f.status,
 			f.category,
 			f.product_id, p.name,
 			f.assignee_id, f.import_job_id,
@@ -347,6 +356,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 	var detail FindingDetail
 	if err := row.Scan(
 		&detail.ID,
+		&detail.TenantID,
 		&detail.Title,
 		&detail.Description,
 		&detail.Fingerprint,
@@ -466,7 +476,7 @@ func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateF
 		UPDATE findings
 		SET %s
 		WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
+		RETURNING id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
 		strings.Join(setClauses, ", "),
 		len(args),
 	)
@@ -490,7 +500,7 @@ func SoftDeleteFinding(ctx context.Context, db *sql.DB, id uuid.UUID) (*models.F
 		`UPDATE findings
 		 SET deleted_at = $1, updated_at = $1
 		 WHERE id = $2 AND deleted_at IS NULL
-		 RETURNING id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
+		 RETURNING id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
 		now,
 		id,
 	)
@@ -508,6 +518,7 @@ func SoftDeleteFinding(ctx context.Context, db *sql.DB, id uuid.UUID) (*models.F
 
 func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 	var finding models.Finding
+	var tenantID uuid.NullUUID
 	var scanResultID uuid.NullUUID
 	var productID uuid.NullUUID
 	var duplicateID uuid.NullUUID
@@ -524,6 +535,7 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 
 	if err := row.Scan(
 		&finding.ID,
+		&tenantID,
 		&scanResultID,
 		&productID,
 		&finding.Fingerprint,
@@ -554,6 +566,10 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 	if scanResultID.Valid {
 		value := scanResultID.UUID
 		finding.ScanResultID = &value
+	}
+	if tenantID.Valid {
+		value := tenantID.UUID
+		finding.TenantID = &value
 	}
 	if productID.Valid {
 		value := productID.UUID

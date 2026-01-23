@@ -1,6 +1,7 @@
 [
   {
     "id": "3cbb5f0b-8a36-4cdb-95d7-8a0b5cf25b6f",
+    "tenantId": "0a8f9b7c-22af-4d5e-8b79-2f6f1e8dfc9a",
     "title": "Outdated OpenSSL dependency",
     "severity": "high",
     "status": "confirmed",
@@ -37,6 +38,7 @@
   },
   {
     "id": "0d88b63e-7e79-4f65-9c0b-098a2a5f52f1",
+    "tenantId": "0a8f9b7c-22af-4d5e-8b79-2f6f1e8dfc9a",
     "title": "SQL injection in search endpoint",
     "severity": "critical",
     "status": "under_review",

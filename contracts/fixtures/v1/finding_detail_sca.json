@@ -1,5 +1,6 @@
 {
   "id": "1c87464c-2c6f-4d55-89d4-b7fef2a6b7db",
+  "tenantId": "0a8f9b7c-22af-4d5e-8b79-2f6f1e8dfc9a",
   "title": "openssl: CVE-2023-12345",
   "description": "OpenSSL 1.0.2 is vulnerable to CVE-2023-12345.",
   "fingerprint": "sca:openssl:1.0.2:CVE-2023-12345",
@@ -71,6 +72,7 @@
   "duplicates": {
     "master": {
       "id": "1c87464c-2c6f-4d55-89d4-b7fef2a6b7db",
+      "tenantId": "0a8f9b7c-22af-4d5e-8b79-2f6f1e8dfc9a",
       "title": "openssl: CVE-2023-12345",
       "severity": "high",
       "status": "confirmed",
