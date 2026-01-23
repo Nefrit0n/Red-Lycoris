@@ -9,6 +9,11 @@ import (
 )
 
 func ProductListItem(item storage.ProductListItem) v1dto.ProductListItemDTO {
+	var tenantID *string
+	if item.TenantID.Valid {
+		value := item.TenantID.UUID.String()
+		tenantID = &value
+	}
 	var identifier *string
 	if item.Identifier.Valid {
 		value := item.Identifier.String
@@ -31,6 +36,7 @@ func ProductListItem(item storage.ProductListItem) v1dto.ProductListItemDTO {
 	}
 	return v1dto.ProductListItemDTO{
 		ID:                item.ID.String(),
+		TenantID:          tenantID,
 		Name:              item.Name,
 		Identifier:        identifier,
 		Version:           version,
@@ -47,6 +53,11 @@ func ProductDetailFromListItem(item storage.ProductListItem) v1dto.ProductDetail
 }
 
 func ProductDetail(item models.Product, findingsOpenCount int, lastScanAt *time.Time) v1dto.ProductDetailDTO {
+	var tenantID *string
+	if item.TenantID != nil {
+		value := item.TenantID.String()
+		tenantID = &value
+	}
 	var identifier *string
 	if item.Identifier != nil && *item.Identifier != "" {
 		identifier = item.Identifier
@@ -67,6 +78,7 @@ func ProductDetail(item models.Product, findingsOpenCount int, lastScanAt *time.
 	return v1dto.ProductDetailDTO{
 		ProductListItemDTO: v1dto.ProductListItemDTO{
 			ID:                item.ID.String(),
+			TenantID:          tenantID,
 			Name:              item.Name,
 			Identifier:        identifier,
 			Version:           version,

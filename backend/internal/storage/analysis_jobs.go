@@ -13,6 +13,7 @@ import (
 
 type AnalysisJobListItem struct {
 	ID              uuid.UUID
+	TenantID        uuid.NullUUID
 	ProductID       uuid.NullUUID
 	ProductName     sql.NullString
 	EngagementID    uuid.NullUUID
@@ -92,6 +93,7 @@ func CreateAnalysisJob(ctx context.Context, db *sql.DB, job *models.AnalysisJob)
 		ctx,
 		`INSERT INTO analysis_jobs (
 			id,
+			tenant_id,
 			product_id,
 			engagement_id,
 			status,
@@ -114,9 +116,10 @@ func CreateAnalysisJob(ctx context.Context, db *sql.DB, job *models.AnalysisJob)
 			started_at,
 			finished_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
 		)`,
 		job.ID,
+		anyUUIDPtr(job.TenantID),
 		productID,
 		engagementID,
 		job.Status,
@@ -146,6 +149,7 @@ func GetAnalysisJobByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*Analysi
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT aj.id,
+			aj.tenant_id,
 			aj.product_id,
 			p.name,
 			aj.engagement_id,
@@ -180,6 +184,7 @@ func GetAnalysisJobByIdempotencyKey(ctx context.Context, db *sql.DB, key string)
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT aj.id,
+			aj.tenant_id,
 			aj.product_id,
 			p.name,
 			aj.engagement_id,
@@ -297,6 +302,7 @@ func ListAnalysisJobs(ctx context.Context, db *sql.DB, limit int, offset int) ([
 	rows, err := db.QueryContext(
 		ctx,
 		`SELECT aj.id,
+			aj.tenant_id,
 			aj.product_id,
 			p.name,
 			aj.engagement_id,
@@ -328,6 +334,7 @@ func ListAnalysisJobs(ctx context.Context, db *sql.DB, limit int, offset int) ([
 		var scanners []string
 		if err := rows.Scan(
 			&item.ID,
+			&item.TenantID,
 			&item.ProductID,
 			&item.ProductName,
 			&item.EngagementID,
@@ -363,6 +370,7 @@ func scanAnalysisJobDetailRow(s scanner) (*AnalysisJobDetail, error) {
 	var scanners []string
 	if err := s.Scan(
 		&item.ID,
+		&item.TenantID,
 		&item.ProductID,
 		&item.ProductName,
 		&item.EngagementID,
@@ -400,6 +408,7 @@ func ListAnalysisJobsWithArchiveCleanup(ctx context.Context, db *sql.DB, olderTh
 	rows, err := db.QueryContext(
 		ctx,
 		`SELECT aj.id,
+			aj.tenant_id,
 			aj.product_id,
 			p.name,
 			aj.engagement_id,

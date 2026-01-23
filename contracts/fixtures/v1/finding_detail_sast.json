@@ -1,5 +1,6 @@
 {
   "id": "7d7a2d3e-48bf-4b2c-80c4-9e9f0f6b2d10",
+  "tenantId": "0a8f9b7c-22af-4d5e-8b79-2f6f1e8dfc9a",
   "title": "SQL injection in search endpoint",
   "description": "User input is concatenated directly into SQL query.",
   "fingerprint": "sast:sql-injection:search",

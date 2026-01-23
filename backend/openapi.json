@@ -563,6 +563,11 @@
             "type": "string",
             "format": "uuid"
           },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "scanner": {
             "type": "string"
           },
@@ -648,6 +653,11 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           },
           "name": {
             "type": "string"
@@ -778,6 +788,11 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           },
           "title": {
             "type": "string"

@@ -4,6 +4,7 @@ import "encoding/json"
 
 type FindingListItemDTO struct {
 	ID           string        `json:"id"`
+	TenantID     *string       `json:"tenantId,omitempty"`
 	Title        string        `json:"title"`
 	Severity     string        `json:"severity"`
 	Status       string        `json:"status"`

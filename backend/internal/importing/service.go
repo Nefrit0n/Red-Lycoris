@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ type ImportParams struct {
 	ProductID     *uuid.UUID
 	EngagementID  *uuid.UUID
 	CreatedBy     *uuid.UUID
+	TenantID      *uuid.UUID
 	Callbacks     *ImportCallbacks
 }
 
@@ -73,6 +75,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 		Status:        models.ImportJobQueued,
 		Checksum:      checksum,
 		CreatedBy:     params.CreatedBy,
+		TenantID:      params.TenantID,
 	}
 	if params.ProductID != nil {
 		importJob.ProductID = params.ProductID
@@ -152,6 +155,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	}
 
 	scan := &models.ScanResult{
+		TenantID:      params.TenantID,
 		EngagementID:  params.EngagementID,
 		ProductID:     params.ProductID,
 		UploaderID:    params.CreatedBy,
@@ -181,6 +185,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 			sourceType:    &sourceType,
 			sourceVersion: params.SourceVersion,
 			productID:     params.ProductID,
+			tenantID:      params.TenantID,
 			scanID:        scan.ID,
 			importJobID:   importJob.ID,
 			seenAt:        seenAt,
@@ -264,6 +269,7 @@ type processFindingParams struct {
 	sourceType    *string
 	sourceVersion *string
 	productID     *uuid.UUID
+	tenantID      *uuid.UUID
 	scanID        uuid.UUID
 	importJobID   uuid.UUID
 	seenAt        time.Time
@@ -285,7 +291,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		return nil, err
 	}
 
-	masterID, repeatCount, found, err := findExistingMaster(ctx, tx, fingerprint, params.productID)
+	masterID, repeatCount, found, err := findExistingMaster(ctx, tx, fingerprint, params.productID, params.tenantID)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
@@ -304,6 +310,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 			return nil, err
 		}
 		model := &models.Finding{
+			TenantID:      params.tenantID,
 			ScanResultID:  &params.scanID,
 			ProductID:     params.productID,
 			Fingerprint:   fingerprint,
@@ -347,6 +354,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		return nil, err
 	}
 	duplicate := &models.Finding{
+		TenantID:      params.tenantID,
 		ScanResultID:  &params.scanID,
 		ProductID:     params.productID,
 		Fingerprint:   fingerprint,
@@ -554,7 +562,7 @@ func toNullString(value *string) sql.NullString {
 
 // findExistingMaster looks for an existing master finding with the same fingerprint.
 // Returns the master ID, repeat count, whether found, and any error.
-func findExistingMaster(ctx context.Context, tx *sql.Tx, fingerprint string, productID *uuid.UUID) (uuid.UUID, int, bool, error) {
+func findExistingMaster(ctx context.Context, tx *sql.Tx, fingerprint string, productID *uuid.UUID, tenantID *uuid.UUID) (uuid.UUID, int, bool, error) {
 	var masterID uuid.UUID
 	var repeatCount int
 
@@ -565,8 +573,13 @@ func findExistingMaster(ctx context.Context, tx *sql.Tx, fingerprint string, pro
 		   AND deleted_at IS NULL`
 	args := []interface{}{fingerprint}
 
+	if tenantID != nil {
+		query += " AND tenant_id = $2"
+		args = append(args, *tenantID)
+	}
+
 	if productID != nil {
-		query += " AND product_id = $2"
+		query += fmt.Sprintf(" AND product_id = $%d", len(args)+1)
 		args = append(args, *productID)
 	} else {
 		query += " AND product_id IS NULL"
