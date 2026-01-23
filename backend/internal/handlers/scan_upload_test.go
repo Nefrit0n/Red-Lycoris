@@ -8,13 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"lotus-warden/backend/internal/config"
-	"lotus-warden/backend/internal/middleware"
+	"lotus-warden/backend/internal/handlers"
 	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/server"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
@@ -25,8 +23,15 @@ func TestScanUploadEndpoint(t *testing.T) {
 	}
 	defer db.Close()
 
-	cfg := config.Config{JWTSecret: "test-secret"}
-	app := server.NewApp(cfg, db, nil, nil)
+	app := fiber.New(fiber.Config{BodyLimit: 12 << 20})
+	userID := uuid.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		c.Locals("roles", []string{"analyst"})
+		return c.Next()
+	})
+	scanHandler := handlers.NewScanUploadHandler(db, nil, nil)
+	app.Post("/api/v1/scans/upload", scanHandler.Handle)
 
 	report := map[string]any{
 		"ArtifactName": "billing-api",
@@ -96,6 +101,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 			0,
 			0,
 			0,
+			false,
 			sqlmock.AnyArg(),
 			nil,
 			sqlmock.AnyArg(),
@@ -113,7 +119,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("INSERT INTO scan_results").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), false).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectBegin()
@@ -129,7 +135,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			models.CategorySCA,
-			"SQL Injection",
+			"lib-sql",
 			sqlmock.AnyArg(),
 			"high",
 			"new",
@@ -174,7 +180,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			models.CategorySCA,
-			"XSS",
+			"lib-web",
 			sqlmock.AnyArg(),
 			"medium",
 			"duplicate",
@@ -227,18 +233,8 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
-		UserID: uuid.New().String(),
-		Roles:  []string{"analyst"},
-	})
-	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
-	if err != nil {
-		t.Fatalf("sign token failed: %v", err)
-	}
-
 	req := httptest.NewRequest("POST", "/api/v1/scans/upload", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+tokenString)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
@@ -274,8 +270,14 @@ func TestScanUploadRejectsOversizedReport(t *testing.T) {
 	}
 	defer db.Close()
 
-	cfg := config.Config{JWTSecret: "test-secret"}
-	app := server.NewApp(cfg, db, nil, nil)
+	app := fiber.New(fiber.Config{BodyLimit: 12 << 20})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", uuid.New())
+		c.Locals("roles", []string{"analyst"})
+		return c.Next()
+	})
+	scanHandler := handlers.NewScanUploadHandler(db, nil, nil)
+	app.Post("/api/v1/scans/upload", scanHandler.Handle)
 
 	largePayload := strings.Repeat("a", 11*1024*1024)
 	body, err := json.Marshal(map[string]any{
@@ -286,18 +288,8 @@ func TestScanUploadRejectsOversizedReport(t *testing.T) {
 		t.Fatalf("marshal request failed: %v", err)
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
-		UserID: uuid.New().String(),
-		Roles:  []string{"analyst"},
-	})
-	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
-	if err != nil {
-		t.Fatalf("sign token failed: %v", err)
-	}
-
 	req := httptest.NewRequest("POST", "/api/v1/scans/upload", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+tokenString)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
