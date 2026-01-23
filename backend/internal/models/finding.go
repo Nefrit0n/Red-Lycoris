@@ -53,6 +53,11 @@ type Finding struct {
 	FirstSeenAt    time.Time       `db:"first_seen_at"`
 	LastSeenAt     time.Time       `db:"last_seen_at"`
 	RepeatCount    int             `db:"repeat_count"`
+	SLADueAt       *time.Time      `db:"sla_due_at"`
+	SLABreached    bool            `db:"sla_breached"`
+	SLABreachedAt  *time.Time      `db:"sla_breached_at"`
+	SLAProfile     *string         `db:"sla_profile"`
+	SLASource      *string         `db:"sla_source"`
 	SourceType     *string         `db:"source_type"`
 	SourceVersion  *string         `db:"source_version"`
 	EndpointMethod *string         `db:"endpoint_method"`

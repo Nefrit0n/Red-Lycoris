@@ -14,6 +14,7 @@ import (
 	"lotus-warden/backend/internal/handlers"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/policies"
+	"lotus-warden/backend/internal/sla"
 )
 
 type stubPolicyEvaluator struct {
@@ -36,7 +37,7 @@ func TestStatusChangeBlockedByPolicy(t *testing.T) {
 	now := time.Now().UTC()
 
 	rows := sqlmock.NewRows([]string{
-		"id", "tenant_id", "title", "description", "fingerprint", "severity", "status", "category", "product_id", "name", "assignee_id", "import_job_id", "first_seen_at", "last_seen_at", "repeat_count", "duplicate_id", "source_type", "source_version", "endpoint_method", "endpoint_path", "evidence", "raw_data", "created_at", "updated_at", "deleted_at",
+		"id", "tenant_id", "title", "description", "fingerprint", "severity", "status", "category", "product_id", "name", "assignee_id", "import_job_id", "first_seen_at", "last_seen_at", "repeat_count", "duplicate_id", "sla_due_at", "sla_breached", "sla_breached_at", "sla_profile", "sla_source", "source_type", "source_version", "endpoint_method", "endpoint_path", "evidence", "raw_data", "created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		findingID,
 		nil,
@@ -53,6 +54,11 @@ func TestStatusChangeBlockedByPolicy(t *testing.T) {
 		now,
 		now,
 		0,
+		nil,
+		nil,
+		false,
+		nil,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -90,7 +96,7 @@ func TestStatusChangeBlockedByPolicy(t *testing.T) {
 		},
 	}}
 
-	handler := handlers.NewFindingsHandler(db, evaluator)
+	handler := handlers.NewFindingsHandler(db, evaluator, sla.DefaultMatrix())
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals("user_id", uuid.New())

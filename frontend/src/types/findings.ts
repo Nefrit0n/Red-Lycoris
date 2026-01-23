@@ -33,6 +33,12 @@ export interface FindingListItemDTO {
   firstSeenAt?: string | null;
   lastSeenAt?: string | null;
   repeatCount?: number | null;
+  slaDueAt?: string | null;
+  slaBreached?: boolean | null;
+  slaBreachedAt?: string | null;
+  slaProfile?: string | null;
+  slaSource?: string | null;
+  slaDaysRemaining?: number | null;
   createdAt: string;
   updatedAt: string;
   intel_summary?: IntelSummary | null;
