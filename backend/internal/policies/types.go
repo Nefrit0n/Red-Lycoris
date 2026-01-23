@@ -22,6 +22,9 @@ type Event struct {
 	Actor      *Actor  `json:"actor,omitempty"`
 	FromStatus *string `json:"fromStatus,omitempty"`
 	ToStatus   *string `json:"toStatus,omitempty"`
+	Profile    *string `json:"profile,omitempty"`
+	CommitSha  *string `json:"commitSha,omitempty"`
+	BuildID    *string `json:"buildId,omitempty"`
 }
 
 type Finding struct {

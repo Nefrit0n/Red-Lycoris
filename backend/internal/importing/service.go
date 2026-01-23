@@ -20,6 +20,7 @@ import (
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/parser"
 	"lotus-warden/backend/internal/policies"
+	"lotus-warden/backend/internal/sla"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/google/uuid"
@@ -48,6 +49,7 @@ type ImportParams struct {
 	PolicyEngine  policies.Evaluator
 	PolicyActorID *uuid.UUID
 	CorrelationID *string
+	SLAMatrix     sla.Matrix
 }
 
 // ImportCallbacks contains optional callback functions for import events
@@ -182,6 +184,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 	createdFindings := 0
 	seenAt := time.Now().UTC()
 	identifierSet := map[string]struct{}{}
+	slaMatrix := resolveSLAMatrix(params)
 
 	for i, finding := range findings {
 		canonical := canonicalFindings[i]
@@ -195,6 +198,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 			scanID:        scan.ID,
 			importJobID:   importJob.ID,
 			seenAt:        seenAt,
+			slaMatrix:     slaMatrix,
 		})
 		if err != nil {
 			return nil, err
@@ -314,6 +318,7 @@ type processFindingParams struct {
 	scanID        uuid.UUID
 	importJobID   uuid.UUID
 	seenAt        time.Time
+	slaMatrix     sla.Matrix
 }
 
 type processFindingResult struct {
@@ -332,7 +337,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		return nil, err
 	}
 
-	masterID, repeatCount, found, err := findExistingMaster(ctx, tx, fingerprint, params.productID, params.tenantID)
+	masterRecord, found, err := findExistingMaster(ctx, tx, fingerprint, params.productID, params.tenantID)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
@@ -369,6 +374,14 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 			Evidence:      evidence,
 			RawData:       rawData,
 		}
+		if dueAt, ok := sla.DueAt(params.seenAt, params.finding.Severity, params.slaMatrix); ok {
+			model.SLADueAt = &dueAt
+			model.SLABreached = false
+			profile := sla.DefaultProfile
+			source := sla.DefaultSource
+			model.SLAProfile = &profile
+			model.SLASource = &source
+		}
 		if err := storage.CreateFindingTx(ctx, tx, model); err != nil {
 			_ = tx.Rollback()
 			return nil, err
@@ -404,7 +417,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		Description:   params.finding.Description,
 		Severity:      params.finding.Severity,
 		Status:        models.StatusDuplicate,
-		DuplicateID:   &masterID,
+		DuplicateID:   &masterRecord.ID,
 		ImportJobID:   &params.importJobID,
 		FirstSeenAt:   params.seenAt,
 		LastSeenAt:    params.seenAt,
@@ -423,18 +436,41 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		return nil, err
 	}
 
-	// Update master's repeat count and last_seen_at
-	if _, err := tx.ExecContext(
-		ctx,
-		`UPDATE findings
-		 SET repeat_count = $1,
-		     last_seen_at = $2,
-		     updated_at = $2
-		 WHERE id = $3`,
-		repeatCount+1,
-		params.seenAt,
-		masterID,
-	); err != nil {
+	// Update master's repeat count, last_seen_at, and SLA if needed.
+	updateArgs := []interface{}{masterRecord.RepeatCount + 1, params.seenAt}
+	setClauses := []string{
+		"repeat_count = $1",
+		"last_seen_at = $2",
+		"updated_at = $2",
+	}
+	incomingSeverity := params.finding.Severity
+	effectiveSeverity := masterRecord.Severity
+	if sla.SeverityRank(incomingSeverity) > sla.SeverityRank(masterRecord.Severity) {
+		updateArgs = append(updateArgs, incomingSeverity)
+		setClauses = append(setClauses, fmt.Sprintf("severity = $%d", len(updateArgs)))
+		effectiveSeverity = incomingSeverity
+	}
+	if dueAt, ok := sla.DueAt(masterRecord.FirstSeenAt, effectiveSeverity, params.slaMatrix); ok {
+		existingDueAt := nullableTime(masterRecord.SLADueAt)
+		if sla.ShouldUpdateDueAt(existingDueAt, dueAt) {
+			updateArgs = append(updateArgs, dueAt)
+			setClauses = append(setClauses, fmt.Sprintf("sla_due_at = $%d", len(updateArgs)))
+			profile := sla.DefaultProfile
+			source := sla.DefaultSource
+			updateArgs = append(updateArgs, profile, source)
+			setClauses = append(setClauses, fmt.Sprintf("sla_profile = $%d", len(updateArgs)-1))
+			setClauses = append(setClauses, fmt.Sprintf("sla_source = $%d", len(updateArgs)))
+		}
+	}
+	updateArgs = append(updateArgs, masterRecord.ID)
+	query := fmt.Sprintf(`
+		UPDATE findings
+		SET %s
+		WHERE id = $%d`,
+		strings.Join(setClauses, ", "),
+		len(updateArgs),
+	)
+	if _, err := tx.ExecContext(ctx, query, updateArgs...); err != nil {
 		_ = tx.Rollback()
 		return nil, err
 	}
@@ -442,7 +478,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &processFindingResult{isNew: false, finding: duplicate, masterID: masterID}, nil
+	return &processFindingResult{isNew: false, finding: duplicate, masterID: masterRecord.ID}, nil
 }
 
 func resolveFindingCategory(finding parser.Finding) string {
@@ -601,13 +637,33 @@ func toNullString(value *string) sql.NullString {
 	return sql.NullString{String: strings.TrimSpace(*value), Valid: true}
 }
 
+func resolveSLAMatrix(params ImportParams) sla.Matrix {
+	if params.SLAMatrix == (sla.Matrix{}) {
+		return sla.DefaultMatrix()
+	}
+	return params.SLAMatrix
+}
+
+func nullableTime(value sql.NullTime) *time.Time {
+	if value.Valid {
+		clone := value.Time
+		return &clone
+	}
+	return nil
+}
+
 // findExistingMaster looks for an existing master finding with the same fingerprint.
 // Returns the master ID, repeat count, whether found, and any error.
-func findExistingMaster(ctx context.Context, tx *sql.Tx, fingerprint string, productID *uuid.UUID, tenantID *uuid.UUID) (uuid.UUID, int, bool, error) {
-	var masterID uuid.UUID
-	var repeatCount int
+type existingMaster struct {
+	ID          uuid.UUID
+	RepeatCount int
+	Severity    string
+	FirstSeenAt time.Time
+	SLADueAt    sql.NullTime
+}
 
-	query := `SELECT id, repeat_count
+func findExistingMaster(ctx context.Context, tx *sql.Tx, fingerprint string, productID *uuid.UUID, tenantID *uuid.UUID) (*existingMaster, bool, error) {
+	query := `SELECT id, repeat_count, severity, first_seen_at, sla_due_at
 		 FROM findings
 		 WHERE fingerprint = $1
 		   AND duplicate_id IS NULL
@@ -627,14 +683,21 @@ func findExistingMaster(ctx context.Context, tx *sql.Tx, fingerprint string, pro
 	}
 	query += " LIMIT 1 FOR UPDATE"
 
-	err := tx.QueryRowContext(ctx, query, args...).Scan(&masterID, &repeatCount)
+	var record existingMaster
+	err := tx.QueryRowContext(ctx, query, args...).Scan(
+		&record.ID,
+		&record.RepeatCount,
+		&record.Severity,
+		&record.FirstSeenAt,
+		&record.SLADueAt,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return uuid.UUID{}, 0, false, nil
+			return nil, false, nil
 		}
-		return uuid.UUID{}, 0, false, err
+		return nil, false, err
 	}
-	return masterID, repeatCount, true, nil
+	return &record, true, nil
 }
 
 // ComputeChecksum calculates SHA256 checksum of data

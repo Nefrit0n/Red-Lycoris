@@ -15,6 +15,7 @@ import (
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/parser"
 	"lotus-warden/backend/internal/policies"
+	"lotus-warden/backend/internal/sla"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
@@ -52,14 +53,16 @@ type ScanUploadHandler struct {
 	validator    *validator.Validate
 	publisher    *events.Publisher
 	policyEngine policies.Evaluator
+	slaMatrix    sla.Matrix
 }
 
-func NewScanUploadHandler(db *sql.DB, publisher *events.Publisher, policyEngine policies.Evaluator) *ScanUploadHandler {
+func NewScanUploadHandler(db *sql.DB, publisher *events.Publisher, policyEngine policies.Evaluator, slaMatrix sla.Matrix) *ScanUploadHandler {
 	return &ScanUploadHandler{
 		db:           db,
 		validator:    validator.New(),
 		publisher:    publisher,
 		policyEngine: policyEngine,
+		slaMatrix:    slaMatrix,
 	}
 }
 
@@ -235,6 +238,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		PolicyEngine:  h.policyEngine,
 		PolicyActorID: uploaderID,
 		CorrelationID: requestIDFromContext(c),
+		SLAMatrix:     h.slaMatrix,
 	})
 	if err != nil {
 		if errors.Is(err, parser.ErrUnsupportedFormat) {
