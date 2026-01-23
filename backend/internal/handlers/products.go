@@ -104,27 +104,15 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid product id"})
 	}
 
-	row := h.db.QueryRowContext(
-		c.Context(),
-		`SELECT id, tenant_id, name, identifier, version, asset_criticality FROM products WHERE id = $1`,
-		id,
-	)
-	var product storage.ProductListItem
-	var tenantID uuid.NullUUID
-	var identifier sql.NullString
-	var version sql.NullString
-	var assetCriticality sql.NullString
-	if err := row.Scan(&product.ID, &tenantID, &product.Name, &identifier, &version, &assetCriticality); err != nil {
-		if err == sql.ErrNoRows {
-			return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "product not found"})
-		}
+	product, err := storage.GetProductListItem(c.Context(), h.db, id)
+	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch product"})
 	}
-	product.TenantID = tenantID
-	product.Identifier = identifier
-	product.Version = version
-	product.AssetCriticality = assetCriticality
+	if product == nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "product not found"})
+	}
 
-	response := v1mapper.ProductDetailFromListItem(product)
+	response := v1mapper.ProductDetailFromListItem(*product)
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response})
 }
+
