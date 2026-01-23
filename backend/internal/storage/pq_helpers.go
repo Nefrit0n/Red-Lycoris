@@ -14,3 +14,7 @@ func pqUUIDArray(ids []uuid.UUID) any {
 	}
 	return pq.Array(ss)
 }
+
+func pqStringArray(values []string) any {
+	return pq.Array(values)
+}

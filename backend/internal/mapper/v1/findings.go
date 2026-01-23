@@ -9,6 +9,7 @@ import (
 
 	v1dto "lotus-warden/backend/internal/dto/v1"
 	"lotus-warden/backend/internal/models"
+	"lotus-warden/backend/internal/sla"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/google/uuid"
@@ -73,28 +74,61 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 		value := item.LastSeenAt.Time.Format(timeFormatRFC3339)
 		lastSeenAt = &value
 	}
+	var slaDueAt *string
+	var slaBreached *bool
+	var slaBreachedAt *string
+	var slaProfile *string
+	var slaSource *string
+	var slaDaysRemaining *int
+	if item.SLADueAt.Valid {
+		value := item.SLADueAt.Time.Format(timeFormatRFC3339)
+		slaDueAt = &value
+		slaDaysRemaining = sla.DaysRemaining(&item.SLADueAt.Time, time.Now().UTC())
+	}
+	if item.SLABreached.Valid {
+		value := item.SLABreached.Bool
+		slaBreached = &value
+	}
+	if item.SLABreachedAt.Valid {
+		value := item.SLABreachedAt.Time.Format(timeFormatRFC3339)
+		slaBreachedAt = &value
+	}
+	if item.SLAProfile.Valid {
+		value := item.SLAProfile.String
+		slaProfile = &value
+	}
+	if item.SLASource.Valid {
+		value := item.SLASource.String
+		slaSource = &value
+	}
 	repeatCount := item.RepeatCount
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
 	return v1dto.FindingListItemDTO{
-		ID:          item.ID.String(),
-		TenantID:    tenantID,
-		Title:       item.Title,
-		Severity:    item.Severity,
-		Status:      item.Status,
-		Category:    item.Category,
-		ScannerType: scannerType,
-		SourceType:  sourceType,
-		Occurrence:  &occurrence,
-		FirstSeenAt: firstSeenAt,
-		LastSeenAt:  lastSeenAt,
-		RepeatCount: &repeatCount,
-		ProductID:   productID,
-		ProductName: productName,
-		AssigneeID:  assigneeID,
-		Owner:       owner,
-		ImportJobID: importJobID,
-		CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339),
-		UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339),
+		ID:               item.ID.String(),
+		TenantID:         tenantID,
+		Title:            item.Title,
+		Severity:         item.Severity,
+		Status:           item.Status,
+		Category:         item.Category,
+		ScannerType:      scannerType,
+		SourceType:       sourceType,
+		Occurrence:       &occurrence,
+		FirstSeenAt:      firstSeenAt,
+		LastSeenAt:       lastSeenAt,
+		RepeatCount:      &repeatCount,
+		SLADueAt:         slaDueAt,
+		SLABreached:      slaBreached,
+		SLABreachedAt:    slaBreachedAt,
+		SLAProfile:       slaProfile,
+		SLASource:        slaSource,
+		SLADaysRemaining: slaDaysRemaining,
+		ProductID:        productID,
+		ProductName:      productName,
+		AssigneeID:       assigneeID,
+		Owner:            owner,
+		ImportJobID:      importJobID,
+		CreatedAt:        item.CreatedAt.Format(timeFormatRFC3339),
+		UpdatedAt:        item.UpdatedAt.Format(timeFormatRFC3339),
 	}
 }
 
@@ -164,6 +198,33 @@ func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
 		value := item.LastSeenAt.Time.Format(timeFormatRFC3339)
 		lastSeenAt = &value
 	}
+	var slaDueAt *string
+	var slaBreached *bool
+	var slaBreachedAt *string
+	var slaProfile *string
+	var slaSource *string
+	var slaDaysRemaining *int
+	if item.SLADueAt.Valid {
+		value := item.SLADueAt.Time.Format(timeFormatRFC3339)
+		slaDueAt = &value
+		slaDaysRemaining = sla.DaysRemaining(&item.SLADueAt.Time, time.Now().UTC())
+	}
+	if item.SLABreached.Valid {
+		value := item.SLABreached.Bool
+		slaBreached = &value
+	}
+	if item.SLABreachedAt.Valid {
+		value := item.SLABreachedAt.Time.Format(timeFormatRFC3339)
+		slaBreachedAt = &value
+	}
+	if item.SLAProfile.Valid {
+		value := item.SLAProfile.String
+		slaProfile = &value
+	}
+	if item.SLASource.Valid {
+		value := item.SLASource.String
+		slaSource = &value
+	}
 	repeatCount := item.RepeatCount
 	var duplicateID *uuid.UUID
 	if item.DuplicateID.Valid {
@@ -172,22 +233,28 @@ func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
 	return v1dto.FindingDetailDTO{
 		FindingListItemDTO: v1dto.FindingListItemDTO{
-			ID:          item.ID.String(),
-			TenantID:    tenantID,
-			Title:       item.Title,
-			Severity:    item.Severity,
-			Status:      item.Status,
-			Category:    item.Category,
-			Occurrence:  &occurrence,
-			FirstSeenAt: firstSeenAt,
-			LastSeenAt:  lastSeenAt,
-			RepeatCount: &repeatCount,
-			ProductID:   productID,
-			ProductName: productName,
-			AssigneeID:  assigneeID,
-			ImportJobID: importJobID,
-			CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339),
-			UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339),
+			ID:               item.ID.String(),
+			TenantID:         tenantID,
+			Title:            item.Title,
+			Severity:         item.Severity,
+			Status:           item.Status,
+			Category:         item.Category,
+			Occurrence:       &occurrence,
+			FirstSeenAt:      firstSeenAt,
+			LastSeenAt:       lastSeenAt,
+			RepeatCount:      &repeatCount,
+			SLADueAt:         slaDueAt,
+			SLABreached:      slaBreached,
+			SLABreachedAt:    slaBreachedAt,
+			SLAProfile:       slaProfile,
+			SLASource:        slaSource,
+			SLADaysRemaining: slaDaysRemaining,
+			ProductID:        productID,
+			ProductName:      productName,
+			AssigneeID:       assigneeID,
+			ImportJobID:      importJobID,
+			CreatedAt:        item.CreatedAt.Format(timeFormatRFC3339),
+			UpdatedAt:        item.UpdatedAt.Format(timeFormatRFC3339),
 		},
 		Description:    description,
 		Fingerprint:    &item.Fingerprint,
@@ -245,27 +312,57 @@ func FindingFromModel(item models.Finding) v1dto.FindingDetailDTO {
 		value := item.DeletedAt.Format(timeFormatRFC3339)
 		deletedAt = &value
 	}
+	var slaDueAt *string
+	var slaBreached *bool
+	var slaBreachedAt *string
+	var slaProfile *string
+	var slaSource *string
+	var slaDaysRemaining *int
+	if item.SLADueAt != nil {
+		value := item.SLADueAt.Format(timeFormatRFC3339)
+		slaDueAt = &value
+		slaDaysRemaining = sla.DaysRemaining(item.SLADueAt, time.Now().UTC())
+	}
+	slaBreached = &item.SLABreached
+	if item.SLABreachedAt != nil {
+		value := item.SLABreachedAt.Format(timeFormatRFC3339)
+		slaBreachedAt = &value
+	}
+	if item.SLAProfile != nil {
+		value := *item.SLAProfile
+		slaProfile = &value
+	}
+	if item.SLASource != nil {
+		value := *item.SLASource
+		slaSource = &value
+	}
 	repeatCount := item.RepeatCount
 	occurrence := computeOccurrenceStatus(repeatCount, item.DuplicateID)
 	firstSeenAt := item.FirstSeenAt.Format(timeFormatRFC3339)
 	lastSeenAt := item.LastSeenAt.Format(timeFormatRFC3339)
 	return v1dto.FindingDetailDTO{
 		FindingListItemDTO: v1dto.FindingListItemDTO{
-			ID:          item.ID.String(),
-			TenantID:    tenantID,
-			Title:       item.Title,
-			Severity:    item.Severity,
-			Status:      item.Status,
-			Category:    item.Category,
-			Occurrence:  &occurrence,
-			FirstSeenAt: &firstSeenAt,
-			LastSeenAt:  &lastSeenAt,
-			RepeatCount: &repeatCount,
-			ProductID:   productID,
-			AssigneeID:  assigneeID,
-			ImportJobID: importJobID,
-			CreatedAt:   item.CreatedAt.Format(timeFormatRFC3339),
-			UpdatedAt:   item.UpdatedAt.Format(timeFormatRFC3339),
+			ID:               item.ID.String(),
+			TenantID:         tenantID,
+			Title:            item.Title,
+			Severity:         item.Severity,
+			Status:           item.Status,
+			Category:         item.Category,
+			Occurrence:       &occurrence,
+			FirstSeenAt:      &firstSeenAt,
+			LastSeenAt:       &lastSeenAt,
+			RepeatCount:      &repeatCount,
+			SLADueAt:         slaDueAt,
+			SLABreached:      slaBreached,
+			SLABreachedAt:    slaBreachedAt,
+			SLAProfile:       slaProfile,
+			SLASource:        slaSource,
+			SLADaysRemaining: slaDaysRemaining,
+			ProductID:        productID,
+			AssigneeID:       assigneeID,
+			ImportJobID:      importJobID,
+			CreatedAt:        item.CreatedAt.Format(timeFormatRFC3339),
+			UpdatedAt:        item.UpdatedAt.Format(timeFormatRFC3339),
 		},
 		Description:    item.Description,
 		Fingerprint:    &item.Fingerprint,
