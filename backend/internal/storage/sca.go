@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -21,6 +22,7 @@ type ScaFindingDetail struct {
 }
 
 func UpsertScaComponentTx(ctx context.Context, tx *sql.Tx, name string, ecosystem *string, purl *string) (uuid.UUID, error) {
+	normalizedEcosystem := normalizeEcosystem(ecosystem)
 	if purl != nil && *purl != "" {
 		var existingID uuid.UUID
 		err := tx.QueryRowContext(
@@ -46,7 +48,7 @@ func UpsertScaComponentTx(ctx context.Context, tx *sql.Tx, name string, ecosyste
 		   AND purl IS NULL
 		 LIMIT 1`,
 		name,
-		ecosystem,
+		normalizedEcosystem,
 	).Scan(&existingID)
 	if err == nil {
 		return existingID, nil
@@ -62,13 +64,26 @@ func UpsertScaComponentTx(ctx context.Context, tx *sql.Tx, name string, ecosyste
 		 VALUES ($1, $2, $3, $4)`,
 		id,
 		nullStringPtr(purl),
-		nullStringPtr(ecosystem),
+		nullStringPtr(normalizedEcosystem),
 		name,
 	)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
 	return id, nil
+}
+
+func normalizeEcosystem(ecosystem *string) *string {
+	if ecosystem == nil {
+		value := "unknown"
+		return &value
+	}
+	trimmed := strings.TrimSpace(*ecosystem)
+	if trimmed == "" {
+		value := "unknown"
+		return &value
+	}
+	return &trimmed
 }
 
 func CreateScaFindingTx(ctx context.Context, tx *sql.Tx, detail ScaFindingDetail) error {
