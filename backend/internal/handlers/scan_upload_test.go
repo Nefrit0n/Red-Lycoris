@@ -69,20 +69,21 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WithArgs(sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
-	mock.ExpectQuery("SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE identifier = \\$1 LIMIT 1").
+	mock.ExpectQuery("SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE identifier = \\$1 LIMIT 1").
 		WithArgs("billing-api").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "description", "identifier", "version", "asset_criticality", "created_at", "updated_at"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "name", "slug", "description", "identifier", "version", "asset_criticality", "created_at", "updated_at"}))
 
-	mock.ExpectQuery("SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE slug = \\$1 LIMIT 1").
+	mock.ExpectQuery("SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE slug = \\$1 LIMIT 1").
 		WithArgs("billing-api-1-0-0").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "description", "identifier", "version", "asset_criticality", "created_at", "updated_at"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "name", "slug", "description", "identifier", "version", "asset_criticality", "created_at", "updated_at"}))
 
 	mock.ExpectExec("INSERT INTO products").
-		WithArgs(sqlmock.AnyArg(), "Billing API", "billing-api-1-0-0", sqlmock.AnyArg(), "billing-api", "1.0.0", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "Billing API", "billing-api-1-0-0", sqlmock.AnyArg(), "billing-api", "1.0.0", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("INSERT INTO import_jobs").
 		WithArgs(
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			"trivy",
 			sqlmock.AnyArg(),
@@ -112,7 +113,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("INSERT INTO scan_results").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "trivy", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectBegin()
@@ -122,6 +123,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 
 	mock.ExpectExec("INSERT INTO findings").
 		WithArgs(
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
@@ -166,6 +168,7 @@ func TestScanUploadEndpoint(t *testing.T) {
 
 	mock.ExpectExec("INSERT INTO findings").
 		WithArgs(
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),

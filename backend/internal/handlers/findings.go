@@ -31,6 +31,7 @@ type CreateFindingRequest struct {
 	Status      string  `json:"status,omitempty"`
 	Category    *string `json:"category,omitempty"`
 	ProductID   string  `json:"productId" validate:"required,uuid4"`
+	TenantID    *string `json:"tenantId,omitempty" validate:"omitempty,uuid4"`
 }
 
 type UpdateFindingRequest struct {
@@ -64,6 +65,7 @@ type BulkActionFilters struct {
 	SourceType       string  `json:"sourceType,omitempty"`
 	Query            string  `json:"q,omitempty"`
 	ImportJobID      *string `json:"import_job_id,omitempty" validate:"omitempty,uuid4"`
+	TenantID         *string `json:"tenantId,omitempty" validate:"omitempty,uuid4"`
 	DateFrom         *string `json:"dateFrom,omitempty"`
 	DateTo           *string `json:"dateTo,omitempty"`
 	CanonicalOnly    *bool   `json:"canonicalOnly,omitempty"`
@@ -340,6 +342,11 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 		Status:      status,
 		Category:    category,
 		Fingerprint: uuid.NewString(),
+	}
+	if req.TenantID != nil && strings.TrimSpace(*req.TenantID) != "" {
+		if parsed, err := uuid.Parse(strings.TrimSpace(*req.TenantID)); err == nil {
+			finding.TenantID = &parsed
+		}
 	}
 
 	if err := storage.CreateFinding(c.Context(), h.db, finding); err != nil {

@@ -2,6 +2,7 @@ package v1
 
 type ImportJobListItemDTO struct {
 	ID                string  `json:"id"`
+	TenantID          *string `json:"tenantId,omitempty"`
 	Scanner           string  `json:"scanner"`
 	SourceType        *string `json:"sourceType,omitempty"`
 	SourceVersion     *string `json:"sourceVersion,omitempty"`

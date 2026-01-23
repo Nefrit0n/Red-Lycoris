@@ -22,6 +22,7 @@ const (
 
 type AnalysisJob struct {
 	ID               uuid.UUID  `db:"id"`
+	TenantID         *uuid.UUID `db:"tenant_id"`
 	ProductID        *uuid.UUID `db:"product_id"`
 	EngagementID     *uuid.UUID `db:"engagement_id"`
 	Status           string     `db:"status"`

@@ -15,6 +15,7 @@ import (
 
 // FindingFilterParams holds common filter parameters parsed from query string
 type FindingFilterParams struct {
+	TenantID         *uuid.UUID
 	ProductID        *uuid.UUID
 	ImportJobID      *uuid.UUID
 	DateFrom         *time.Time
@@ -45,6 +46,14 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 		IncludeRepeats:   parseBoolWithDefault(c.Query("includeRepeats"), false),
 		SortField:        strings.TrimSpace(c.Query("sortField")),
 		SortOrder:        strings.TrimSpace(c.Query("sortOrder")),
+	}
+
+	if raw := strings.TrimSpace(c.Query("tenantId")); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid tenantId")
+		}
+		params.TenantID = &parsed
 	}
 
 	// Resolve product filter
@@ -90,6 +99,7 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 // toStorageFilters converts FindingFilterParams to storage.FindingFilters
 func (p *FindingFilterParams) toStorageFilters(limit, offset int) storage.FindingFilters {
 	return storage.FindingFilters{
+		TenantID:         p.TenantID,
 		Severity:         p.Severity,
 		Status:           p.Status,
 		OccurrenceStatus: p.OccurrenceStatus,
@@ -142,6 +152,14 @@ func parseBulkFilters(c *fiber.Ctx, db *sql.DB, filterInput *BulkActionFilters) 
 
 	if filterInput == nil {
 		return filters, nil
+	}
+
+	if filterInput.TenantID != nil && strings.TrimSpace(*filterInput.TenantID) != "" {
+		parsed, err := uuid.Parse(strings.TrimSpace(*filterInput.TenantID))
+		if err != nil {
+			return filters, fmt.Errorf("invalid tenantId")
+		}
+		filters.TenantID = &parsed
 	}
 
 	var productIDParam string

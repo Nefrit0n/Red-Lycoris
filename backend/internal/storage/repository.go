@@ -56,9 +56,10 @@ func CreateProduct(ctx context.Context, db *sql.DB, product *models.Product) err
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO products (id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		`INSERT INTO products (id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		product.ID,
+		anyUUIDPtr(product.TenantID),
 		product.Name,
 		product.Slug,
 		nullStringPtr(product.Description),
@@ -71,51 +72,75 @@ func CreateProduct(ctx context.Context, db *sql.DB, product *models.Product) err
 	return err
 }
 
-func FindProductByIdentifier(ctx context.Context, db *sql.DB, identifier string) (*models.Product, error) {
+func FindProductByIdentifier(ctx context.Context, db *sql.DB, identifier string, tenantID *uuid.UUID) (*models.Product, error) {
+	query := `SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
+		 FROM products
+		 WHERE identifier = $1`
+	args := []any{identifier}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+	query += " LIMIT 1"
+
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
-		 FROM products
-		 WHERE identifier = $1
-		 LIMIT 1`,
-		identifier,
+		query,
+		args...,
 	)
 	return scanProductRow(row)
 }
 
-func FindProductByNameVersion(ctx context.Context, db *sql.DB, name string, version *string) (*models.Product, error) {
+func FindProductByNameVersion(ctx context.Context, db *sql.DB, name string, version *string, tenantID *uuid.UUID) (*models.Product, error) {
 	if version == nil {
+		query := `SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
+			 FROM products
+			 WHERE name = $1 AND version IS NULL`
+		args := []any{name}
+		if tenantID != nil {
+			query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+			args = append(args, *tenantID)
+		}
+		query += " LIMIT 1"
 		row := db.QueryRowContext(
 			ctx,
-			`SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
-			 FROM products
-			 WHERE name = $1 AND version IS NULL
-			 LIMIT 1`,
-			name,
+			query,
+			args...,
 		)
 		return scanProductRow(row)
 	}
 
+	query := `SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
+		 FROM products
+		 WHERE name = $1 AND version = $2`
+	args := []any{name, *version}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+	query += " LIMIT 1"
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
-		 FROM products
-		 WHERE name = $1 AND version = $2
-		 LIMIT 1`,
-		name,
-		*version,
+		query,
+		args...,
 	)
 	return scanProductRow(row)
 }
 
-func FindProductBySlug(ctx context.Context, db *sql.DB, slug string) (*models.Product, error) {
+func FindProductBySlug(ctx context.Context, db *sql.DB, slug string, tenantID *uuid.UUID) (*models.Product, error) {
+	query := `SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
+		 FROM products
+		 WHERE slug = $1`
+	args := []any{slug}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+	query += " LIMIT 1"
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at
-		 FROM products
-		 WHERE slug = $1
-		 LIMIT 1`,
-		slug,
+		query,
+		args...,
 	)
 	return scanProductRow(row)
 }
@@ -152,9 +177,10 @@ func CreateScanResult(ctx context.Context, db *sql.DB, scanResult *models.ScanRe
 
 	_, err := db.ExecContext(
 		ctx,
-		`INSERT INTO scan_results (id, engagement_id, product_id, uploader_id, import_job_id, scanner, source_type, source_version, raw_report, processed_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		`INSERT INTO scan_results (id, tenant_id, engagement_id, product_id, uploader_id, import_job_id, scanner, source_type, source_version, raw_report, processed_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		scanResult.ID,
+		anyUUIDPtr(scanResult.TenantID),
 		anyUUIDPtr(scanResult.EngagementID),
 		anyUUIDPtr(scanResult.ProductID),
 		anyUUIDPtr(scanResult.UploaderID),
@@ -187,9 +213,10 @@ func createFindingWithExecer(ctx context.Context, ex execer, finding *models.Fin
 
 	_, err := ex.ExecContext(
 		ctx,
-		`INSERT INTO findings (id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+		`INSERT INTO findings (id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
 		finding.ID,
+		anyUUIDPtr(finding.TenantID),
 		anyUUIDPtr(finding.ScanResultID),
 		anyUUIDPtr(finding.ProductID),
 		finding.Fingerprint,
@@ -222,10 +249,15 @@ type FindingMasterRecord struct {
 	RepeatCount int
 }
 
-func FindMasterFindingByFingerprint(ctx context.Context, db *sql.DB, fingerprint string, productID *uuid.UUID) (*FindingMasterRecord, error) {
+func FindMasterFindingByFingerprint(ctx context.Context, db *sql.DB, fingerprint string, productID *uuid.UUID, tenantID *uuid.UUID) (*FindingMasterRecord, error) {
 	// PostgreSQL использует позиционные параметры $1,$2,... :contentReference[oaicite:3]{index=3}
 	query := `SELECT id, repeat_count FROM findings WHERE fingerprint = $1 AND duplicate_id IS NULL AND deleted_at IS NULL`
 	args := []any{fingerprint}
+
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
 
 	if productID != nil {
 		query += fmt.Sprintf(" AND product_id = $%d", len(args)+1)
@@ -253,6 +285,7 @@ func FindMasterFindingByFingerprint(ctx context.Context, db *sql.DB, fingerprint
 
 func scanProductRow(row *sql.Row) (*models.Product, error) {
 	var product models.Product
+	var tenantID uuid.NullUUID
 	var description sql.NullString
 	var identifier sql.NullString
 	var version sql.NullString
@@ -260,6 +293,7 @@ func scanProductRow(row *sql.Row) (*models.Product, error) {
 
 	if err := row.Scan(
 		&product.ID,
+		&tenantID,
 		&product.Name,
 		&product.Slug,
 		&description,
@@ -277,6 +311,10 @@ func scanProductRow(row *sql.Row) (*models.Product, error) {
 
 	if description.Valid {
 		product.Description = &description.String
+	}
+	if tenantID.Valid {
+		value := tenantID.UUID
+		product.TenantID = &value
 	}
 	if identifier.Valid {
 		product.Identifier = &identifier.String

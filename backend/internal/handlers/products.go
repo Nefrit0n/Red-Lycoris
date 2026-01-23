@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	v1dto "lotus-warden/backend/internal/dto/v1"
 	v1mapper "lotus-warden/backend/internal/mapper/v1"
@@ -24,6 +25,7 @@ type CreateProductRequest struct {
 	Identifier       *string `json:"identifier,omitempty" validate:"omitempty,max=200"`
 	Version          *string `json:"version,omitempty" validate:"omitempty,max=100"`
 	AssetCriticality *string `json:"assetCriticality,omitempty" validate:"omitempty,oneof=low medium high critical"`
+	TenantID         *string `json:"tenantId,omitempty" validate:"omitempty,uuid4"`
 }
 
 func NewProductsHandler(db *sql.DB) *ProductsHandler {
@@ -37,7 +39,16 @@ func (h *ProductsHandler) List(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid pagination"})
 	}
 
-	items, total, err := storage.ListProducts(c.Context(), h.db, limit, offset)
+	var tenantID *uuid.UUID
+	if raw := strings.TrimSpace(c.Query("tenantId")); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid tenantId"})
+		}
+		tenantID = &parsed
+	}
+
+	items, total, err := storage.ListProducts(c.Context(), h.db, tenantID, limit, offset)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch products"})
 	}
@@ -61,6 +72,11 @@ func (h *ProductsHandler) Create(c *fiber.Ctx) error {
 	product := &models.Product{
 		Name: req.Name,
 		Slug: slugify(req.Name),
+	}
+	if req.TenantID != nil && *req.TenantID != "" {
+		if parsed, err := uuid.Parse(*req.TenantID); err == nil {
+			product.TenantID = &parsed
+		}
 	}
 	if req.Identifier != nil && *req.Identifier != "" {
 		product.Identifier = req.Identifier
@@ -90,19 +106,21 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 
 	row := h.db.QueryRowContext(
 		c.Context(),
-		`SELECT id, name, identifier, version, asset_criticality FROM products WHERE id = $1`,
+		`SELECT id, tenant_id, name, identifier, version, asset_criticality FROM products WHERE id = $1`,
 		id,
 	)
 	var product storage.ProductListItem
+	var tenantID uuid.NullUUID
 	var identifier sql.NullString
 	var version sql.NullString
 	var assetCriticality sql.NullString
-	if err := row.Scan(&product.ID, &product.Name, &identifier, &version, &assetCriticality); err != nil {
+	if err := row.Scan(&product.ID, &tenantID, &product.Name, &identifier, &version, &assetCriticality); err != nil {
 		if err == sql.ErrNoRows {
 			return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "product not found"})
 		}
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch product"})
 	}
+	product.TenantID = tenantID
 	product.Identifier = identifier
 	product.Version = version
 	product.AssetCriticality = assetCriticality

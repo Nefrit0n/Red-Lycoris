@@ -16,6 +16,7 @@ const (
 
 type ImportJob struct {
 	ID                uuid.UUID  `db:"id"`
+	TenantID          *uuid.UUID `db:"tenant_id"`
 	Scanner           string     `db:"scanner"`
 	SourceType        *string    `db:"source_type"`
 	SourceVersion     *string    `db:"source_version"`

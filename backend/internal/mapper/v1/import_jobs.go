@@ -9,6 +9,11 @@ import (
 )
 
 func ImportJobListItem(item storage.ImportJobListItem) v1dto.ImportJobListItemDTO {
+	var tenantID *string
+	if item.TenantID.Valid {
+		value := item.TenantID.UUID.String()
+		tenantID = &value
+	}
 	var startedAt *string
 	if item.StartedAt.Valid {
 		value := item.StartedAt.Time.Format(time.RFC3339)
@@ -56,6 +61,7 @@ func ImportJobListItem(item storage.ImportJobListItem) v1dto.ImportJobListItemDT
 	}
 	return v1dto.ImportJobListItemDTO{
 		ID:                item.ID.String(),
+		TenantID:          tenantID,
 		Scanner:           item.Scanner,
 		SourceType:        sourceType,
 		SourceVersion:     sourceVersion,
@@ -89,6 +95,11 @@ func ImportJobDetail(item storage.ImportJobDetail) v1dto.ImportJobDetailDTO {
 }
 
 func ImportJobFromModel(item models.ImportJob) v1dto.ImportJobDetailDTO {
+	var tenantID *string
+	if item.TenantID != nil {
+		value := item.TenantID.String()
+		tenantID = &value
+	}
 	var startedAt *string
 	if item.StartedAt != nil {
 		value := item.StartedAt.Format(time.RFC3339)
@@ -137,6 +148,7 @@ func ImportJobFromModel(item models.ImportJob) v1dto.ImportJobDetailDTO {
 	resp := v1dto.ImportJobDetailDTO{
 		ImportJobListItemDTO: v1dto.ImportJobListItemDTO{
 			ID:                item.ID.String(),
+			TenantID:          tenantID,
 			Scanner:           item.Scanner,
 			SourceType:        sourceType,
 			SourceVersion:     sourceVersion,
