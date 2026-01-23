@@ -235,6 +235,7 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 				ProductID:    importing.NullUUIDPtr(job.ProductID),
 				EngagementID: importing.NullUUIDPtr(job.EngagementID),
 				CreatedBy:    importing.NullUUIDPtr(job.CreatedBy),
+				TenantID:     importing.NullUUIDPtr(job.TenantID),
 				Callbacks: &importing.ImportCallbacks{
 					OnIdentifiersDetected: func(identifiers []string) {
 						if publisher == nil || len(identifiers) == 0 {

@@ -38,6 +38,7 @@ const (
 
 type Finding struct {
 	ID             uuid.UUID       `db:"id"`
+	TenantID       *uuid.UUID      `db:"tenant_id"`
 	ScanResultID   *uuid.UUID      `db:"scan_result_id"`
 	ProductID      *uuid.UUID      `db:"product_id"`
 	Fingerprint    string          `db:"fingerprint"`

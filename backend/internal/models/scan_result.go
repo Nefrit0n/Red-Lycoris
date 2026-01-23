@@ -9,6 +9,7 @@ import (
 
 type ScanResult struct {
 	ID            uuid.UUID       `db:"id"`
+	TenantID      *uuid.UUID      `db:"tenant_id"`
 	EngagementID  *uuid.UUID      `db:"engagement_id"`
 	ProductID     *uuid.UUID      `db:"product_id"`
 	UploaderID    *uuid.UUID      `db:"uploader_id"`
