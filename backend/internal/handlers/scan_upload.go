@@ -91,6 +91,10 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 	if product != nil {
 		productID = &product.ID
 	}
+	var tenantID *uuid.UUID
+	if product != nil && product.TenantID != nil {
+		tenantID = product.TenantID
+	}
 
 	auditMeta := auditMetadataFromContext(c)
 
@@ -205,6 +209,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		ProductID:    productID,
 		EngagementID: req.EngagementID,
 		CreatedBy:    uploaderID,
+		TenantID:     tenantID,
 		Callbacks:    callbacks,
 	})
 	if err != nil {
@@ -333,7 +338,7 @@ func (h *ScanUploadHandler) resolveProduct(ctx context.Context, req ScanUploadRe
 	}
 
 	if identifier != "" {
-		product, err := storage.FindProductByIdentifier(ctx, h.db, identifier)
+		product, err := storage.FindProductByIdentifier(ctx, h.db, identifier, nil)
 		if err != nil {
 			return nil, false, err
 		}
@@ -351,7 +356,7 @@ func (h *ScanUploadHandler) resolveProduct(ctx context.Context, req ScanUploadRe
 		if version != "" {
 			versionPtr = &version
 		}
-		product, err := storage.FindProductByNameVersion(ctx, h.db, name, versionPtr)
+		product, err := storage.FindProductByNameVersion(ctx, h.db, name, versionPtr, nil)
 		if err != nil {
 			return nil, false, err
 		}
@@ -361,7 +366,7 @@ func (h *ScanUploadHandler) resolveProduct(ctx context.Context, req ScanUploadRe
 		return h.createProduct(ctx, name, version, nil)
 	}
 
-	unassigned, err := storage.FindProductBySlug(ctx, h.db, "unassigned")
+	unassigned, err := storage.FindProductBySlug(ctx, h.db, "unassigned", nil)
 	if err != nil {
 		return nil, false, err
 	}
@@ -378,7 +383,7 @@ func (h *ScanUploadHandler) createProduct(ctx context.Context, name, version str
 	}
 	baseSlug := slug
 	for i := 1; i <= 5; i++ {
-		existing, err := storage.FindProductBySlug(ctx, h.db, slug)
+		existing, err := storage.FindProductBySlug(ctx, h.db, slug, nil)
 		if err != nil {
 			return nil, false, err
 		}

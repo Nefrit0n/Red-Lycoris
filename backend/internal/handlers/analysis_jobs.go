@@ -33,6 +33,7 @@ type AnalysisJobsHandler struct {
 
 type AnalysisJobResponse struct {
 	ID                 string   `json:"id"`
+	TenantID           *string  `json:"tenantId,omitempty"`
 	ProductID          *string  `json:"productId,omitempty"`
 	ProductName        *string  `json:"productName,omitempty"`
 	EngagementID       *string  `json:"engagementId,omitempty"`
@@ -130,6 +131,13 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		CreatedBy:      uploaderID,
 		ArchiveSize:    fileHeader.Size,
 		IdempotencyKey: nil,
+	}
+	if rawTenant := strings.TrimSpace(c.FormValue("tenant_id")); rawTenant != "" {
+		parsed, err := uuid.Parse(rawTenant)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant_id"})
+		}
+		job.TenantID = &parsed
 	}
 	if idempotencyKey != "" {
 		job.IdempotencyKey = &idempotencyKey
@@ -267,6 +275,10 @@ func mapAnalysisJobListItem(item storage.AnalysisJobListItem) AnalysisJobRespons
 		FindingsNew:     item.FindingsNew,
 		DuplicatesTotal: item.DuplicatesTotal,
 		CreatedAt:       item.CreatedAt.Format(time.RFC3339),
+	}
+	if item.TenantID.Valid {
+		value := item.TenantID.UUID.String()
+		resp.TenantID = &value
 	}
 	if item.ProductID.Valid {
 		value := item.ProductID.UUID.String()
