@@ -191,6 +191,19 @@ func requestIDFromContext(c *fiber.Ctx) *string {
 	return nil
 }
 
+func isSLAClosedStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case models.StatusMitigated,
+		models.StatusFalsePositive,
+		models.StatusOutOfScope,
+		models.StatusRiskAccepted,
+		models.StatusDuplicate:
+		return true
+	default:
+		return false
+	}
+}
+
 func parseDateParam(raw string, endOfDay bool) (*time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

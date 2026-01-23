@@ -49,6 +49,7 @@ import {
 const COL_CHECKBOX = 44;
 const COL_SEVERITY = 140;
 const COL_STATUS = 160;
+const COL_SLA = 130;
 const COL_ACTIONS = 56;
 
 const severityLabels: Record<FindingSeverity, string> = {
@@ -180,6 +181,14 @@ const statusConfig: Record<FindingStatus, {
   },
 };
 
+const slaClosedStatuses = new Set<FindingStatus>([
+  "mitigated",
+  "false_positive",
+  "out_of_scope",
+  "risk_accepted",
+  "duplicate",
+]);
+
 // Примечание: occurrenceLabels и occurrenceColors удалены,
 // т.к. repeat/age badges теперь используют кастомную стилизацию
 
@@ -284,6 +293,54 @@ const formatDateTimeRuCompact = (value?: string | null) => {
   }
 };
 
+const resolveSlaDisplay = (finding: FindingListItemDTO, now: Date) => {
+  if (!finding.slaDueAt) {
+    return {
+      label: "—",
+      color: "text.secondary",
+      bgcolor: "transparent",
+      borderColor: "rgba(255, 255, 255, 0.12)",
+      dueAtLabel: "",
+    };
+  }
+
+  const dueAt = new Date(finding.slaDueAt);
+  const daysRemaining =
+    typeof finding.slaDaysRemaining === "number"
+      ? finding.slaDaysRemaining
+      : Math.ceil((dueAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const isClosed = slaClosedStatuses.has(finding.status);
+  const isBreached = Boolean(finding.slaBreached) && !isClosed;
+
+  if (isBreached || daysRemaining < 0) {
+    return {
+      label: "BREACHED",
+      color: "#ef5350",
+      bgcolor: "rgba(244, 67, 54, 0.15)",
+      borderColor: "rgba(244, 67, 54, 0.4)",
+      dueAtLabel: formatDateTimeRuCompact(finding.slaDueAt),
+    };
+  }
+
+  if (daysRemaining === 0) {
+    return {
+      label: "due today",
+      color: "#ffb74d",
+      bgcolor: "rgba(255, 152, 0, 0.16)",
+      borderColor: "rgba(255, 152, 0, 0.4)",
+      dueAtLabel: formatDateTimeRuCompact(finding.slaDueAt),
+    };
+  }
+
+  return {
+    label: `${daysRemaining}d left`,
+    color: "#81c784",
+    bgcolor: "rgba(76, 175, 80, 0.14)",
+    borderColor: "rgba(129, 199, 132, 0.35)",
+    dueAtLabel: formatDateTimeRuCompact(finding.slaDueAt),
+  };
+};
+
 const prettifyScanner = (v?: string | null) => {
   if (!v) return "—";
   const s = v.trim();
@@ -371,6 +428,7 @@ export default function FindingsTable({
   groupByRule = false,
 }: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
+  const now = useMemo(() => new Date(), [safeData]);
 
   // Состояние для развёрнутых групп (по title)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -469,7 +527,7 @@ export default function FindingsTable({
     [normalizedQuery]
   );
 
-  const colCount = 5; // checkbox + issue + severity + status + actions
+  const colCount = 6; // checkbox + issue + severity + status + sla + actions
 
   return (
     <TableContainer
@@ -484,7 +542,7 @@ export default function FindingsTable({
         size="small"
         sx={{
           width: "100%",
-          minWidth: 980,
+          minWidth: 1110,
           tableLayout: "fixed", // чтобы ширины колонок не прыгали
         }}
       >
@@ -494,6 +552,7 @@ export default function FindingsTable({
           <col /> {/* issue details (auto) */}
           <col style={{ width: COL_SEVERITY }} />
           <col style={{ width: COL_STATUS }} />
+          <col style={{ width: COL_SLA }} />
           <col style={{ width: COL_ACTIONS }} />
         </colgroup>
 
@@ -553,6 +612,20 @@ export default function FindingsTable({
             </TableCell>
 
             <TableCell
+              align="center"
+              sx={{ width: COL_SLA, maxWidth: COL_SLA }}
+            >
+              <TableSortLabel
+                hideSortIcon={false}
+                active={sortField === "slaDueAt"}
+                direction={sortField === "slaDueAt" ? sortOrder : "asc"}
+                onClick={() => onSortChange("slaDueAt")}
+              >
+                SLA
+              </TableSortLabel>
+            </TableCell>
+
+            <TableCell
               align="right"
               sx={{ width: COL_ACTIONS, maxWidth: COL_ACTIONS }}
             />
@@ -575,6 +648,9 @@ export default function FindingsTable({
                 </TableCell>
                 <TableCell align="center" sx={{ width: COL_STATUS }}>
                   <Skeleton width={110} />
+                </TableCell>
+                <TableCell align="center" sx={{ width: COL_SLA }}>
+                  <Skeleton width={80} />
                 </TableCell>
                 <TableCell align="right" sx={{ width: COL_ACTIONS }}>
                   <Skeleton width={28} height={28} />
@@ -710,6 +786,7 @@ export default function FindingsTable({
                   : null;
               const isKev = Boolean(intelSummary?.kev);
               const isSca = f.category === "SCA";
+              const slaDisplay = resolveSlaDisplay(f, now);
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
@@ -1300,6 +1377,44 @@ export default function FindingsTable({
                         </Box>
                       );
                     })()}
+                  </TableCell>
+
+                  {/* SLA */}
+                  <TableCell
+                    align="center"
+                    sx={{
+                      width: COL_SLA,
+                      maxWidth: COL_SLA,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <Tooltip
+                      title={
+                        slaDisplay.dueAtLabel
+                          ? `Due: ${slaDisplay.dueAtLabel}`
+                          : "SLA not set"
+                      }
+                    >
+                      <Box
+                        sx={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          px: 1,
+                          py: 0.4,
+                          minWidth: 80,
+                          borderRadius: "14px",
+                          fontWeight: 600,
+                          fontSize: "0.7rem",
+                          color: slaDisplay.color,
+                          bgcolor: slaDisplay.bgcolor,
+                          border: `1px solid ${slaDisplay.borderColor}`,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {slaDisplay.label}
+                      </Box>
+                    </Tooltip>
                   </TableCell>
 
                   {/* Actions */}

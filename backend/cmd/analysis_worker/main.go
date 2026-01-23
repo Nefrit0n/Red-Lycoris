@@ -21,6 +21,7 @@ import (
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/objectstore"
 	"lotus-warden/backend/internal/scanners"
+	"lotus-warden/backend/internal/sla"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/google/uuid"
@@ -144,13 +145,14 @@ func handleMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objects
 		TrivyImage:       cfg.AnalysisTrivyImage,
 		Timeout:          parseDuration(cfg.AnalysisScannerTimeout, 20*time.Minute),
 	}
+	slaMatrix := sla.MatrixFromConfig(cfg)
 
 	var totalNew, totalDuplicates, totalFindings int
 	var scanErrors []string
 
 	for _, scanner := range job.Scanners {
 		scanner = strings.ToLower(strings.TrimSpace(scanner))
-		result, err := runScanner(ctx, db, store, publisher, job, scanner, jobDir, workspace, scannerCfg)
+		result, err := runScanner(ctx, db, store, publisher, job, scanner, jobDir, workspace, slaMatrix, scannerCfg)
 		if err != nil {
 			scanErrors = append(scanErrors, err.Error())
 		}
@@ -184,7 +186,7 @@ func handleMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objects
 	return finalizeJob(ctx, db, publisher, job, status, startedAt, finalErr)
 }
 
-func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publisher *events.Publisher, job *storage.AnalysisJobDetail, scanner string, jobDir string, workspace string, cfg scanners.RunnerConfig) (*importing.ImportResult, error) {
+func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publisher *events.Publisher, job *storage.AnalysisJobDetail, scanner string, jobDir string, workspace string, slaMatrix sla.Matrix, cfg scanners.RunnerConfig) (*importing.ImportResult, error) {
 	resultPath := filepath.Join(jobDir, fmt.Sprintf("result_%s.json", scanner))
 
 	var scanErr error
@@ -236,6 +238,7 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 				EngagementID: importing.NullUUIDPtr(job.EngagementID),
 				CreatedBy:    importing.NullUUIDPtr(job.CreatedBy),
 				TenantID:     importing.NullUUIDPtr(job.TenantID),
+				SLAMatrix:    slaMatrix,
 				Callbacks: &importing.ImportCallbacks{
 					OnIdentifiersDetected: func(identifiers []string) {
 						if publisher == nil || len(identifiers) == 0 {

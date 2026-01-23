@@ -28,7 +28,7 @@ func TestFindingsListDefaultsToCanonical(t *testing.T) {
 	mock.ExpectQuery("(?s)\\s*SELECT COUNT\\(\\*\\).*duplicate_id IS NULL").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery("(?s)\\s*SELECT f.id.*duplicate_id IS NULL").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "severity", "status", "category", "product_id", "name", "assignee_id", "username", "import_job_id", "created_at", "updated_at", "first_seen_at", "last_seen_at", "repeat_count", "duplicate_id", "scanner", "source_type"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "severity", "status", "category", "product_id", "name", "assignee_id", "username", "import_job_id", "created_at", "updated_at", "first_seen_at", "last_seen_at", "repeat_count", "duplicate_id", "sla_due_at", "sla_breached", "sla_breached_at", "sla_profile", "sla_source", "scanner", "source_type"}))
 	mock.ExpectQuery("(?s)\\s*SELECT f.severity, COUNT\\(\\*\\).*duplicate_id IS NULL").
 		WillReturnRows(sqlmock.NewRows([]string{"severity", "count"}))
 

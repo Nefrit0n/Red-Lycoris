@@ -16,6 +16,11 @@ type SeverityCounts struct {
 	Info     int `json:"info"`
 }
 
+type CategoryCount struct {
+	Category string `json:"category"`
+	Count    int    `json:"count"`
+}
+
 // CountFindingsBySeverity returns counts per severity for the given filters.
 // It mirrors the same WHERE logic as ListFindings (canonicalOnly/includeRepeats/etc.).
 func CountFindingsBySeverity(ctx context.Context, db *sql.DB, filters FindingFilters) (SeverityCounts, error) {
@@ -60,5 +65,40 @@ func CountFindingsBySeverity(ctx context.Context, db *sql.DB, filters FindingFil
 		return SeverityCounts{}, err
 	}
 
+	return counts, nil
+}
+
+// CountFindingsByCategory returns counts per category for the given filters.
+// It mirrors the same WHERE logic as ListFindings (canonicalOnly/includeRepeats/etc.).
+func CountFindingsByCategory(ctx context.Context, db *sql.DB, filters FindingFilters) ([]CategoryCount, error) {
+	whereClause, args := buildFindingWhereClause(filters, 0)
+
+	query := `
+		SELECT f.category, COUNT(*)
+		FROM findings f
+		LEFT JOIN products p ON p.id = f.product_id
+		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
+	` + " " + whereClause + `
+		GROUP BY f.category
+	`
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := []CategoryCount{}
+	for rows.Next() {
+		var category string
+		var n int
+		if err := rows.Scan(&category, &n); err != nil {
+			return nil, err
+		}
+		counts = append(counts, CategoryCount{Category: category, Count: n})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return counts, nil
 }
