@@ -14,16 +14,7 @@ func (p *TrivyParser) ScannerType() string {
 	return "trivy"
 }
 
-/*
-CanParse:
-- SARIF → да
-- JSON → да
-- Есть хотя бы один finding (vuln или secret)
-*/
 func (p *TrivyParser) CanParse(data []byte) bool {
-	if canParseSarif(data) {
-		return true
-	}
 	if !json.Valid(data) {
 		return false
 	}
@@ -34,7 +25,7 @@ func (p *TrivyParser) CanParse(data []byte) bool {
 	}
 
 	for _, r := range report.Results {
-		if len(r.Vulnerabilities) > 0 || len(r.Secrets) > 0 || len(r.Misconfigurations) > 0 || len(r.Licenses) > 0 {
+		if len(r.Vulnerabilities) > 0 {
 			return true
 		}
 	}
@@ -42,10 +33,6 @@ func (p *TrivyParser) CanParse(data []byte) bool {
 }
 
 func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
-	if canParseSarif(data) {
-		return parseSarif(data, "trivy")
-	}
-
 	var report trivyReport
 	if err := json.Unmarshal(data, &report); err != nil {
 		return nil, err
@@ -56,15 +43,6 @@ func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
 	for _, result := range report.Results {
 		for _, vuln := range result.Vulnerabilities {
 			findings = append(findings, p.buildVulnerabilityFinding(result, vuln))
-		}
-		for _, secret := range result.Secrets {
-			findings = append(findings, p.buildSecretFinding(result, secret))
-		}
-		for _, misconf := range result.Misconfigurations {
-			findings = append(findings, p.buildMisconfigurationFinding(result, misconf))
-		}
-		for _, license := range result.Licenses {
-			findings = append(findings, p.buildLicenseFinding(result, license))
 		}
 	}
 
