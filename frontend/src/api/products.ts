@@ -6,6 +6,13 @@ import {
 } from "../types/products";
 import { ImportJobListItemDTO } from "../types/imports";
 import { request, requestList, requestWithMeta } from "./client";
+import { Product, ProductWithStats, ProductDetail } from "../types/products";
+import {
+  getAuthHeaders,
+  parseApiResponse,
+  parseApiResponseWithMeta,
+  parseListApiResponse,
+} from "./http";
 
 export const fetchProducts = async (
   limit: number,
