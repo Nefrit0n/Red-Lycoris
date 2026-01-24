@@ -37,6 +37,7 @@ func (h *PolicyResultsHandler) List(c *fiber.Ctx) error {
 		Limit:    limit,
 		Offset:   offset,
 		Decision: strings.TrimSpace(c.Query("decision")),
+		TenantID: tenantIDFromContext(c),
 	}
 
 	if filters.Decision != "" && !isValidPolicyDecision(filters.Decision) {
@@ -101,7 +102,7 @@ func (h *PolicyResultsHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid policy result id"})
 	}
 
-	result, err := storage.GetPolicyResultByID(c.Context(), h.db, resultID)
+	result, err := storage.GetPolicyResultByID(c.Context(), h.db, resultID, tenantIDFromContext(c))
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy result"})
 	}
@@ -131,6 +132,7 @@ func (h *PolicyResultsHandler) Export(c *fiber.Ctx) error {
 	filters := storage.PolicyResultsExportFilters{
 		Decision: strings.TrimSpace(c.Query("decision")),
 		Limit:    limit,
+		TenantID: tenantIDFromContext(c),
 	}
 
 	if filters.Decision != "" && !isValidPolicyDecision(filters.Decision) {
