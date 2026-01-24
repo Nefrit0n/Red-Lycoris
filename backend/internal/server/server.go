@@ -169,4 +169,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured.Get("/policy-results", policyResultsHandler.List)
 	secured.Get("/policy-results/:id", policyResultsHandler.Get)
 	secured.Get("/policy-results/export", middleware.AuthorizeRole("admin", "superuser"), policyResultsHandler.Export)
+
+	riskMetricsHandler := handlers.NewRiskMetricsHandler(db)
+	secured.Get("/metrics/risk", riskMetricsHandler.Get)
 }

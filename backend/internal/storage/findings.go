@@ -22,6 +22,7 @@ type FindingListItem struct {
 	RiskScore      sql.NullFloat64
 	RiskBand       sql.NullString
 	RiskUpdatedAt  sql.NullTime
+	RiskModel      sql.NullString
 	ProductID      uuid.NullUUID
 	ProductName    sql.NullString
 	AssigneeID     uuid.NullUUID
@@ -56,6 +57,7 @@ type FindingDetail struct {
 	RiskBand       sql.NullString
 	RiskUpdatedAt  sql.NullTime
 	RiskFactors    []byte
+	RiskModel      sql.NullString
 	ProductID      uuid.NullUUID
 	ProductName    sql.NullString
 	AssigneeID     uuid.NullUUID
@@ -91,6 +93,7 @@ type FindingFilters struct {
 	ImportJobID      *uuid.UUID
 	PolicyID         *uuid.UUID
 	PolicyDecision   string
+	RiskBand         string
 	Query            string
 	DateFrom         *time.Time
 	DateTo           *time.Time
@@ -154,6 +157,11 @@ func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []
 			" AND (SELECT pr.decision FROM policy_results pr WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id ORDER BY pr.evaluated_at DESC LIMIT 1) = $%d",
 			startIndex+len(args),
 		)
+	}
+
+	if filters.RiskBand != "" {
+		args = append(args, filters.RiskBand)
+		whereClause += fmt.Sprintf(" AND fr.risk_band = $%d", startIndex+len(args))
 	}
 
 	if filters.Query != "" {
@@ -224,6 +232,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 	countQuery := `
 		SELECT COUNT(*)
 		FROM findings f
+		LEFT JOIN finding_risk fr ON fr.finding_id = f.id
 		LEFT JOIN products p ON p.id = f.product_id
 		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
 	` + " " + whereClause
@@ -243,7 +252,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		SELECT
 			f.id, f.tenant_id, f.title, f.severity, f.status,
 			f.category,
-			fr.risk_score, fr.risk_band, fr.computed_at,
+			fr.risk_score, fr.risk_band, fr.computed_at, fr.model_version,
 			f.product_id, p.name,
 			f.assignee_id, u.username,
 			f.import_job_id,
@@ -296,6 +305,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.RiskScore,
 			&item.RiskBand,
 			&item.RiskUpdatedAt,
+			&item.RiskModel,
 			&item.ProductID,
 			&item.ProductName,
 			&item.AssigneeID,
@@ -399,7 +409,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		`SELECT
 			f.id, f.tenant_id, f.title, f.description, f.fingerprint, f.severity, f.status,
 			f.category,
-			fr.risk_score, fr.risk_band, fr.computed_at, fr.factors,
+			fr.risk_score, fr.risk_band, fr.computed_at, fr.factors, fr.model_version,
 			f.product_id, p.name,
 			f.assignee_id, f.import_job_id,
 			f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id,
@@ -427,6 +437,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		&detail.RiskBand,
 		&detail.RiskUpdatedAt,
 		&detail.RiskFactors,
+		&detail.RiskModel,
 		&detail.ProductID,
 		&detail.ProductName,
 		&detail.AssigneeID,

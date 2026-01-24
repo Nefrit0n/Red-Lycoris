@@ -22,7 +22,7 @@ export function useFindingDetail(id: string): UseFindingDetailResult {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetchFindingDetail(id, signal);
+        const response = await fetchFindingDetail(id, signal, { includeRiskFactors: true });
         setData(response);
       } catch (e) {
         if (!(e instanceof DOMException && e.name === "AbortError")) {
