@@ -29,6 +29,9 @@ type FindingListItemDTO struct {
 	ImportJobID      *string       `json:"importJobId,omitempty"`
 	CreatedAt        string        `json:"createdAt"`
 	UpdatedAt        string        `json:"updatedAt"`
+	RiskScore        *float64      `json:"riskScore,omitempty"`
+	RiskBand         *string       `json:"riskBand,omitempty"`
+	RiskUpdatedAt    *string       `json:"riskUpdatedAt,omitempty"`
 	IntelSummary     *IntelSummary `json:"intel_summary,omitempty"`
 }
 
@@ -107,6 +110,7 @@ type FindingDetailDTO struct {
 	Occurrences    []FindingOccurrence    `json:"occurrences,omitempty"`
 	Duplicates     *DuplicateGroup        `json:"duplicates,omitempty"`
 	DeletedAt      *string                `json:"deletedAt,omitempty"`
+	RiskFactors    map[string]interface{} `json:"riskFactors,omitempty"`
 }
 
 type Finding = FindingListItemDTO

@@ -18,6 +18,8 @@ const (
 	SbomStreamName            = "SBOM"
 	SbomSubject               = "sbom.>"
 	SbomIndexRequestedSubject = "sbom.index.requested.v1"
+
+	RiskRecomputeRequestedSubject = "finding.risk.recompute.requested.v1"
 )
 
 type Publisher struct {
@@ -47,7 +49,7 @@ func NewPublisher(url string) (*Publisher, error) {
 	// Важно: не просто AddStream. Если stream уже есть, но subjects другие — делаем UpdateStream.
 	if err := ensureStream(js, &nats.StreamConfig{
 		Name:      AnalysisStreamName,
-		Subjects:  []string{AnalysisSubject},
+		Subjects:  []string{AnalysisSubject, RiskRecomputeRequestedSubject},
 		Retention: nats.LimitsPolicy,
 		MaxAge:    7 * 24 * time.Hour,
 	}); err != nil {
