@@ -41,7 +41,9 @@ import {
   FindingOccurrenceStatus,
   FindingSeverity,
   FindingStatus,
+  RiskBand,
 } from "../types/findings";
+import { RISK_BAND_COLORS } from "../utils/findingConstants";
 
 /**
  * Ширины колонок.
@@ -49,6 +51,7 @@ import {
  */
 const COL_CHECKBOX = 44;
 const COL_SEVERITY = 140;
+const COL_RISK = 120;
 const COL_STATUS = 160;
 const COL_SLA = 130;
 const COL_ACTIONS = 56;
@@ -58,6 +61,13 @@ const severityLabels: Record<FindingSeverity, string> = {
   medium: "Medium",
   high: "High",
   critical: "Critical",
+};
+
+const riskBandShortLabels: Record<RiskBand, string> = {
+  low: "LOW",
+  medium: "MED",
+  high: "HIGH",
+  critical: "CRIT",
 };
 
 // Новая конфигурация severity с заливкой и иконками
@@ -534,7 +544,7 @@ export default function FindingsTable({
     [normalizedQuery]
   );
 
-  const colCount = 6; // checkbox + issue + severity + status + sla + actions
+  const colCount = 7; // checkbox + issue + severity + risk + status + sla + actions
 
   return (
     <TableContainer
@@ -549,7 +559,7 @@ export default function FindingsTable({
         size="small"
         sx={{
           width: "100%",
-          minWidth: 1110,
+          minWidth: 1230,
           tableLayout: "fixed", // чтобы ширины колонок не прыгали
         }}
       >
@@ -558,6 +568,7 @@ export default function FindingsTable({
           <col style={{ width: COL_CHECKBOX }} />
           <col /> {/* issue details (auto) */}
           <col style={{ width: COL_SEVERITY }} />
+          <col style={{ width: COL_RISK }} />
           <col style={{ width: COL_STATUS }} />
           <col style={{ width: COL_SLA }} />
           <col style={{ width: COL_ACTIONS }} />
@@ -601,6 +612,25 @@ export default function FindingsTable({
                 onClick={() => onSortChange("severity")}
               >
                 Severity
+              </TableSortLabel>
+            </TableCell>
+
+            <TableCell
+              align="center"
+              sx={{ width: COL_RISK, maxWidth: COL_RISK }}
+            >
+              <TableSortLabel
+                hideSortIcon={false}
+                active={sortField === "riskScore"}
+                direction={sortField === "riskScore" ? sortOrder : "asc"}
+                onClick={() => onSortChange("riskScore")}
+              >
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <span>Risk</span>
+                  <Tooltip title="Risk = Likelihood × Impact (OWASP)">
+                    <InfoOutlinedIcon sx={{ fontSize: 14 }} />
+                  </Tooltip>
+                </Stack>
               </TableSortLabel>
             </TableCell>
 
@@ -652,6 +682,9 @@ export default function FindingsTable({
                 </TableCell>
                 <TableCell align="center" sx={{ width: COL_SEVERITY }}>
                   <Skeleton width={90} />
+                </TableCell>
+                <TableCell align="center" sx={{ width: COL_RISK }}>
+                  <Skeleton width={70} />
                 </TableCell>
                 <TableCell align="center" sx={{ width: COL_STATUS }}>
                   <Skeleton width={110} />
@@ -1354,6 +1387,49 @@ export default function FindingsTable({
                           {config.icon}
                           {severityLabels[f.severity]}
                         </Box>
+                      );
+                    })()}
+                  </TableCell>
+
+                  {/* Risk */}
+                  <TableCell
+                    align="center"
+                    sx={{
+                      width: COL_RISK,
+                      maxWidth: COL_RISK,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {(() => {
+                      const score =
+                        typeof f.riskScore === "number" ? Math.round(f.riskScore) : null;
+                      const band = f.riskBand as RiskBand | null | undefined;
+                      if (score === null || !band) {
+                        return (
+                          <Tooltip title="Risk not computed yet">
+                            <Box component="span" sx={{ color: "text.secondary" }}>
+                              —
+                            </Box>
+                          </Tooltip>
+                        );
+                      }
+                      return (
+                        <Tooltip title="Risk = Likelihood × Impact (OWASP)">
+                          <Chip
+                            size="small"
+                            label={`${riskBandShortLabels[band]} ${score}`}
+                            sx={{
+                              height: 24,
+                              fontSize: "0.7rem",
+                              fontWeight: 700,
+                              borderColor: RISK_BAND_COLORS[band],
+                              color: RISK_BAND_COLORS[band],
+                              bgcolor: "rgba(255, 255, 255, 0.04)",
+                              border: "1px solid",
+                              "& .MuiChip-label": { px: 0.8 },
+                            }}
+                          />
+                        </Tooltip>
                       );
                     })()}
                   </TableCell>

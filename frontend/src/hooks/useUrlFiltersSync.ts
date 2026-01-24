@@ -6,6 +6,7 @@ import {
   FindingSeverity,
   FindingStatus,
   PolicyDecision,
+  RiskBand,
 } from '../types/findings';
 import { getUrlParam, getUrlParamNumber, buildQueryString } from '../utils/urlHelpers';
 
@@ -21,6 +22,7 @@ const statusOptions: FindingStatus[] = [
   'duplicate',
 ];
 const occurrenceOptions: FindingOccurrenceStatus[] = ['NEW', 'REPEAT'];
+const riskBandOptions: RiskBand[] = ['low', 'medium', 'high', 'critical'];
 
 export interface FiltersState {
   // Pagination
@@ -33,6 +35,7 @@ export interface FiltersState {
   importJobId: string;
   filterSeverity: FindingSeverity | '';
   filterStatus: FindingStatus | '';
+  filterRiskBand: RiskBand | '';
   filterOccurrence: FindingOccurrenceStatus | '';
   filterScannerType: string;
   filterPolicyDecision: PolicyDecision | '';
@@ -56,6 +59,7 @@ export interface FiltersActions {
   setImportJobId: (value: string) => void;
   setFilterSeverity: (value: FindingSeverity | '') => void;
   setFilterStatus: (value: FindingStatus | '') => void;
+  setFilterRiskBand: (value: RiskBand | '') => void;
   setFilterOccurrence: (value: FindingOccurrenceStatus | '') => void;
   setFilterScannerType: (value: string) => void;
   setFilterPolicyDecision: (value: PolicyDecision | '') => void;
@@ -76,6 +80,7 @@ const defaultFilters: FiltersState = {
   importJobId: '',
   filterSeverity: '',
   filterStatus: '',
+  filterRiskBand: '',
   filterOccurrence: '',
   filterScannerType: '',
   filterPolicyDecision: '',
@@ -106,6 +111,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     left.importJobId === right.importJobId &&
     left.filterSeverity === right.filterSeverity &&
     left.filterStatus === right.filterStatus &&
+    left.filterRiskBand === right.filterRiskBand &&
     left.filterOccurrence === right.filterOccurrence &&
     left.filterScannerType === right.filterScannerType &&
     left.filterPolicyDecision === right.filterPolicyDecision &&
@@ -152,6 +158,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
 
     const severity = getUrlParam(search, 'severity');
     const status = getUrlParam(search, 'status');
+    const riskBand = getUrlParam(search, 'riskBand');
     const occurrence = getUrlParam(search, 'occurrenceStatus');
     const decisionOptions: PolicyDecision[] = ['pass', 'fail', 'warn'];
 
@@ -165,6 +172,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       'productName',
       'severity',
       'status',
+      'riskScore',
       'slaDueAt',
       'lastSeenAt',
       'createdAt',
@@ -188,6 +196,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
         ? (severity as FindingSeverity)
         : '',
       filterStatus: statusOptions.includes(status as FindingStatus) ? (status as FindingStatus) : '',
+      filterRiskBand: riskBandOptions.includes(riskBand as RiskBand) ? (riskBand as RiskBand) : '',
       filterOccurrence: occurrenceOptions.includes(occurrence as FindingOccurrenceStatus)
         ? (occurrence as FindingOccurrenceStatus)
         : '',
@@ -218,6 +227,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       product: filters.productId,
       severity: filters.filterSeverity,
       status: filters.filterStatus,
+      riskBand: filters.filterRiskBand,
       occurrenceStatus: filters.filterOccurrence,
       scannerType: filters.filterScannerType,
       policyDecision: filters.filterPolicyDecision,
@@ -266,6 +276,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     setImportJobId: (importJobId) => setFilters((prev) => ({ ...prev, importJobId, page: 0 })),
     setFilterSeverity: (filterSeverity) => setFilters((prev) => ({ ...prev, filterSeverity, page: 0 })),
     setFilterStatus: (filterStatus) => setFilters((prev) => ({ ...prev, filterStatus, page: 0 })),
+    setFilterRiskBand: (filterRiskBand) => setFilters((prev) => ({ ...prev, filterRiskBand, page: 0 })),
     setFilterOccurrence: (filterOccurrence) => setFilters((prev) => ({ ...prev, filterOccurrence, page: 0 })),
     setFilterScannerType: (filterScannerType) => setFilters((prev) => ({ ...prev, filterScannerType, page: 0 })),
     setFilterPolicyDecision: (filterPolicyDecision) => setFilters((prev) => ({ ...prev, filterPolicyDecision, page: 0 })),

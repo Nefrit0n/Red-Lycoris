@@ -26,6 +26,7 @@ export const fetchFindings = async (
 
   if (params.filterSeverity) searchParams.set("severity", params.filterSeverity);
   if (params.filterStatus) searchParams.set("status", params.filterStatus);
+  if (params.filterRiskBand) searchParams.set("riskBand", params.filterRiskBand);
   if (params.filterOccurrence) searchParams.set("occurrenceStatus", params.filterOccurrence);
   if (params.filterScannerType) searchParams.set("scannerType", params.filterScannerType);
   if (params.filterPolicyDecision) {
@@ -56,9 +57,17 @@ export const fetchFindings = async (
 
 export const fetchFindingDetail = async (
   id: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: { includeRiskFactors?: boolean }
 ): Promise<FindingDetail> => {
-  return request<FindingDetailDTO>(`/api/v1/findings/${id}`, { signal });
+  const searchParams = new URLSearchParams();
+  if (options?.includeRiskFactors) {
+    searchParams.set("includeRiskFactors", "true");
+  }
+  return request<FindingDetailDTO>(`/api/v1/findings/${id}`, {
+    signal,
+    query: searchParams,
+  });
 };
 
 export const updateFindingStatus = async (

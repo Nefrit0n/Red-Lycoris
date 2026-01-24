@@ -1,4 +1,4 @@
-import { FindingCategory, FindingSeverity, FindingStatus } from "./findings";
+import { FindingCategory, FindingSeverity, FindingStatus, RiskBand } from "./findings";
 
 export interface DashboardMetricsDTO {
   totalOpenFindings: number;
@@ -81,4 +81,33 @@ export interface DashboardData {
   trend: TrendPoint[];
   topProducts: ProductRisk[];
   recentActivity: RecentActivityItem[];
+  riskMetrics?: RiskMetricsDTO | null;
+}
+
+export interface RiskBandCounts {
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+}
+
+export interface RiskTopFinding {
+  id: string;
+  title: string;
+  severity: FindingSeverity;
+  riskScore: number;
+  riskBand: RiskBand;
+  productId?: string | null;
+}
+
+export interface RiskTrendPoint {
+  date: string;
+  avgRisk: number;
+  criticalCount: number;
+}
+
+export interface RiskMetricsDTO {
+  bands: RiskBandCounts;
+  topFindings: RiskTopFinding[];
+  trend?: RiskTrendPoint[];
 }

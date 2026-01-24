@@ -22,6 +22,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import LinkIcon from "@mui/icons-material/Link";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCurrentUser } from "../api/auth";
@@ -41,6 +42,8 @@ import {
   STATUS_COLORS,
   STATUS_LABELS,
   ALL_STATUSES,
+  RISK_BAND_COLORS,
+  RISK_BAND_LABELS,
 } from "../utils/findingConstants";
 import { formatDateRu, EventCategory } from "../utils/findingFormatters";
 import { FindingComment, SemgrepEvidence } from "../types/findings";
@@ -119,6 +122,7 @@ export const FindingDetailContent = ({
   const [tab, setTab] = useState(0);
   const [eventFilter, setEventFilter] = useState<EventCategory>("all");
   const [evidenceExpanded, setEvidenceExpanded] = useState(false);
+  const [factorsExpanded, setFactorsExpanded] = useState(false);
 
   // User permissions
   const user = getCurrentUser();
@@ -221,6 +225,11 @@ export const FindingDetailContent = ({
   const sastDetails = resolvedDetails.category === "SAST" ? resolvedDetails.details : null;
   const showScaTab = resolvedDetails.category === "SCA";
   const showSastTab = resolvedDetails.category === "SAST";
+  const riskScore =
+    typeof data.riskScore === "number" ? Math.round(data.riskScore) : null;
+  const riskBand = data.riskBand ?? null;
+  const riskFactors = data.riskFactors ?? null;
+  const canShowFactors = Boolean(riskFactors);
 
   let tabIndex = 0;
   const descriptionIndex = tabIndex++;
@@ -493,6 +502,143 @@ export const FindingDetailContent = ({
                   </IconButton>
                 </Tooltip>
               </Stack>
+            )}
+          </Stack>
+        </Section>
+
+        <Section
+          title={
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <span>Risk score</span>
+              <Tooltip title="Risk = Likelihood × Impact (OWASP)">
+                <InfoOutlinedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+              </Tooltip>
+            </Stack>
+          }
+          dense={compact}
+        >
+          <Stack spacing={1.2}>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                Score
+              </Typography>
+              {riskScore !== null && riskBand ? (
+                <Chip
+                  size="small"
+                  label={`${RISK_BAND_LABELS[riskBand]} ${riskScore}`}
+                  sx={{
+                    fontWeight: 700,
+                    borderColor: RISK_BAND_COLORS[riskBand],
+                    color: RISK_BAND_COLORS[riskBand],
+                    border: "1px solid",
+                  }}
+                />
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  —
+                </Typography>
+              )}
+            </Stack>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                Updated at
+              </Typography>
+              <Typography variant="body2">
+                {data.riskUpdatedAt ? formatDateRu(data.riskUpdatedAt) : "—"}
+              </Typography>
+            </Stack>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                Model version
+              </Typography>
+              <Typography variant="body2">{data.modelVersion ?? "—"}</Typography>
+            </Stack>
+
+            {canShowFactors && (
+              <Box>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setFactorsExpanded((prev) => !prev)}
+                >
+                  {factorsExpanded ? "Hide factors" : "Show factors"}
+                </Button>
+                <Collapse in={factorsExpanded} sx={{ mt: 1.5 }}>
+                  <Stack spacing={1.2}>
+                    <Stack direction="row" alignItems="center" gap={1}>
+                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
+                        Impact
+                      </Typography>
+                      <Typography variant="body2">
+                        {typeof riskFactors?.impact?.value === "number"
+                          ? riskFactors.impact.value.toFixed(2)
+                          : "—"}
+                        {typeof riskFactors?.impact?.cvss_score === "number"
+                          ? ` · CVSS ${riskFactors.impact.cvss_score.toFixed(1)}`
+                          : ""}
+                        {riskFactors?.impact?.severity ? ` · ${riskFactors.impact.severity}` : ""}
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" gap={1}>
+                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
+                        Likelihood
+                      </Typography>
+                      <Typography variant="body2">
+                        {typeof riskFactors?.likelihood?.value === "number"
+                          ? riskFactors.likelihood.value.toFixed(2)
+                          : "—"}
+                        {typeof riskFactors?.likelihood?.epss_score === "number"
+                          ? ` · EPSS ${(riskFactors.likelihood.epss_score * 100).toFixed(1)}%`
+                          : ""}
+                        {riskFactors?.likelihood?.kev ? " · KEV" : ""}
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" gap={1}>
+                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
+                        Asset multiplier
+                      </Typography>
+                      <Typography variant="body2">
+                        {typeof riskFactors?.asset?.multiplier === "number"
+                          ? riskFactors.asset.multiplier.toFixed(2)
+                          : "—"}
+                        {riskFactors?.asset?.criticality
+                          ? ` · ${riskFactors.asset.criticality}`
+                          : ""}
+                        {riskFactors?.asset?.environment
+                          ? ` · ${riskFactors.asset.environment}`
+                          : ""}
+                        {riskFactors?.asset?.internet_exposed ? " · Internet exposed" : ""}
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" gap={1}>
+                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
+                        Freshness
+                      </Typography>
+                      <Typography variant="body2">
+                        {riskFactors?.freshness?.enabled
+                          ? `Age ${riskFactors.freshness.age_days?.toFixed(0) ?? "—"}d · x${riskFactors.freshness.multiplier?.toFixed(2) ?? "—"}`
+                          : "Disabled"}
+                      </Typography>
+                    </Stack>
+                    {(cvssScore !== null || epssScore !== null || kevFlag) && (
+                      <Stack direction="row" alignItems="center" gap={1}>
+                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
+                          Intel summary
+                        </Typography>
+                        <Typography variant="body2">
+                          {cvssScore !== null
+                            ? `CVSS ${cvssScore.toFixed(1)}${cvssVersion ? ` (v${cvssVersion})` : ""}`
+                            : "CVSS —"}
+                          {epssScore !== null
+                            ? ` · EPSS ${(epssScore * 100).toFixed(1)}%`
+                            : ""}
+                          {kevFlag ? " · KEV" : ""}
+                        </Typography>
+                      </Stack>
+                    )}
+                  </Stack>
+                </Collapse>
+              </Box>
             )}
           </Stack>
         </Section>
