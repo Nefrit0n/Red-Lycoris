@@ -99,6 +99,14 @@ const toStringArray = (value: unknown): string[] => {
   return [];
 };
 
+const slaClosedStatuses = new Set([
+  "mitigated",
+  "false_positive",
+  "out_of_scope",
+  "risk_accepted",
+  "duplicate",
+]);
+
 const uniq = (values: string[]) => Array.from(new Set(values));
 
 export const FindingDetailContent = ({
@@ -238,6 +246,37 @@ export const FindingDetailContent = ({
   if (error || !data) {
     return <Alert severity="error">{error || "Данные не найдены"}</Alert>;
   }
+
+  const slaDueAt = data.slaDueAt ? new Date(data.slaDueAt) : null;
+  const slaDaysRemaining =
+    typeof data.slaDaysRemaining === "number"
+      ? data.slaDaysRemaining
+      : slaDueAt
+        ? Math.ceil((slaDueAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : null;
+  const slaClosed = slaClosedStatuses.has(data.status);
+  const slaBreached = Boolean(data.slaBreached) && !slaClosed;
+  const slaStatusLabel = !slaDueAt
+    ? "Not set"
+    : slaBreached || (typeof slaDaysRemaining === "number" && slaDaysRemaining < 0)
+      ? "BREACHED"
+      : slaDaysRemaining === 0
+        ? "Due today"
+        : `${slaDaysRemaining}d left`;
+  const slaStatusColor = !slaDueAt
+    ? "text.secondary"
+    : slaBreached || (typeof slaDaysRemaining === "number" && slaDaysRemaining < 0)
+      ? "#ef5350"
+      : slaDaysRemaining === 0
+        ? "#ffb74d"
+        : "#81c784";
+  const slaStatusBg = !slaDueAt
+    ? "transparent"
+    : slaBreached || (typeof slaDaysRemaining === "number" && slaDaysRemaining < 0)
+      ? "rgba(244, 67, 54, 0.12)"
+      : slaDaysRemaining === 0
+        ? "rgba(255, 152, 0, 0.15)"
+        : "rgba(76, 175, 80, 0.12)";
 
   // Build chips for header
   const chips = [
@@ -455,6 +494,58 @@ export const FindingDetailContent = ({
                 </Tooltip>
               </Stack>
             )}
+          </Stack>
+        </Section>
+
+        <Section title="SLA" dense={compact}>
+          <Stack spacing={1.2}>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                Status
+              </Typography>
+              <Box
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  px: 1,
+                  py: 0.4,
+                  borderRadius: "12px",
+                  fontWeight: 600,
+                  fontSize: "0.75rem",
+                  color: slaStatusColor,
+                  bgcolor: slaStatusBg,
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  textTransform: "uppercase",
+                }}
+              >
+                {slaStatusLabel}
+              </Box>
+            </Stack>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                Due at
+              </Typography>
+              <Typography variant="body2">
+                {slaDueAt ? formatDateRu(data.slaDueAt) : "—"}
+              </Typography>
+            </Stack>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                Days remaining
+              </Typography>
+              <Typography variant="body2">
+                {typeof slaDaysRemaining === "number" ? slaDaysRemaining : "—"}
+              </Typography>
+            </Stack>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
+                Source
+              </Typography>
+              <Typography variant="body2">
+                {data.slaSource ?? "default_matrix"}
+                {data.slaProfile ? ` (${data.slaProfile})` : ""}
+              </Typography>
+            </Stack>
           </Stack>
         </Section>
 
