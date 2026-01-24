@@ -12,6 +12,7 @@ import (
 
 	"lotus-warden/backend/internal/config"
 	"lotus-warden/backend/internal/events"
+	"lotus-warden/backend/internal/metrics"
 	"lotus-warden/backend/internal/objectstore"
 	"lotus-warden/backend/internal/server"
 	"lotus-warden/backend/internal/storage"
@@ -45,7 +46,7 @@ func main() {
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	go runSLABreachUpdater(stopCtx, db, parseDuration(cfg.SLABreachCheckInterval, 15*time.Minute))
+	go runSLABreachUpdater(stopCtx, db, parseDuration(cfg.SLABreachInterval, 15*time.Minute))
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
 
@@ -83,9 +84,15 @@ func runSLABreachUpdater(ctx context.Context, db *sql.DB, interval time.Duration
 	defer ticker.Stop()
 
 	for {
-		now := time.Now().UTC()
-		if _, err := storage.MarkSLABreaches(ctx, db, now); err != nil {
+		now := time.Now()
+		updated, err := storage.MarkSLABreaches(ctx, db, now)
+		if err != nil {
 			log.Printf("sla breach update failed: %v", err)
+		} else {
+			metrics.RecordSLABreachUpdate(updated, now)
+			if updated > 0 {
+				log.Printf("sla breach updater marked %d findings", updated)
+			}
 		}
 
 		select {
