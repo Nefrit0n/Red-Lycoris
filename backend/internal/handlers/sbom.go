@@ -117,11 +117,21 @@ func (h *SbomHandler) Upload(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to save sbom"})
 	}
 
+	if err := storage.UpdateSbomIndexStatus(c.Context(), h.db, sbom.ID, "queued", nil, nil, 0, 0); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to queue sbom indexing"})
+	}
+
 	if h.publisher != nil {
 		_ = h.publisher.PublishJSON(c.Context(), events.SbomIndexRequestedSubject, map[string]string{
-			"sbom_id": sbom.ID.String(),
+			"sbom_id":    sbom.ID.String(),
+			"product_id": sbom.ProductID.String(),
+			"object_key": sbom.ObjectKey,
+			"format":     sbom.Format,
+			"sha256":     sbom.SHA256,
 		})
 	}
+
+	fmt.Printf("sbom index queued sbom_id=%s product_id=%s\n", sbom.ID.String(), sbom.ProductID.String())
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
@@ -132,7 +142,7 @@ func (h *SbomHandler) Upload(c *fiber.Ctx) error {
 			"originalFilename": sbom.OriginalFilename,
 			"sizeBytes":        sbom.SizeBytes,
 			"createdAt":        sbom.CreatedAt.Format(time.RFC3339),
-			"indexStatus":      "pending",
+			"indexStatus":      "queued",
 		},
 	})
 }

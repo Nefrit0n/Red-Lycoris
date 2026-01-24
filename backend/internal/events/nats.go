@@ -16,8 +16,8 @@ const (
 	AnalysisJobsSubject = "analysis.jobs"
 
 	SbomStreamName            = "SBOM"
-	SbomSubject               = "sbom.*"
-	SbomIndexRequestedSubject = "sbom.index.requested"
+	SbomSubject               = "sbom.>"
+	SbomIndexRequestedSubject = "sbom.index.requested.v1"
 )
 
 type Publisher struct {

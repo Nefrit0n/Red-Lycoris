@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	sbomIndexStatusPending = "pending"
-	sbomIndexStatusIndexed = "indexed"
-	sbomIndexStatusFailed  = "failed"
+	sbomIndexStatusProcessing = "processing"
+	sbomIndexStatusDone       = "done"
+	sbomIndexStatusFailed     = "failed"
 )
 
 func IndexSbom(ctx context.Context, db *sql.DB, store objectstore.Store, sbomID uuid.UUID) error {
@@ -31,7 +31,7 @@ func IndexSbom(ctx context.Context, db *sql.DB, store objectstore.Store, sbomID 
 		return fmt.Errorf("sbom not found")
 	}
 
-	if err := storage.UpdateSbomIndexStatus(ctx, db, sbomID, sbomIndexStatusPending, nil, nil, 0, 0); err != nil {
+	if err := storage.UpdateSbomIndexStatus(ctx, db, sbomID, sbomIndexStatusProcessing, nil, nil, 0, 0); err != nil {
 		return err
 	}
 
@@ -51,7 +51,7 @@ func IndexSbom(ctx context.Context, db *sql.DB, store objectstore.Store, sbomID 
 	}
 
 	indexedAt := time.Now().UTC()
-	if err := storage.UpdateSbomIndexStatus(ctx, db, sbomID, sbomIndexStatusIndexed, &indexedAt, nil, componentCount, edgeCount); err != nil {
+	if err := storage.UpdateSbomIndexStatus(ctx, db, sbomID, sbomIndexStatusDone, &indexedAt, nil, componentCount, edgeCount); err != nil {
 		return err
 	}
 	return nil
@@ -88,8 +88,8 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 	if _, err = tx.ExecContext(ctx, `DELETE FROM sbom_edges WHERE sbom_id = $1`, sbomID); err != nil {
 		return 0, 0, fmt.Errorf("delete sbom edges failed: %w", err)
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM sbom_components WHERE sbom_id = $1`, sbomID); err != nil {
-		return 0, 0, fmt.Errorf("delete sbom components failed: %w", err)
+	if _, err = tx.ExecContext(ctx, `DELETE FROM sbom_component_occurrences WHERE sbom_id = $1`, sbomID); err != nil {
+		return 0, 0, fmt.Errorf("delete sbom component occurrences failed: %w", err)
 	}
 
 	componentIDs := make(map[string]uuid.UUID)
@@ -101,7 +101,9 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 		}
 		key := componentKey(comp)
 		if existing, ok := componentIndex[key]; ok {
-			componentIDs[comp.BomRef] = existing
+			if comp.BomRef != "" {
+				componentIDs[comp.BomRef] = existing
+			}
 			continue
 		}
 
@@ -128,7 +130,7 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 	}
 
 	componentCount := 0
-	inserted := map[uuid.UUID]bool{}
+	inserted := map[string]bool{}
 	for _, comp := range result.Components {
 		if strings.TrimSpace(comp.Name) == "" {
 			continue
@@ -137,21 +139,15 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 		if !ok {
 			continue
 		}
-		if inserted[id] {
+		versionValue := strings.TrimSpace(comp.Version)
+		occKey := fmt.Sprintf("%s|%s", id.String(), strings.ToLower(versionValue))
+		if inserted[occKey] {
 			continue
 		}
 
-		var propsJSON []byte
-		if comp.Props != nil {
-			propsJSON, _ = json.Marshal(comp.Props)
-		}
 		var licensesJSON []byte
 		if len(comp.Licenses) > 0 {
 			licensesJSON, _ = json.Marshal(comp.Licenses)
-		}
-
-		if err := updateComponentLicenses(ctx, tx, id, licensesJSON, comp.Supplier); err != nil {
-			return 0, 0, err
 		}
 
 		direct := false
@@ -159,15 +155,25 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 			direct = true
 		}
 
-		if _, err := tx.ExecContext(ctx, `INSERT INTO sbom_components (sbom_id, component_id, bom_ref, direct, properties)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (sbom_id, component_id)
-			DO UPDATE SET bom_ref = EXCLUDED.bom_ref, direct = EXCLUDED.direct, properties = EXCLUDED.properties`,
-			sbomID, id, nullableString(comp.BomRef), direct, nullableJSON(propsJSON)); err != nil {
-			return 0, 0, fmt.Errorf("insert sbom component failed: %w", err)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO sbom_component_occurrences (sbom_id, component_id, version, direct, bom_ref, supplier, licenses, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+			ON CONFLICT (sbom_id, component_id, version)
+			DO UPDATE SET direct = EXCLUDED.direct,
+			              bom_ref = EXCLUDED.bom_ref,
+			              supplier = COALESCE(EXCLUDED.supplier, sbom_component_occurrences.supplier),
+			              licenses = COALESCE(EXCLUDED.licenses, sbom_component_occurrences.licenses)`,
+			sbomID,
+			id,
+			versionValue,
+			direct,
+			nullableString(comp.BomRef),
+			nullableString(comp.Supplier),
+			nullableJSON(licensesJSON),
+		); err != nil {
+			return 0, 0, fmt.Errorf("insert sbom component occurrence failed: %w", err)
 		}
 		componentCount++
-		inserted[id] = true
+		inserted[occKey] = true
 	}
 
 	edgeCount := 0
@@ -195,66 +201,41 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 func ensureComponent(ctx context.Context, tx *sql.Tx, comp ComponentInput) (uuid.UUID, error) {
 	if comp.Purl != "" {
 		var id uuid.UUID
-		err := tx.QueryRowContext(ctx, `SELECT id FROM components WHERE purl = $1`, comp.Purl).Scan(&id)
-		if err == nil {
-			return id, nil
-		}
-		if err != nil && err != sql.ErrNoRows {
+		err := tx.QueryRowContext(ctx, `INSERT INTO sca_components (purl, ecosystem, name, created_at)
+			VALUES ($1, $2, $3, NOW())
+			ON CONFLICT (purl) WHERE purl IS NOT NULL
+			DO UPDATE SET name = EXCLUDED.name, ecosystem = EXCLUDED.ecosystem
+			RETURNING id`,
+			comp.Purl,
+			nullableString(comp.Ecosystem),
+			comp.Name,
+		).Scan(&id)
+		if err != nil {
 			return uuid.Nil, err
 		}
-		return insertComponent(ctx, tx, comp)
+		return id, nil
 	}
 
 	var id uuid.UUID
-	err := tx.QueryRowContext(ctx, `SELECT id FROM components WHERE ecosystem IS NOT DISTINCT FROM $1 AND name = $2 AND version IS NOT DISTINCT FROM $3`,
-		nullableString(comp.Ecosystem), comp.Name, nullableString(comp.Version),
-	).Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-	if err != nil && err != sql.ErrNoRows {
-		return uuid.Nil, err
-	}
-	return insertComponent(ctx, tx, comp)
-}
-
-func insertComponent(ctx context.Context, tx *sql.Tx, comp ComponentInput) (uuid.UUID, error) {
-	id := uuid.New()
-	var licensesJSON []byte
-	if len(comp.Licenses) > 0 {
-		licensesJSON, _ = json.Marshal(comp.Licenses)
-	}
-
-	_, err := tx.ExecContext(ctx, `INSERT INTO components (id, purl, name, version, ecosystem, supplier, licenses, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-		id,
-		nullableString(comp.Purl),
-		comp.Name,
-		nullableString(comp.Version),
+	err := tx.QueryRowContext(ctx, `INSERT INTO sca_components (purl, ecosystem, name, created_at)
+		VALUES (NULL, $1, $2, NOW())
+		ON CONFLICT (ecosystem, name) WHERE purl IS NULL
+		DO UPDATE SET name = EXCLUDED.name
+		RETURNING id`,
 		nullableString(comp.Ecosystem),
-		nullableString(comp.Supplier),
-		nullableJSON(licensesJSON),
-	)
+		comp.Name,
+	).Scan(&id)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	return id, nil
 }
 
-func updateComponentLicenses(ctx context.Context, tx *sql.Tx, componentID uuid.UUID, licensesJSON []byte, supplier string) error {
-	_, err := tx.ExecContext(ctx, `UPDATE components SET licenses = COALESCE($2, licenses), supplier = COALESCE(NULLIF($3, ''), supplier)
-		WHERE id = $1`, componentID, nullableJSON(licensesJSON), supplier)
-	if err != nil {
-		return fmt.Errorf("update component metadata failed: %w", err)
-	}
-	return nil
-}
-
 func componentKey(comp ComponentInput) string {
 	if comp.Purl != "" {
 		return "purl:" + strings.ToLower(comp.Purl)
 	}
-	return fmt.Sprintf("eco:%s|%s|%s", strings.ToLower(comp.Ecosystem), strings.ToLower(comp.Name), strings.ToLower(comp.Version))
+	return fmt.Sprintf("eco:%s|%s", strings.ToLower(comp.Ecosystem), strings.ToLower(comp.Name))
 }
 
 func nullableString(value string) any {
