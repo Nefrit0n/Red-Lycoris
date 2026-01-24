@@ -5,6 +5,8 @@ import (
 	"database/sql"
 
 	"github.com/google/uuid"
+
+	"lotus-warden/backend/internal/models"
 )
 
 type BlockingFinding struct {
@@ -21,7 +23,7 @@ func ListBlockingFindingsByImportJob(ctx context.Context, db *sql.DB, importJobI
 		WHERE f.deleted_at IS NULL
 		  AND f.duplicate_id IS NULL
 		  AND f.import_job_id = $1
-		  AND f.status <> 'mitigated'
+		  AND f.status = ANY($3)
 		  AND CASE LOWER(f.severity)
 		        WHEN 'critical' THEN 4
 		        WHEN 'high' THEN 3
@@ -32,7 +34,7 @@ func ListBlockingFindingsByImportJob(ctx context.Context, db *sql.DB, importJobI
 		ORDER BY f.severity DESC, f.created_at ASC
 	`
 
-	rows, err := db.QueryContext(ctx, query, importJobID, minSeverityRank)
+	rows, err := db.QueryContext(ctx, query, importJobID, minSeverityRank, pqStringArray(models.FindingOpenStatuses))
 	if err != nil {
 		return nil, err
 	}
