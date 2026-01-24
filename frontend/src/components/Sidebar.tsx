@@ -30,11 +30,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrentUser, isAdminUser, logout } from "../api/auth";
 import { useThemeMode } from "../contexts/ThemeContext";
 
-type RecentEntry = {
-  path: string;
-  title: string;
-};
-
 type NavItem = {
   label: string;
   path: string;
@@ -42,52 +37,8 @@ type NavItem = {
 };
 
 const COLLAPSED_KEY = "lotus_warden_sidebar_collapsed";
-const RECENT_KEY = "lotus_warden_recent_pages";
-const MAX_RECENT = 10;
 const COLLAPSED_WIDTH = 72;
 const EXPANDED_WIDTH = 260;
-
-const readRecent = (): RecentEntry[] => {
-  const raw = localStorage.getItem(RECENT_KEY);
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw) as RecentEntry[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const writeRecent = (entries: RecentEntry[]) => {
-  localStorage.setItem(RECENT_KEY, JSON.stringify(entries));
-};
-
-const resolveTitleForPath = (path: string): string | null => {
-  if (path.startsWith("/dashboard")) {
-    return "Dashboard";
-  }
-  if (path.startsWith("/findings")) {
-    return "Находки";
-  }
-  if (path.startsWith("/products")) {
-    return "Продукты";
-  }
-  if (path.startsWith("/imports")) {
-    return "Импорты";
-  }
-  if (path.startsWith("/scans/upload")) {
-    return "Загрузить скан";
-  }
-  if (path.startsWith("/admin")) {
-    return "Админ";
-  }
-  if (path.startsWith("/analyze")) {
-    return "Анализ";
-  }
-  return null;
-};
 
 interface SidebarProps {
   onOpenCommandPalette?: () => void;
@@ -104,7 +55,6 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
     const raw = localStorage.getItem(COLLAPSED_KEY);
     return raw === "true";
   });
-  const [recentItems, setRecentItems] = useState<RecentEntry[]>(() => readRecent());
 
   const navigationItems = useMemo<NavItem[]>(
     () => {
@@ -131,20 +81,6 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
   useEffect(() => {
     localStorage.setItem(COLLAPSED_KEY, String(collapsed));
   }, [collapsed]);
-
-  useEffect(() => {
-    const title = resolveTitleForPath(location.pathname);
-    if (!title) {
-      return;
-    }
-
-    setRecentItems((prev) => {
-      const filtered = prev.filter((item) => item.path !== location.pathname);
-      const updated = [{ path: location.pathname, title }, ...filtered].slice(0, MAX_RECENT);
-      writeRecent(updated);
-      return updated;
-    });
-  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -258,28 +194,6 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
             })}
           </List>
         </Box>
-
-        {!collapsed && recentItems.length > 0 && (
-          <Box sx={{ px: 2, pt: 3 }}>
-            <Typography variant="overline" color="text.secondary">
-              Недавнее
-            </Typography>
-            <List disablePadding>
-              {recentItems.map((item) => (
-                <ListItemButton
-                  key={item.path}
-                  onClick={() => navigate(item.path)}
-                  sx={{
-                    my: 0.5,
-                    borderRadius: 1.5,
-                  }}
-                >
-                  <ListItemText primary={item.title} secondary={item.path} />
-                </ListItemButton>
-              ))}
-            </List>
-          </Box>
-        )}
       </Box>
 
       <Divider />
@@ -322,11 +236,7 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
                     primary="Поиск"
                     primaryTypographyProps={{ fontSize: "0.875rem" }}
                   />
-                  <Chip
-                    label="⌘K"
-                    size="small"
-                    sx={{ height: 20, fontSize: "0.65rem" }}
-                  />
+                  <Chip label="⌘K" size="small" sx={{ height: 20, fontSize: "0.65rem" }} />
                 </>
               )}
             </ListItemButton>
@@ -334,7 +244,10 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
         )}
 
         {/* Theme Toggle */}
-        <Tooltip title={collapsed ? (resolvedMode === "dark" ? "Светлая тема" : "Тёмная тема") : ""} placement="right">
+        <Tooltip
+          title={collapsed ? (resolvedMode === "dark" ? "Светлая тема" : "Тёмная тема") : ""}
+          placement="right"
+        >
           <ListItemButton
             onClick={toggleMode}
             sx={{
@@ -354,9 +267,7 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
               {resolvedMode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
             </ListItemIcon>
             {!collapsed && (
-              <ListItemText
-                primary={resolvedMode === "dark" ? "Светлая тема" : "Тёмная тема"}
-              />
+              <ListItemText primary={resolvedMode === "dark" ? "Светлая тема" : "Тёмная тема"} />
             )}
           </ListItemButton>
         </Tooltip>
