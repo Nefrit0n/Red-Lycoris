@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"net/http"
 
 	"lotus-warden/backend/internal/config"
 	"lotus-warden/backend/internal/events"
@@ -54,6 +55,18 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 			"sbom_index_duration_total_ms":    metrics.SbomIndexDurationTotalMs(),
 			"sbom_index_last_duration_ms":     metrics.SbomIndexLastDurationMs(),
 			"sbom_index_last_component_count": metrics.SbomIndexLastComponentCount(),
+		})
+	})
+
+	app.Get("/metrics/risk", func(c *fiber.Ctx) error {
+		lag, err := storage.CountFindingsMissingCurrentRiskModel(c.Context(), db)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to compute risk lag"})
+		}
+		return c.JSON(fiber.Map{
+			"risk_scheduler_enqueued_total": metrics.RiskSchedulerEnqueuedAll(),
+			"risk_compute_processed_total":  metrics.RiskComputeProcessedAll(),
+			"risk_model_lag_total":          lag,
 		})
 	})
 
@@ -119,7 +132,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured.Get("/products/:id", productsHandler.Get)
 	secured.Post("/products", middleware.AuthorizeRole("admin", "analyst"), productsHandler.Create)
 
-	assetContextHandler := handlers.NewAssetContextHandler(db)
+	assetContextHandler := handlers.NewAssetContextHandler(db, publisher)
 	secured.Get("/products/:id/asset-context", middleware.AuthorizeRole("admin", "analyst"), assetContextHandler.GetProductAssetContext)
 	secured.Put("/products/:id/asset-context", middleware.AuthorizeRole("admin", "analyst"), assetContextHandler.UpsertProductAssetContext)
 
@@ -148,6 +161,9 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	admin.Post("/policies/:id/versions", policiesHandler.AddVersion)
 	admin.Put("/policies/:id/assignments", policiesHandler.UpdateAssignments)
 	admin.Delete("/policies/:id", policiesHandler.Delete)
+
+	riskModelsHandler := handlers.NewRiskModelsHandler(db, publisher)
+	admin.Post("/risk-models/:id/activate", riskModelsHandler.Activate)
 
 	policyResultsHandler := handlers.NewPolicyResultsHandler(db)
 	secured.Get("/policy-results", policyResultsHandler.List)
