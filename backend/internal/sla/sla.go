@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"lotus-warden/backend/internal/config"
+	"lotus-warden/backend/internal/models"
 )
 
 type Matrix struct {
@@ -95,12 +96,7 @@ func IsBreached(dueAt *time.Time, status string, now time.Time) bool {
 }
 
 func isClosedStatus(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "mitigated", "false_positive", "out_of_scope", "risk_accepted", "duplicate":
-		return true
-	default:
-		return false
-	}
+	return models.IsClosedFindingStatus(status)
 }
 
 func SeverityRank(severity string) int {
