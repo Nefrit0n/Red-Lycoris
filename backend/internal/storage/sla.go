@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"time"
-)
 
-var slaOpenStatuses = []string{"new", "under_review", "confirmed"}
+	"lotus-warden/backend/internal/models"
+)
 
 // MarkSLABreaches marks findings as breached when due dates pass and status is still open.
 func MarkSLABreaches(ctx context.Context, db *sql.DB, now time.Time) (int64, error) {
@@ -21,7 +21,7 @@ func MarkSLABreaches(ctx context.Context, db *sql.DB, now time.Time) (int64, err
 		  AND deleted_at IS NULL
 		  AND status = ANY($2)
 	`
-	result, err := db.ExecContext(ctx, query, now, pqStringArray(slaOpenStatuses))
+	result, err := db.ExecContext(ctx, query, now, pqStringArray(models.FindingOpenStatuses))
 	if err != nil {
 		return 0, err
 	}
