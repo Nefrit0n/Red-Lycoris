@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +36,34 @@ const (
 	StatusMitigated     = "mitigated"
 	StatusDuplicate     = "duplicate"
 )
+
+var FindingOpenStatuses = []string{
+	StatusNew,
+	StatusUnderReview,
+	StatusConfirmed,
+}
+
+var FindingClosedStatuses = []string{
+	StatusMitigated,
+	StatusFalsePositive,
+	StatusOutOfScope,
+	StatusRiskAccepted,
+	StatusDuplicate,
+}
+
+func NormalizeFindingStatus(status string) string {
+	return strings.ToLower(strings.TrimSpace(status))
+}
+
+func IsClosedFindingStatus(status string) bool {
+	normalized := NormalizeFindingStatus(status)
+	for _, candidate := range FindingClosedStatuses {
+		if normalized == candidate {
+			return true
+		}
+	}
+	return false
+}
 
 type Finding struct {
 	ID             uuid.UUID       `db:"id"`
