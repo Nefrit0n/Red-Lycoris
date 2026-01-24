@@ -7,6 +7,7 @@
 | Сущность | Основная таблица | Связанные таблицы |
 | --- | --- | --- |
 | Asset / Product | `products` | `engagements`, `scan_results`, `findings`, `import_jobs`, `analysis_jobs` |
+| Asset Context | `product_asset_context` | `products` |
 | Scan Result | `scan_results` | `import_jobs`, `products`, `users` |
 | Import Job | `import_jobs` | `scan_results`, `findings`, `products`, `users` |
 | Finding | `findings` | `finding_comments`, `finding_events`, `finding_vuln_identifiers` |
@@ -30,6 +31,22 @@
 
 **Замечания:**
 - `asset_criticality` логически соответствует критичности продукта и может использовать те же значения, что и `findings.severity`.
+
+## Asset Context (`product_asset_context`)
+
+**Назначение:** контекст актива для risk‑скоринга (минимальные бизнес‑сигналы, 1:1 с продуктом).
+
+**Ключевые поля:**
+- `product_id` (UUID)
+- `tenant_id` (UUID, nullable)
+- `environment` (TEXT) — окружение (`prod`, `staging`, `dev`, `unknown`).
+- `internet_exposed` (BOOLEAN) — признак внешней доступности.
+- `data_classification` (TEXT) — классификация данных (`public`, `internal`, `confidential`, `restricted`, `unknown`).
+- `business_impact` (TEXT, nullable) — бизнес‑влияние (`low`, `medium`, `high`, `critical`).
+- `tags` (TEXT[], nullable) — набор фильтруемых тегов.
+- `metadata` (JSONB) — расширяемые данные без миграций.
+- `created_at` (TIMESTAMPTZ)
+- `updated_at` (TIMESTAMPTZ)
 
 ## Scan Result (`scan_results`)
 
