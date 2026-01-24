@@ -12,7 +12,7 @@ import (
 
 const (
 	AnalysisStreamName  = "ANALYSIS"
-	AnalysisSubject     = "analysis.*"
+	AnalysisSubject     = "analysis.>"
 	AnalysisJobsSubject = "analysis.jobs"
 
 	SbomStreamName            = "SBOM"
