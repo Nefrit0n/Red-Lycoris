@@ -194,20 +194,7 @@ func (h *SbomHandler) Download(c *fiber.Ctx) error {
 	}
 
 	item, err := storage.GetSbomByID(c.Context(), h.db, id)
-	if err != nil {
-		rid := getRequestID(c)
-		fmt.Printf("sbom get failed request_id=%s sbom_id=%s err=%v\n", rid, id.String(), err)
-
-		resp := fiber.Map{"success": false, "error": "failed to fetch sbom"}
-		if rid != "" {
-			resp["requestId"] = rid
-		}
-		if debugErrorsEnabled() {
-			resp["details"] = err.Error()
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(resp)
-	}
-	if item == nil {
+	if err != nil || item == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "error": "sbom not found"})
 	}
 
@@ -220,14 +207,22 @@ func (h *SbomHandler) Download(c *fiber.Ctx) error {
 	filename := sanitizeFilename(item.OriginalFilename)
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 
-	// Prefer stored contentType in metadata (if present), else guess from filename/format.
 	if ct := contentTypeFromMetadata(item.Metadata); ct != "" {
 		c.Set("Content-Type", ct)
 	} else {
 		c.Type(contentTypeForSbomGuess(filename, item.Format))
 	}
 
-	return c.SendStream(object)
+	// (не обязательно, но полезно)
+	if item.SizeBytes > 0 && item.SizeBytes < (1<<31) {
+		c.Response().Header.SetContentLength(int(item.SizeBytes))
+	}
+
+	// ВАЖНО: io.Copy блокирует → defer Close() выполнится ПОСЛЕ передачи
+	if _, err := io.Copy(c.Response().BodyWriter(), object); err != nil {
+		return err
+	}
+	return nil
 }
 
 func detectSbomFormat(filename string, payload []byte) (string, error) {
