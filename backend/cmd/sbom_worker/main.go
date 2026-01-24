@@ -10,6 +10,7 @@ import (
 
 	"lotus-warden/backend/internal/config"
 	"lotus-warden/backend/internal/events"
+	"lotus-warden/backend/internal/metrics"
 	"lotus-warden/backend/internal/objectstore"
 	"lotus-warden/backend/internal/sbomindex"
 	"lotus-warden/backend/internal/storage"
@@ -21,7 +22,11 @@ import (
 const sbomConsumer = "sbom-worker"
 
 type sbomMessage struct {
-	SbomID string `json:"sbom_id"`
+	SbomID    string `json:"sbom_id"`
+	ProductID string `json:"product_id"`
+	ObjectKey string `json:"object_key"`
+	Format    string `json:"format"`
+	SHA256    string `json:"sha256"`
 }
 
 func main() {
@@ -74,14 +79,34 @@ func main() {
 func handleMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objectstore.Store) error {
 	var payload sbomMessage
 	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+		_ = msg.Ack()
 		return err
 	}
-	defer func() { _ = msg.Ack() }()
 
 	sbomID, err := uuid.Parse(payload.SbomID)
 	if err != nil {
+		_ = msg.Ack()
 		return err
 	}
 
-	return sbomindex.IndexSbom(ctx, db, store, sbomID)
+	start := time.Now()
+	log.Printf("sbom index processing sbom_id=%s product_id=%s", sbomID.String(), payload.ProductID)
+	err = sbomindex.IndexSbom(ctx, db, store, sbomID)
+	duration := time.Since(start)
+
+	sbom, sbomErr := storage.GetSbomByID(ctx, db, sbomID)
+	componentCount := 0
+	status := "unknown"
+	if sbomErr == nil && sbom != nil {
+		componentCount = sbom.ComponentCount
+		status = sbom.IndexStatus
+	}
+	if err != nil {
+		log.Printf("sbom index failed sbom_id=%s status=%s duration=%s err=%v", sbomID.String(), status, duration, err)
+	} else {
+		log.Printf("sbom index done sbom_id=%s status=%s components=%d duration=%s", sbomID.String(), status, componentCount, duration)
+	}
+	metrics.RecordSbomIndexResult(duration, componentCount, err)
+	_ = msg.Ack()
+	return err
 }

@@ -242,7 +242,7 @@ func GetLatestIndexedSbomByProduct(ctx context.Context, db *sql.DB, productID uu
 		`SELECT id, product_id, format, object_key, sha256, original_filename, size_bytes, metadata,
 		        index_status, indexed_at, index_error, component_count, edge_count, created_at
 		 FROM sboms
-		 WHERE product_id = $1 AND index_status = 'indexed'
+		 WHERE product_id = $1 AND index_status = 'done'
 		 ORDER BY indexed_at DESC NULLS LAST, created_at DESC
 		 LIMIT 1`,
 		productID,

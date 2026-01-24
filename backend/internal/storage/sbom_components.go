@@ -45,8 +45,8 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 	where, args := buildSbomComponentFilters(filters)
 
 	countQuery := fmt.Sprintf(`SELECT COUNT(*)
-		FROM sbom_components sc
-		JOIN components c ON c.id = sc.component_id
+		FROM sbom_component_occurrences sco
+		JOIN sca_components c ON c.id = sco.component_id
 		WHERE %s`, where)
 
 	var total int
@@ -57,11 +57,11 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 	argsWithLimit := append([]any{}, args...)
 	argsWithLimit = append(argsWithLimit, filters.Limit, filters.Offset)
 
-	listQuery := fmt.Sprintf(`SELECT c.id, c.purl, c.name, c.version, c.ecosystem, c.supplier, c.licenses, sc.direct
-		FROM sbom_components sc
-		JOIN components c ON c.id = sc.component_id
+	listQuery := fmt.Sprintf(`SELECT c.id, c.purl, c.name, NULLIF(sco.version, ''), c.ecosystem, sco.supplier, sco.licenses, sco.direct
+		FROM sbom_component_occurrences sco
+		JOIN sca_components c ON c.id = sco.component_id
 		WHERE %s
-		ORDER BY c.name, c.version
+		ORDER BY c.name, sco.version
 		LIMIT $%d OFFSET $%d`, where, len(argsWithLimit)-1, len(argsWithLimit))
 
 	rows, err := db.QueryContext(ctx, listQuery, argsWithLimit...)
@@ -100,11 +100,11 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 }
 
 func buildSbomComponentFilters(filters SbomComponentFilters) (string, []any) {
-	clauses := []string{"sc.sbom_id = $1"}
+	clauses := []string{"sco.sbom_id = $1"}
 	args := []any{filters.SbomID}
 
 	if filters.DirectOnly != nil && *filters.DirectOnly {
-		clauses = append(clauses, fmt.Sprintf("sc.direct = $%d", len(args)+1))
+		clauses = append(clauses, fmt.Sprintf("sco.direct = $%d", len(args)+1))
 		args = append(args, true)
 	}
 	if value := strings.TrimSpace(filters.Ecosystem); value != "" {
@@ -116,7 +116,7 @@ func buildSbomComponentFilters(filters SbomComponentFilters) (string, []any) {
 		args = append(args, "%"+value+"%")
 	}
 	if value := strings.TrimSpace(filters.License); value != "" {
-		clauses = append(clauses, fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(c.licenses, '[]'::jsonb)) AS lic WHERE lic ILIKE $%d)", len(args)+1))
+		clauses = append(clauses, fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(sco.licenses, '[]'::jsonb)) AS lic WHERE lic ILIKE $%d)", len(args)+1))
 		args = append(args, "%"+value+"%")
 	}
 
