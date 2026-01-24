@@ -119,6 +119,10 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured.Get("/products/:id", productsHandler.Get)
 	secured.Post("/products", middleware.AuthorizeRole("admin", "analyst"), productsHandler.Create)
 
+	assetContextHandler := handlers.NewAssetContextHandler(db)
+	secured.Get("/products/:id/asset-context", middleware.AuthorizeRole("admin", "analyst"), assetContextHandler.GetProductAssetContext)
+	secured.Put("/products/:id/asset-context", middleware.AuthorizeRole("admin", "analyst"), assetContextHandler.UpsertProductAssetContext)
+
 	sbomHandler := handlers.NewSbomHandler(db, store, publisher)
 	secured.Post("/sbom/upload", middleware.AuthorizeRole("analyst", "admin"), sbomHandler.Upload)
 	secured.Get("/sbom", sbomHandler.List)
