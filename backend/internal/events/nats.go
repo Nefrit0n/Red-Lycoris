@@ -80,6 +80,41 @@ func NewPublisher(url string) (*Publisher, error) {
 	return &Publisher{nc: nc, js: js}, nil
 }
 
+func ensureConsumerForSubject(js nats.JetStreamContext, stream string, durable string, filterSubject string) error {
+	ci, err := js.ConsumerInfo(stream, durable)
+	if err != nil {
+		if err == nats.ErrConsumerNotFound {
+			_, err := js.AddConsumer(stream, &nats.ConsumerConfig{
+				Durable:       durable,
+				AckPolicy:     nats.AckExplicitPolicy,
+				DeliverPolicy: nats.DeliverAllPolicy,
+				FilterSubject: filterSubject,
+				AckWait:       60 * time.Second,
+				MaxAckPending: 2048,
+			})
+			return err
+		}
+		return err
+	}
+
+	if ci.Config.FilterSubject != filterSubject {
+		if err := js.DeleteConsumer(stream, durable); err != nil {
+			return fmt.Errorf("delete consumer %s/%s failed: %w", stream, durable, err)
+		}
+		_, err := js.AddConsumer(stream, &nats.ConsumerConfig{
+			Durable:       durable,
+			AckPolicy:     nats.AckExplicitPolicy,
+			DeliverPolicy: nats.DeliverAllPolicy,
+			FilterSubject: filterSubject,
+			AckWait:       60 * time.Second,
+			MaxAckPending: 2048,
+		})
+		return err
+	}
+
+	return nil
+}
+
 func ensureStream(js nats.JetStreamContext, desired *nats.StreamConfig) error {
 	info, err := js.StreamInfo(desired.Name)
 	if err != nil {
