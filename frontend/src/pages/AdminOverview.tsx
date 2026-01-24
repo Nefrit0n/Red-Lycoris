@@ -45,6 +45,17 @@ const sections = [
     ],
   },
   {
+    title: "Policies",
+    description:
+      "Управление политиками, версиями и назначениями.",
+    path: "/admin/policies",
+    items: [
+      "CRUD политик и статусы",
+      "версии правил (Rego)",
+      "назначения по продуктам/импортам",
+    ],
+  },
+  {
     title: "Webhooks / Integrations",
     description:
       "Исходящие уведомления и доставки.",

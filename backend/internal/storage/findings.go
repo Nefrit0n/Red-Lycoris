@@ -13,30 +13,31 @@ import (
 )
 
 type FindingListItem struct {
-	ID            uuid.UUID
-	TenantID      uuid.NullUUID
-	Title         string
-	Severity      string
-	Status        string
-	Category      string
-	ProductID     uuid.NullUUID
-	ProductName   sql.NullString
-	AssigneeID    uuid.NullUUID
-	AssigneeName  sql.NullString
-	ImportJobID   uuid.NullUUID
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	FirstSeenAt   sql.NullTime
-	LastSeenAt    sql.NullTime
-	RepeatCount   int
-	DuplicateID   uuid.NullUUID
-	SLADueAt      sql.NullTime
-	SLABreached   sql.NullBool
-	SLABreachedAt sql.NullTime
-	SLAProfile    sql.NullString
-	SLASource     sql.NullString
-	Scanner       sql.NullString
-	SourceType    sql.NullString
+	ID             uuid.UUID
+	TenantID       uuid.NullUUID
+	Title          string
+	Severity       string
+	Status         string
+	Category       string
+	ProductID      uuid.NullUUID
+	ProductName    sql.NullString
+	AssigneeID     uuid.NullUUID
+	AssigneeName   sql.NullString
+	ImportJobID    uuid.NullUUID
+	PolicyDecision sql.NullString
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	FirstSeenAt    sql.NullTime
+	LastSeenAt     sql.NullTime
+	RepeatCount    int
+	DuplicateID    uuid.NullUUID
+	SLADueAt       sql.NullTime
+	SLABreached    sql.NullBool
+	SLABreachedAt  sql.NullTime
+	SLAProfile     sql.NullString
+	SLASource      sql.NullString
+	Scanner        sql.NullString
+	SourceType     sql.NullString
 }
 
 type FindingDetail struct {
@@ -81,6 +82,8 @@ type FindingFilters struct {
 	SourceType       string
 	ProductID        *uuid.UUID
 	ImportJobID      *uuid.UUID
+	PolicyID         *uuid.UUID
+	PolicyDecision   string
 	Query            string
 	DateFrom         *time.Time
 	DateTo           *time.Time
@@ -128,6 +131,22 @@ func buildFindingWhereClause(filters FindingFilters, startIndex int) (string, []
 	if filters.ImportJobID != nil {
 		args = append(args, *filters.ImportJobID)
 		whereClause += fmt.Sprintf(" AND f.import_job_id = $%d", startIndex+len(args))
+	}
+
+	if filters.PolicyID != nil {
+		args = append(args, *filters.PolicyID)
+		whereClause += fmt.Sprintf(
+			" AND EXISTS (SELECT 1 FROM policy_results pr WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $%d)",
+			startIndex+len(args),
+		)
+	}
+
+	if filters.PolicyDecision != "" {
+		args = append(args, filters.PolicyDecision)
+		whereClause += fmt.Sprintf(
+			" AND (SELECT pr.decision FROM policy_results pr WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id ORDER BY pr.evaluated_at DESC LIMIT 1) = $%d",
+			startIndex+len(args),
+		)
 	}
 
 	if filters.Query != "" {
@@ -220,6 +239,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			f.product_id, p.name,
 			f.assignee_id, u.username,
 			f.import_job_id,
+			pr.decision,
 			f.created_at, f.updated_at,
 			f.first_seen_at, f.last_seen_at, f.repeat_count,
 			f.duplicate_id,
@@ -230,6 +250,13 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		LEFT JOIN products p ON p.id = f.product_id
 		LEFT JOIN users u ON u.id = f.assignee_id
 		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
+		LEFT JOIN LATERAL (
+			SELECT pr.decision
+			FROM policy_results pr
+			WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
+			ORDER BY pr.evaluated_at DESC
+			LIMIT 1
+		) pr ON true
 		%s
 		ORDER BY %s %s, f.id %s
 		LIMIT $%d OFFSET $%d`,
@@ -262,6 +289,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.AssigneeID,
 			&item.AssigneeName,
 			&item.ImportJobID,
+			&item.PolicyDecision,
 			&item.CreatedAt,
 			&item.UpdatedAt,
 			&item.FirstSeenAt,

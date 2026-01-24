@@ -12,6 +12,7 @@ type FindingListItemDTO struct {
 	ScannerType      *string       `json:"scannerType,omitempty"`
 	SourceType       *string       `json:"sourceType,omitempty"`
 	Occurrence       *string       `json:"occurrenceStatus,omitempty"`
+	PolicyDecision   *string       `json:"policyDecision,omitempty"`
 	FirstSeenAt      *string       `json:"firstSeenAt,omitempty"`
 	LastSeenAt       *string       `json:"lastSeenAt,omitempty"`
 	RepeatCount      *int          `json:"repeatCount,omitempty"`
