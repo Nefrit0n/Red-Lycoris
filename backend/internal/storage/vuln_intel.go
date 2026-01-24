@@ -14,14 +14,14 @@ import (
 )
 
 const (
-	defaultRecentLimit          = 200
-	maxRecentLimit              = 1000
-	maxIdentifiersPerFinding    = 500
-	maxIdentifierLen            = 128
-	maxRefsPerDetail            = 200
-	maxRefURLLen                = 2048
-	maxLastErrorLen             = 2000
-	maxReferencesPayloadBytes   = 1 << 20 // 1MB safety cap
+	defaultRecentLimit        = 200
+	maxRecentLimit            = 1000
+	maxIdentifiersPerFinding  = 500
+	maxIdentifierLen          = 128
+	maxRefsPerDetail          = 200
+	maxRefURLLen              = 2048
+	maxLastErrorLen           = 2000
+	maxReferencesPayloadBytes = 1 << 20 // 1MB safety cap
 )
 
 type IntelSummary struct {
@@ -60,6 +60,7 @@ type VulnIntelRecord struct {
 	EPSSScore       *float64
 	EPSSPercentile  *float64
 	KEV             bool
+	FailCount       int
 	LastRefreshedAt *time.Time
 	NextRetryAt     *time.Time
 	LastError       *string
@@ -68,6 +69,7 @@ type VulnIntelRecord struct {
 type VulnIntelStatus struct {
 	LastRefreshedAt sql.NullTime
 	NextRetryAt     sql.NullTime
+	FailCount       int
 }
 
 // --- helpers
@@ -386,11 +388,11 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 
 func GetVulnIntelStatus(ctx context.Context, db *sql.DB, identifier string) (*VulnIntelStatus, error) {
 	query := `
-		SELECT last_refreshed_at, next_retry_at
+		SELECT last_refreshed_at, next_retry_at, fail_count
 		FROM vuln_intel
 		WHERE identifier = $1`
 	var status VulnIntelStatus
-	err := db.QueryRowContext(ctx, query, identifier).Scan(&status.LastRefreshedAt, &status.NextRetryAt)
+	err := db.QueryRowContext(ctx, query, identifier).Scan(&status.LastRefreshedAt, &status.NextRetryAt, &status.FailCount)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -435,11 +437,11 @@ func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) er
 		INSERT INTO vuln_intel (
 			identifier, source_version, nvd_payload, epss_payload, kev_payload, references_payload,
 			cvss_score, cvss_version, epss_score, epss_percentile, kev,
-			last_refreshed_at, next_retry_at, last_error, updated_at
+			fail_count, last_refreshed_at, next_retry_at, last_error, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11,
-			$12, $13, $14, NOW()
+			$12, $13, $14, $15, NOW()
 		)
 		ON CONFLICT (identifier, source_version)
 		DO UPDATE SET
@@ -452,6 +454,7 @@ func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) er
 			epss_score = EXCLUDED.epss_score,
 			epss_percentile = EXCLUDED.epss_percentile,
 			kev = EXCLUDED.kev,
+			fail_count = EXCLUDED.fail_count,
 			last_refreshed_at = EXCLUDED.last_refreshed_at,
 			next_retry_at = EXCLUDED.next_retry_at,
 			last_error = EXCLUDED.last_error,
@@ -469,6 +472,7 @@ func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) er
 		nullFloatPtr(record.EPSSScore),
 		nullFloatPtr(record.EPSSPercentile),
 		record.KEV,
+		record.FailCount,
 		nullTimePtr(record.LastRefreshedAt),
 		nullTimePtr(record.NextRetryAt),
 		anyStringPtr(lastErr),
@@ -476,17 +480,18 @@ func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) er
 	return err
 }
 
-func UpdateVulnIntelError(ctx context.Context, db *sql.DB, identifier string, sourceVersion string, lastError string, nextRetryAt time.Time) error {
+func UpdateVulnIntelError(ctx context.Context, db *sql.DB, identifier string, sourceVersion string, lastError string, nextRetryAt time.Time, failCount int) error {
 	lastError = truncateString(lastError, maxLastErrorLen)
 	query := `
-		INSERT INTO vuln_intel (identifier, source_version, last_error, next_retry_at, updated_at)
-		VALUES ($1, $2, $3, $4, NOW())
+		INSERT INTO vuln_intel (identifier, source_version, last_error, next_retry_at, fail_count, updated_at)
+		VALUES ($1, $2, $3, $4, $5, NOW())
 		ON CONFLICT (identifier, source_version)
 		DO UPDATE SET
 			last_error = EXCLUDED.last_error,
 			next_retry_at = EXCLUDED.next_retry_at,
+			fail_count = EXCLUDED.fail_count,
 			updated_at = NOW()`
-	_, err := db.ExecContext(ctx, query, identifier, sourceVersion, lastError, nextRetryAt)
+	_, err := db.ExecContext(ctx, query, identifier, sourceVersion, lastError, nextRetryAt, failCount)
 	return err
 }
 

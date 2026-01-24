@@ -76,10 +76,13 @@ func (s *Service) ShouldRefresh(status *storage.VulnIntelStatus, now time.Time) 
 	return true
 }
 
-func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIntelRecord, error) {
+func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIntelRecord, bool, error) {
 	record := storage.VulnIntelRecord{
 		Identifier:    identifier,
 		SourceVersion: "v1",
+	}
+	if !IsCVE(identifier) {
+		return record, true, nil
 	}
 
 	var references []storage.IntelReference
@@ -89,37 +92,35 @@ func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIn
 	var epssPercentile *float64
 	var kev bool
 
-	if IsCVE(identifier) {
-		nvdPayload, nvdRefs, score, version, err := s.nvd.fetch(ctx, identifier)
-		if err != nil {
-			return record, err
-		}
-		record.NVDPayload = nvdPayload
-		references = append(references, nvdRefs...)
-		cvssScore = score
-		cvssVersion = version
+	nvdPayload, nvdRefs, score, version, err := s.nvd.fetch(ctx, identifier)
+	if err != nil {
+		return record, false, err
+	}
+	record.NVDPayload = nvdPayload
+	references = append(references, nvdRefs...)
+	cvssScore = score
+	cvssVersion = version
 
-		epssPayload, epssScoreValue, epssPercentileValue, err := s.epss.fetch(ctx, identifier)
-		if err != nil {
-			return record, err
-		}
-		record.EPSSPayload = epssPayload
-		if epssScoreValue != nil {
-			epssScore = epssScoreValue
-		}
-		if epssPercentileValue != nil {
-			epssPercentile = epssPercentileValue
-		}
+	epssPayload, epssScoreValue, epssPercentileValue, err := s.epss.fetch(ctx, identifier)
+	if err != nil {
+		return record, false, err
+	}
+	record.EPSSPayload = epssPayload
+	if epssScoreValue != nil {
+		epssScore = epssScoreValue
+	}
+	if epssPercentileValue != nil {
+		epssPercentile = epssPercentileValue
+	}
 
-		kevPayload, kevRefs, kevFound, err := s.kev.fetch(ctx, identifier)
-		if err != nil {
-			return record, err
-		}
-		if kevFound {
-			kev = true
-			record.KEVPayload = kevPayload
-			references = append(references, kevRefs...)
-		}
+	kevPayload, kevRefs, kevFound, err := s.kev.fetch(ctx, identifier)
+	if err != nil {
+		return record, false, err
+	}
+	if kevFound {
+		kev = true
+		record.KEVPayload = kevPayload
+		references = append(references, kevRefs...)
 	}
 
 	record.References = dedupeReferences(references)
@@ -128,7 +129,7 @@ func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIn
 	record.EPSSScore = epssScore
 	record.EPSSPercentile = epssPercentile
 	record.KEV = kev
-	return record, nil
+	return record, false, nil
 }
 
 func dedupeReferences(refs []storage.IntelReference) []storage.IntelReference {
