@@ -29,6 +29,12 @@ type SbomComponentItem struct {
 	Supplier  sql.NullString
 	Licenses  json.RawMessage
 	Direct    bool
+
+	VulnTotal    int
+	VulnCritical int
+	VulnHigh     int
+	VulnMedium   int
+	VulnLow      int
 }
 
 func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFilters) ([]SbomComponentItem, int, error) {
@@ -57,12 +63,28 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 	argsWithLimit := append([]any{}, args...)
 	argsWithLimit = append(argsWithLimit, filters.Limit, filters.Offset)
 
-	listQuery := fmt.Sprintf(`SELECT c.id, c.purl, c.name, NULLIF(sco.version, ''), c.ecosystem, sco.supplier, sco.licenses, sco.direct
+	listQuery := fmt.Sprintf(`WITH vuln AS (
+		SELECT sco.component_id,
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE f.severity = 'critical') AS critical,
+			COUNT(*) FILTER (WHERE f.severity = 'high') AS high,
+			COUNT(*) FILTER (WHERE f.severity = 'medium') AS medium,
+			COUNT(*) FILTER (WHERE f.severity = 'low') AS low
 		FROM sbom_component_occurrences sco
-		JOIN sca_components c ON c.id = sco.component_id
-		WHERE %s
-		ORDER BY c.name, sco.version
-		LIMIT $%d OFFSET $%d`, where, len(argsWithLimit)-1, len(argsWithLimit))
+		JOIN sboms s ON s.id = sco.sbom_id
+		JOIN sca_findings sf ON sf.component_id = sco.component_id
+		JOIN findings f ON f.id = sf.finding_id AND f.product_id = s.product_id
+		WHERE sco.sbom_id = $1
+		GROUP BY sco.component_id
+	)
+	SELECT c.id, c.purl, c.name, NULLIF(sco.version, ''), c.ecosystem, sco.supplier, sco.licenses, sco.direct,
+		COALESCE(v.total, 0), COALESCE(v.critical, 0), COALESCE(v.high, 0), COALESCE(v.medium, 0), COALESCE(v.low, 0)
+	FROM sbom_component_occurrences sco
+	JOIN sca_components c ON c.id = sco.component_id
+	LEFT JOIN vuln v ON v.component_id = sco.component_id
+	WHERE %s
+	ORDER BY COALESCE(v.total, 0) DESC, c.name, sco.version
+	LIMIT $%d OFFSET $%d`, where, len(argsWithLimit)-1, len(argsWithLimit))
 
 	rows, err := db.QueryContext(ctx, listQuery, argsWithLimit...)
 	if err != nil {
@@ -83,6 +105,11 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 			&item.Supplier,
 			&licenses,
 			&item.Direct,
+			&item.VulnTotal,
+			&item.VulnCritical,
+			&item.VulnHigh,
+			&item.VulnMedium,
+			&item.VulnLow,
 		); err != nil {
 			return nil, 0, fmt.Errorf("sbom components scan failed: %w", err)
 		}
