@@ -3,26 +3,32 @@ package v1
 import "encoding/json"
 
 type FindingListItemDTO struct {
-	ID           string        `json:"id"`
-	TenantID     *string       `json:"tenantId,omitempty"`
-	Title        string        `json:"title"`
-	Severity     string        `json:"severity"`
-	Status       string        `json:"status"`
-	Category     string        `json:"category"`
-	ScannerType  *string       `json:"scannerType,omitempty"`
-	SourceType   *string       `json:"sourceType,omitempty"`
-	Occurrence   *string       `json:"occurrenceStatus,omitempty"`
-	FirstSeenAt  *string       `json:"firstSeenAt,omitempty"`
-	LastSeenAt   *string       `json:"lastSeenAt,omitempty"`
-	RepeatCount  *int          `json:"repeatCount,omitempty"`
-	ProductID    *string       `json:"productId,omitempty"`
-	ProductName  *string       `json:"productName,omitempty"`
-	AssigneeID   *string       `json:"assigneeId,omitempty"`
-	Owner        *Owner        `json:"owner,omitempty"`
-	ImportJobID  *string       `json:"importJobId,omitempty"`
-	CreatedAt    string        `json:"createdAt"`
-	UpdatedAt    string        `json:"updatedAt"`
-	IntelSummary *IntelSummary `json:"intel_summary,omitempty"`
+	ID               string        `json:"id"`
+	TenantID         *string       `json:"tenantId,omitempty"`
+	Title            string        `json:"title"`
+	Severity         string        `json:"severity"`
+	Status           string        `json:"status"`
+	Category         string        `json:"category"`
+	ScannerType      *string       `json:"scannerType,omitempty"`
+	SourceType       *string       `json:"sourceType,omitempty"`
+	Occurrence       *string       `json:"occurrenceStatus,omitempty"`
+	FirstSeenAt      *string       `json:"firstSeenAt,omitempty"`
+	LastSeenAt       *string       `json:"lastSeenAt,omitempty"`
+	RepeatCount      *int          `json:"repeatCount,omitempty"`
+	SLADueAt         *string       `json:"slaDueAt,omitempty"`
+	SLABreached      *bool         `json:"slaBreached,omitempty"`
+	SLABreachedAt    *string       `json:"slaBreachedAt,omitempty"`
+	SLAProfile       *string       `json:"slaProfile,omitempty"`
+	SLASource        *string       `json:"slaSource,omitempty"`
+	SLADaysRemaining *int          `json:"slaDaysRemaining,omitempty"`
+	ProductID        *string       `json:"productId,omitempty"`
+	ProductName      *string       `json:"productName,omitempty"`
+	AssigneeID       *string       `json:"assigneeId,omitempty"`
+	Owner            *Owner        `json:"owner,omitempty"`
+	ImportJobID      *string       `json:"importJobId,omitempty"`
+	CreatedAt        string        `json:"createdAt"`
+	UpdatedAt        string        `json:"updatedAt"`
+	IntelSummary     *IntelSummary `json:"intel_summary,omitempty"`
 }
 
 type FindingDetailsSAST struct {

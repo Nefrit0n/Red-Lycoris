@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	v1dto "lotus-warden/backend/internal/dto/v1"
 	v1mapper "lotus-warden/backend/internal/mapper/v1"
 	"lotus-warden/backend/internal/middleware"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/policies"
+	"lotus-warden/backend/internal/sla"
 	"lotus-warden/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
@@ -23,6 +25,7 @@ type FindingsHandler struct {
 	db           *sql.DB
 	validator    *validator.Validate
 	policyEngine policies.Evaluator
+	slaMatrix    sla.Matrix
 }
 
 // Request types
@@ -87,8 +90,8 @@ type BulkPrevStatus struct {
 }
 
 // NewFindingsHandler creates a new FindingsHandler
-func NewFindingsHandler(db *sql.DB, policyEngine policies.Evaluator) *FindingsHandler {
-	return &FindingsHandler{db: db, validator: validator.New(), policyEngine: policyEngine}
+func NewFindingsHandler(db *sql.DB, policyEngine policies.Evaluator, slaMatrix sla.Matrix) *FindingsHandler {
+	return &FindingsHandler{db: db, validator: validator.New(), policyEngine: policyEngine, slaMatrix: slaMatrix}
 }
 
 // List returns a paginated list of findings
@@ -539,13 +542,50 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 		}
 	}
 
+	var slaDueAt *time.Time
+	var slaBreached *bool
+	var slaBreachedAt *time.Time
+	var slaProfile *string
+	var slaSource *string
+
+	if req.Severity != nil && *req.Severity != current.Severity {
+		baseTime := current.CreatedAt
+		if current.FirstSeenAt.Valid {
+			baseTime = current.FirstSeenAt.Time
+		}
+		if dueAt, ok := sla.DueAt(baseTime, *req.Severity, h.slaMatrix); ok {
+			var existingDueAt *time.Time
+			if current.SLADueAt.Valid {
+				value := current.SLADueAt.Time
+				existingDueAt = &value
+			}
+			if sla.ShouldUpdateDueAt(existingDueAt, dueAt) {
+				slaDueAt = &dueAt
+				profile := sla.DefaultProfile
+				source := sla.DefaultSource
+				slaProfile = &profile
+				slaSource = &source
+			}
+		}
+	}
+
+	if req.Status != nil && isSLAClosedStatus(*req.Status) {
+		breached := false
+		slaBreached = &breached
+	}
+
 	updated, err := storage.UpdateFinding(c.Context(), h.db, id, storage.UpdateFindingParams{
-		Title:       req.Title,
-		Description: req.Description,
-		Severity:    req.Severity,
-		Status:      req.Status,
-		ProductID:   productID,
-		AssigneeID:  assigneeID,
+		Title:         req.Title,
+		Description:   req.Description,
+		Severity:      req.Severity,
+		Status:        req.Status,
+		ProductID:     productID,
+		AssigneeID:    assigneeID,
+		SLADueAt:      slaDueAt,
+		SLABreached:   slaBreached,
+		SLABreachedAt: slaBreachedAt,
+		SLAProfile:    slaProfile,
+		SLASource:     slaSource,
 	})
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update finding"})
