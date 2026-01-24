@@ -48,7 +48,7 @@ type Config struct {
 	SLAHighDuration          string
 	SLAMediumDuration        string
 	SLALowDuration           string
-	SLABreachCheckInterval   string
+	SLABreachInterval        string
 }
 
 func Load() Config {
@@ -90,7 +90,7 @@ func Load() Config {
 		SLAHighDuration:          getEnv("SLA_HIGH_DURATION", "720h"),
 		SLAMediumDuration:        getEnv("SLA_MEDIUM_DURATION", "2160h"),
 		SLALowDuration:           getEnv("SLA_LOW_DURATION", "4320h"),
-		SLABreachCheckInterval:   getEnv("SLA_BREACH_CHECK_INTERVAL", "15m"),
+		SLABreachInterval:        getEnv("SLA_BREACH_INTERVAL", getEnv("SLA_BREACH_CHECK_INTERVAL", "15m")),
 	}
 }
 
