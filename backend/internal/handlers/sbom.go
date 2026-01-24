@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -48,19 +49,29 @@ func (h *SbomHandler) Upload(c *fiber.Ctx) error {
 	if fileHeader.Size <= 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "empty file"})
 	}
-	if fileHeader.Size > maxSbomBytes {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "error": fmt.Sprintf("file exceeds %d bytes", maxSbomBytes)})
+	if fileHeader.Size > int64(maxSbomBytes) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   fmt.Sprintf("file exceeds %d bytes", maxSbomBytes),
+		})
 	}
 
-	file, err := fileHeader.Open()
+	f, err := fileHeader.Open()
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "failed to read file"})
 	}
-	defer file.Close()
+	defer f.Close()
 
-	payload, err := io.ReadAll(file)
+	// Safety: even if fileHeader.Size is wrong, we hard-cap reads.
+	payload, err := io.ReadAll(io.LimitReader(f, int64(maxSbomBytes)+1))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "failed to read file"})
+	}
+	if int64(len(payload)) > int64(maxSbomBytes) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   fmt.Sprintf("file exceeds %d bytes", maxSbomBytes),
+		})
 	}
 
 	format, err := detectSbomFormat(fileHeader.Filename, payload)
@@ -71,12 +82,22 @@ func (h *SbomHandler) Upload(c *fiber.Ctx) error {
 	sum := sha256.Sum256(payload)
 	sha := fmt.Sprintf("%x", sum[:])
 
+	encoding := detectEncoding(fileHeader.Filename, payload)
+	contentType := contentTypeForSbomUpload(fileHeader.Filename, format, encoding)
+
 	objectKey := fmt.Sprintf("sboms/%s/%s/%s", productID.String(), uuid.NewString(), sanitizeFilename(fileHeader.Filename))
-	contentType := contentTypeForSbom(fileHeader.Filename, format)
 
 	if err := h.store.PutObject(c.Context(), objectKey, bytes.NewReader(payload), int64(len(payload)), contentType); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to store sbom"})
 	}
+
+	// Optional metadata (helps Download() set correct Content-Type later)
+	meta := fiber.Map{
+		"contentType": contentType,
+		"encoding":    encoding, // json|xml|text|unknown
+		"detected":    format,
+	}
+	metaBytes, _ := json.Marshal(meta)
 
 	sbom := &models.Sbom{
 		ProductID:        productID,
@@ -86,6 +107,10 @@ func (h *SbomHandler) Upload(c *fiber.Ctx) error {
 		OriginalFilename: fileHeader.Filename,
 		SizeBytes:        int64(len(payload)),
 	}
+	if len(metaBytes) > 0 {
+		sbom.Metadata = metaBytes
+	}
+
 	if err := storage.CreateSbom(c.Context(), h.db, sbom); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to save sbom"})
 	}
@@ -115,15 +140,25 @@ func (h *SbomHandler) List(c *fiber.Ctx) error {
 
 	items, err := storage.ListSbomsByProduct(c.Context(), h.db, productID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to list sboms"})
+		rid := getRequestID(c)
+		fmt.Printf("sbom list failed request_id=%s product_id=%s err=%v\n", rid, productID.String(), err)
+
+		resp := fiber.Map{"success": false, "error": "failed to list sboms"}
+		if rid != "" {
+			resp["requestId"] = rid
+		}
+		if debugErrorsEnabled() {
+			resp["details"] = err.Error()
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(resp)
 	}
 
 	response := make([]map[string]interface{}, 0, len(items))
 	for _, item := range items {
 		var createdAt *string
 		if item.CreatedAt.Valid {
-			value := item.CreatedAt.Time.Format(time.RFC3339)
-			createdAt = &value
+			v := item.CreatedAt.Time.Format(time.RFC3339)
+			createdAt = &v
 		}
 		response = append(response, map[string]interface{}{
 			"id":               item.ID.String(),
@@ -146,7 +181,17 @@ func (h *SbomHandler) Download(c *fiber.Ctx) error {
 
 	item, err := storage.GetSbomByID(c.Context(), h.db, id)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch sbom"})
+		rid := getRequestID(c)
+		fmt.Printf("sbom get failed request_id=%s sbom_id=%s err=%v\n", rid, id.String(), err)
+
+		resp := fiber.Map{"success": false, "error": "failed to fetch sbom"}
+		if rid != "" {
+			resp["requestId"] = rid
+		}
+		if debugErrorsEnabled() {
+			resp["details"] = err.Error()
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(resp)
 	}
 	if item == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "error": "sbom not found"})
@@ -158,21 +203,36 @@ func (h *SbomHandler) Download(c *fiber.Ctx) error {
 	}
 	defer object.Close()
 
-	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", item.OriginalFilename))
-	c.Type(contentTypeForSbom(item.OriginalFilename, item.Format))
+	filename := sanitizeFilename(item.OriginalFilename)
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+
+	// Prefer stored contentType in metadata (if present), else guess from filename/format.
+	if ct := contentTypeFromMetadata(item.Metadata); ct != "" {
+		c.Set("Content-Type", ct)
+	} else {
+		c.Type(contentTypeForSbomGuess(filename, item.Format))
+	}
 
 	return c.SendStream(object)
 }
 
 func detectSbomFormat(filename string, payload []byte) (string, error) {
 	lower := strings.ToLower(filename)
-	if strings.HasSuffix(lower, ".spdx.json") || strings.HasSuffix(lower, ".spdx-json") {
+
+	// SPDX
+	if strings.HasSuffix(lower, ".spdx.json") || strings.HasSuffix(lower, ".spdx-json") || strings.HasSuffix(lower, ".spdxjson") {
 		return models.SbomFormatSPDXJSON, nil
 	}
 	if strings.HasSuffix(lower, ".spdx") {
 		return models.SbomFormatSPDX, nil
 	}
-	if strings.Contains(lower, "cyclonedx") || strings.HasSuffix(lower, ".cdx") {
+
+	// CycloneDX conventional patterns (*.cdx.json, *.cdx.xml, *.cdx) :contentReference[oaicite:2]{index=2}
+	if strings.HasSuffix(lower, ".cdx.json") || strings.HasSuffix(lower, ".cdx.xml") || strings.HasSuffix(lower, ".cdx") {
+		return models.SbomFormatCycloneDX, nil
+	}
+	// Some tools use "cyclonedx" in name
+	if strings.Contains(lower, "cyclonedx") {
 		return models.SbomFormatCycloneDX, nil
 	}
 
@@ -181,6 +241,7 @@ func detectSbomFormat(filename string, payload []byte) (string, error) {
 		return "", fmt.Errorf("empty sbom payload")
 	}
 
+	// JSON heuristics
 	if json.Valid(payload) {
 		var meta map[string]interface{}
 		if err := json.Unmarshal(payload, &meta); err != nil {
@@ -194,6 +255,7 @@ func detectSbomFormat(filename string, payload []byte) (string, error) {
 		}
 	}
 
+	// XML / Tag-Value heuristics
 	lowerPayload := strings.ToLower(trimmed)
 	if strings.Contains(lowerPayload, "cyclonedx") || strings.Contains(lowerPayload, "<bom") {
 		return models.SbomFormatCycloneDX, nil
@@ -205,6 +267,27 @@ func detectSbomFormat(filename string, payload []byte) (string, error) {
 	return "", fmt.Errorf("unsupported sbom format")
 }
 
+func detectEncoding(filename string, payload []byte) string {
+	lower := strings.ToLower(filename)
+	if strings.HasSuffix(lower, ".json") || strings.HasSuffix(lower, ".cdx.json") || strings.HasSuffix(lower, ".spdx.json") {
+		return "json"
+	}
+	if strings.HasSuffix(lower, ".xml") || strings.HasSuffix(lower, ".cdx.xml") {
+		return "xml"
+	}
+	trim := strings.TrimSpace(string(payload))
+	if trim == "" {
+		return "unknown"
+	}
+	if json.Valid(payload) {
+		return "json"
+	}
+	if strings.HasPrefix(trim, "<") || strings.Contains(strings.ToLower(trim), "<bom") {
+		return "xml"
+	}
+	return "text"
+}
+
 func sanitizeFilename(name string) string {
 	base := filepath.Base(name)
 	if base == "." || base == string(filepath.Separator) || base == "" {
@@ -213,13 +296,26 @@ func sanitizeFilename(name string) string {
 	return base
 }
 
-func contentTypeForSbom(filename string, format string) string {
+func contentTypeForSbomUpload(filename string, format string, encoding string) string {
+	// Prefer real encoding when known
+	switch encoding {
+	case "json":
+		return "application/json"
+	case "xml":
+		return "application/xml"
+	case "text":
+		return "text/plain"
+	}
+
+	// fallback to extension sniff
 	ext := strings.ToLower(filepath.Ext(filename))
 	if ext != "" {
-		if value := mime.TypeByExtension(ext); value != "" {
-			return value
+		if v := mime.TypeByExtension(ext); v != "" {
+			return v
 		}
 	}
+
+	// last resort by format
 	switch format {
 	case models.SbomFormatCycloneDX:
 		return "application/xml"
@@ -230,4 +326,60 @@ func contentTypeForSbom(filename string, format string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+func contentTypeForSbomGuess(filename string, format string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext != "" {
+		if v := mime.TypeByExtension(ext); v != "" {
+			return v
+		}
+	}
+	switch format {
+	case models.SbomFormatCycloneDX:
+		// Could be JSON or XML; without metadata, default XML.
+		return "application/xml"
+	case models.SbomFormatSPDXJSON:
+		return "application/json"
+	case models.SbomFormatSPDX:
+		return "text/plain"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func contentTypeFromMetadata(meta json.RawMessage) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(meta, &m); err != nil {
+		return ""
+	}
+	if v, ok := m["contentType"].(string); ok && strings.TrimSpace(v) != "" {
+		return v
+	}
+	return ""
+}
+
+func getRequestID(c *fiber.Ctx) string {
+	if v := c.Locals("request_id"); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	if v := c.Locals("requestid"); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	if rid := strings.TrimSpace(c.Get("X-Request-ID")); rid != "" {
+		return rid
+	}
+	return ""
+}
+
+func debugErrorsEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("LW_DEBUG_ERRORS")))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
