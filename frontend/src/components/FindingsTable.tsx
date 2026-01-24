@@ -1,6 +1,7 @@
 import {
   Box,
   Checkbox,
+  Chip,
   IconButton,
   Skeleton,
   Stack,
@@ -106,6 +107,12 @@ const severityRowBgColors: Record<FindingSeverity, string | null> = {
   high: "rgba(244, 67, 54, 0.04)",
   medium: null,
   low: null,
+};
+
+const policyDecisionStyles: Record<string, { label: string; color: string; border: string }> = {
+  pass: { label: "PASS", color: "#81c784", border: "rgba(129, 199, 132, 0.45)" },
+  warn: { label: "WARN", color: "#ffb74d", border: "rgba(255, 183, 77, 0.45)" },
+  fail: { label: "FAIL", color: "#ef5350", border: "rgba(239, 83, 80, 0.5)" },
 };
 
 const statusLabels: Record<FindingStatus, string> = {
@@ -787,6 +794,11 @@ export default function FindingsTable({
               const isKev = Boolean(intelSummary?.kev);
               const isSca = f.category === "SCA";
               const slaDisplay = resolveSlaDisplay(f, now);
+              const policyDecisionKey = f.policyDecision ? f.policyDecision.toLowerCase() : null;
+              const policyDecisionMeta =
+                policyDecisionKey && policyDecisionStyles[policyDecisionKey]
+                  ? policyDecisionStyles[policyDecisionKey]
+                  : null;
 
               const handleRowClick = () => {
                 if (batchMode) onToggleOne(f.id);
@@ -1028,6 +1040,23 @@ export default function FindingsTable({
                               {getAgeLabel(ageDays)}
                             </Box>
                           </Tooltip>
+                        )}
+
+                        {policyDecisionMeta && (
+                          <Chip
+                            size="small"
+                            label={`Gate: ${policyDecisionMeta.label}`}
+                            variant="outlined"
+                            sx={{
+                              height: 22,
+                              fontSize: "0.65rem",
+                              fontWeight: 700,
+                              borderColor: policyDecisionMeta.border,
+                              color: policyDecisionMeta.color,
+                              bgcolor: "rgba(255, 255, 255, 0.04)",
+                              "& .MuiChip-label": { px: 0.75 },
+                            }}
+                          />
                         )}
                       </Stack>
 

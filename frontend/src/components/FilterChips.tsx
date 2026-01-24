@@ -1,5 +1,5 @@
 import { Chip, Stack } from "@mui/material";
-import { FindingOccurrenceStatus, FindingSeverity, FindingStatus } from "../types/findings";
+import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision } from "../types/findings";
 import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS } from "../utils/findingConstants";
 
 interface FilterChipsProps {
@@ -10,6 +10,7 @@ interface FilterChipsProps {
   filterStatus: FindingStatus | "";
   filterOccurrence: FindingOccurrenceStatus | "";
   filterScannerType: string;
+  filterPolicyDecision: PolicyDecision | "";
   dateFrom: string;
   dateTo: string;
   showRepeats: boolean;
@@ -19,6 +20,7 @@ interface FilterChipsProps {
   onStatusChange: (value: FindingStatus | "") => void;
   onOccurrenceChange: (value: FindingOccurrenceStatus | "") => void;
   onScannerTypeChange: (value: string) => void;
+  onPolicyDecisionChange: (value: PolicyDecision | "") => void;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
   onShowRepeatsChange: (value: boolean) => void;
@@ -35,6 +37,7 @@ export const FilterChips = ({
   filterStatus,
   filterOccurrence,
   filterScannerType,
+  filterPolicyDecision,
   dateFrom,
   dateTo,
   showRepeats,
@@ -44,6 +47,7 @@ export const FilterChips = ({
   onStatusChange,
   onOccurrenceChange,
   onScannerTypeChange,
+  onPolicyDecisionChange,
   onDateFromChange,
   onDateToChange,
   onShowRepeatsChange,
@@ -106,6 +110,18 @@ export const FilterChips = ({
         variant="outlined"
         label={`Сканер: ${filterScannerType}`}
         onDelete={() => onScannerTypeChange("")}
+      />
+    );
+  }
+
+  if (filterPolicyDecision) {
+    chips.push(
+      <Chip
+        key="policyDecision"
+        size="small"
+        variant="outlined"
+        label={`Policy: ${filterPolicyDecision.toUpperCase()}`}
+        onDelete={() => onPolicyDecisionChange("")}
       />
     );
   }

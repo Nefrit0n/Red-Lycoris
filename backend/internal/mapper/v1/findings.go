@@ -50,6 +50,11 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 		value := item.ImportJobID.UUID.String()
 		importJobID = &value
 	}
+	var policyDecision *string
+	if item.PolicyDecision.Valid {
+		value := item.PolicyDecision.String
+		policyDecision = &value
+	}
 	var duplicateID *uuid.UUID
 	if item.DuplicateID.Valid {
 		duplicateID = &item.DuplicateID.UUID
@@ -113,6 +118,7 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 		ScannerType:      scannerType,
 		SourceType:       sourceType,
 		Occurrence:       &occurrence,
+		PolicyDecision:   policyDecision,
 		FirstSeenAt:      firstSeenAt,
 		LastSeenAt:       lastSeenAt,
 		RepeatCount:      &repeatCount,
