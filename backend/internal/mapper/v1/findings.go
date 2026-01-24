@@ -106,6 +106,21 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 		value := item.SLASource.String
 		slaSource = &value
 	}
+	var riskScore *float64
+	if item.RiskScore.Valid {
+		value := item.RiskScore.Float64
+		riskScore = &value
+	}
+	var riskBand *string
+	if item.RiskBand.Valid {
+		value := item.RiskBand.String
+		riskBand = &value
+	}
+	var riskUpdatedAt *string
+	if item.RiskUpdatedAt.Valid {
+		value := item.RiskUpdatedAt.Time.Format(timeFormatRFC3339)
+		riskUpdatedAt = &value
+	}
 	repeatCount := item.RepeatCount
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
 	return v1dto.FindingListItemDTO{
@@ -135,6 +150,9 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 		ImportJobID:      importJobID,
 		CreatedAt:        item.CreatedAt.Format(timeFormatRFC3339),
 		UpdatedAt:        item.UpdatedAt.Format(timeFormatRFC3339),
+		RiskScore:        riskScore,
+		RiskBand:         riskBand,
+		RiskUpdatedAt:    riskUpdatedAt,
 	}
 }
 
@@ -231,6 +249,21 @@ func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
 		value := item.SLASource.String
 		slaSource = &value
 	}
+	var riskScore *float64
+	if item.RiskScore.Valid {
+		value := item.RiskScore.Float64
+		riskScore = &value
+	}
+	var riskBand *string
+	if item.RiskBand.Valid {
+		value := item.RiskBand.String
+		riskBand = &value
+	}
+	var riskUpdatedAt *string
+	if item.RiskUpdatedAt.Valid {
+		value := item.RiskUpdatedAt.Time.Format(timeFormatRFC3339)
+		riskUpdatedAt = &value
+	}
 	repeatCount := item.RepeatCount
 	var duplicateID *uuid.UUID
 	if item.DuplicateID.Valid {
@@ -261,6 +294,9 @@ func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
 			ImportJobID:      importJobID,
 			CreatedAt:        item.CreatedAt.Format(timeFormatRFC3339),
 			UpdatedAt:        item.UpdatedAt.Format(timeFormatRFC3339),
+			RiskScore:        riskScore,
+			RiskBand:         riskBand,
+			RiskUpdatedAt:    riskUpdatedAt,
 		},
 		Description:    description,
 		Fingerprint:    &item.Fingerprint,

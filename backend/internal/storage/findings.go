@@ -19,6 +19,9 @@ type FindingListItem struct {
 	Severity       string
 	Status         string
 	Category       string
+	RiskScore      sql.NullFloat64
+	RiskBand       sql.NullString
+	RiskUpdatedAt  sql.NullTime
 	ProductID      uuid.NullUUID
 	ProductName    sql.NullString
 	AssigneeID     uuid.NullUUID
@@ -49,6 +52,10 @@ type FindingDetail struct {
 	Severity       string
 	Status         string
 	Category       string
+	RiskScore      sql.NullFloat64
+	RiskBand       sql.NullString
+	RiskUpdatedAt  sql.NullTime
+	RiskFactors    []byte
 	ProductID      uuid.NullUUID
 	ProductName    sql.NullString
 	AssigneeID     uuid.NullUUID
@@ -236,6 +243,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		SELECT
 			f.id, f.tenant_id, f.title, f.severity, f.status,
 			f.category,
+			fr.risk_score, fr.risk_band, fr.computed_at,
 			f.product_id, p.name,
 			f.assignee_id, u.username,
 			f.import_job_id,
@@ -247,6 +255,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			sr.scanner,
 			f.source_type
 		FROM findings f
+		LEFT JOIN finding_risk fr ON fr.finding_id = f.id
 		LEFT JOIN products p ON p.id = f.product_id
 		LEFT JOIN users u ON u.id = f.assignee_id
 		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
@@ -284,6 +293,9 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.Severity,
 			&item.Status,
 			&item.Category,
+			&item.RiskScore,
+			&item.RiskBand,
+			&item.RiskUpdatedAt,
 			&item.ProductID,
 			&item.ProductName,
 			&item.AssigneeID,
@@ -345,6 +357,7 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, id uuid.UUID, filters 
 				lag(f.id)  OVER (ORDER BY %s) AS prev_id,
 				lead(f.id) OVER (ORDER BY %s) AS next_id
 			FROM findings f
+			LEFT JOIN finding_risk fr ON fr.finding_id = f.id
 			LEFT JOIN products p ON p.id = f.product_id
 			LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
 			%s
@@ -386,6 +399,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		`SELECT
 			f.id, f.tenant_id, f.title, f.description, f.fingerprint, f.severity, f.status,
 			f.category,
+			fr.risk_score, fr.risk_band, fr.computed_at, fr.factors,
 			f.product_id, p.name,
 			f.assignee_id, f.import_job_id,
 			f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id,
@@ -393,6 +407,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 			f.source_type, f.source_version, f.endpoint_method, f.endpoint_path, f.evidence, f.raw_data,
 			f.created_at, f.updated_at, f.deleted_at
 		 FROM findings f
+		 LEFT JOIN finding_risk fr ON fr.finding_id = f.id
 		 LEFT JOIN products p ON p.id = f.product_id
 		 WHERE f.id = $1 AND f.deleted_at IS NULL`,
 		id,
@@ -408,6 +423,10 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		&detail.Severity,
 		&detail.Status,
 		&detail.Category,
+		&detail.RiskScore,
+		&detail.RiskBand,
+		&detail.RiskUpdatedAt,
+		&detail.RiskFactors,
 		&detail.ProductID,
 		&detail.ProductName,
 		&detail.AssigneeID,
@@ -464,6 +483,8 @@ func resolveFindingSortField(sortField string) string {
 		return "f.updated_at"
 	case "sla_due_at", "slaDueAt":
 		return "CASE WHEN f.sla_due_at IS NULL THEN 1 ELSE 0 END, f.sla_due_at"
+	case "riskScore", "risk_score":
+		return "fr.risk_score"
 	default:
 		return "f.created_at"
 	}
