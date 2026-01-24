@@ -111,3 +111,36 @@ func TestRiskDeterministicHash(t *testing.T) {
 		t.Fatalf("expected deterministic score, got %.2f and %.2f", first.Score, second.Score)
 	}
 }
+
+func TestRiskHashChangesWithModelVersion(t *testing.T) {
+	base := 0.3
+	ctx := RiskContext{
+		Severity:         "medium",
+		Status:           "new",
+		Category:         "SAST",
+		Identifiers:      []string{"CVE-2024-1234"},
+		AssetCriticality: "high",
+		Environment:      "prod",
+		InternetExposed:  true,
+		EPSSScore:        &base,
+		KEV:              false,
+		FirstSeenAt:      time.Unix(1700000000, 0),
+		LastSeenAt:       time.Unix(1700000500, 0),
+	}
+
+	modelV1 := DefaultModelV1()
+	modelV2 := DefaultModelV1()
+	modelV2.Version = "v2"
+
+	first, err := NewCalculator(modelV1).Compute(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	second, err := NewCalculator(modelV2).Compute(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if first.InputHash == second.InputHash {
+		t.Fatalf("expected hash to change with model version")
+	}
+}
