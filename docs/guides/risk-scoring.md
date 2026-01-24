@@ -98,3 +98,11 @@ Risk recomputation is requested via a stable, intent-driven subject namespace:
 * `finding.risk.recompute.requested.v1`
 
 The subject is versioned and supports durable JetStream consumers with filtered subjects so multiple worker instances can share a single durable consumer for load balancing.
+
+## Export
+
+For compliance / reporting you can export findings (including risk fields and basic intel) as a file:
+
+* `GET /api/v1/findings/export?format=csv|json&limit=10000&offset=0` (supports the same filters as the findings list)
+
+`format=json` returns a standard JSON array; `format=csv` returns RFC4180-compatible CSV.
