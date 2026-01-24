@@ -10,6 +10,7 @@ export type FindingStatus =
   | "duplicate";
 export type FindingOccurrenceStatus = "NEW" | "REPEAT";
 export type FindingCategory = "SAST" | "SCA" | "SECRETS" | "CONFIG";
+export type PolicyDecision = "pass" | "fail" | "warn";
 
 export interface FindingOwnerDTO {
   id: string;
@@ -24,6 +25,7 @@ export interface FindingListItemDTO {
   assigneeId?: string | null;
   owner?: FindingOwnerDTO | null;
   importJobId?: string | null;
+  policyDecision?: PolicyDecision | null;
   scannerType?: string | null;
   sourceType?: string | null;
   severity: FindingSeverity;
@@ -58,6 +60,7 @@ export interface FetchFindingsParams {
   filterStatus?: FindingStatus | "";
   filterOccurrence?: FindingOccurrenceStatus | "";
   filterScannerType?: string;
+  filterPolicyDecision?: PolicyDecision | "";
   search?: string;
   dateFrom?: string;
   dateTo?: string;
