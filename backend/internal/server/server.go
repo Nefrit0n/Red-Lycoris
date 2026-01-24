@@ -108,6 +108,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 
 	findingsHandler := handlers.NewFindingsHandler(db, policyEngine, slaMatrix)
 	secured.Get("/findings", findingsHandler.List)
+	secured.Get("/findings/export", middleware.AuthorizeRole("analyst", "admin"), findingsHandler.Export)
 	secured.Get("/findings/:id", findingsHandler.Get)
 	secured.Get("/findings/:id/neighbors", findingsHandler.Neighbors)
 	secured.Get("/findings/:id/duplicates", findingsHandler.GetDuplicates)

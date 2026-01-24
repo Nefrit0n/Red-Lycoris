@@ -39,6 +39,7 @@ import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import { FindingListItemDTO } from "../types/findings";
+import { buildQueryString } from "../utils/urlHelpers";
 
 import { FindingDetailContent } from "./FindingDetail";
 
@@ -97,6 +98,43 @@ const FindingsList = () => {
     const qs = params.toString();
     return `${location.pathname}${qs ? `?${qs}` : ""}`;
   }, [location.pathname, location.search]);
+
+  const exportQuery = useMemo(() => {
+    // Build a query without pagination/selection so backend export can return all filtered rows.
+    const qs = buildQueryString({
+      product: filters.productId || undefined,
+      severity: filters.filterSeverity || undefined,
+      status: filters.filterStatus || undefined,
+      riskBand: filters.filterRiskBand || undefined,
+      occurrenceStatus: filters.filterOccurrence || undefined,
+      scannerType: filters.filterScannerType || undefined,
+      policyDecision: filters.filterPolicyDecision || undefined,
+      search: filters.searchInput?.trim() || undefined,
+      dateFrom: filters.dateFrom || undefined,
+      dateTo: filters.dateTo || undefined,
+      import_job_id: filters.importJobId || undefined,
+      canonicalOnly: !filters.showRepeats,
+      includeRepeats: filters.showRepeats,
+      sortField: filters.sortField,
+      sortOrder: filters.sortOrder,
+    });
+    return qs;
+  }, [
+    filters.productId,
+    filters.filterSeverity,
+    filters.filterStatus,
+    filters.filterRiskBand,
+    filters.filterOccurrence,
+    filters.filterScannerType,
+    filters.filterPolicyDecision,
+    filters.searchInput,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.importJobId,
+    filters.showRepeats,
+    filters.sortField,
+    filters.sortOrder,
+  ]);
 
   const handleSortChange = useCallback(
     (field: keyof FindingListItemDTO) => {
@@ -204,7 +242,17 @@ const FindingsList = () => {
           />
 
           {/* Export */}
-          <ExportMenu data={data} filename="findings" disabled={loading} />
+          <ExportMenu
+            data={data}
+            filename="findings"
+            disabled={loading}
+            serverExport={{
+              path: "/api/v1/findings/export",
+              query: exportQuery,
+              total,
+              maxRows: 20000,
+            }}
+          />
 
           <Tooltip title="Переключить режим отображения">
             <ToggleButtonGroup
