@@ -229,7 +229,7 @@ const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans
           </Box>
           <Box sx={{ flex: 1 }}>
             <Typography variant="body2" fontWeight={500}>
-            {scan.scanner}
+              {scan.scanner}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {new Date(scan.createdAt).toLocaleString("ru-RU")}
@@ -255,16 +255,29 @@ const formatBytes = (bytes: number): string => {
   return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
 };
 
-const formatIndexStatus = (status?: SbomIndexStatus | null): { label: string; color: "default" | "success" | "warning" | "error" } => {
-  if (!status) return { label: "нет данных", color: "default" };
+const formatIndexStatus = (
+  status?: SbomIndexStatus | null
+): { label: string; color: "default" | "success" | "warning" | "error" } => {
+  if (!status) return { label: "нет SBOM", color: "default" };
+
   switch (status.status) {
+    // backward compatibility (если где-то остались старые значения)
     case "indexed":
-      return { label: "indexed", color: "success" };
+    case "done":
+      return { label: "ready", color: "success" };
+
+    case "processing":
+      return { label: "indexing", color: "warning" };
+
+    case "queued":
+    case "pending":
+      return { label: "queued", color: "warning" };
+
     case "failed":
       return { label: "failed", color: "error" };
-    case "pending":
+
     default:
-      return { label: "pending", color: "warning" };
+      return { label: status.status || "unknown", color: "default" };
   }
 };
 
@@ -362,6 +375,20 @@ const ProductDetailPage = () => {
     if (tabIndex !== 1) return;
     fetchComponents();
   }, [fetchComponents, tabIndex]);
+
+  useEffect(() => {
+    if (tabIndex !== 1) return;
+    if (!indexStatus) return;
+
+    const s = indexStatus.status;
+    if (s !== "queued" && s !== "processing" && s !== "pending") return;
+
+    const interval = window.setInterval(() => {
+      if (!document.hidden) fetchComponents();
+    }, 2000);
+
+    return () => window.clearInterval(interval);
+  }, [tabIndex, indexStatus?.status, fetchComponents]);
 
   const handleSbomUpload = async (file: File) => {
     if (!id) return;
@@ -697,7 +724,7 @@ const ProductDetailPage = () => {
                     </Typography>
                   )}
                   <Typography variant="body2" color="text.secondary">
-                    Components: {indexStatus?.componentCount ?? 0}
+                    Components: {componentsTotal}
                   </Typography>
                 </Stack>
                 <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
