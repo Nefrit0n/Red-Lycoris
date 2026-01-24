@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -20,6 +21,11 @@ type SbomItem struct {
 	OriginalFilename string
 	SizeBytes        int64
 	Metadata         json.RawMessage
+	IndexStatus      string
+	IndexedAt        sql.NullTime
+	IndexError       sql.NullString
+	ComponentCount   int
+	EdgeCount        int
 	CreatedAt        sql.NullTime
 }
 
@@ -58,7 +64,8 @@ func CreateSbom(ctx context.Context, db *sql.DB, sbom *models.Sbom) error {
 func ListSbomsByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) ([]SbomItem, error) {
 	rows, err := db.QueryContext(
 		ctx,
-		`SELECT id, product_id, format, object_key, sha256, original_filename, size_bytes, metadata, created_at
+		`SELECT id, product_id, format, object_key, sha256, original_filename, size_bytes, metadata,
+		        index_status, indexed_at, index_error, component_count, edge_count, created_at
 		 FROM sboms
 		 WHERE product_id = $1
 		 ORDER BY created_at DESC`,
@@ -83,6 +90,11 @@ func ListSbomsByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) ([
 			&item.OriginalFilename,
 			&item.SizeBytes,
 			&meta, // <-- вместо &item.Metadata
+			&item.IndexStatus,
+			&item.IndexedAt,
+			&item.IndexError,
+			&item.ComponentCount,
+			&item.EdgeCount,
 			&item.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list sboms scan failed: %w", err)
@@ -107,7 +119,8 @@ func ListSbomsByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) ([
 func GetSbomByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*SbomItem, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, product_id, format, object_key, sha256, original_filename, size_bytes, metadata, created_at
+		`SELECT id, product_id, format, object_key, sha256, original_filename, size_bytes, metadata,
+		        index_status, indexed_at, index_error, component_count, edge_count, created_at
 		 FROM sboms
 		 WHERE id = $1`,
 		id,
@@ -125,6 +138,11 @@ func GetSbomByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*SbomItem, erro
 		&item.OriginalFilename,
 		&item.SizeBytes,
 		&meta,
+		&item.IndexStatus,
+		&item.IndexedAt,
+		&item.IndexError,
+		&item.ComponentCount,
+		&item.EdgeCount,
 		&item.CreatedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
@@ -137,6 +155,126 @@ func GetSbomByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*SbomItem, erro
 		item.Metadata = json.RawMessage(meta)
 	} else {
 		item.Metadata = nil
+	}
+
+	return &item, nil
+}
+
+type SbomIndexStatus struct {
+	SbomID         uuid.UUID
+	Status         string
+	IndexedAt      sql.NullTime
+	IndexError     sql.NullString
+	ComponentCount int
+	EdgeCount      int
+}
+
+func UpdateSbomIndexStatus(ctx context.Context, db *sql.DB, sbomID uuid.UUID, status string, indexedAt *time.Time, indexError *string, componentCount int, edgeCount int) error {
+	_, err := db.ExecContext(
+		ctx,
+		`UPDATE sboms
+		 SET index_status = $2,
+		     indexed_at = $3,
+		     index_error = $4,
+		     component_count = $5,
+		     edge_count = $6
+		 WHERE id = $1`,
+		sbomID,
+		status,
+		nullTimePtr(indexedAt),
+		nullStringPtr(indexError),
+		componentCount,
+		edgeCount,
+	)
+	if err != nil {
+		return fmt.Errorf("update sbom index status failed: %w", err)
+	}
+	return nil
+}
+
+func GetLatestSbomByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) (*SbomItem, error) {
+	row := db.QueryRowContext(
+		ctx,
+		`SELECT id, product_id, format, object_key, sha256, original_filename, size_bytes, metadata,
+		        index_status, indexed_at, index_error, component_count, edge_count, created_at
+		 FROM sboms
+		 WHERE product_id = $1
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		productID,
+	)
+
+	var item SbomItem
+	var meta []byte
+
+	if err := row.Scan(
+		&item.ID,
+		&item.ProductID,
+		&item.Format,
+		&item.ObjectKey,
+		&item.SHA256,
+		&item.OriginalFilename,
+		&item.SizeBytes,
+		&meta,
+		&item.IndexStatus,
+		&item.IndexedAt,
+		&item.IndexError,
+		&item.ComponentCount,
+		&item.EdgeCount,
+		&item.CreatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get latest sbom scan failed: %w", err)
+	}
+
+	if meta != nil {
+		item.Metadata = json.RawMessage(meta)
+	}
+
+	return &item, nil
+}
+
+func GetLatestIndexedSbomByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) (*SbomItem, error) {
+	row := db.QueryRowContext(
+		ctx,
+		`SELECT id, product_id, format, object_key, sha256, original_filename, size_bytes, metadata,
+		        index_status, indexed_at, index_error, component_count, edge_count, created_at
+		 FROM sboms
+		 WHERE product_id = $1 AND index_status = 'indexed'
+		 ORDER BY indexed_at DESC NULLS LAST, created_at DESC
+		 LIMIT 1`,
+		productID,
+	)
+
+	var item SbomItem
+	var meta []byte
+
+	if err := row.Scan(
+		&item.ID,
+		&item.ProductID,
+		&item.Format,
+		&item.ObjectKey,
+		&item.SHA256,
+		&item.OriginalFilename,
+		&item.SizeBytes,
+		&meta,
+		&item.IndexStatus,
+		&item.IndexedAt,
+		&item.IndexError,
+		&item.ComponentCount,
+		&item.EdgeCount,
+		&item.CreatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get latest indexed sbom scan failed: %w", err)
+	}
+
+	if meta != nil {
+		item.Metadata = json.RawMessage(meta)
 	}
 
 	return &item, nil
