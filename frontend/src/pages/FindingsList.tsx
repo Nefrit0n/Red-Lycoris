@@ -142,6 +142,7 @@ const FindingsList = () => {
       filters.filterStatus,
       filters.filterOccurrence,
       filters.filterScannerType,
+      filters.filterPolicyDecision,
       filters.dateFrom,
       filters.dateTo,
     ];
@@ -154,6 +155,7 @@ const FindingsList = () => {
     filters.filterStatus,
     filters.filterOccurrence,
     filters.filterScannerType,
+    filters.filterPolicyDecision,
     filters.dateFrom,
     filters.dateTo,
     filters.showRepeats,
@@ -168,6 +170,9 @@ const FindingsList = () => {
       if (viewFilters.filterStatus !== undefined) actions.setFilterStatus(viewFilters.filterStatus);
       if (viewFilters.filterOccurrence !== undefined) actions.setFilterOccurrence(viewFilters.filterOccurrence);
       if (viewFilters.filterScannerType !== undefined) actions.setFilterScannerType(viewFilters.filterScannerType);
+      if (viewFilters.filterPolicyDecision !== undefined) {
+        actions.setFilterPolicyDecision(viewFilters.filterPolicyDecision);
+      }
       if (viewFilters.dateFrom !== undefined) actions.setDateFrom(viewFilters.dateFrom);
       if (viewFilters.dateTo !== undefined) actions.setDateTo(viewFilters.dateTo);
       if (viewFilters.showRepeats !== undefined) actions.setShowRepeats(viewFilters.showRepeats);
@@ -241,6 +246,7 @@ const FindingsList = () => {
             filterStatus={filters.filterStatus}
             filterOccurrence={filters.filterOccurrence}
             filterScannerType={filters.filterScannerType}
+            filterPolicyDecision={filters.filterPolicyDecision}
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
             showRepeats={filters.showRepeats}
@@ -250,6 +256,7 @@ const FindingsList = () => {
             onStatusChange={actions.setFilterStatus}
             onOccurrenceChange={actions.setFilterOccurrence}
             onScannerTypeChange={actions.setFilterScannerType}
+            onPolicyDecisionChange={actions.setFilterPolicyDecision}
             onDateFromChange={actions.setDateFrom}
             onDateToChange={actions.setDateTo}
             onShowRepeatsChange={actions.setShowRepeats}
@@ -466,6 +473,7 @@ const FindingsList = () => {
             filterStatus={filters.filterStatus}
             filterOccurrence={filters.filterOccurrence}
             filterScannerType={filters.filterScannerType}
+            filterPolicyDecision={filters.filterPolicyDecision}
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
             showRepeats={filters.showRepeats}
@@ -475,6 +483,7 @@ const FindingsList = () => {
             onStatusChange={actions.setFilterStatus}
             onOccurrenceChange={actions.setFilterOccurrence}
             onScannerTypeChange={actions.setFilterScannerType}
+            onPolicyDecisionChange={actions.setFilterPolicyDecision}
             onDateFromChange={actions.setDateFrom}
             onDateToChange={actions.setDateTo}
             onShowRepeatsChange={actions.setShowRepeats}

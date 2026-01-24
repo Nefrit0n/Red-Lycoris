@@ -5,6 +5,7 @@ import {
   FindingOccurrenceStatus,
   FindingSeverity,
   FindingStatus,
+  PolicyDecision,
 } from '../types/findings';
 import { getUrlParam, getUrlParamNumber, buildQueryString } from '../utils/urlHelpers';
 
@@ -34,6 +35,7 @@ export interface FiltersState {
   filterStatus: FindingStatus | '';
   filterOccurrence: FindingOccurrenceStatus | '';
   filterScannerType: string;
+  filterPolicyDecision: PolicyDecision | '';
   dateFrom: string;
   dateTo: string;
   showRepeats: boolean;
@@ -56,6 +58,7 @@ export interface FiltersActions {
   setFilterStatus: (value: FindingStatus | '') => void;
   setFilterOccurrence: (value: FindingOccurrenceStatus | '') => void;
   setFilterScannerType: (value: string) => void;
+  setFilterPolicyDecision: (value: PolicyDecision | '') => void;
   setDateFrom: (value: string) => void;
   setDateTo: (value: string) => void;
   setShowRepeats: (value: boolean) => void;
@@ -75,6 +78,7 @@ const defaultFilters: FiltersState = {
   filterStatus: '',
   filterOccurrence: '',
   filterScannerType: '',
+  filterPolicyDecision: '',
   dateFrom: '',
   dateTo: '',
   showRepeats: false,
@@ -104,6 +108,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     left.filterStatus === right.filterStatus &&
     left.filterOccurrence === right.filterOccurrence &&
     left.filterScannerType === right.filterScannerType &&
+    left.filterPolicyDecision === right.filterPolicyDecision &&
     left.dateFrom === right.dateFrom &&
     left.dateTo === right.dateTo &&
     left.showRepeats === right.showRepeats &&
@@ -141,12 +146,14 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     const importJobId = getUrlParam(search, 'import_job_id');
     const searchInput = getUrlParam(search, 'search') || getUrlParam(search, 'q');
     const scannerType = getUrlParam(search, 'scannerType');
+    const policyDecision = getUrlParam(search, 'policyDecision');
     const dateFrom = getUrlParam(search, 'dateFrom');
     const dateTo = getUrlParam(search, 'dateTo');
 
     const severity = getUrlParam(search, 'severity');
     const status = getUrlParam(search, 'status');
     const occurrence = getUrlParam(search, 'occurrenceStatus');
+    const decisionOptions: PolicyDecision[] = ['pass', 'fail', 'warn'];
 
     const includeRepeats = getUrlParam(search, 'includeRepeats') === 'true';
     const canonicalOnly = getUrlParam(search, 'canonicalOnly');
@@ -185,6 +192,9 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
         ? (occurrence as FindingOccurrenceStatus)
         : '',
       filterScannerType: scannerType,
+      filterPolicyDecision: decisionOptions.includes(policyDecision as PolicyDecision)
+        ? (policyDecision as PolicyDecision)
+        : '',
       dateFrom,
       dateTo,
       showRepeats,
@@ -210,6 +220,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       status: filters.filterStatus,
       occurrenceStatus: filters.filterOccurrence,
       scannerType: filters.filterScannerType,
+      policyDecision: filters.filterPolicyDecision,
       search: filters.searchInput,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
@@ -257,6 +268,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     setFilterStatus: (filterStatus) => setFilters((prev) => ({ ...prev, filterStatus, page: 0 })),
     setFilterOccurrence: (filterOccurrence) => setFilters((prev) => ({ ...prev, filterOccurrence, page: 0 })),
     setFilterScannerType: (filterScannerType) => setFilters((prev) => ({ ...prev, filterScannerType, page: 0 })),
+    setFilterPolicyDecision: (filterPolicyDecision) => setFilters((prev) => ({ ...prev, filterPolicyDecision, page: 0 })),
     setDateFrom: (dateFrom) => setFilters((prev) => ({ ...prev, dateFrom, page: 0 })),
     setDateTo: (dateTo) => setFilters((prev) => ({ ...prev, dateTo, page: 0 })),
     setShowRepeats: (showRepeats) => setFilters((prev) => ({ ...prev, showRepeats, page: 0 })),

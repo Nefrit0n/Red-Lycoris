@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import { useMemo } from "react";
-import { FindingOccurrenceStatus, FindingSeverity, FindingStatus } from "../types/findings";
+import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision } from "../types/findings";
 import { ProductAutocomplete } from "./ProductAutocomplete";
 import { FilterChips } from "./FilterChips";
 import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS } from "../utils/findingConstants";
@@ -28,6 +28,7 @@ interface FiltersPanelProps {
   filterStatus: FindingStatus | "";
   filterOccurrence: FindingOccurrenceStatus | "";
   filterScannerType: string;
+  filterPolicyDecision: PolicyDecision | "";
   dateFrom: string;
   dateTo: string;
   showRepeats: boolean;
@@ -37,6 +38,7 @@ interface FiltersPanelProps {
   onStatusChange: (value: FindingStatus | "") => void;
   onOccurrenceChange: (value: FindingOccurrenceStatus | "") => void;
   onScannerTypeChange: (value: string) => void;
+  onPolicyDecisionChange: (value: PolicyDecision | "") => void;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
   onShowRepeatsChange: (value: boolean) => void;
@@ -52,6 +54,7 @@ const FiltersPanel = ({
   filterStatus,
   filterOccurrence,
   filterScannerType,
+  filterPolicyDecision,
   dateFrom,
   dateTo,
   showRepeats,
@@ -61,6 +64,7 @@ const FiltersPanel = ({
   onStatusChange,
   onOccurrenceChange,
   onScannerTypeChange,
+  onPolicyDecisionChange,
   onDateFromChange,
   onDateToChange,
   onShowRepeatsChange,
@@ -84,6 +88,10 @@ const FiltersPanel = ({
     onScannerTypeChange(event.target.value);
   };
 
+  const handlePolicyDecisionChange = (event: SelectChangeEvent) => {
+    onPolicyDecisionChange(event.target.value as PolicyDecision | "");
+  };
+
   const hasActiveFilters =
     Boolean(productId) ||
     Boolean(search) ||
@@ -91,6 +99,7 @@ const FiltersPanel = ({
     filterStatus !== "" ||
     filterOccurrence !== "" ||
     Boolean(filterScannerType) ||
+    filterPolicyDecision !== "" ||
     Boolean(dateFrom) ||
     Boolean(dateTo) ||
     showRepeats;
@@ -199,6 +208,23 @@ const FiltersPanel = ({
                 <MenuItem value="semgrep">Semgrep</MenuItem>
               </Select>
             </FormControl>
+
+            <FormControl size="small" fullWidth>
+              <InputLabel id="filter-policy-decision-label">Policy decision</InputLabel>
+              <Select
+                labelId="filter-policy-decision-label"
+                label="Policy decision"
+                value={filterPolicyDecision}
+                onChange={handlePolicyDecisionChange}
+              >
+                <MenuItem value="">
+                  <em>Все</em>
+                </MenuItem>
+                <MenuItem value="pass">PASS</MenuItem>
+                <MenuItem value="warn">WARN</MenuItem>
+                <MenuItem value="fail">FAIL</MenuItem>
+              </Select>
+            </FormControl>
           </Stack>
         </Box>
 
@@ -283,6 +309,7 @@ const FiltersPanel = ({
             filterStatus={filterStatus}
             filterOccurrence={filterOccurrence}
             filterScannerType={filterScannerType}
+            filterPolicyDecision={filterPolicyDecision}
             dateFrom={dateFrom}
             dateTo={dateTo}
             showRepeats={showRepeats}
@@ -292,6 +319,7 @@ const FiltersPanel = ({
             onStatusChange={onStatusChange}
             onOccurrenceChange={onOccurrenceChange}
             onScannerTypeChange={onScannerTypeChange}
+            onPolicyDecisionChange={onPolicyDecisionChange}
             onDateFromChange={onDateFromChange}
             onDateToChange={onDateToChange}
             onShowRepeatsChange={onShowRepeatsChange}

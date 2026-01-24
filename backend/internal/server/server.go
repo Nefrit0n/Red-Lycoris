@@ -111,4 +111,18 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	admin := secured.Group("/admin", middleware.AuthorizeRole("admin"))
 	auditLogHandler := handlers.NewAuditLogHandler(db)
 	admin.Get("/audit-log", auditLogHandler.List)
+
+	policiesHandler := handlers.NewPoliciesHandler(db)
+	admin.Get("/policies", policiesHandler.List)
+	admin.Post("/policies", policiesHandler.Create)
+	admin.Get("/policies/:id", policiesHandler.Get)
+	admin.Patch("/policies/:id", policiesHandler.Update)
+	admin.Post("/policies/:id/versions", policiesHandler.AddVersion)
+	admin.Put("/policies/:id/assignments", policiesHandler.UpdateAssignments)
+	admin.Delete("/policies/:id", policiesHandler.Delete)
+
+	policyResultsHandler := handlers.NewPolicyResultsHandler(db)
+	secured.Get("/policy-results", policyResultsHandler.List)
+	secured.Get("/policy-results/:id", policyResultsHandler.Get)
+	secured.Get("/policy-results/export", middleware.AuthorizeRole("admin", "superuser"), policyResultsHandler.Export)
 }
