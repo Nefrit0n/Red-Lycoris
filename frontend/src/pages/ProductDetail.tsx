@@ -6,9 +6,14 @@ import {
   CircularProgress,
   Container,
   Divider,
+  FormControlLabel,
   Grid,
   Paper,
   Stack,
+  Switch,
+  Tab,
+  Tabs,
+  TextField,
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -32,10 +37,10 @@ import {
   Tooltip as RechartsTooltip,
 } from "recharts";
 import { fetchProductDetail } from "../api/products";
-import { downloadSbom, listSboms, uploadSbom } from "../api/sbom";
+import { downloadSbom, listProductComponents, listSboms, uploadSbom } from "../api/sbom";
 import { Section } from "../components/Section";
 import { ProductDetail as ProductDetailType } from "../types/products";
-import { SbomItem } from "../types/sbom";
+import { SbomComponentItem, SbomIndexStatus, SbomItem } from "../types/sbom";
 
 const SEVERITY_COLORS = {
   critical: "#f44336",
@@ -250,6 +255,19 @@ const formatBytes = (bytes: number): string => {
   return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
 };
 
+const formatIndexStatus = (status?: SbomIndexStatus | null): { label: string; color: "default" | "success" | "warning" | "error" } => {
+  if (!status) return { label: "нет данных", color: "default" };
+  switch (status.status) {
+    case "indexed":
+      return { label: "indexed", color: "success" };
+    case "failed":
+      return { label: "failed", color: "error" };
+    case "pending":
+    default:
+      return { label: "pending", color: "warning" };
+  }
+};
+
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -261,6 +279,18 @@ const ProductDetailPage = () => {
   const [sbomError, setSbomError] = useState<string | null>(null);
   const [sbomUploading, setSbomUploading] = useState(false);
   const [sbomUploadError, setSbomUploadError] = useState<string | null>(null);
+  const [tabIndex, setTabIndex] = useState(0);
+  const [components, setComponents] = useState<SbomComponentItem[]>([]);
+  const [componentsTotal, setComponentsTotal] = useState(0);
+  const [componentsLoading, setComponentsLoading] = useState(false);
+  const [componentsError, setComponentsError] = useState<string | null>(null);
+  const [componentsFilters, setComponentsFilters] = useState({
+    directOnly: false,
+    ecosystem: "",
+    license: "",
+    q: "",
+  });
+  const [indexStatus, setIndexStatus] = useState<SbomIndexStatus | null>(null);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
@@ -304,6 +334,34 @@ const ProductDetailPage = () => {
   useEffect(() => {
     fetchSboms();
   }, [fetchSboms]);
+
+  const fetchComponents = useCallback(async () => {
+    if (!id) return;
+    setComponentsLoading(true);
+    setComponentsError(null);
+    try {
+      const response = await listProductComponents(id, {
+        directOnly: componentsFilters.directOnly,
+        ecosystem: componentsFilters.ecosystem || undefined,
+        license: componentsFilters.license || undefined,
+        q: componentsFilters.q || undefined,
+        limit: 200,
+        offset: 0,
+      });
+      setComponents(response.items);
+      setComponentsTotal(response.total);
+      setIndexStatus(response.indexStatus ?? null);
+    } catch (err) {
+      setComponentsError(err instanceof Error ? err.message : "Не удалось загрузить компоненты");
+    } finally {
+      setComponentsLoading(false);
+    }
+  }, [componentsFilters, id]);
+
+  useEffect(() => {
+    if (tabIndex !== 1) return;
+    fetchComponents();
+  }, [fetchComponents, tabIndex]);
 
   const handleSbomUpload = async (file: File) => {
     if (!id) return;
@@ -359,6 +417,7 @@ const ProductDetailPage = () => {
   const healthScore = calculateHealthScore(data.severityBreakdown);
   const healthColor = getHealthColor(healthScore);
   const totalOpenFindings = data.findingsOpenCount;
+  const statusChip = formatIndexStatus(indexStatus);
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -502,97 +561,254 @@ const ProductDetailPage = () => {
 
       <Grid container spacing={3} sx={{ mt: 1 }}>
         <Grid item xs={12}>
-          <Section title="SBOM">
-            <Stack spacing={2}>
-              <Typography variant="body2" color="text.secondary">
-                Поддерживаемые форматы: CycloneDX, SPDX, SPDX JSON.
-              </Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
-                <Button variant="contained" component="label" disabled={sbomUploading}>
-                  {sbomUploading ? "Загрузка..." : "Загрузить SBOM"}
-                  <input
-                    type="file"
-                    hidden
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) {
-                        handleSbomUpload(file);
-                      }
-                      event.target.value = "";
-                    }}
-                  />
-                </Button>
-                <Button variant="outlined" onClick={fetchSboms} disabled={sbomLoading}>
-                  Обновить список
-                </Button>
-              </Stack>
-              {sbomUploadError && <Alert severity="error">{sbomUploadError}</Alert>}
-              {sbomError && <Alert severity="error">{sbomError}</Alert>}
-              {sbomLoading ? (
-                <Box display="flex" justifyContent="center" py={2}>
-                  <CircularProgress size={20} />
-                </Box>
-              ) : sboms.length === 0 ? (
+          <Section title="SBOM & Components">
+            <Tabs
+              value={tabIndex}
+              onChange={(_, value) => setTabIndex(value)}
+              sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}
+            >
+              <Tab label="SBOM" />
+              <Tab label="Components" />
+            </Tabs>
+            {tabIndex === 0 && (
+              <Stack spacing={2}>
                 <Typography variant="body2" color="text.secondary">
-                  SBOM пока не загружены.
+                  Поддерживаемые форматы: CycloneDX, SPDX, SPDX JSON.
                 </Typography>
-              ) : (
-                <Box sx={{ overflowX: "auto" }}>
-                  <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
-                    <Box component="thead">
-                      <Box component="tr" sx={{ textAlign: "left" }}>
-                        {["Файл", "Формат", "Размер", "SHA256", "Дата", ""].map((label) => (
-                          <Box
-                            key={label}
-                            component="th"
-                            style={{
-                              fontWeight: 600,
-                              fontSize: 12,
-                              padding: "10px 8px",
-                              borderBottom: "1px solid rgba(0,0,0,0.08)",
-                            }}
-                          >
-                            {label}
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+                  <Button variant="contained" component="label" disabled={sbomUploading}>
+                    {sbomUploading ? "Загрузка..." : "Загрузить SBOM"}
+                    <input
+                      type="file"
+                      hidden
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          handleSbomUpload(file);
+                        }
+                        event.target.value = "";
+                      }}
+                    />
+                  </Button>
+                  <Button variant="outlined" onClick={fetchSboms} disabled={sbomLoading}>
+                    Обновить список
+                  </Button>
+                </Stack>
+                {sbomUploadError && <Alert severity="error">{sbomUploadError}</Alert>}
+                {sbomError && <Alert severity="error">{sbomError}</Alert>}
+                {sbomLoading ? (
+                  <Box display="flex" justifyContent="center" py={2}>
+                    <CircularProgress size={20} />
+                  </Box>
+                ) : sboms.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    SBOM пока не загружены.
+                  </Typography>
+                ) : (
+                  <Box sx={{ overflowX: "auto" }}>
+                    <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
+                      <Box component="thead">
+                        <Box component="tr" sx={{ textAlign: "left" }}>
+                          {[
+                            "Файл",
+                            "Формат",
+                            "Размер",
+                            "SHA256",
+                            "Indexed",
+                            "Компоненты",
+                            "Дата",
+                            "",
+                          ].map((label) => (
+                            <Box
+                              key={label}
+                              component="th"
+                              style={{
+                                fontWeight: 600,
+                                fontSize: 12,
+                                padding: "10px 8px",
+                                borderBottom: "1px solid rgba(0,0,0,0.08)",
+                              }}
+                            >
+                              {label}
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                      <Box component="tbody">
+                        {sboms.map((item) => (
+                          <Box key={item.id} component="tr">
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {item.originalFilename}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {item.format}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {formatBytes(item.sizeBytes)}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+                                {item.sha256}
+                              </Typography>
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              <Chip
+                                size="small"
+                                label={item.indexStatus || "pending"}
+                                color={
+                                  item.indexStatus === "indexed"
+                                    ? "success"
+                                    : item.indexStatus === "failed"
+                                      ? "error"
+                                      : "warning"
+                                }
+                              />
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {item.componentCount ?? 0}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {item.createdAt ? new Date(item.createdAt).toLocaleString("ru-RU") : "—"}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => handleSbomDownload(item)}
+                              >
+                                Скачать
+                              </Button>
+                            </Box>
                           </Box>
                         ))}
                       </Box>
                     </Box>
-                    <Box component="tbody">
-                      {sboms.map((item) => (
-                        <Box key={item.id} component="tr">
-                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                            {item.originalFilename}
-                          </Box>
-                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                            {item.format}
-                          </Box>
-                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                            {formatBytes(item.sizeBytes)}
-                          </Box>
-                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                            <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
-                              {item.sha256}
-                            </Typography>
-                          </Box>
-                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                            {item.createdAt ? new Date(item.createdAt).toLocaleString("ru-RU") : "—"}
-                          </Box>
-                          <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              onClick={() => handleSbomDownload(item)}
-                            >
-                              Скачать
-                            </Button>
-                          </Box>
-                        </Box>
-                      ))}
-                    </Box>
                   </Box>
-                </Box>
-              )}
-            </Stack>
+                )}
+              </Stack>
+            )}
+            {tabIndex === 1 && (
+              <Stack spacing={2}>
+                <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
+                  <Chip label={`Status: ${statusChip.label}`} color={statusChip.color} />
+                  {indexStatus?.error && (
+                    <Typography variant="body2" color="error">
+                      {indexStatus.error}
+                    </Typography>
+                  )}
+                  <Typography variant="body2" color="text.secondary">
+                    Components: {indexStatus?.componentCount ?? 0}
+                  </Typography>
+                </Stack>
+                <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                  <TextField
+                    label="Search"
+                    size="small"
+                    value={componentsFilters.q}
+                    onChange={(event) =>
+                      setComponentsFilters((prev) => ({ ...prev, q: event.target.value }))
+                    }
+                  />
+                  <TextField
+                    label="Ecosystem"
+                    size="small"
+                    value={componentsFilters.ecosystem}
+                    onChange={(event) =>
+                      setComponentsFilters((prev) => ({ ...prev, ecosystem: event.target.value }))
+                    }
+                  />
+                  <TextField
+                    label="License contains"
+                    size="small"
+                    value={componentsFilters.license}
+                    onChange={(event) =>
+                      setComponentsFilters((prev) => ({ ...prev, license: event.target.value }))
+                    }
+                  />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={componentsFilters.directOnly}
+                        onChange={(event) =>
+                          setComponentsFilters((prev) => ({
+                            ...prev,
+                            directOnly: event.target.checked,
+                          }))
+                        }
+                      />
+                    }
+                    label="Direct only"
+                  />
+                  <Button variant="outlined" onClick={fetchComponents} disabled={componentsLoading}>
+                    Обновить
+                  </Button>
+                </Stack>
+                {componentsError && <Alert severity="error">{componentsError}</Alert>}
+                {componentsLoading ? (
+                  <Box display="flex" justifyContent="center" py={2}>
+                    <CircularProgress size={20} />
+                  </Box>
+                ) : components.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Компоненты не найдены.
+                  </Typography>
+                ) : (
+                  <Box sx={{ overflowX: "auto" }}>
+                    <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
+                      <Box component="thead">
+                        <Box component="tr" sx={{ textAlign: "left" }}>
+                          {["Name", "Version", "Ecosystem", "Direct", "Licenses"].map((label) => (
+                            <Box
+                              key={label}
+                              component="th"
+                              style={{
+                                fontWeight: 600,
+                                fontSize: 12,
+                                padding: "10px 8px",
+                                borderBottom: "1px solid rgba(0,0,0,0.08)",
+                              }}
+                            >
+                              {label}
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                      <Box component="tbody">
+                        {components.map((item) => (
+                          <Box key={item.id} component="tr">
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              <Stack spacing={0.5}>
+                                <Typography variant="body2">{item.name}</Typography>
+                                {item.purl && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {item.purl}
+                                  </Typography>
+                                )}
+                              </Stack>
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {item.version || "—"}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {item.ecosystem || "—"}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {item.direct ? "Yes" : "No"}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {(item.licenses || []).join(", ") || "—"}
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                      Всего: {componentsTotal}
+                    </Typography>
+                  </Box>
+                )}
+              </Stack>
+            )}
           </Section>
         </Grid>
       </Grid>

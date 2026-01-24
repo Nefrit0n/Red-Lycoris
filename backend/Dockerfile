@@ -14,7 +14,8 @@ FROM base AS build
 COPY . .
 RUN go build -ldflags="-s -w" -trimpath -o /app/server ./cmd/server && \
     go build -ldflags="-s -w" -trimpath -o /app/analysis_worker ./cmd/analysis_worker && \
-    go build -ldflags="-s -w" -trimpath -o /app/intel_worker ./cmd/intel_worker
+    go build -ldflags="-s -w" -trimpath -o /app/intel_worker ./cmd/intel_worker && \
+    go build -ldflags="-s -w" -trimpath -o /app/sbom_worker ./cmd/sbom_worker
 
 FROM alpine:3.20 AS runtime
 WORKDIR /app
@@ -68,3 +69,17 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 CMD ["/app/intel_worker"]
+
+# SBOM worker target
+FROM alpine:3.20 AS sbom-worker
+WORKDIR /app
+
+RUN apk add --no-cache ca-certificates wget && \
+    addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+COPY --from=build /app/sbom_worker /app/sbom_worker
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+CMD ["/app/sbom_worker"]

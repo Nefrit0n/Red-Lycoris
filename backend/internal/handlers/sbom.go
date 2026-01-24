@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"lotus-warden/backend/internal/events"
 	"lotus-warden/backend/internal/models"
 	"lotus-warden/backend/internal/objectstore"
 	"lotus-warden/backend/internal/storage"
@@ -24,12 +25,13 @@ import (
 const maxSbomBytes = 20 << 20
 
 type SbomHandler struct {
-	db    *sql.DB
-	store objectstore.Store
+	db        *sql.DB
+	store     objectstore.Store
+	publisher *events.Publisher
 }
 
-func NewSbomHandler(db *sql.DB, store objectstore.Store) *SbomHandler {
-	return &SbomHandler{db: db, store: store}
+func NewSbomHandler(db *sql.DB, store objectstore.Store, publisher *events.Publisher) *SbomHandler {
+	return &SbomHandler{db: db, store: store, publisher: publisher}
 }
 
 func (h *SbomHandler) Upload(c *fiber.Ctx) error {
@@ -115,6 +117,12 @@ func (h *SbomHandler) Upload(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to save sbom"})
 	}
 
+	if h.publisher != nil {
+		_ = h.publisher.PublishJSON(c.Context(), events.SbomIndexRequestedSubject, map[string]string{
+			"sbom_id": sbom.ID.String(),
+		})
+	}
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"data": map[string]interface{}{
@@ -124,6 +132,7 @@ func (h *SbomHandler) Upload(c *fiber.Ctx) error {
 			"originalFilename": sbom.OriginalFilename,
 			"sizeBytes":        sbom.SizeBytes,
 			"createdAt":        sbom.CreatedAt.Format(time.RFC3339),
+			"indexStatus":      "pending",
 		},
 	})
 }
@@ -167,6 +176,11 @@ func (h *SbomHandler) List(c *fiber.Ctx) error {
 			"originalFilename": item.OriginalFilename,
 			"sizeBytes":        item.SizeBytes,
 			"createdAt":        createdAt,
+			"indexStatus":      item.IndexStatus,
+			"indexError":       nullString(item.IndexError),
+			"indexedAt":        nullTime(item.IndexedAt),
+			"componentCount":   item.ComponentCount,
+			"edgeCount":        item.EdgeCount,
 		})
 	}
 
@@ -382,4 +396,19 @@ func getRequestID(c *fiber.Ctx) string {
 func debugErrorsEnabled() bool {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("LW_DEBUG_ERRORS")))
 	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+func nullTime(value sql.NullTime) *string {
+	if !value.Valid {
+		return nil
+	}
+	v := value.Time.Format(time.RFC3339)
+	return &v
+}
+
+func nullString(value sql.NullString) *string {
+	if !value.Valid {
+		return nil
+	}
+	return &value.String
 }
