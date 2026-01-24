@@ -121,6 +121,11 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 		value := item.RiskUpdatedAt.Time.Format(timeFormatRFC3339)
 		riskUpdatedAt = &value
 	}
+	var riskModelVersion *string
+	if item.RiskModel.Valid {
+		value := item.RiskModel.String
+		riskModelVersion = &value
+	}
 	repeatCount := item.RepeatCount
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
 	return v1dto.FindingListItemDTO{
@@ -153,6 +158,7 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 		RiskScore:        riskScore,
 		RiskBand:         riskBand,
 		RiskUpdatedAt:    riskUpdatedAt,
+		RiskModelVersion: riskModelVersion,
 	}
 }
 
@@ -264,6 +270,11 @@ func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
 		value := item.RiskUpdatedAt.Time.Format(timeFormatRFC3339)
 		riskUpdatedAt = &value
 	}
+	var riskModelVersion *string
+	if item.RiskModel.Valid {
+		value := item.RiskModel.String
+		riskModelVersion = &value
+	}
 	repeatCount := item.RepeatCount
 	var duplicateID *uuid.UUID
 	if item.DuplicateID.Valid {
@@ -297,6 +308,7 @@ func FindingDetail(item storage.FindingDetail) v1dto.FindingDetailDTO {
 			RiskScore:        riskScore,
 			RiskBand:         riskBand,
 			RiskUpdatedAt:    riskUpdatedAt,
+			RiskModelVersion: riskModelVersion,
 		},
 		Description:    description,
 		Fingerprint:    &item.Fingerprint,
