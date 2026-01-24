@@ -83,6 +83,7 @@ const SavedViewsSelector = ({ currentFilters, onApplyView }: SavedViewsSelectorP
       currentFilters.filterStatus ||
       currentFilters.filterOccurrence ||
       currentFilters.filterScannerType ||
+      currentFilters.filterPolicyDecision ||
       currentFilters.dateFrom ||
       currentFilters.dateTo ||
       currentFilters.showRepeats

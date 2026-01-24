@@ -18,6 +18,8 @@ type FindingFilterParams struct {
 	TenantID         *uuid.UUID
 	ProductID        *uuid.UUID
 	ImportJobID      *uuid.UUID
+	PolicyID         *uuid.UUID
+	PolicyDecision   string
 	DateFrom         *time.Time
 	DateTo           *time.Time
 	Severity         string
@@ -46,6 +48,7 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 		IncludeRepeats:   parseBoolWithDefault(c.Query("includeRepeats"), false),
 		SortField:        strings.TrimSpace(c.Query("sortField")),
 		SortOrder:        strings.TrimSpace(c.Query("sortOrder")),
+		PolicyDecision:   strings.TrimSpace(c.Query("policyDecision")),
 	}
 
 	if raw := strings.TrimSpace(c.Query("tenantId")); raw != "" {
@@ -75,6 +78,18 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 			return nil, fmt.Errorf("invalid import_job_id")
 		}
 		params.ImportJobID = &parsed
+	}
+
+	if policyIDRaw := strings.TrimSpace(c.Query("policyId")); policyIDRaw != "" {
+		parsed, err := uuid.Parse(policyIDRaw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid policyId")
+		}
+		params.PolicyID = &parsed
+	}
+
+	if params.PolicyDecision != "" && !isValidPolicyDecision(params.PolicyDecision) {
+		return nil, fmt.Errorf("invalid policyDecision")
 	}
 
 	// Parse date range
@@ -107,6 +122,8 @@ func (p *FindingFilterParams) toStorageFilters(limit, offset int) storage.Findin
 		SourceType:       p.SourceType,
 		ProductID:        p.ProductID,
 		ImportJobID:      p.ImportJobID,
+		PolicyID:         p.PolicyID,
+		PolicyDecision:   p.PolicyDecision,
 		Query:            p.Query,
 		DateFrom:         p.DateFrom,
 		DateTo:           p.DateTo,
@@ -122,6 +139,15 @@ func (p *FindingFilterParams) toStorageFilters(limit, offset int) storage.Findin
 // toStorageFiltersWithoutPagination converts FindingFilterParams to storage.FindingFilters without pagination
 func (p *FindingFilterParams) toStorageFiltersWithoutPagination() storage.FindingFilters {
 	return p.toStorageFilters(0, 0)
+}
+
+func isValidPolicyDecision(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "pass", "fail", "warn":
+		return true
+	default:
+		return false
+	}
 }
 
 // parsePagination parses pagination parameters from query string

@@ -28,6 +28,9 @@ export const fetchFindings = async (
   if (params.filterStatus) searchParams.set("status", params.filterStatus);
   if (params.filterOccurrence) searchParams.set("occurrenceStatus", params.filterOccurrence);
   if (params.filterScannerType) searchParams.set("scannerType", params.filterScannerType);
+  if (params.filterPolicyDecision) {
+    searchParams.set("policyDecision", params.filterPolicyDecision);
+  }
 
   if (params.search) searchParams.set("search", params.search);
 
