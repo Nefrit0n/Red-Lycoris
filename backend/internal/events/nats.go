@@ -49,7 +49,7 @@ func NewPublisher(url string) (*Publisher, error) {
 	// Важно: не просто AddStream. Если stream уже есть, но subjects другие — делаем UpdateStream.
 	if err := ensureStream(js, &nats.StreamConfig{
 		Name:      AnalysisStreamName,
-		Subjects:  []string{AnalysisSubject, RiskRecomputeRequestedSubject},
+		Subjects:  []string{AnalysisSubject, RiskRecomputeRequestedSubject, AssetContextUpdatedSubject, RiskModelActivatedSubject},
 		Retention: nats.LimitsPolicy,
 		MaxAge:    7 * 24 * time.Hour,
 	}); err != nil {
@@ -134,6 +134,24 @@ func (p *Publisher) PublishJSON(ctx context.Context, subject string, payload any
 		return err
 	}
 	_, err = p.js.Publish(subject, data, nats.Context(ctx))
+	return err
+}
+
+func (p *Publisher) PublishJSONWithMsgID(ctx context.Context, subject string, msgID string, payload any) error {
+	if p == nil || p.js == nil {
+		return nil
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	msg := nats.NewMsg(subject)
+	msg.Data = data
+	if msg.Header == nil {
+		msg.Header = nats.Header{}
+	}
+	msg.Header.Set(nats.MsgIdHdr, msgID)
+	_, err = p.js.PublishMsg(msg, nats.Context(ctx))
 	return err
 }
 

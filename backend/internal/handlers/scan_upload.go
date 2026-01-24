@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -516,6 +517,6 @@ func publishRiskRecompute(ctx context.Context, publisher *events.Publisher, find
 		Source:    source,
 	}
 	if err := publisher.PublishJSON(ctx, events.RiskRecomputeRequestedSubject, payload); err != nil {
-		logger.Warnw("risk recompute publish failed", "error", err)
+		log.Printf("risk recompute publish failed: %v", err)
 	}
 }
