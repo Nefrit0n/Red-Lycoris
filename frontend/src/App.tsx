@@ -20,6 +20,7 @@ import AnalysisJobDetail from "./pages/AnalysisJobDetail";
 
 import AdminAuditLogPage from "./pages/admin/AdminAuditLogPage";
 import AdminGroupsPage from "./pages/admin/AdminGroupsPage";
+import AdminPoliciesPage from "./pages/admin/AdminPoliciesPage";
 import AdminScannersPage from "./pages/admin/AdminScannersPage";
 import AdminSetupPage from "./pages/admin/AdminSetupPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
@@ -55,6 +56,7 @@ const App = () => {
               <Route path="/admin" element={<AdminOverview />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/admin/groups" element={<AdminGroupsPage />} />
+              <Route path="/admin/policies" element={<AdminPoliciesPage />} />
               <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
               <Route path="/admin/webhooks" element={<AdminWebhooksPage />} />
               <Route path="/admin/scanners" element={<AdminScannersPage />} />
