@@ -6,6 +6,7 @@ import (
 	"lotus-warden/backend/internal/config"
 	"lotus-warden/backend/internal/events"
 	"lotus-warden/backend/internal/handlers"
+	"lotus-warden/backend/internal/metrics"
 	"lotus-warden/backend/internal/middleware"
 	"lotus-warden/backend/internal/objectstore"
 	"lotus-warden/backend/internal/policies"
@@ -36,6 +37,14 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 
 	app.Get("/api/ping", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"message": "Hello World"})
+	})
+
+	app.Get("/metrics/sla", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"sla_breach_updated_total":    metrics.SLABreachUpdatedTotal(),
+			"sla_breach_last_run_updated": metrics.SLABreachLastRunUpdated(),
+			"sla_breach_last_run_unix":    metrics.SLABreachLastRunUnix(),
+		})
 	})
 
 	api := app.Group("/api/v1")

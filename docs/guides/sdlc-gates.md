@@ -70,6 +70,10 @@ Fields:
 - **Pass**: `pass=true`, `decision` is `pass` or `warn`. CI should continue.
 - **Fail**: `pass=false`, `decision=fail`. CI should fail the job.
 
+## SLA breach background updates
+
+SLA breach flags (`sla_breached`) are refreshed by a background job in the API server. The interval is controlled by `SLA_BREACH_INTERVAL` (default `15m`), and each run updates any overdue open findings before gate checks evaluate the latest state. The job also records metrics on how many rows were updated per run.
+
 ## Shell usage (curl)
 
 ```bash
