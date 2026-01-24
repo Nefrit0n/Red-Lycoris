@@ -186,6 +186,7 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 	if finding == nil {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
+	includeRiskFactors := strings.EqualFold(c.Query("includeRiskFactors"), "true") || c.Query("includeRiskFactors") == "1"
 
 	masterID := finding.ID
 	if finding.DuplicateID.Valid {
@@ -258,6 +259,12 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		Details:            v1mapper.FindingCategoryDetails(mappedFinding.Category, evidence, scaDetail),
 		ScaDetails:         v1mapper.ScaDetail(scaDetail, evidence),
 		IntelDetails:       v1mapper.IntelDetail(intelDetail),
+	}
+	if includeRiskFactors && len(finding.RiskFactors) > 0 {
+		var factors map[string]interface{}
+		if err := json.Unmarshal(finding.RiskFactors, &factors); err == nil {
+			resp.RiskFactors = factors
+		}
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})

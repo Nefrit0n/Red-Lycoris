@@ -35,6 +35,7 @@ import (
 const (
 	analysisConsumer = "analysis-worker"
 	sbomConsumer     = "sbom-worker" // durable consumer name, но работает внутри того же процесса/контейнера
+	riskConsumer     = "risk-worker"
 
 	fetchBatchSize = 1
 
@@ -52,6 +53,12 @@ type sbomIndexMessage struct {
 	// Можно расширять без breaking changes:
 	// ProductID string `json:"product_id,omitempty"`
 	// ObjectKey string `json:"object_key,omitempty"`
+}
+
+type riskRecomputeMessage struct {
+	TenantID  *string `json:"tenant_id,omitempty"`
+	FindingID string  `json:"finding_id"`
+	Source    string  `json:"source"`
 }
 
 type permanentError struct{ err error }
@@ -96,18 +103,51 @@ func main() {
 		log.Fatalf("jetstream unavailable")
 	}
 
-	analysisSub, err := js.PullSubscribe(events.AnalysisJobsSubject, analysisConsumer)
-	if err != nil {
-		log.Fatalf("failed to subscribe analysis: %v", err)
+	roles := parseWorkerRoles(os.Getenv("WORKER_ROLES"))
+	var analysisSub *nats.Subscription
+	if roles.has("analysis") {
+		analysisSub, err = js.PullSubscribe(
+			events.AnalysisJobsSubject,
+			analysisConsumer,
+			nats.BindStream(events.AnalysisStreamName),
+			nats.MaxAckPending(32),
+			nats.AckExplicit(),
+		)
+		if err != nil {
+			log.Fatalf("failed to subscribe analysis: %v", err)
+		}
 	}
 
 	// SBOM consumer — если stream/subject не настроен, не валим весь воркер,
 	// но пишем громкое предупреждение. Анализ-джобы должны жить даже если SBOM сломан.
-	sbomSub, err := js.PullSubscribe(events.SbomIndexRequestedSubject, sbomConsumer)
-	if err != nil {
-		log.Printf("WARN: failed to subscribe sbom (%s): %v", events.SbomIndexRequestedSubject, err)
-		log.Printf("WARN: SBOM indexing will NOT run until JetStream stream includes subject 'sbom.>' and consumer can be created.")
-		sbomSub = nil
+	var sbomSub *nats.Subscription
+	if roles.has("sbom") {
+		sbomSub, err = js.PullSubscribe(
+			events.SbomIndexRequestedSubject,
+			sbomConsumer,
+			nats.BindStream(events.SbomStreamName),
+			nats.MaxAckPending(32),
+			nats.AckExplicit(),
+		)
+		if err != nil {
+			log.Printf("WARN: failed to subscribe sbom (%s): %v", events.SbomIndexRequestedSubject, err)
+			log.Printf("WARN: SBOM indexing will NOT run until JetStream stream includes subject 'sbom.>' and consumer can be created.")
+			sbomSub = nil
+		}
+	}
+
+	var riskSub *nats.Subscription
+	if roles.has("risk") {
+		riskSub, err = js.PullSubscribe(
+			events.RiskRecomputeRequestedSubject,
+			riskConsumer,
+			nats.BindStream(events.AnalysisStreamName),
+			nats.MaxAckPending(64),
+			nats.AckExplicit(),
+		)
+		if err != nil {
+			log.Fatalf("failed to subscribe risk: %v", err)
+		}
 	}
 
 	// cleanup (как было)
@@ -134,13 +174,15 @@ func main() {
 	var wg sync.WaitGroup
 
 	// Анализ-джобы
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		runPullLoop(ctx, "analysis", analysisSub, func(c context.Context, m *nats.Msg) error {
-			return handleAnalysisMessage(c, m, db, store, publisher, cfg)
-		})
-	}()
+	if analysisSub != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runPullLoop(ctx, "analysis", analysisSub, func(c context.Context, m *nats.Msg) error {
+				return handleAnalysisMessage(c, m, db, store, publisher, cfg)
+			})
+		}()
+	}
 
 	// SBOM индексация (если подписка поднялась)
 	if sbomSub != nil {
@@ -149,6 +191,16 @@ func main() {
 			defer wg.Done()
 			runPullLoop(ctx, "sbom", sbomSub, func(c context.Context, m *nats.Msg) error {
 				return handleSbomIndexMessage(c, m, db, store)
+			})
+		}()
+	}
+
+	if riskSub != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runPullLoop(ctx, "risk", riskSub, func(c context.Context, m *nats.Msg) error {
+				return handleRiskMessage(c, m, db)
 			})
 		}()
 	}
@@ -198,6 +250,32 @@ func runPullLoop(ctx context.Context, name string, sub *nats.Subscription, handl
 			_ = msg.NakWithDelay(nakRetryDelay)
 		}
 	}
+}
+
+type workerRoles map[string]struct{}
+
+func (r workerRoles) has(role string) bool {
+	_, ok := r[role]
+	return ok
+}
+
+func parseWorkerRoles(raw string) workerRoles {
+	roles := workerRoles{}
+	clean := strings.TrimSpace(raw)
+	if clean == "" {
+		roles["analysis"] = struct{}{}
+		roles["sbom"] = struct{}{}
+		roles["risk"] = struct{}{}
+		return roles
+	}
+	for _, part := range strings.FieldsFunc(clean, func(r rune) bool { return r == ',' || r == ';' || r == ' ' }) {
+		value := strings.TrimSpace(strings.ToLower(part))
+		if value == "" {
+			continue
+		}
+		roles[value] = struct{}{}
+	}
+	return roles
 }
 
 /* ---------------------------
@@ -360,6 +438,12 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 				TenantID:     importing.NullUUIDPtr(job.TenantID),
 				SLAMatrix:    slaMatrix,
 				Callbacks: &importing.ImportCallbacks{
+					OnFindingCreated: func(finding *models.Finding) {
+						publishRiskRecompute(ctx, publisher, finding.ID, finding.TenantID, "import")
+					},
+					OnDuplicateCreated: func(_ *models.Finding, masterID uuid.UUID) {
+						publishRiskRecompute(ctx, publisher, masterID, importing.NullUUIDPtr(job.TenantID), "import")
+					},
 					OnIdentifiersDetected: func(identifiers []string) {
 						if publisher == nil || len(identifiers) == 0 {
 							return
