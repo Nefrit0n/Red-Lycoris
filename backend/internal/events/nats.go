@@ -14,6 +14,10 @@ const (
 	AnalysisStreamName  = "ANALYSIS"
 	AnalysisSubject     = "analysis.*"
 	AnalysisJobsSubject = "analysis.jobs"
+
+	SbomStreamName            = "SBOM"
+	SbomSubject               = "sbom.*"
+	SbomIndexRequestedSubject = "sbom.index.requested"
 )
 
 type Publisher struct {
@@ -59,6 +63,16 @@ func NewPublisher(url string) (*Publisher, error) {
 	}); err != nil {
 		nc.Close()
 		return nil, fmt.Errorf("ensure stream %s failed: %w", IntelStreamName, err)
+	}
+
+	if err := ensureStream(js, &nats.StreamConfig{
+		Name:      SbomStreamName,
+		Subjects:  []string{SbomSubject},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    7 * 24 * time.Hour,
+	}); err != nil {
+		nc.Close()
+		return nil, fmt.Errorf("ensure stream %s failed: %w", SbomStreamName, err)
 	}
 
 	return &Publisher{nc: nc, js: js}, nil

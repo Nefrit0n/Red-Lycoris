@@ -1,5 +1,5 @@
 import { request, requestBlob } from "./client";
-import { SbomItem } from "../types/sbom";
+import { SbomComponentItem, SbomIndexStatus, SbomItem } from "../types/sbom";
 
 export const listSboms = async (productId: string): Promise<SbomItem[]> => {
   return request<SbomItem[]>("/api/v1/sbom", {
@@ -30,3 +30,36 @@ export const downloadSbom = async (id: string, filename: string): Promise<void> 
   link.remove();
   window.URL.revokeObjectURL(url);
 };
+
+export const listSbomComponents = async (
+  sbomId: string,
+  params: {
+    directOnly?: boolean;
+    ecosystem?: string;
+    license?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<{ items: SbomComponentItem[]; total: number }> =>
+  request<{ items: SbomComponentItem[]; total: number }>(`/api/v1/sbom/${sbomId}/components`, {
+    query: params,
+  });
+
+export const listProductComponents = async (
+  productId: string,
+  params: {
+    directOnly?: boolean;
+    ecosystem?: string;
+    license?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<{ items: SbomComponentItem[]; total: number; indexStatus?: SbomIndexStatus | null }> =>
+  request<{ items: SbomComponentItem[]; total: number; indexStatus?: SbomIndexStatus | null }>(
+    `/api/v1/products/${productId}/components`,
+    {
+      query: params,
+    }
+  );
