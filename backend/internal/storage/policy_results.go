@@ -40,6 +40,7 @@ type PolicyResultFilters struct {
 	ImportJobID *uuid.UUID
 	From        *time.Time
 	To          *time.Time
+	TenantID    *uuid.UUID
 }
 
 type PolicyResultsExportFilters struct {
@@ -50,6 +51,7 @@ type PolicyResultsExportFilters struct {
 	From        *time.Time
 	To          *time.Time
 	Limit       int
+	TenantID    *uuid.UUID
 }
 
 func ListPolicyResults(ctx context.Context, db *sql.DB, filters PolicyResultFilters) ([]PolicyResultItem, int, error) {
@@ -96,6 +98,14 @@ func ListPolicyResults(ctx context.Context, db *sql.DB, filters PolicyResultFilt
             (pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.import_job_id = $%d))
             OR (pr.subject_type = 'import_job' AND pr.subject_id = $%d)
             OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.import_job_id = $%d))
+        )`, len(args), len(args), len(args)))
+	}
+	if filters.TenantID != nil {
+		args = append(args, *filters.TenantID)
+		where = append(where, fmt.Sprintf(`(
+            (pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $%d))
+            OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $%d))
+            OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $%d))
         )`, len(args), len(args), len(args)))
 	}
 
@@ -155,7 +165,17 @@ func ListPolicyResults(ctx context.Context, db *sql.DB, filters PolicyResultFilt
 	return items, total, nil
 }
 
-func GetPolicyResultByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*PolicyResultDetail, error) {
+func GetPolicyResultByID(ctx context.Context, db *sql.DB, id uuid.UUID, tenantID *uuid.UUID) (*PolicyResultDetail, error) {
+	args := []interface{}{id}
+	tenantClause := ""
+	if tenantID != nil {
+		args = append(args, *tenantID)
+		tenantClause = fmt.Sprintf(` AND (
+            (pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $%d))
+            OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $%d))
+            OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $%d))
+         )`, len(args), len(args), len(args))
+	}
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT
@@ -165,8 +185,8 @@ func GetPolicyResultByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*Policy
          FROM policy_results pr
          LEFT JOIN policy_rules prule ON prule.id = pr.policy_rule_id
          LEFT JOIN policies p ON p.id = pr.policy_id
-         WHERE pr.id = $1`,
-		id,
+         WHERE pr.id = $1`+tenantClause,
+		args...,
 	)
 
 	var detail PolicyResultDetail
@@ -233,6 +253,14 @@ func QueryPolicyResultsExport(ctx context.Context, db *sql.DB, filters PolicyRes
 			(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.import_job_id = $%d))
 			OR (pr.subject_type = 'import_job' AND pr.subject_id = $%d)
 			OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.import_job_id = $%d))
+		)`, len(args), len(args), len(args)))
+	}
+	if filters.TenantID != nil {
+		args = append(args, *filters.TenantID)
+		where = append(where, fmt.Sprintf(`(
+			(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $%d))
+			OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $%d))
+			OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $%d))
 		)`, len(args), len(args), len(args)))
 	}
 
