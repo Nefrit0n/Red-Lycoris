@@ -85,3 +85,11 @@ We store models in `risk_models`:
 * `is_active` indicates the currently applied model per tenant.
 
 This prevents “silent” weight changes and allows historical re-scoring.
+
+## Event Subjects
+
+Risk recomputation is requested via a stable, intent-driven subject namespace:
+
+* `finding.risk.recompute.requested.v1`
+
+The subject is versioned and supports durable JetStream consumers with filtered subjects so multiple worker instances can share a single durable consumer for load balancing.
