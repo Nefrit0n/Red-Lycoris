@@ -90,6 +90,9 @@ func handleIntelMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, publishe
 	}
 
 	now := time.Now().UTC()
+	var epssTouched int
+	var kevTouched int
+	var nvdTouched int
 	for _, identifier := range payload.Identifiers {
 		if identifier == "" {
 			continue
@@ -133,13 +136,42 @@ func handleIntelMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, publishe
 				log.Printf("intel upsert error: %v", err)
 				return
 			}
-			if publisher != nil {
-				_ = publisher.PublishJSON(ctx, events.IntelEnriched, map[string]any{
-					"identifier": identifier,
-					"updated_at": now.Format(time.RFC3339),
-				})
+			if record.NVDPayload != nil {
+				nvdTouched++
+			}
+			if record.EPSSPayload != nil {
+				epssTouched++
+			}
+			if record.KEVPayload != nil {
+				kevTouched++
 			}
 		}()
+	}
+	if publisher != nil && (epssTouched > 0 || kevTouched > 0 || nvdTouched > 0) {
+		updatedAt := time.Now().UTC()
+		date := updatedAt.Format("2006-01-02")
+		if epssTouched > 0 {
+			_ = publisher.PublishJSON(ctx, events.IntelEPSSRefreshedSubject, events.IntelEPSSRefreshedEvent{
+				Date:             date,
+				UpdatedAt:        updatedAt,
+				CountRowsTouched: epssTouched,
+			})
+		}
+		if kevTouched > 0 {
+			_ = publisher.PublishJSON(ctx, events.IntelKEVRefreshedSubject, events.IntelKEVRefreshedEvent{
+				Date:             date,
+				UpdatedAt:        updatedAt,
+				CountRowsTouched: kevTouched,
+			})
+		}
+		if nvdTouched > 0 {
+			_ = publisher.PublishJSON(ctx, events.IntelNVDRefreshedSubject, events.IntelNVDRefreshedEvent{
+				From:             updatedAt,
+				To:               updatedAt,
+				UpdatedAt:        updatedAt,
+				CountRowsTouched: nvdTouched,
+			})
+		}
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"lotus-warden/backend/internal/events"
+	"lotus-warden/backend/internal/metrics"
 	"lotus-warden/backend/internal/risk"
 	"lotus-warden/backend/internal/storage"
 
@@ -94,13 +95,18 @@ func handleRiskMessage(ctx context.Context, msg *nats.Msg, db *sql.DB) error {
 	})
 	if err != nil {
 		_ = tx.Rollback()
+		metrics.RecordRiskComputeProcessed("error", 1)
 		return err
 	}
 	if err := tx.Commit(); err != nil {
+		metrics.RecordRiskComputeProcessed("error", 1)
 		return err
 	}
 	if updated {
 		log.Printf("[risk] updated risk for finding %s", findingID)
+		metrics.RecordRiskComputeProcessed("updated", 1)
+	} else {
+		metrics.RecordRiskComputeProcessed("noop", 1)
 	}
 
 	return nil
