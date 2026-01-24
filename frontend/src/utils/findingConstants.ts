@@ -2,7 +2,7 @@
  * Shared constants for findings
  */
 
-import { FindingSeverity, FindingStatus, FindingOccurrenceStatus } from "../types/findings";
+import { FindingSeverity, FindingStatus, FindingOccurrenceStatus, RiskBand } from "../types/findings";
 
 // Severity styles
 export const SEVERITY_STYLES: Record<FindingSeverity, { label: string; color: string }> = {
@@ -73,3 +73,17 @@ export const ALL_SEVERITIES: FindingSeverity[] = ["low", "medium", "high", "crit
 
 // All occurrence statuses
 export const ALL_OCCURRENCES: FindingOccurrenceStatus[] = ["NEW", "REPEAT"];
+
+export const RISK_BAND_LABELS: Record<RiskBand, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
+
+export const RISK_BAND_COLORS: Record<RiskBand, string> = {
+  low: "#2e7d32",
+  medium: "#ed6c02",
+  high: "#d32f2f",
+  critical: "#7b1fa2",
+};

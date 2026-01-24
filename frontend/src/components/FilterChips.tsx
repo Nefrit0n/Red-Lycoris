@@ -1,6 +1,6 @@
 import { Chip, Stack } from "@mui/material";
-import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision } from "../types/findings";
-import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS } from "../utils/findingConstants";
+import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision, RiskBand } from "../types/findings";
+import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS, RISK_BAND_LABELS } from "../utils/findingConstants";
 
 interface FilterChipsProps {
   productId: string;
@@ -8,6 +8,7 @@ interface FilterChipsProps {
   search: string;
   filterSeverity: FindingSeverity | "";
   filterStatus: FindingStatus | "";
+  filterRiskBand: RiskBand | "";
   filterOccurrence: FindingOccurrenceStatus | "";
   filterScannerType: string;
   filterPolicyDecision: PolicyDecision | "";
@@ -18,6 +19,7 @@ interface FilterChipsProps {
   onSearchChange: (value: string) => void;
   onSeverityChange: (value: FindingSeverity | "") => void;
   onStatusChange: (value: FindingStatus | "") => void;
+  onRiskBandChange: (value: RiskBand | "") => void;
   onOccurrenceChange: (value: FindingOccurrenceStatus | "") => void;
   onScannerTypeChange: (value: string) => void;
   onPolicyDecisionChange: (value: PolicyDecision | "") => void;
@@ -35,6 +37,7 @@ export const FilterChips = ({
   search,
   filterSeverity,
   filterStatus,
+  filterRiskBand,
   filterOccurrence,
   filterScannerType,
   filterPolicyDecision,
@@ -45,6 +48,7 @@ export const FilterChips = ({
   onSearchChange,
   onSeverityChange,
   onStatusChange,
+  onRiskBandChange,
   onOccurrenceChange,
   onScannerTypeChange,
   onPolicyDecisionChange,
@@ -86,6 +90,18 @@ export const FilterChips = ({
         variant="outlined"
         label={`Статус: ${STATUS_LABELS[filterStatus]}`}
         onDelete={() => onStatusChange("")}
+      />
+    );
+  }
+
+  if (filterRiskBand) {
+    chips.push(
+      <Chip
+        key="riskBand"
+        size="small"
+        variant="outlined"
+        label={`Риск: ${RISK_BAND_LABELS[filterRiskBand]}`}
+        onDelete={() => onRiskBandChange("")}
       />
     );
   }

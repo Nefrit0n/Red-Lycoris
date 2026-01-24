@@ -1,9 +1,19 @@
 import {
   Alert,
   Box,
+  Chip,
   Container,
+  FormControl,
   Grid,
   IconButton,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Skeleton,
+  Stack,
+  Select,
+  TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import {
@@ -12,11 +22,12 @@ import {
   CheckCircle as CheckCircleIcon,
   Security as SecurityIcon,
   Refresh as RefreshIcon,
+  InfoOutlined as InfoOutlinedIcon,
 } from "@mui/icons-material";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { fetchDashboardData } from "../api/dashboard";
-import { DashboardData } from "../types/dashboard";
+import { Link } from "react-router-dom";
+import { fetchDashboardData, fetchRiskMetrics } from "../api/dashboard";
+import { DashboardData, RiskMetricsDTO } from "../types/dashboard";
 import {
   MetricCard,
   SeverityPieChart,
@@ -29,8 +40,11 @@ import {
   TrendDataPoint,
   ProductRiskData,
   ActivityItem,
+  RiskTrendChart,
+  RiskTrendDataPoint,
 } from "../components/charts";
-import { SEVERITY_STYLES, STATUS_LABELS } from "../utils/findingConstants";
+import { ProductAutocomplete } from "../components/ProductAutocomplete";
+import { RISK_BAND_COLORS, RISK_BAND_LABELS, SEVERITY_STYLES, STATUS_LABELS } from "../utils/findingConstants";
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "#7b1fa2",
@@ -50,10 +64,16 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const Dashboard = () => {
-  const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [riskMetrics, setRiskMetrics] = useState<RiskMetricsDTO | null>(null);
+  const [riskLoading, setRiskLoading] = useState(true);
+  const [riskError, setRiskError] = useState<string | null>(null);
+  const [riskProductId, setRiskProductId] = useState("");
+  const [riskStatus, setRiskStatus] = useState("");
+  const [riskFrom, setRiskFrom] = useState("");
+  const [riskTo, setRiskTo] = useState("");
 
   const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -71,14 +91,49 @@ const Dashboard = () => {
     }
   }, []);
 
+  const fetchRiskData = useCallback(
+    async (signal?: AbortSignal) => {
+      setRiskLoading(true);
+      setRiskError(null);
+      try {
+        const response = await fetchRiskMetrics(
+          {
+            productId: riskProductId,
+            from: riskFrom,
+            to: riskTo,
+            status: riskStatus,
+          },
+          signal
+        );
+        setRiskMetrics(response);
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          console.error("Risk metrics fetch error:", err);
+          setRiskError("Не удалось загрузить risk метрики.");
+          setRiskMetrics(null);
+        }
+      } finally {
+        setRiskLoading(false);
+      }
+    },
+    [riskProductId, riskFrom, riskTo, riskStatus]
+  );
+
   useEffect(() => {
     const controller = new AbortController();
     fetchData(controller.signal);
     return () => controller.abort();
   }, [fetchData]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchRiskData(controller.signal);
+    return () => controller.abort();
+  }, [fetchRiskData]);
+
   const handleRefresh = () => {
     fetchData();
+    fetchRiskData();
   };
 
   // Transform data for charts
@@ -131,6 +186,28 @@ const Dashboard = () => {
         timestamp: a.timestamp,
       }))
     : [];
+
+  const riskTrendData: RiskTrendDataPoint[] = riskMetrics?.trend
+    ? riskMetrics.trend.map((point) => ({
+        date: point.date,
+        avgRisk: Math.round(point.avgRisk),
+        criticalCount: point.criticalCount,
+      }))
+    : [];
+
+  const riskBands = riskMetrics?.bands ?? {
+    low: 0,
+    medium: 0,
+    high: 0,
+    critical: 0,
+  };
+  const riskBandEntries = [
+    { key: "critical", label: RISK_BAND_LABELS.critical, count: riskBands.critical },
+    { key: "high", label: RISK_BAND_LABELS.high, count: riskBands.high },
+    { key: "medium", label: RISK_BAND_LABELS.medium, count: riskBands.medium },
+    { key: "low", label: RISK_BAND_LABELS.low, count: riskBands.low },
+  ] as const;
+  const riskTotal = riskBandEntries.reduce((sum, entry) => sum + entry.count, 0);
 
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 3, md: 4 } }}>
@@ -253,6 +330,206 @@ const Dashboard = () => {
           />
         </Grid>
       </Grid>
+
+      <Box sx={{ mt: 4 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="h5" fontWeight={600}>
+              Risk analytics
+            </Typography>
+            <Tooltip title="Risk uses Likelihood × Impact + asset context">
+              <InfoOutlinedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+            </Tooltip>
+          </Stack>
+        </Stack>
+
+        <Paper sx={{ p: 2.5, mb: 3 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <ProductAutocomplete value={riskProductId} onChange={setRiskProductId} />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="risk-status-label">Статус</InputLabel>
+                <Select
+                  labelId="risk-status-label"
+                  label="Статус"
+                  value={riskStatus}
+                  onChange={(event) => setRiskStatus(event.target.value)}
+                >
+                  <MenuItem value="">
+                    <em>Все</em>
+                  </MenuItem>
+                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                    <MenuItem key={value} value={value}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={6} md={2}>
+              <TextField
+                label="From"
+                type="date"
+                size="small"
+                fullWidth
+                value={riskFrom}
+                onChange={(event) => setRiskFrom(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={6} md={2}>
+              <TextField
+                label="To"
+                type="date"
+                size="small"
+                fullWidth
+                value={riskTo}
+                onChange={(event) => setRiskTo(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+          </Grid>
+        </Paper>
+
+        {riskError && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {riskError}
+          </Alert>
+        )}
+
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 3, height: "100%" }}>
+              <Typography variant="h6" fontWeight={600} gutterBottom>
+                Risk distribution
+              </Typography>
+              {riskLoading ? (
+                <Box sx={{ mt: 2 }}>
+                  {riskBandEntries.map((entry) => (
+                    <Box key={entry.key} sx={{ mb: 1.5 }}>
+                      <Skeleton variant="text" width="40%" />
+                      <Skeleton variant="rectangular" height={10} />
+                    </Box>
+                  ))}
+                </Box>
+              ) : (
+                <Stack spacing={1.5} sx={{ mt: 1 }}>
+                  {riskBandEntries.map((entry) => {
+                    const percent = riskTotal > 0 ? (entry.count / riskTotal) * 100 : 0;
+                    return (
+                      <Box key={entry.key}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between">
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {entry.label}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {entry.count}
+                          </Typography>
+                        </Stack>
+                        <Box
+                          sx={{
+                            mt: 0.5,
+                            height: 8,
+                            borderRadius: 999,
+                            bgcolor: "rgba(255,255,255,0.08)",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              height: "100%",
+                              width: `${percent}%`,
+                              bgcolor: RISK_BAND_COLORS[entry.key],
+                            }}
+                          />
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                  {!riskTotal && (
+                    <Typography variant="body2" color="text.secondary">
+                      Нет данных по рискам.
+                    </Typography>
+                  )}
+                </Stack>
+              )}
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 3, height: "100%" }}>
+              <Typography variant="h6" fontWeight={600} gutterBottom>
+                Top 10 risky findings
+              </Typography>
+              {riskLoading ? (
+                <Stack spacing={1}>
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <Skeleton key={index} variant="rectangular" height={24} />
+                  ))}
+                </Stack>
+              ) : riskMetrics?.topFindings?.length ? (
+                <Stack spacing={1.2}>
+                  {riskMetrics.topFindings.map((finding) => (
+                    <Stack
+                      key={finding.id}
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      spacing={1}
+                    >
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 600,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          component={Link}
+                          to={`/findings/${finding.id}`}
+                          style={{ color: "inherit", textDecoration: "none" }}
+                        >
+                          {finding.title}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {SEVERITY_STYLES[finding.severity].label}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        size="small"
+                        label={`${RISK_BAND_LABELS[finding.riskBand]} ${Math.round(
+                          finding.riskScore
+                        )}`}
+                        sx={{
+                          fontWeight: 700,
+                          borderColor: RISK_BAND_COLORS[finding.riskBand],
+                          color: RISK_BAND_COLORS[finding.riskBand],
+                          border: "1px solid",
+                        }}
+                      />
+                    </Stack>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Нет risky находок для выбранных фильтров.
+                </Typography>
+              )}
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <RiskTrendChart
+              data={riskTrendData}
+              title="Risk trend"
+              loading={riskLoading}
+            />
+          </Grid>
+        </Grid>
+      </Box>
     </Container>
   );
 };
