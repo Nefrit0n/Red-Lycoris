@@ -63,25 +63,35 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 	argsWithLimit := append([]any{}, args...)
 	argsWithLimit = append(argsWithLimit, filters.Limit, filters.Offset)
 
-	listQuery := fmt.Sprintf(`WITH vuln AS (
-		SELECT sco.component_id,
+	listQuery := fmt.Sprintf(`WITH sbom_ctx AS (
+		SELECT product_id FROM sboms WHERE id = $1
+	), vuln AS (
+		SELECT
+			CASE WHEN c.ecosystem = 'gomod' THEN 'golang' ELSE c.ecosystem END AS ecosystem,
+			c.name AS name,
+			NULLIF(sf.installed_version, '') AS version,
 			COUNT(*) AS total,
 			COUNT(*) FILTER (WHERE f.severity = 'critical') AS critical,
 			COUNT(*) FILTER (WHERE f.severity = 'high') AS high,
 			COUNT(*) FILTER (WHERE f.severity = 'medium') AS medium,
 			COUNT(*) FILTER (WHERE f.severity = 'low') AS low
-		FROM sbom_component_occurrences sco
-		JOIN sboms s ON s.id = sco.sbom_id
-		JOIN sca_findings sf ON sf.component_id = sco.component_id
-		JOIN findings f ON f.id = sf.finding_id AND f.product_id = s.product_id
-		WHERE sco.sbom_id = $1
-		GROUP BY sco.component_id
+		FROM sca_findings sf
+		JOIN findings f ON f.id = sf.finding_id
+		JOIN sca_components c ON c.id = sf.component_id
+		JOIN sbom_ctx s ON s.product_id = f.product_id
+		GROUP BY
+			CASE WHEN c.ecosystem = 'gomod' THEN 'golang' ELSE c.ecosystem END,
+			c.name,
+			NULLIF(sf.installed_version, '')
 	)
 	SELECT c.id, c.purl, c.name, NULLIF(sco.version, ''), c.ecosystem, sco.supplier, sco.licenses, sco.direct,
 		COALESCE(v.total, 0), COALESCE(v.critical, 0), COALESCE(v.high, 0), COALESCE(v.medium, 0), COALESCE(v.low, 0)
 	FROM sbom_component_occurrences sco
 	JOIN sca_components c ON c.id = sco.component_id
-	LEFT JOIN vuln v ON v.component_id = sco.component_id
+	LEFT JOIN vuln v ON
+		v.name = c.name
+		AND v.ecosystem IS NOT DISTINCT FROM c.ecosystem
+		AND v.version IS NOT DISTINCT FROM NULLIF(sco.version, '')
 	WHERE %s
 	ORDER BY COALESCE(v.total, 0) DESC, c.name, sco.version
 	LIMIT $%d OFFSET $%d`, where, len(argsWithLimit)-1, len(argsWithLimit))
