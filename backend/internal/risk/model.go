@@ -36,6 +36,21 @@ type RiskInputs struct {
 	Now              time.Time
 }
 
+type RiskContext struct {
+	Severity         string
+	Status           string
+	Category         string
+	Identifiers      []string
+	AssetCriticality string
+	Environment      string
+	InternetExposed  bool
+	CVSSScore        *float64
+	EPSSScore        *float64
+	KEV              bool
+	FirstSeenAt      time.Time
+	LastSeenAt       time.Time
+}
+
 type ImpactFactor struct {
 	CVSSScore *float64 `json:"cvss_score,omitempty"`
 	Severity  string   `json:"severity,omitempty"`
@@ -75,6 +90,18 @@ type RiskResult struct {
 	Band         string      `json:"band"`
 	ModelVersion string      `json:"model_version"`
 	Factors      RiskFactors `json:"factors"`
+}
+
+type Result struct {
+	Score        float64     `json:"score"`
+	Band         string      `json:"band"`
+	ModelVersion string      `json:"model_version"`
+	Factors      RiskFactors `json:"factors"`
+	InputHash    string      `json:"input_hash"`
+}
+
+type Calculator interface {
+	Compute(ctx RiskContext) (Result, error)
 }
 
 func DefaultModelV1() RiskModel {
