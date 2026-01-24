@@ -133,6 +133,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 				"import_job_id": finding.ImportJobID.String(),
 				"meta":          auditMeta,
 			})
+			publishRiskRecompute(c.Context(), h.publisher, finding.ID, finding.TenantID, "import")
 		},
 		OnDuplicateCreated: func(finding *models.Finding, masterID uuid.UUID) {
 			_ = createFindingEventForID(c.Context(), h.db, masterID, uploaderID, "repeat_detected", fiber.Map{
@@ -152,6 +153,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 				"import_job_id": finding.ImportJobID.String(),
 				"meta":          auditMeta,
 			})
+			publishRiskRecompute(c.Context(), h.publisher, masterID, finding.TenantID, "import")
 		},
 		OnImportFailed: func(jobID uuid.UUID, err error) {
 			_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
@@ -497,4 +499,23 @@ func createFindingEventForID(ctx context.Context, db *sql.DB, findingID uuid.UUI
 		Payload:   rawPayload,
 	}
 	return storage.CreateFindingEvent(ctx, db, event)
+}
+
+func publishRiskRecompute(ctx context.Context, publisher *events.Publisher, findingID uuid.UUID, tenantID *uuid.UUID, source string) {
+	if publisher == nil {
+		return
+	}
+	var tenantValue *string
+	if tenantID != nil {
+		value := tenantID.String()
+		tenantValue = &value
+	}
+	payload := events.RiskRecomputeRequest{
+		TenantID:  tenantValue,
+		FindingID: findingID.String(),
+		Source:    source,
+	}
+	if err := publisher.PublishJSON(ctx, events.RiskRecomputeRequestedSubject, payload); err != nil {
+		logger.Warnw("risk recompute publish failed", "error", err)
+	}
 }
