@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
+	"lotus-warden/backend/internal/events"
 	v1mapper "lotus-warden/backend/internal/mapper/v1"
 	"lotus-warden/backend/internal/storage"
 
@@ -32,6 +34,7 @@ const (
 type AssetContextHandler struct {
 	db        *sql.DB
 	validator *validator.Validate
+	publisher *events.Publisher
 }
 
 type UpsertProductAssetContextRequest struct {
@@ -43,8 +46,8 @@ type UpsertProductAssetContextRequest struct {
 	Metadata           map[string]interface{} `json:"metadata,omitempty"`
 }
 
-func NewAssetContextHandler(db *sql.DB) *AssetContextHandler {
-	return &AssetContextHandler{db: db, validator: validator.New()}
+func NewAssetContextHandler(db *sql.DB, publisher *events.Publisher) *AssetContextHandler {
+	return &AssetContextHandler{db: db, validator: validator.New(), publisher: publisher}
 }
 
 func (h *AssetContextHandler) GetProductAssetContext(c *fiber.Ctx) error {
@@ -131,6 +134,14 @@ func (h *AssetContextHandler) UpsertProductAssetContext(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to upsert asset context"})
+	}
+
+	if h.publisher != nil {
+		_ = h.publisher.PublishJSON(c.Context(), events.AssetContextUpdatedSubject, events.AssetContextUpdatedEvent{
+			ProductID: productID.String(),
+			TenantID:  tenantID.String(),
+			UpdatedAt: time.Now().UTC(),
+		})
 	}
 
 	action := "product_asset_context.updated"
