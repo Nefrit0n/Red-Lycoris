@@ -1,5 +1,7 @@
 package events
 
+import "github.com/nats-io/nats.go"
+
 const (
 	IntelStreamName           = "INTEL"
 	IntelSubject              = "intel.>"
@@ -12,4 +14,8 @@ type IntelEnrichRequest struct {
 	Identifiers []string `json:"identifiers"`
 	ProductID   *string  `json:"product_id,omitempty"`
 	Source      string   `json:"source,omitempty"`
+}
+
+func EnsureIntelConsumer(js nats.JetStreamContext, durable string) error {
+	return ensureConsumerForSubject(js, IntelStreamName, durable, IntelEnrichRequested)
 }
