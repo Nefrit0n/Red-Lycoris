@@ -174,6 +174,32 @@ func userIDFromContext(c *fiber.Ctx) *uuid.UUID {
 	return nil
 }
 
+func tenantIDFromContext(c *fiber.Ctx) *uuid.UUID {
+	if v := c.Locals("tenant_id"); v != nil {
+		switch t := v.(type) {
+		case uuid.UUID:
+			return &t
+		case string:
+			if id, err := uuid.Parse(t); err == nil {
+				return &id
+			}
+		}
+	}
+
+	if v := c.Locals("tenantId"); v != nil {
+		switch t := v.(type) {
+		case uuid.UUID:
+			return &t
+		case string:
+			if id, err := uuid.Parse(t); err == nil {
+				return &id
+			}
+		}
+	}
+
+	return nil
+}
+
 func requestIDFromContext(c *fiber.Ctx) *string {
 	if v := c.Locals("requestid"); v != nil {
 		switch value := v.(type) {

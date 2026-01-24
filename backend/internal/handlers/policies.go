@@ -67,11 +67,12 @@ func (h *PoliciesHandler) List(c *fiber.Ctx) error {
 	}
 
 	filters := storage.PolicyFilters{
-		Limit:  limit,
-		Offset: offset,
-		Query:  strings.TrimSpace(c.Query("q")),
-		Status: strings.TrimSpace(c.Query("status")),
-		Kind:   strings.TrimSpace(c.Query("kind")),
+		Limit:    limit,
+		Offset:   offset,
+		Query:    strings.TrimSpace(c.Query("q")),
+		Status:   strings.TrimSpace(c.Query("status")),
+		Kind:     strings.TrimSpace(c.Query("kind")),
+		TenantID: tenantIDFromContext(c),
 	}
 
 	items, total, err := storage.ListPolicies(c.Context(), h.db, filters)
@@ -93,7 +94,8 @@ func (h *PoliciesHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid policy id"})
 	}
 
-	policy, err := storage.GetPolicyByID(c.Context(), h.db, policyID)
+	tenantID := tenantIDFromContext(c)
+	policy, err := storage.GetPolicyByID(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy"})
 	}
@@ -101,11 +103,11 @@ func (h *PoliciesHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "policy not found"})
 	}
 
-	rules, err := storage.ListPolicyRules(c.Context(), h.db, policyID)
+	rules, err := storage.ListPolicyRules(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy rules"})
 	}
-	assignments, err := storage.ListPolicyAssignments(c.Context(), h.db, policyID)
+	assignments, err := storage.ListPolicyAssignments(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch assignments"})
 	}
@@ -149,11 +151,13 @@ func (h *PoliciesHandler) Create(c *fiber.Ctx) error {
 	}()
 
 	var policy storage.PolicyRecord
+	tenantID := tenantIDFromContext(c)
 	row := tx.QueryRowContext(
 		c.Context(),
-		`INSERT INTO policies (name, kind, status, description)
-         VALUES ($1, $2, $3, $4)
+		`INSERT INTO policies (tenant_id, name, kind, status, description)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id, tenant_id, name, kind, status, description, created_at, updated_at`,
+		tenantID,
 		strings.TrimSpace(req.Name),
 		strings.TrimSpace(req.Kind),
 		status,
@@ -217,7 +221,8 @@ func (h *PoliciesHandler) Update(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "no fields to update"})
 	}
 
-	current, err := storage.GetPolicyByID(c.Context(), h.db, policyID)
+	tenantID := tenantIDFromContext(c)
+	current, err := storage.GetPolicyByID(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy"})
 	}
@@ -255,11 +260,11 @@ func (h *PoliciesHandler) Update(c *fiber.Ctx) error {
 		})
 	}
 
-	rules, err := storage.ListPolicyRules(c.Context(), h.db, policyID)
+	rules, err := storage.ListPolicyRules(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy rules"})
 	}
-	assignments, err := storage.ListPolicyAssignments(c.Context(), h.db, policyID)
+	assignments, err := storage.ListPolicyAssignments(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch assignments"})
 	}
@@ -284,6 +289,15 @@ func (h *PoliciesHandler) AddVersion(c *fiber.Ctx) error {
 	}
 	if err := validatePolicyRule(req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+
+	tenantID := tenantIDFromContext(c)
+	current, err := storage.GetPolicyByID(c.Context(), h.db, policyID, tenantID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy"})
+	}
+	if current == nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "policy not found"})
 	}
 
 	tx, err := h.db.BeginTx(c.Context(), nil)
@@ -325,6 +339,8 @@ func (h *PoliciesHandler) UpdateAssignments(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid policy id"})
 	}
 
+	tenantID := tenantIDFromContext(c)
+
 	var req UpdateAssignmentsRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid request body"})
@@ -343,12 +359,20 @@ func (h *PoliciesHandler) UpdateAssignments(c *fiber.Ctx) error {
 		}
 	}
 
-	beforeAssignments, err := storage.ListPolicyAssignments(c.Context(), h.db, policyID)
+	current, err := storage.GetPolicyByID(c.Context(), h.db, policyID, tenantID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy"})
+	}
+	if current == nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "policy not found"})
+	}
+
+	beforeAssignments, err := storage.ListPolicyAssignments(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch assignments"})
 	}
 
-	rules, err := storage.ListPolicyRules(c.Context(), h.db, policyID)
+	rules, err := storage.ListPolicyRules(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy rules"})
 	}
@@ -433,7 +457,8 @@ func (h *PoliciesHandler) Delete(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid policy id"})
 	}
 
-	current, err := storage.GetPolicyByID(c.Context(), h.db, policyID)
+	tenantID := tenantIDFromContext(c)
+	current, err := storage.GetPolicyByID(c.Context(), h.db, policyID, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy"})
 	}
