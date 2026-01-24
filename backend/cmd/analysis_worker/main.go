@@ -36,12 +36,15 @@ const (
 	analysisConsumer = "analysis-worker"
 	sbomConsumer     = "sbom-worker" // durable consumer name, но работает внутри того же процесса/контейнера
 	riskConsumer     = "risk-worker"
+	riskScheduler    = "risk-scheduler"
 
 	fetchBatchSize = 1
 
 	fetchMaxWait     = 5 * time.Second
 	nakRetryDelay    = 30 * time.Second
 	inProgressPeriod = 15 * time.Second
+
+	riskSchedulerAckWait = 2 * time.Minute
 )
 
 type analysisMessage struct {
@@ -59,6 +62,7 @@ type riskRecomputeMessage struct {
 	TenantID  *string `json:"tenant_id,omitempty"`
 	FindingID string  `json:"finding_id"`
 	Source    string  `json:"source"`
+	Cause     string  `json:"cause,omitempty"`
 }
 
 type permanentError struct{ err error }
@@ -137,7 +141,7 @@ func main() {
 	}
 
 	var riskSub *nats.Subscription
-	if roles.has("risk") {
+	if roles.hasAny("risk_compute", "risk") {
 		riskSub, err = js.PullSubscribe(
 			events.RiskRecomputeRequestedSubject,
 			riskConsumer,
@@ -147,6 +151,69 @@ func main() {
 		)
 		if err != nil {
 			log.Fatalf("failed to subscribe risk: %v", err)
+		}
+	}
+
+	var intelEPSSSub *nats.Subscription
+	var intelKEVSub *nats.Subscription
+	var intelNVDSub *nats.Subscription
+	var assetContextSub *nats.Subscription
+	var riskModelSub *nats.Subscription
+	if roles.has("risk_scheduler") {
+		intelEPSSSub, err = js.PullSubscribe(
+			events.IntelEPSSRefreshedSubject,
+			riskScheduler,
+			nats.BindStream(events.IntelStreamName),
+			nats.MaxAckPending(16),
+			nats.AckExplicit(),
+			nats.AckWait(riskSchedulerAckWait),
+		)
+		if err != nil {
+			log.Fatalf("failed to subscribe intel epss: %v", err)
+		}
+		intelKEVSub, err = js.PullSubscribe(
+			events.IntelKEVRefreshedSubject,
+			riskScheduler,
+			nats.BindStream(events.IntelStreamName),
+			nats.MaxAckPending(16),
+			nats.AckExplicit(),
+			nats.AckWait(riskSchedulerAckWait),
+		)
+		if err != nil {
+			log.Fatalf("failed to subscribe intel kev: %v", err)
+		}
+		intelNVDSub, err = js.PullSubscribe(
+			events.IntelNVDRefreshedSubject,
+			riskScheduler,
+			nats.BindStream(events.IntelStreamName),
+			nats.MaxAckPending(16),
+			nats.AckExplicit(),
+			nats.AckWait(riskSchedulerAckWait),
+		)
+		if err != nil {
+			log.Fatalf("failed to subscribe intel nvd: %v", err)
+		}
+		assetContextSub, err = js.PullSubscribe(
+			events.AssetContextUpdatedSubject,
+			riskScheduler,
+			nats.BindStream(events.AnalysisStreamName),
+			nats.MaxAckPending(32),
+			nats.AckExplicit(),
+			nats.AckWait(riskSchedulerAckWait),
+		)
+		if err != nil {
+			log.Fatalf("failed to subscribe asset context: %v", err)
+		}
+		riskModelSub, err = js.PullSubscribe(
+			events.RiskModelActivatedSubject,
+			riskScheduler,
+			nats.BindStream(events.AnalysisStreamName),
+			nats.MaxAckPending(8),
+			nats.AckExplicit(),
+			nats.AckWait(riskSchedulerAckWait),
+		)
+		if err != nil {
+			log.Fatalf("failed to subscribe risk model: %v", err)
 		}
 	}
 
@@ -205,6 +272,56 @@ func main() {
 		}()
 	}
 
+	if intelEPSSSub != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runPullLoop(ctx, "risk-scheduler-epss", intelEPSSSub, func(c context.Context, m *nats.Msg) error {
+				return handleIntelRefreshMessage(c, m, db, publisher, events.IntelEPSSRefreshedSubject)
+			})
+		}()
+	}
+
+	if intelKEVSub != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runPullLoop(ctx, "risk-scheduler-kev", intelKEVSub, func(c context.Context, m *nats.Msg) error {
+				return handleIntelRefreshMessage(c, m, db, publisher, events.IntelKEVRefreshedSubject)
+			})
+		}()
+	}
+
+	if intelNVDSub != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runPullLoop(ctx, "risk-scheduler-nvd", intelNVDSub, func(c context.Context, m *nats.Msg) error {
+				return handleIntelRefreshMessage(c, m, db, publisher, events.IntelNVDRefreshedSubject)
+			})
+		}()
+	}
+
+	if assetContextSub != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runPullLoop(ctx, "risk-scheduler-asset-context", assetContextSub, func(c context.Context, m *nats.Msg) error {
+				return handleAssetContextMessage(c, m, db, publisher)
+			})
+		}()
+	}
+
+	if riskModelSub != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runPullLoop(ctx, "risk-scheduler-model", riskModelSub, func(c context.Context, m *nats.Msg) error {
+				return handleRiskModelActivatedMessage(c, m, db, publisher)
+			})
+		}()
+	}
+
 	wg.Wait()
 	log.Printf("analysis-worker stopped")
 }
@@ -259,13 +376,23 @@ func (r workerRoles) has(role string) bool {
 	return ok
 }
 
+func (r workerRoles) hasAny(roles ...string) bool {
+	for _, role := range roles {
+		if r.has(role) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseWorkerRoles(raw string) workerRoles {
 	roles := workerRoles{}
 	clean := strings.TrimSpace(raw)
 	if clean == "" {
 		roles["analysis"] = struct{}{}
 		roles["sbom"] = struct{}{}
-		roles["risk"] = struct{}{}
+		roles["risk_compute"] = struct{}{}
+		roles["risk_scheduler"] = struct{}{}
 		return roles
 	}
 	for _, part := range strings.FieldsFunc(clean, func(r rune) bool { return r == ',' || r == ';' || r == ' ' }) {
