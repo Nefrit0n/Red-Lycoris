@@ -1,42 +1,87 @@
-# Risk Scoring: Asset Context (MVP)
+# Risk Scoring (Phase 2.1)
 
-Этот гайд описывает минимальные сигналы контекста актива, которые используются при будущей оценке риска (вместе с EPSS/KEV/CVSS).
+## Risk vs. Severity
 
-## Asset Context
+* **Severity** is an input classification from scanners or analysts (low/medium/high/critical).
+* **Risk** is a **business-aware, explainable score (0..100)** that combines impact, likelihood, and asset context.
 
-Сущность **Asset Context** хранится отдельно от продукта и привязана к `products` (1:1 в текущей версии). Она задаёт базовые бизнес‑сигналы о продукте.
+Risk is designed to be **deterministic**: the same inputs produce the same score.
 
-### Поля
+## Inputs
 
-- `environment`: `prod` | `staging` | `dev` | `unknown`
-- `internet_exposed`: `bool`
-- `data_classification`: `public` | `internal` | `confidential` | `restricted` | `unknown`
-- `business_impact`: `low` | `medium` | `high` | `critical`
-- `tags`: массив тегов (TEXT[])
-- `metadata`: произвольный JSONB для будущих расширений
+We only use inputs that already exist in the system:
 
-### Рекомендации по заполнению
+* **Impact**
+  * `cvss_score` from `vuln_intel` if present.
+  * Otherwise, fallback to severity map: `critical=1.0`, `high=0.7`, `medium=0.4`, `low=0.1`.
+* **Likelihood**
+  * `epss_score` (0..1) from `vuln_intel` if present.
+  * If `kev=true`, apply a **KEV floor** to ensure known-exploited vulns are always high likelihood.
+* **Asset**
+  * `products.asset_criticality` (low/medium/high/critical).
+  * `product_asset_context` (optional): `environment` and `internet_exposed` influence a multiplier.
+* **Freshness / exposure (optional)**
+  * A separate weight applies a multiplier when a finding stays open longer.
+  * Weight defaults to **0.0** (disabled) in v1.
 
-- **environment**: используйте `prod` для систем, влияющих на SLA/клиентов.
-- **internet_exposed**: ставьте `true`, если продукт доступен с публичного интернета (внешние API, публичные панели).
-- **data_classification**: отражает наиболее чувствительные данные, которые обрабатывает продукт.
-- **business_impact**: оценка влияния на бизнес при компрометации.
-- **tags**: короткие фильтруемые метки (например, `pci`, `customer-facing`, `payments`).
-- **metadata**: свободная структура, например:
+## Formula (Risk Model v1)
 
-```json
-{
-  "owner": "secops",
-  "segment": "payments",
-  "regulated": true
-}
+We use a **weighted sum** for interpretability and monotonicity:
+
+```
+impact = cvss_score/10 OR severity_fallback
+likelihood = epss_score
+if kev: likelihood = max(likelihood, kev_floor)
+
+base = (wI * impact + wL * likelihood)
+score = 100 * clamp01(base * asset_multiplier * exposure_multiplier * freshness_multiplier)
 ```
 
-## Использование в risk-score
+**Trade-off:** A weighted sum is easier to explain than power/exponent models, remains monotonic in each input, and is easy to tune without unexpected jumps.
 
-В будущей формуле risk-score Asset Context будет использоваться как модификатор к базовой уязвимости:
+## Default Weights (v1)
 
-- `environment` и `business_impact` усиливают/ослабляют итоговый риск.
-- `internet_exposed` повышает вес удалённой атаки.
-- `data_classification` влияет на приоритет remediation.
-- `tags` и `metadata` дают возможность гибко настраивать правила без миграций.
+* `wI = 0.6`, `wL = 0.4`
+* `kev_floor = 0.9`
+* Asset criticality multipliers:
+  * low: `0.8`
+  * medium: `1.0`
+  * high: `1.2`
+  * critical: `1.4`
+* Asset context multipliers:
+  * `environment=prod`: `1.1`
+  * `environment=staging`: `1.0`
+  * `environment=dev`: `0.9`
+  * `environment=unknown`: `1.0`
+  * `internet_exposed=true`: `1.2`
+* Freshness multiplier (optional):
+  * `freshness_weight = 0.0` (disabled)
+  * `freshness_max_days = 90`
+
+## Bands
+
+| Score | Band |
+| --- | --- |
+| < 20 | low |
+| < 50 | medium |
+| < 80 | high |
+| >= 80 | critical |
+
+## Explainability
+
+Each score returns JSON factors with inputs and multipliers:
+
+* `impact`: source values (`cvss_score` or `severity`) and impact value
+* `likelihood`: `epss_score`, `kev` flag, and likelihood value
+* `asset`: `asset_criticality`, `environment`, `internet_exposed`, and multipliers
+* `freshness`: whether enabled, age in days, and multiplier
+
+## Model Versioning
+
+We store models in `risk_models`:
+
+* `version` identifies the scoring logic (e.g., `v1`).
+* `weights` stores the full weight set used to compute scores.
+* `is_active` indicates the currently applied model per tenant.
+
+This prevents “silent” weight changes and allows historical re-scoring.
