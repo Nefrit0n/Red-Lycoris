@@ -199,15 +199,24 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 }
 
 func ensureComponent(ctx context.Context, tx *sql.Tx, comp ComponentInput) (uuid.UUID, error) {
+	// sca_components.ecosystem is NOT NULL (migration 019) with default 'unknown'.
+	// If we explicitly INSERT NULL (or empty string), we bypass DEFAULT and can hit
+	// the NOT NULL constraint. Normalize ecosystem here.
+	eco := normalizeEcosystem(comp.Ecosystem)
+
 	if comp.Purl != "" {
 		var id uuid.UUID
 		err := tx.QueryRowContext(ctx, `INSERT INTO sca_components (purl, ecosystem, name, created_at)
-			VALUES ($1, $2, $3, NOW())
+			VALUES ($1, COALESCE(NULLIF($2, ''), 'unknown'), $3, NOW())
 			ON CONFLICT (purl) WHERE purl IS NOT NULL
-			DO UPDATE SET name = EXCLUDED.name, ecosystem = EXCLUDED.ecosystem
+			DO UPDATE SET name = EXCLUDED.name,
+			              ecosystem = CASE
+			                WHEN EXCLUDED.ecosystem = 'unknown' THEN sca_components.ecosystem
+			                ELSE EXCLUDED.ecosystem
+			              END
 			RETURNING id`,
 			comp.Purl,
-			nullableString(comp.Ecosystem),
+			eco,
 			comp.Name,
 		).Scan(&id)
 		if err != nil {
@@ -218,11 +227,11 @@ func ensureComponent(ctx context.Context, tx *sql.Tx, comp ComponentInput) (uuid
 
 	var id uuid.UUID
 	err := tx.QueryRowContext(ctx, `INSERT INTO sca_components (purl, ecosystem, name, created_at)
-		VALUES (NULL, $1, $2, NOW())
+		VALUES (NULL, COALESCE(NULLIF($1, ''), 'unknown'), $2, NOW())
 		ON CONFLICT (ecosystem, name) WHERE purl IS NULL
 		DO UPDATE SET name = EXCLUDED.name
 		RETURNING id`,
-		nullableString(comp.Ecosystem),
+		eco,
 		comp.Name,
 	).Scan(&id)
 	if err != nil {
@@ -235,7 +244,15 @@ func componentKey(comp ComponentInput) string {
 	if comp.Purl != "" {
 		return "purl:" + strings.ToLower(comp.Purl)
 	}
-	return fmt.Sprintf("eco:%s|%s", strings.ToLower(comp.Ecosystem), strings.ToLower(comp.Name))
+	return fmt.Sprintf("eco:%s|%s", strings.ToLower(normalizeEcosystem(comp.Ecosystem)), strings.ToLower(comp.Name))
+}
+
+func normalizeEcosystem(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "unknown"
+	}
+	return strings.ToLower(value)
 }
 
 func nullableString(value string) any {
