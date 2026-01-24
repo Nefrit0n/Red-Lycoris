@@ -47,6 +47,16 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 		})
 	})
 
+	app.Get("/metrics/sbom", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"sbom_index_total":                metrics.SbomIndexTotal(),
+			"sbom_index_failed_total":         metrics.SbomIndexFailedTotal(),
+			"sbom_index_duration_total_ms":    metrics.SbomIndexDurationTotalMs(),
+			"sbom_index_last_duration_ms":     metrics.SbomIndexLastDurationMs(),
+			"sbom_index_last_component_count": metrics.SbomIndexLastComponentCount(),
+		})
+	})
+
 	api := app.Group("/api/v1")
 
 	// ✅ НОВЫЙ КОНТРАКТ (без rootPassword)
@@ -116,6 +126,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 
 	sbomComponentsHandler := handlers.NewSbomComponentsHandler(db)
 	secured.Get("/sbom/:id/components", sbomComponentsHandler.ListBySbom)
+	secured.Get("/sbom/:id/status", sbomComponentsHandler.Status)
 	secured.Get("/products/:id/components", sbomComponentsHandler.ListByProduct)
 
 	intelHandler := handlers.NewIntelHandler(db, publisher)
