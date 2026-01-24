@@ -226,9 +226,9 @@ export const FindingDetailContent = ({
   const showScaTab = resolvedDetails.category === "SCA";
   const showSastTab = resolvedDetails.category === "SAST";
   const riskScore =
-    typeof data.riskScore === "number" ? Math.round(data.riskScore) : null;
-  const riskBand = data.riskBand ?? null;
-  const riskFactors = data.riskFactors ?? null;
+    typeof data?.riskScore === "number" ? Math.round(data.riskScore) : null;
+  const riskBand = data?.riskBand ?? null;
+  const riskFactors = data?.riskFactors ?? null;
   const canShowFactors = Boolean(riskFactors);
 
   let tabIndex = 0;
