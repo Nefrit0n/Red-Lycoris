@@ -130,6 +130,7 @@ services:
       <<: [ *db-env, *object-store-env, *analysis-env, *intel-env ]
       APP_ENV: production
       APP_PORT: 8080
+      LW_DEBUG_ERRORS: "true"
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
 
