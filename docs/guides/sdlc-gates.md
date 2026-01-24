@@ -10,7 +10,7 @@ This guide describes how to use the gate-check API in CI/CD pipelines to enforce
 - Returns `200 OK` when the gate passes.
 - Returns `412 Precondition Failed` when the gate fails (body still contains the response payload).
 - `pass` is derived from the policy decision (`fail` blocks; `warn` does not).
-- `blockingFindings` are derived from policy violations (when linked to findings) or, if none are linked, from findings with severity >= `high` and status != `mitigated`.
+- `blockingFindings` are derived from policy violations (when linked to findings) or, if none are linked, from findings with severity >= `high` and an open status (`new`, `under_review`, `confirmed`). Closed statuses (`mitigated`, `false_positive`, `out_of_scope`, `risk_accepted`, `duplicate`) are excluded.
 
 ## Request
 
