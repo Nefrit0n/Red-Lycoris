@@ -46,11 +46,20 @@ func (h *SbomComponentsHandler) ListBySbom(c *fiber.Ctx) error {
 		response = append(response, sbomComponentToDTO(comp))
 	}
 
+	status := &v1.SbomIndexStatusDTO{
+		Status:         item.IndexStatus,
+		Error:          nullString(item.IndexError),
+		ComponentCount: item.ComponentCount,
+		EdgeCount:      item.EdgeCount,
+		IndexedAt:      nullTimePtr(item.IndexedAt),
+	}
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"data": map[string]interface{}{
-			"items": response,
-			"total": total,
+			"items":       response,
+			"total":       total,
+			"indexStatus": status,
 		},
 	})
 }
@@ -110,16 +119,46 @@ func (h *SbomComponentsHandler) ListByProduct(c *fiber.Ctx) error {
 	})
 }
 
+func (h *SbomComponentsHandler) Status(c *fiber.Ctx) error {
+	sbomID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid sbom id"})
+	}
+
+	item, err := storage.GetSbomByID(c.Context(), h.db, sbomID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch sbom"})
+	}
+	if item == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "error": "sbom not found"})
+	}
+
+	status := v1.SbomIndexStatusDTO{
+		Status:         item.IndexStatus,
+		Error:          nullString(item.IndexError),
+		ComponentCount: item.ComponentCount,
+		EdgeCount:      item.EdgeCount,
+		IndexedAt:      nullTimePtr(item.IndexedAt),
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"success": true, "data": status})
+}
+
 func parseSbomComponentFilters(c *fiber.Ctx, sbomID uuid.UUID) storage.SbomComponentFilters {
 	directOnly := parseBoolPtr(c.Query("directOnly"))
 	limit := parseIntOrDefault(c.Query("limit"), 100)
 	offset := parseIntOrDefault(c.Query("offset"), 0)
 
+	license := strings.TrimSpace(c.Query("licenseContains"))
+	if license == "" {
+		license = strings.TrimSpace(c.Query("license"))
+	}
+
 	return storage.SbomComponentFilters{
 		SbomID:     sbomID,
 		DirectOnly: directOnly,
 		Ecosystem:  strings.TrimSpace(c.Query("ecosystem")),
-		License:    strings.TrimSpace(c.Query("license")),
+		License:    license,
 		Query:      strings.TrimSpace(c.Query("q")),
 		Limit:      limit,
 		Offset:     offset,
