@@ -114,6 +114,7 @@ services:
       sh -lc '
         nats --server nats://nats:4222 stream add ANALYSIS --subjects "analysis.>" --storage file --retention limits --max-age 168h --defaults || true;
         nats --server nats://nats:4222 stream add INTEL   --subjects "intel.>"   --storage file --retention limits --max-age 168h --defaults || true;
+        nats --server nats://nats:4222 stream add SBOM    --subjects "sbom.>"    --storage file --retention limits --max-age 168h --defaults || true;
       '
     restart: "no"
     networks:
