@@ -21,6 +21,12 @@ export interface SbomComponentItem {
   supplier?: string | null;
   licenses?: string[] | null;
   direct: boolean;
+
+  vulnTotal: number;
+  vulnCritical: number;
+  vulnHigh: number;
+  vulnMedium: number;
+  vulnLow: number;
 }
 
 export interface SbomIndexStatus {

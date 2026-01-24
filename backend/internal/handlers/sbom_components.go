@@ -199,6 +199,12 @@ func sbomComponentToDTO(item storage.SbomComponentItem) v1.SbomComponentDTO {
 		Supplier:  nullString(item.Supplier),
 		Licenses:  item.Licenses,
 		Direct:    item.Direct,
+
+		VulnTotal:    item.VulnTotal,
+		VulnCritical: item.VulnCritical,
+		VulnHigh:     item.VulnHigh,
+		VulnMedium:   item.VulnMedium,
+		VulnLow:      item.VulnLow,
 	}
 }
 

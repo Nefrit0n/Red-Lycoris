@@ -14,6 +14,12 @@ type SbomComponentDTO struct {
 	Supplier  *string         `json:"supplier,omitempty"`
 	Licenses  json.RawMessage `json:"licenses,omitempty"`
 	Direct    bool            `json:"direct"`
+
+	VulnTotal    int `json:"vulnTotal"`
+	VulnCritical int `json:"vulnCritical"`
+	VulnHigh     int `json:"vulnHigh"`
+	VulnMedium   int `json:"vulnMedium"`
+	VulnLow      int `json:"vulnLow"`
 }
 
 type SbomIndexStatusDTO struct {

@@ -784,7 +784,7 @@ const ProductDetailPage = () => {
                     <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
                       <Box component="thead">
                         <Box component="tr" sx={{ textAlign: "left" }}>
-                          {["Name", "Version", "Ecosystem", "Direct", "Licenses"].map((label) => (
+                          {["Name", "Version", "Ecosystem", "Direct", "Vulns", "Licenses"].map((label) => (
                             <Box
                               key={label}
                               component="th"
@@ -821,6 +821,18 @@ const ProductDetailPage = () => {
                             </Box>
                             <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
                               {item.direct ? "Yes" : "No"}
+                            </Box>
+                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                              {item.vulnTotal > 0 ? (
+                                <Stack spacing={0.25}>
+                                  <Typography variant="body2">{item.vulnTotal}</Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    C/H/M/L: {item.vulnCritical}/{item.vulnHigh}/{item.vulnMedium}/{item.vulnLow}
+                                  </Typography>
+                                </Stack>
+                              ) : (
+                                "0"
+                              )}
                             </Box>
                             <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
                               {(item.licenses || []).join(", ") || "—"}
