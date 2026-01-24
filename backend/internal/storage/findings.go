@@ -13,25 +13,30 @@ import (
 )
 
 type FindingListItem struct {
-	ID           uuid.UUID
-	TenantID     uuid.NullUUID
-	Title        string
-	Severity     string
-	Status       string
-	Category     string
-	ProductID    uuid.NullUUID
-	ProductName  sql.NullString
-	AssigneeID   uuid.NullUUID
-	AssigneeName sql.NullString
-	ImportJobID  uuid.NullUUID
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	FirstSeenAt  sql.NullTime
-	LastSeenAt   sql.NullTime
-	RepeatCount  int
-	DuplicateID  uuid.NullUUID
-	Scanner      sql.NullString
-	SourceType   sql.NullString
+	ID            uuid.UUID
+	TenantID      uuid.NullUUID
+	Title         string
+	Severity      string
+	Status        string
+	Category      string
+	ProductID     uuid.NullUUID
+	ProductName   sql.NullString
+	AssigneeID    uuid.NullUUID
+	AssigneeName  sql.NullString
+	ImportJobID   uuid.NullUUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	FirstSeenAt   sql.NullTime
+	LastSeenAt    sql.NullTime
+	RepeatCount   int
+	DuplicateID   uuid.NullUUID
+	SLADueAt      sql.NullTime
+	SLABreached   sql.NullBool
+	SLABreachedAt sql.NullTime
+	SLAProfile    sql.NullString
+	SLASource     sql.NullString
+	Scanner       sql.NullString
+	SourceType    sql.NullString
 }
 
 type FindingDetail struct {
@@ -51,6 +56,11 @@ type FindingDetail struct {
 	LastSeenAt     sql.NullTime
 	RepeatCount    int
 	DuplicateID    uuid.NullUUID
+	SLADueAt       sql.NullTime
+	SLABreached    sql.NullBool
+	SLABreachedAt  sql.NullTime
+	SLAProfile     sql.NullString
+	SLASource      sql.NullString
 	SourceType     sql.NullString
 	SourceVersion  sql.NullString
 	EndpointMethod sql.NullString
@@ -213,6 +223,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			f.created_at, f.updated_at,
 			f.first_seen_at, f.last_seen_at, f.repeat_count,
 			f.duplicate_id,
+			f.sla_due_at, f.sla_breached, f.sla_breached_at, f.sla_profile, f.sla_source,
 			sr.scanner,
 			f.source_type
 		FROM findings f
@@ -257,6 +268,11 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.LastSeenAt,
 			&item.RepeatCount,
 			&item.DuplicateID,
+			&item.SLADueAt,
+			&item.SLABreached,
+			&item.SLABreachedAt,
+			&item.SLAProfile,
+			&item.SLASource,
 			&item.Scanner,
 			&item.SourceType,
 		); err != nil {
@@ -345,6 +361,7 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 			f.product_id, p.name,
 			f.assignee_id, f.import_job_id,
 			f.first_seen_at, f.last_seen_at, f.repeat_count, f.duplicate_id,
+			f.sla_due_at, f.sla_breached, f.sla_breached_at, f.sla_profile, f.sla_source,
 			f.source_type, f.source_version, f.endpoint_method, f.endpoint_path, f.evidence, f.raw_data,
 			f.created_at, f.updated_at, f.deleted_at
 		 FROM findings f
@@ -371,6 +388,11 @@ func GetFindingByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDeta
 		&detail.LastSeenAt,
 		&detail.RepeatCount,
 		&detail.DuplicateID,
+		&detail.SLADueAt,
+		&detail.SLABreached,
+		&detail.SLABreachedAt,
+		&detail.SLAProfile,
+		&detail.SLASource,
 		&detail.SourceType,
 		&detail.SourceVersion,
 		&detail.EndpointMethod,
@@ -412,6 +434,8 @@ func resolveFindingSortField(sortField string) string {
 		return "f.created_at"
 	case "updated_at", "updatedAt":
 		return "f.updated_at"
+	case "sla_due_at", "slaDueAt":
+		return "CASE WHEN f.sla_due_at IS NULL THEN 1 ELSE 0 END, f.sla_due_at"
 	default:
 		return "f.created_at"
 	}
@@ -426,12 +450,17 @@ func nullableUUID(value uuid.NullUUID) *uuid.UUID {
 }
 
 type UpdateFindingParams struct {
-	Title       *string
-	Description *string
-	Severity    *string
-	Status      *string
-	ProductID   *uuid.UUID
-	AssigneeID  *uuid.UUID
+	Title         *string
+	Description   *string
+	Severity      *string
+	Status        *string
+	ProductID     *uuid.UUID
+	AssigneeID    *uuid.UUID
+	SLADueAt      *time.Time
+	SLABreached   *bool
+	SLABreachedAt *time.Time
+	SLAProfile    *string
+	SLASource     *string
 }
 
 func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateFindingParams) (*models.Finding, error) {
@@ -462,6 +491,26 @@ func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateF
 		args = append(args, *params.AssigneeID)
 		setClauses = append(setClauses, fmt.Sprintf("assignee_id = $%d", len(args)))
 	}
+	if params.SLADueAt != nil {
+		args = append(args, *params.SLADueAt)
+		setClauses = append(setClauses, fmt.Sprintf("sla_due_at = $%d", len(args)))
+	}
+	if params.SLABreached != nil {
+		args = append(args, *params.SLABreached)
+		setClauses = append(setClauses, fmt.Sprintf("sla_breached = $%d", len(args)))
+	}
+	if params.SLABreachedAt != nil {
+		args = append(args, *params.SLABreachedAt)
+		setClauses = append(setClauses, fmt.Sprintf("sla_breached_at = $%d", len(args)))
+	}
+	if params.SLAProfile != nil {
+		args = append(args, *params.SLAProfile)
+		setClauses = append(setClauses, fmt.Sprintf("sla_profile = $%d", len(args)))
+	}
+	if params.SLASource != nil {
+		args = append(args, *params.SLASource)
+		setClauses = append(setClauses, fmt.Sprintf("sla_source = $%d", len(args)))
+	}
 
 	if len(setClauses) == 0 {
 		return nil, fmt.Errorf("no fields to update")
@@ -476,7 +525,7 @@ func UpdateFinding(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdateF
 		UPDATE findings
 		SET %s
 		WHERE id = $%d AND deleted_at IS NULL
-		RETURNING id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
+		RETURNING id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, sla_due_at, sla_breached, sla_breached_at, sla_profile, sla_source, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
 		strings.Join(setClauses, ", "),
 		len(args),
 	)
@@ -500,7 +549,7 @@ func SoftDeleteFinding(ctx context.Context, db *sql.DB, id uuid.UUID) (*models.F
 		`UPDATE findings
 		 SET deleted_at = $1, updated_at = $1
 		 WHERE id = $2 AND deleted_at IS NULL
-		 RETURNING id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
+		 RETURNING id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, sla_due_at, sla_breached, sla_breached_at, sla_profile, sla_source, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at, deleted_at`,
 		now,
 		id,
 	)
@@ -526,6 +575,11 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 	var importJobID uuid.NullUUID
 	var description sql.NullString
 	var deletedAt sql.NullTime
+	var slaDueAt sql.NullTime
+	var slaBreached sql.NullBool
+	var slaBreachedAt sql.NullTime
+	var slaProfile sql.NullString
+	var slaSource sql.NullString
 	var sourceType sql.NullString
 	var sourceVersion sql.NullString
 	var endpointMethod sql.NullString
@@ -550,6 +604,11 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 		&finding.FirstSeenAt,
 		&finding.LastSeenAt,
 		&finding.RepeatCount,
+		&slaDueAt,
+		&slaBreached,
+		&slaBreachedAt,
+		&slaProfile,
+		&slaSource,
 		&sourceType,
 		&sourceVersion,
 		&endpointMethod,
@@ -590,6 +649,25 @@ func scanFindingRow(row *sql.Row) (*models.Finding, error) {
 	if importJobID.Valid {
 		value := importJobID.UUID
 		finding.ImportJobID = &value
+	}
+	if slaDueAt.Valid {
+		value := slaDueAt.Time
+		finding.SLADueAt = &value
+	}
+	if slaBreached.Valid {
+		finding.SLABreached = slaBreached.Bool
+	}
+	if slaBreachedAt.Valid {
+		value := slaBreachedAt.Time
+		finding.SLABreachedAt = &value
+	}
+	if slaProfile.Valid {
+		value := slaProfile.String
+		finding.SLAProfile = &value
+	}
+	if slaSource.Valid {
+		value := slaSource.String
+		finding.SLASource = &value
 	}
 	if sourceType.Valid {
 		value := sourceType.String

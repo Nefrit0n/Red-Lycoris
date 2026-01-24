@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -44,6 +45,8 @@ func main() {
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	go runSLABreachUpdater(stopCtx, db, parseDuration(cfg.SLABreachCheckInterval, 15*time.Minute))
+
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
 
 	// Запускаем сервер асинхронно, чтобы main мог ждать сигнал
@@ -70,4 +73,33 @@ func main() {
 	if err := app.ShutdownWithContext(ctx); err != nil {
 		log.Printf("shutdown error: %v", err)
 	}
+}
+
+func runSLABreachUpdater(ctx context.Context, db *sql.DB, interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		now := time.Now().UTC()
+		if _, err := storage.MarkSLABreaches(ctx, db, now); err != nil {
+			log.Printf("sla breach update failed: %v", err)
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func parseDuration(value string, fallback time.Duration) time.Duration {
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

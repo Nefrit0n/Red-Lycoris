@@ -60,7 +60,7 @@ func TestApplyFindingPoliciesAutoStatusCreatesEvents(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	rows := sqlmock.NewRows([]string{
-		"id", "tenant_id", "scan_result_id", "product_id", "fingerprint", "category", "title", "description", "severity", "status", "duplicate_id", "assignee_id", "import_job_id", "first_seen_at", "last_seen_at", "repeat_count", "source_type", "source_version", "endpoint_method", "endpoint_path", "evidence", "raw_data", "created_at", "updated_at", "deleted_at",
+		"id", "tenant_id", "scan_result_id", "product_id", "fingerprint", "category", "title", "description", "severity", "status", "duplicate_id", "assignee_id", "import_job_id", "first_seen_at", "last_seen_at", "repeat_count", "sla_due_at", "sla_breached", "sla_breached_at", "sla_profile", "sla_source", "source_type", "source_version", "endpoint_method", "endpoint_path", "evidence", "raw_data", "created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		findingID,
 		nil,
@@ -78,6 +78,11 @@ func TestApplyFindingPoliciesAutoStatusCreatesEvents(t *testing.T) {
 		now,
 		now,
 		0,
+		nil,
+		false,
+		nil,
+		nil,
+		nil,
 		nil,
 		nil,
 		nil,
