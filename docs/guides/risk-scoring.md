@@ -7,6 +7,11 @@
 
 Risk is designed to be **deterministic**: the same inputs produce the same score.
 
+References:
+
+* OWASP frames risk as **Likelihood × Impact**, which maps directly to our explainable factors. (<https://owasp.org/www-community/OWASP_Risk_Rating_Methodology>)
+* NVD clarifies that CVSS is a **severity** metric and is **not a measure of overall risk**. (<https://nvd.nist.gov/vuln-metrics/cvss>)
+
 ## Inputs
 
 We only use inputs that already exist in the system:

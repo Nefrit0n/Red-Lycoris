@@ -9,6 +9,8 @@ export type { StatusData } from "./StatusBarChart";
 
 export { default as TrendLineChart } from "./TrendLineChart";
 export type { TrendDataPoint } from "./TrendLineChart";
+export { default as RiskTrendChart } from "./RiskTrendChart";
+export type { RiskTrendDataPoint } from "./RiskTrendChart";
 
 export { default as TopProductsChart } from "./TopProductsChart";
 export type { ProductRiskData } from "./TopProductsChart";

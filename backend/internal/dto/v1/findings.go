@@ -32,6 +32,7 @@ type FindingListItemDTO struct {
 	RiskScore        *float64      `json:"riskScore,omitempty"`
 	RiskBand         *string       `json:"riskBand,omitempty"`
 	RiskUpdatedAt    *string       `json:"riskUpdatedAt,omitempty"`
+	RiskModelVersion *string       `json:"modelVersion,omitempty"`
 	IntelSummary     *IntelSummary `json:"intel_summary,omitempty"`
 }
 

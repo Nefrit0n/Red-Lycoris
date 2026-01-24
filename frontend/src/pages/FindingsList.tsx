@@ -107,6 +107,7 @@ const FindingsList = () => {
 
         const defaultOrder: "asc" | "desc" =
           field === "severity" ||
+            field === "riskScore" ||
             field === "lastSeenAt" ||
             field === "createdAt" ||
             field === "updatedAt"
@@ -140,6 +141,7 @@ const FindingsList = () => {
       filters.searchInput.trim(),
       filters.filterSeverity,
       filters.filterStatus,
+      filters.filterRiskBand,
       filters.filterOccurrence,
       filters.filterScannerType,
       filters.filterPolicyDecision,
@@ -153,6 +155,7 @@ const FindingsList = () => {
     filters.searchInput,
     filters.filterSeverity,
     filters.filterStatus,
+    filters.filterRiskBand,
     filters.filterOccurrence,
     filters.filterScannerType,
     filters.filterPolicyDecision,
@@ -168,6 +171,7 @@ const FindingsList = () => {
       if (viewFilters.searchInput !== undefined) actions.setSearchInput(viewFilters.searchInput);
       if (viewFilters.filterSeverity !== undefined) actions.setFilterSeverity(viewFilters.filterSeverity);
       if (viewFilters.filterStatus !== undefined) actions.setFilterStatus(viewFilters.filterStatus);
+      if (viewFilters.filterRiskBand !== undefined) actions.setFilterRiskBand(viewFilters.filterRiskBand);
       if (viewFilters.filterOccurrence !== undefined) actions.setFilterOccurrence(viewFilters.filterOccurrence);
       if (viewFilters.filterScannerType !== undefined) actions.setFilterScannerType(viewFilters.filterScannerType);
       if (viewFilters.filterPolicyDecision !== undefined) {
@@ -244,6 +248,7 @@ const FindingsList = () => {
             search={filters.searchInput}
             filterSeverity={filters.filterSeverity}
             filterStatus={filters.filterStatus}
+            filterRiskBand={filters.filterRiskBand}
             filterOccurrence={filters.filterOccurrence}
             filterScannerType={filters.filterScannerType}
             filterPolicyDecision={filters.filterPolicyDecision}
@@ -254,6 +259,7 @@ const FindingsList = () => {
             onSearchChange={actions.setSearchInput}
             onSeverityChange={actions.setFilterSeverity}
             onStatusChange={actions.setFilterStatus}
+            onRiskBandChange={actions.setFilterRiskBand}
             onOccurrenceChange={actions.setFilterOccurrence}
             onScannerTypeChange={actions.setFilterScannerType}
             onPolicyDecisionChange={actions.setFilterPolicyDecision}
@@ -471,6 +477,7 @@ const FindingsList = () => {
             search={filters.searchInput}
             filterSeverity={filters.filterSeverity}
             filterStatus={filters.filterStatus}
+            filterRiskBand={filters.filterRiskBand}
             filterOccurrence={filters.filterOccurrence}
             filterScannerType={filters.filterScannerType}
             filterPolicyDecision={filters.filterPolicyDecision}
@@ -481,6 +488,7 @@ const FindingsList = () => {
             onSearchChange={actions.setSearchInput}
             onSeverityChange={actions.setFilterSeverity}
             onStatusChange={actions.setFilterStatus}
+            onRiskBandChange={actions.setFilterRiskBand}
             onOccurrenceChange={actions.setFilterOccurrence}
             onScannerTypeChange={actions.setFilterScannerType}
             onPolicyDecisionChange={actions.setFilterPolicyDecision}

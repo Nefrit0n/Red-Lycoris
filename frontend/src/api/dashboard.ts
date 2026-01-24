@@ -10,8 +10,10 @@ import {
   TrendPoint,
   ProductRisk,
   RecentActivityItem,
+  RiskMetricsDTO,
 } from "../types/dashboard";
 import { FindingListItemDTO, FindingSeverity, FindingStatus } from "../types/findings";
+import { request } from "./client";
 
 const OPEN_STATUSES: FindingStatus[] = ["new", "under_review", "confirmed"];
 const SEVERITIES: FindingSeverity[] = ["critical", "high", "medium", "low"];
@@ -114,7 +116,29 @@ export const fetchDashboardData = async (signal?: AbortSignal): Promise<Dashboar
     trend,
     topProducts,
     recentActivity,
+    riskMetrics: null,
   };
+};
+
+export const fetchRiskMetrics = async (
+  params: {
+    productId?: string;
+    from?: string;
+    to?: string;
+    status?: string;
+  },
+  signal?: AbortSignal
+): Promise<RiskMetricsDTO> => {
+  const searchParams = new URLSearchParams();
+  if (params.productId) searchParams.set("productId", params.productId);
+  if (params.from) searchParams.set("from", params.from);
+  if (params.to) searchParams.set("to", params.to);
+  if (params.status) searchParams.set("status", params.status);
+
+  return request<RiskMetricsDTO>("/api/v1/metrics/risk", {
+    signal,
+    query: searchParams,
+  });
 };
 
 /**
