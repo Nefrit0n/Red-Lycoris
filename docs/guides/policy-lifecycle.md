@@ -54,3 +54,7 @@ For all policy changes, `audit_log.payload` contains:
 ## Optional: OPA decision logs
 
 If you enable OPA decision logging, each evaluation can include a `decision_id`. That ID can be stored in `policy_results` to correlate with an external decision-log sink (e.g., SIEM or audit store). This is not enabled in MVP, but the system can be extended to persist and export `decision_id` for full forensic traceability.
+
+## SLA breach background updates
+
+SLA breach status (`sla_breached` / `sla_breached_at`) is updated by a background job running in the API server. Configure the cadence with `SLA_BREACH_INTERVAL` (default `15m`). Each run records metrics for how many findings were updated so operations can monitor the SLA refresh activity.
