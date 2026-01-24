@@ -1,4 +1,5 @@
 export type FindingSeverity = "low" | "medium" | "high" | "critical";
+export type RiskBand = "low" | "medium" | "high" | "critical";
 export type FindingStatus =
   | "new"
   | "under_review"
@@ -43,6 +44,10 @@ export interface FindingListItemDTO {
   slaDaysRemaining?: number | null;
   createdAt: string;
   updatedAt: string;
+  riskScore?: number | null;
+  riskBand?: RiskBand | null;
+  riskUpdatedAt?: string | null;
+  modelVersion?: string | null;
   intel_summary?: IntelSummary | null;
 }
 
@@ -58,6 +63,7 @@ export interface FetchFindingsParams {
   filterProductId?: string;
   filterSeverity?: FindingSeverity | "";
   filterStatus?: FindingStatus | "";
+  filterRiskBand?: RiskBand | "";
   filterOccurrence?: FindingOccurrenceStatus | "";
   filterScannerType?: string;
   filterPolicyDecision?: PolicyDecision | "";
@@ -138,6 +144,7 @@ export interface FindingDetailBaseDTO extends FindingListItemDTO {
   scaDetails?: ScaDetails | null;
   intel_summary?: IntelSummary | null;
   intel_details?: IntelDetail | null;
+  riskFactors?: RiskFactors | null;
 }
 
 export interface FindingDetailSASTDTO extends FindingDetailBaseDTO {
@@ -208,6 +215,32 @@ export interface IntelDetail {
     url: string;
   }> | null;
   updated_at?: string | null;
+}
+
+export interface RiskFactors {
+  impact?: {
+    value?: number;
+    cvss_score?: number;
+    severity?: string;
+  };
+  likelihood?: {
+    epss_score?: number;
+    kev?: boolean;
+    value?: number;
+  };
+  asset?: {
+    criticality?: string;
+    multiplier?: number;
+    environment?: string;
+    environment_multiplier?: number;
+    internet_exposed?: boolean;
+    exposure_multiplier?: number;
+  };
+  freshness?: {
+    enabled?: boolean;
+    age_days?: number;
+    multiplier?: number;
+  };
 }
 
 export interface FindingComment {

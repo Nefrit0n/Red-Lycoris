@@ -16,16 +16,17 @@ import {
 } from "@mui/material";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import { useMemo } from "react";
-import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision } from "../types/findings";
+import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision, RiskBand } from "../types/findings";
 import { ProductAutocomplete } from "./ProductAutocomplete";
 import { FilterChips } from "./FilterChips";
-import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS } from "../utils/findingConstants";
+import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS, RISK_BAND_LABELS } from "../utils/findingConstants";
 
 interface FiltersPanelProps {
   productId: string;
   search: string;
   filterSeverity: FindingSeverity | "";
   filterStatus: FindingStatus | "";
+  filterRiskBand: RiskBand | "";
   filterOccurrence: FindingOccurrenceStatus | "";
   filterScannerType: string;
   filterPolicyDecision: PolicyDecision | "";
@@ -36,6 +37,7 @@ interface FiltersPanelProps {
   onSearchChange: (value: string) => void;
   onSeverityChange: (value: FindingSeverity | "") => void;
   onStatusChange: (value: FindingStatus | "") => void;
+  onRiskBandChange: (value: RiskBand | "") => void;
   onOccurrenceChange: (value: FindingOccurrenceStatus | "") => void;
   onScannerTypeChange: (value: string) => void;
   onPolicyDecisionChange: (value: PolicyDecision | "") => void;
@@ -52,6 +54,7 @@ const FiltersPanel = ({
   search,
   filterSeverity,
   filterStatus,
+  filterRiskBand,
   filterOccurrence,
   filterScannerType,
   filterPolicyDecision,
@@ -62,6 +65,7 @@ const FiltersPanel = ({
   onSearchChange,
   onSeverityChange,
   onStatusChange,
+  onRiskBandChange,
   onOccurrenceChange,
   onScannerTypeChange,
   onPolicyDecisionChange,
@@ -84,6 +88,10 @@ const FiltersPanel = ({
     onOccurrenceChange(event.target.value as FindingOccurrenceStatus | "");
   };
 
+  const handleRiskBandChange = (event: SelectChangeEvent) => {
+    onRiskBandChange(event.target.value as RiskBand | "");
+  };
+
   const handleScannerChange = (event: SelectChangeEvent) => {
     onScannerTypeChange(event.target.value);
   };
@@ -97,6 +105,7 @@ const FiltersPanel = ({
     Boolean(search) ||
     filterSeverity !== "" ||
     filterStatus !== "" ||
+    filterRiskBand !== "" ||
     filterOccurrence !== "" ||
     Boolean(filterScannerType) ||
     filterPolicyDecision !== "" ||
@@ -167,6 +176,24 @@ const FiltersPanel = ({
                 <MenuItem value="medium">{SEVERITY_STYLES.medium.label}</MenuItem>
                 <MenuItem value="high">{SEVERITY_STYLES.high.label}</MenuItem>
                 <MenuItem value="critical">{SEVERITY_STYLES.critical.label}</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" fullWidth>
+              <InputLabel id="filter-risk-label">Risk band</InputLabel>
+              <Select
+                labelId="filter-risk-label"
+                label="Risk band"
+                value={filterRiskBand}
+                onChange={handleRiskBandChange}
+              >
+                <MenuItem value="">
+                  <em>Все</em>
+                </MenuItem>
+                <MenuItem value="low">{RISK_BAND_LABELS.low}</MenuItem>
+                <MenuItem value="medium">{RISK_BAND_LABELS.medium}</MenuItem>
+                <MenuItem value="high">{RISK_BAND_LABELS.high}</MenuItem>
+                <MenuItem value="critical">{RISK_BAND_LABELS.critical}</MenuItem>
               </Select>
             </FormControl>
 
@@ -307,6 +334,7 @@ const FiltersPanel = ({
             search={search}
             filterSeverity={filterSeverity}
             filterStatus={filterStatus}
+            filterRiskBand={filterRiskBand}
             filterOccurrence={filterOccurrence}
             filterScannerType={filterScannerType}
             filterPolicyDecision={filterPolicyDecision}
@@ -317,6 +345,7 @@ const FiltersPanel = ({
             onSearchChange={onSearchChange}
             onSeverityChange={onSeverityChange}
             onStatusChange={onStatusChange}
+            onRiskBandChange={onRiskBandChange}
             onOccurrenceChange={onOccurrenceChange}
             onScannerTypeChange={onScannerTypeChange}
             onPolicyDecisionChange={onPolicyDecisionChange}
