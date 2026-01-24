@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE vuln_intel
+    ADD COLUMN IF NOT EXISTS fail_count INT NOT NULL DEFAULT 0;
+
+COMMIT;

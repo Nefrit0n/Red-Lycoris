@@ -11,6 +11,8 @@
 | Scan Result | `scan_results` | `import_jobs`, `products`, `users` |
 | Import Job | `import_jobs` | `scan_results`, `findings`, `products`, `users` |
 | Finding | `findings` | `finding_comments`, `finding_events`, `finding_vuln_identifiers` |
+| Vulnerability Identifiers | `finding_vuln_identifiers` | `findings`, `vuln_intel` |
+| Vulnerability Intel | `vuln_intel` | `finding_vuln_identifiers` |
 | Evidence | `findings.evidence` | `findings.raw_data` |
 | Source | полевая модель для `scan_results`, `import_jobs`, `findings`, `vuln_intel` | `vuln_intel` |
 
@@ -132,6 +134,47 @@
   "metadata": { "scanner": "semgrep", "rule": "..." }
 }
 ```
+
+## Vulnerability Identifiers (`finding_vuln_identifiers`)
+
+**Назначение:** связывает findings с уязвимостями (CVE, GHSA, OSV и т.д.).
+
+**Ключевые поля:**
+- `finding_id` (UUID)
+- `identifier` (TEXT)
+- `created_at` (TIMESTAMPTZ)
+
+**Индексы и ограничения:**
+- `PRIMARY KEY (finding_id, identifier)` — защита от дубликатов.
+- `idx_finding_vuln_identifiers_identifier` — быстрый поиск по идентификатору.
+
+## Vulnerability Intelligence (`vuln_intel`)
+
+**Назначение:** кэш обогащения уязвимостей из внешних источников (NVD/EPSS/KEV).
+
+**Ключевые поля:**
+- `identifier` (TEXT)
+- `source_version` (TEXT)
+- `nvd_payload` (JSONB, nullable)
+- `epss_payload` (JSONB, nullable)
+- `kev_payload` (JSONB, nullable)
+- `references_payload` (JSONB, nullable)
+- `cvss_score` (NUMERIC, nullable)
+- `cvss_version` (TEXT, nullable)
+- `epss_score` (NUMERIC, nullable)
+- `epss_percentile` (NUMERIC, nullable)
+- `kev` (BOOLEAN)
+- `fail_count` (INT)
+- `last_refreshed_at` (TIMESTAMPTZ, nullable)
+- `next_retry_at` (TIMESTAMPTZ, nullable)
+- `last_error` (TEXT, nullable)
+- `created_at` (TIMESTAMPTZ)
+- `updated_at` (TIMESTAMPTZ)
+
+**Индексы и ограничения:**
+- `PRIMARY KEY (identifier, source_version)`
+- `idx_vuln_intel_identifier`
+- `idx_vuln_intel_next_retry`
 
 ## Source (логическая модель)
 

@@ -7,8 +7,10 @@ import (
 	"errors"
 	"hash/fnv"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"lotus-warden/backend/internal/config"
@@ -20,6 +22,10 @@ import (
 )
 
 const intelConsumer = "intel-worker"
+const intelBackoffCap = 6
+
+var jitterRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+var jitterMu sync.Mutex
 
 func main() {
 	cfg := config.Load()
@@ -104,15 +110,25 @@ func handleIntelMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, publishe
 				return
 			}
 
-			record, err := service.Enrich(ctx, identifier)
+			record, skipped, err := service.Enrich(ctx, identifier)
 			if err != nil {
-				nextRetry := now.Add(parseDuration(cfg.IntelRetryBase, 30*time.Minute))
-				_ = storage.UpdateVulnIntelError(ctx, db, identifier, record.SourceVersion, err.Error(), nextRetry)
+				failCount := 1
+				if status != nil {
+					failCount = status.FailCount + 1
+				}
+				backoff := computeBackoff(parseDuration(cfg.IntelRetryBase, 30*time.Minute), failCount)
+				nextRetry := now.Add(backoff)
+				log.Printf("intel enrich failed for %s: %v (fail_count=%d retry_in=%s)", identifier, err, failCount, backoff)
+				_ = storage.UpdateVulnIntelError(ctx, db, identifier, record.SourceVersion, err.Error(), nextRetry, failCount)
 				return
+			}
+			if skipped {
+				log.Printf("intel enrich skipped for %s (unsupported identifier)", identifier)
 			}
 			record.LastRefreshedAt = &now
 			record.NextRetryAt = nil
 			record.LastError = nil
+			record.FailCount = 0
 			if err := storage.UpsertVulnIntel(ctx, db, record); err != nil {
 				log.Printf("intel upsert error: %v", err)
 				return
@@ -159,6 +175,24 @@ func parseDuration(raw string, fallback time.Duration) time.Duration {
 		return time.Duration(seconds) * time.Second
 	}
 	return fallback
+}
+
+func computeBackoff(base time.Duration, failCount int) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	if failCount < 1 {
+		failCount = 1
+	}
+	exp := failCount
+	if exp > intelBackoffCap {
+		exp = intelBackoffCap
+	}
+	backoff := base * time.Duration(1<<exp)
+	jitterMu.Lock()
+	jitter := time.Duration(jitterRand.Int63n(int64(base)))
+	jitterMu.Unlock()
+	return backoff + jitter
 }
 
 func init() {
