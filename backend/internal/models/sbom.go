@@ -24,6 +24,11 @@ type Sbom struct {
 	OriginalFilename string          `db:"original_filename"`
 	SizeBytes        int64           `db:"size_bytes"`
 	Metadata         json.RawMessage `db:"metadata"`
+	IndexStatus      string          `db:"index_status"`
+	IndexedAt        *time.Time      `db:"indexed_at"`
+	IndexError       *string         `db:"index_error"`
+	ComponentCount   int             `db:"component_count"`
+	EdgeCount        int             `db:"edge_count"`
 	CreatedAt        time.Time       `db:"created_at"`
 }
 
