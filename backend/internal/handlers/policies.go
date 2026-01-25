@@ -599,7 +599,7 @@ func insertPolicyRule(ctx context.Context, tx *sql.Tx, policyID uuid.UUID, input
 		strings.TrimSpace(input.Format),
 		content,
 		sha,
-		policyNullableString(input.Entrypoint),
+		nullableString(input.Entrypoint),
 	)
 
 	var rule storage.PolicyRuleRecord
@@ -753,9 +753,7 @@ func mapPolicyAssignmentsAuditPayload(assignments []storage.PolicyAssignmentReco
 	return payload
 }
 
-// policyNullableString is local to policies.go to avoid symbol collisions in the handlers package.
-// (We had a duplicate helper in other handler files and Go does not allow redeclaration.)
-func policyNullableString(value *string) interface{} {
+func nullableString(value *string) interface{} {
 	if value == nil {
 		return nil
 	}

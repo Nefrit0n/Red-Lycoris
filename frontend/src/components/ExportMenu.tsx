@@ -13,57 +13,17 @@ import {
 } from "@mui/icons-material";
 import { useState } from "react";
 import { FindingListItemDTO } from "../types/findings";
-import { getAuthHeaders } from "../api/http";
 import { SEVERITY_STYLES, STATUS_LABELS } from "../utils/findingConstants";
 
 interface ExportMenuProps {
   data: FindingListItemDTO[];
   filename?: string;
   disabled?: boolean;
-
-  /**
-   * If provided, export will call the backend and download a file for the current filters.
-   * `query` should not include `format` (it will be appended).
-   */
-  serverExport?: {
-    path: string;
-    query?: string; // e.g. "severity=high&product=..."
-    total?: number;
-    maxRows?: number; // safety cap shown to user (defaults to 20000)
-  };
 }
 
 type ExportFormat = "csv" | "json";
 
-const DEFAULT_SERVER_MAX = 20000;
-
-const parseContentDispositionFilename = (value: string | null): string | null => {
-  if (!value) return null;
-  // Simple, safe parser for: attachment; filename="..."
-  const match = value.match(/filename\s*=\s*"?([^";]+)"?/i);
-  if (!match) return null;
-  const candidate = match[1].trim();
-  // basic sanitization
-  return candidate.replace(/[\\/\r\n]/g, "_").slice(0, 160);
-};
-
-const downloadBlob = (blob: Blob, filename: string) => {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
-
-const ExportMenu = ({
-  data,
-  filename = "findings",
-  disabled = false,
-  serverExport,
-}: ExportMenuProps) => {
+const ExportMenu = ({ data, filename = "findings", disabled = false }: ExportMenuProps) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -75,14 +35,12 @@ const ExportMenu = ({
     setAnchorEl(null);
   };
 
-  const exportToCSV = (findings: FindingListItemDTO[]): string => {
+  const exportToCSV = (findings: Finding[]): string => {
     const headers = [
       "ID",
       "Title",
       "Severity",
       "Status",
-      "Risk Score",
-      "Risk Band",
       "Product",
       "Scanner",
       "First Seen",
@@ -95,8 +53,6 @@ const ExportMenu = ({
       `"${(f.title || "").replace(/"/g, '""')}"`,
       SEVERITY_STYLES[f.severity]?.label || f.severity,
       STATUS_LABELS[f.status] || f.status,
-      f.riskScore != null ? String(f.riskScore) : "",
-      f.riskBand || "",
       f.productName || "",
       f.scannerType || "",
       f.firstSeenAt ? new Date(f.firstSeenAt).toISOString() : "",
@@ -107,7 +63,7 @@ const ExportMenu = ({
     return [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
   };
 
-  const exportToJSON = (findings: FindingListItemDTO[]): string => {
+  const exportToJSON = (findings: Finding[]): string => {
     const exportData = findings.map((f) => ({
       id: f.id,
       title: f.title,
@@ -115,8 +71,6 @@ const ExportMenu = ({
       severityLabel: SEVERITY_STYLES[f.severity]?.label || f.severity,
       status: f.status,
       statusLabel: STATUS_LABELS[f.status] || f.status,
-      riskScore: f.riskScore,
-      riskBand: f.riskBand,
       productId: f.productId,
       productName: f.productName,
       scannerType: f.scannerType,
@@ -146,41 +100,6 @@ const ExportMenu = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleServerExport = async (format: ExportFormat) => {
-    if (!serverExport) return;
-    setExporting(true);
-    try {
-      const maxRows = serverExport.maxRows ?? DEFAULT_SERVER_MAX;
-      const params = new URLSearchParams((serverExport.query || "").replace(/^\?/, ""));
-      params.set("format", format);
-      // export all filtered rows (bounded by maxRows)
-      const wanted = typeof serverExport.total === "number" ? Math.max(0, serverExport.total) : maxRows;
-      params.set("limit", String(Math.min(wanted, maxRows)));
-      params.set("offset", "0");
-
-      const url = `${serverExport.path}?${params.toString()}`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          ...getAuthHeaders(),
-        },
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `HTTP ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const cd = response.headers.get("content-disposition");
-      const serverFilename = parseContentDispositionFilename(cd);
-      const fallback = `${filename}_${new Date().toISOString().slice(0, 10)}.${format}`;
-      downloadBlob(blob, serverFilename || fallback);
-    } finally {
-      setExporting(false);
-      handleCloseMenu();
-    }
-  };
-
   const handleExport = async (format: ExportFormat) => {
     setExporting(true);
     try {
@@ -199,7 +118,7 @@ const ExportMenu = ({
         size="small"
         onClick={handleOpenMenu}
         startIcon={exporting ? <CircularProgress size={16} /> : <DownloadIcon />}
-        disabled={disabled || exporting || (!serverExport && data.length === 0)}
+        disabled={disabled || data.length === 0 || exporting}
         sx={{ whiteSpace: "nowrap" }}
       >
         Export
@@ -218,31 +137,6 @@ const ExportMenu = ({
           horizontal: "right",
         }}
       >
-        {serverExport && (
-          <>
-            <MenuItem onClick={() => handleServerExport("csv")}>
-              <ListItemIcon>
-                <CsvIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText
-                primary="Export filtered (server) as CSV"
-                secondary={`up to ${(serverExport.maxRows ?? DEFAULT_SERVER_MAX).toLocaleString()} rows`}
-                secondaryTypographyProps={{ variant: "caption" }}
-              />
-            </MenuItem>
-            <MenuItem onClick={() => handleServerExport("json")}>
-              <ListItemIcon>
-                <JsonIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText
-                primary="Export filtered (server) as JSON"
-                secondary={`up to ${(serverExport.maxRows ?? DEFAULT_SERVER_MAX).toLocaleString()} rows`}
-                secondaryTypographyProps={{ variant: "caption" }}
-              />
-            </MenuItem>
-          </>
-        )}
-
         <MenuItem onClick={() => handleExport("csv")}>
           <ListItemIcon>
             <CsvIcon fontSize="small" />

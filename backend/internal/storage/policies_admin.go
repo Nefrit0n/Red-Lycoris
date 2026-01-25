@@ -3,8 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"strings"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,62 +74,62 @@ func ListPolicies(ctx context.Context, db *sql.DB, filters PolicyFilters) ([]Pol
 		filters.Offset = 0
 	}
 
-	where := []string{"1=1"}
-	args := []interface{}{}
+	q := likePatternOrNil(filters.Query)
 
-	if filters.Query != "" {
-		args = append(args, "%"+filters.Query+"%")
-		where = append(where, fmt.Sprintf("(p.name ILIKE $%d OR p.description ILIKE $%d)", len(args), len(args)))
-	}
-	if filters.Status != "" {
-		args = append(args, filters.Status)
-		where = append(where, fmt.Sprintf("p.status = $%d", len(args)))
-	}
-	if filters.Kind != "" {
-		args = append(args, filters.Kind)
-		where = append(where, fmt.Sprintf("p.kind = $%d", len(args)))
-	}
+	var tenant any
 	if filters.TenantID != nil {
-		args = append(args, *filters.TenantID)
-		where = append(where, fmt.Sprintf("p.tenant_id = $%d", len(args)))
+		tenant = *filters.TenantID
 	}
-
-	whereClause := "WHERE " + strings.Join(where, " AND ")
 
 	var total int
-	countQuery := "SELECT COUNT(*) FROM policies p " + whereClause
-	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*)
+		 FROM policies p
+		 WHERE ($1::text IS NULL OR (p.name ILIKE $1 OR p.description ILIKE $1))
+		   AND ($2::text IS NULL OR p.status = $2)
+		   AND ($3::text IS NULL OR p.kind = $3)
+		   AND ($4::uuid IS NULL OR p.tenant_id = $4)`,
+		q,
+		nilIfEmpty(filters.Status),
+		nilIfEmpty(filters.Kind),
+		tenant,
+	).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
-	args = append(args, filters.Limit, filters.Offset)
-	listQuery := fmt.Sprintf(`
-        SELECT
-            p.id, p.tenant_id, p.name, p.kind, p.status, p.description, p.created_at, p.updated_at,
-            lr.version, lr.id,
-            COALESCE(pa.assignments_count, 0)
-        FROM policies p
-        LEFT JOIN LATERAL (
-            SELECT pr.id, pr.version
-            FROM policy_rules pr
-            WHERE pr.policy_id = p.id
-            ORDER BY pr.created_at DESC
-            LIMIT 1
-        ) lr ON true
-        LEFT JOIN (
-            SELECT policy_id, COUNT(*) AS assignments_count
-            FROM policy_assignments
-            GROUP BY policy_id
-        ) pa ON pa.policy_id = p.id
-        %s
-        ORDER BY p.updated_at DESC
-        LIMIT $%d OFFSET $%d`,
-		whereClause,
-		len(args)-1,
-		len(args),
+	rows, err := db.QueryContext(
+		ctx,
+		`SELECT
+			p.id, p.tenant_id, p.name, p.kind, p.status, p.description, p.created_at, p.updated_at,
+			lr.version, lr.id,
+			COALESCE(pa.assignments_count, 0)
+		FROM policies p
+		LEFT JOIN LATERAL (
+			SELECT pr.id, pr.version
+			FROM policy_rules pr
+			WHERE pr.policy_id = p.id
+			ORDER BY pr.created_at DESC
+			LIMIT 1
+		) lr ON true
+		LEFT JOIN (
+			SELECT policy_id, COUNT(*) AS assignments_count
+			FROM policy_assignments
+			GROUP BY policy_id
+		) pa ON pa.policy_id = p.id
+		WHERE ($1::text IS NULL OR (p.name ILIKE $1 OR p.description ILIKE $1))
+		  AND ($2::text IS NULL OR p.status = $2)
+		  AND ($3::text IS NULL OR p.kind = $3)
+		  AND ($4::uuid IS NULL OR p.tenant_id = $4)
+		ORDER BY p.updated_at DESC
+		LIMIT $5 OFFSET $6`,
+		q,
+		nilIfEmpty(filters.Status),
+		nilIfEmpty(filters.Kind),
+		tenant,
+		filters.Limit,
+		filters.Offset,
 	)
-
-	rows, err := db.QueryContext(ctx, listQuery, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -164,18 +163,18 @@ func ListPolicies(ctx context.Context, db *sql.DB, filters PolicyFilters) ([]Pol
 }
 
 func GetPolicyByID(ctx context.Context, db *sql.DB, id uuid.UUID, tenantID *uuid.UUID) (*PolicyRecord, error) {
-	args := []interface{}{id}
-	tenantClause := ""
+	var tenant any
 	if tenantID != nil {
-		args = append(args, *tenantID)
-		tenantClause = fmt.Sprintf(" AND tenant_id = $%d", len(args))
+		tenant = *tenantID
 	}
+
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT id, tenant_id, name, kind, status, description, created_at, updated_at
-         FROM policies
-         WHERE id = $1`+tenantClause,
-		args...,
+		 FROM policies
+		 WHERE id = $1 AND ($2::uuid IS NULL OR tenant_id = $2)`,
+		id,
+		tenant,
 	)
 
 	var policy PolicyRecord
@@ -199,20 +198,20 @@ func GetPolicyByID(ctx context.Context, db *sql.DB, id uuid.UUID, tenantID *uuid
 }
 
 func ListPolicyRules(ctx context.Context, db *sql.DB, policyID uuid.UUID, tenantID *uuid.UUID) ([]PolicyRuleRecord, error) {
-	args := []interface{}{policyID}
-	tenantClause := ""
+	var tenant any
 	if tenantID != nil {
-		args = append(args, *tenantID)
-		tenantClause = fmt.Sprintf(" AND p.tenant_id = $%d", len(args))
+		tenant = *tenantID
 	}
+
 	rows, err := db.QueryContext(
 		ctx,
 		`SELECT pr.id, pr.policy_id, pr.version, pr.format, pr.content, pr.sha256, pr.entrypoint, pr.created_at
-         FROM policy_rules pr
-         JOIN policies p ON p.id = pr.policy_id
-         WHERE pr.policy_id = $1`+tenantClause+`
-         ORDER BY pr.created_at DESC`,
-		args...,
+		 FROM policy_rules pr
+		 INNER JOIN policies p ON p.id = pr.policy_id
+		 WHERE pr.policy_id = $1 AND ($2::uuid IS NULL OR p.tenant_id = $2)
+		 ORDER BY pr.created_at DESC`,
+		policyID,
+		tenant,
 	)
 	if err != nil {
 		return nil, err
@@ -221,42 +220,30 @@ func ListPolicyRules(ctx context.Context, db *sql.DB, policyID uuid.UUID, tenant
 
 	rules := []PolicyRuleRecord{}
 	for rows.Next() {
-		var rule PolicyRuleRecord
-		if err := rows.Scan(
-			&rule.ID,
-			&rule.PolicyID,
-			&rule.Version,
-			&rule.Format,
-			&rule.Content,
-			&rule.Sha256,
-			&rule.Entrypoint,
-			&rule.CreatedAt,
-		); err != nil {
+		var r PolicyRuleRecord
+		if err := rows.Scan(&r.ID, &r.PolicyID, &r.Version, &r.Format, &r.Content, &r.Sha256, &r.Entrypoint, &r.CreatedAt); err != nil {
 			return nil, err
 		}
-		rules = append(rules, rule)
+		rules = append(rules, r)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return rules, nil
+	return rules, rows.Err()
 }
 
 func ListPolicyAssignments(ctx context.Context, db *sql.DB, policyID uuid.UUID, tenantID *uuid.UUID) ([]PolicyAssignmentRecord, error) {
-	args := []interface{}{policyID}
-	tenantClause := ""
+	var tenant any
 	if tenantID != nil {
-		args = append(args, *tenantID)
-		tenantClause = fmt.Sprintf(" AND p.tenant_id = $%d", len(args))
+		tenant = *tenantID
 	}
+
 	rows, err := db.QueryContext(
 		ctx,
 		`SELECT pa.id, pa.policy_id, pa.policy_rule_id, pa.scope, pa.scope_id, pa.priority, pa.created_at
-         FROM policy_assignments pa
-         JOIN policies p ON p.id = pa.policy_id
-         WHERE pa.policy_id = $1`+tenantClause+`
-         ORDER BY pa.priority DESC, pa.created_at ASC`,
-		args...,
+		 FROM policy_assignments pa
+		 INNER JOIN policies p ON p.id = pa.policy_id
+		 WHERE pa.policy_id = $1 AND ($2::uuid IS NULL OR p.tenant_id = $2)
+		 ORDER BY pa.priority ASC, pa.created_at DESC`,
+		policyID,
+		tenant,
 	)
 	if err != nil {
 		return nil, err
@@ -265,98 +252,49 @@ func ListPolicyAssignments(ctx context.Context, db *sql.DB, policyID uuid.UUID, 
 
 	assignments := []PolicyAssignmentRecord{}
 	for rows.Next() {
-		var assignment PolicyAssignmentRecord
-		if err := rows.Scan(
-			&assignment.ID,
-			&assignment.PolicyID,
-			&assignment.PolicyRuleID,
-			&assignment.Scope,
-			&assignment.ScopeID,
-			&assignment.Priority,
-			&assignment.CreatedAt,
-		); err != nil {
+		var a PolicyAssignmentRecord
+		if err := rows.Scan(&a.ID, &a.PolicyID, &a.PolicyRuleID, &a.Scope, &a.ScopeID, &a.Priority, &a.CreatedAt); err != nil {
 			return nil, err
 		}
-		assignments = append(assignments, assignment)
+		assignments = append(assignments, a)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return assignments, nil
+	return assignments, rows.Err()
 }
 
-func UpdatePolicy(ctx context.Context, db *sql.DB, id uuid.UUID, params UpdatePolicyParams) (*PolicyRecord, error) {
-	setClauses := []string{}
-	args := []interface{}{}
-
-	if params.Name != nil {
-		args = append(args, *params.Name)
-		setClauses = append(setClauses, fmt.Sprintf("name = $%d", len(args)))
-	}
-	if params.Description != nil {
-		args = append(args, *params.Description)
-		setClauses = append(setClauses, fmt.Sprintf("description = $%d", len(args)))
-	}
-	if params.Status != nil {
-		args = append(args, *params.Status)
-		setClauses = append(setClauses, fmt.Sprintf("status = $%d", len(args)))
+func UpdatePolicy(ctx context.Context, db *sql.DB, policyID uuid.UUID, params UpdatePolicyParams) error {
+	if params.Name == nil && params.Description == nil && params.Status == nil {
+		return errors.New("no fields to update")
 	}
 
-	if len(setClauses) == 0 {
-		return nil, fmt.Errorf("no fields to update")
-	}
-
-	args = append(args, time.Now().UTC())
-	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", len(args)))
-
-	args = append(args, id)
-
-	query := fmt.Sprintf(
-		`UPDATE policies
-         SET %s
-         WHERE id = $%d
-         RETURNING id, tenant_id, name, kind, status, description, created_at, updated_at`,
-		strings.Join(setClauses, ", "),
-		len(args),
-	)
-
-	row := db.QueryRowContext(ctx, query, args...)
-
-	var policy PolicyRecord
-	if err := row.Scan(
-		&policy.ID,
-		&policy.TenantID,
-		&policy.Name,
-		&policy.Kind,
-		&policy.Status,
-		&policy.Description,
-		&policy.CreatedAt,
-		&policy.UpdatedAt,
-	); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return &policy, nil
-}
-
-func DeletePolicy(ctx context.Context, db *sql.DB, id uuid.UUID) error {
+	updatedAt := time.Now().UTC()
 	_, err := db.ExecContext(
 		ctx,
-		`DELETE FROM policies WHERE id = $1`,
-		id,
+		`UPDATE policies
+		 SET name = COALESCE($1, name),
+		     description = COALESCE($2, description),
+		     status = COALESCE($3, status),
+		     updated_at = $4
+		 WHERE id = $5`,
+		params.Name,
+		params.Description,
+		params.Status,
+		updatedAt,
+		policyID,
 	)
 	return err
 }
 
-func GetPolicyRuleIDByVersion(ctx context.Context, db *sql.DB, policyID uuid.UUID, version string) (*uuid.UUID, error) {
+func CreatePolicyAssignment(ctx context.Context, db *sql.DB, policyID uuid.UUID, policyRuleID *uuid.UUID, scope string, scopeID *uuid.UUID, priority int) (*uuid.UUID, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id FROM policy_rules WHERE policy_id = $1 AND version = $2`,
+		`INSERT INTO policy_assignments (policy_id, policy_rule_id, scope, scope_id, priority)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id`,
 		policyID,
-		version,
+		anyUUIDPtr(policyRuleID),
+		scope,
+		anyUUIDPtr(scopeID),
+		priority,
 	)
 	var id uuid.UUID
 	if err := row.Scan(&id); err != nil {

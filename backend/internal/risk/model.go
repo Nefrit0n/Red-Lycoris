@@ -61,6 +61,8 @@ type LikelihoodFactor struct {
 	EPSSScore *float64 `json:"epss_score,omitempty"`
 	KEV       bool     `json:"kev"`
 	Value     float64  `json:"value"`
+	Known     bool     `json:"known,omitempty"`
+	Reason    string   `json:"reason,omitempty"`
 }
 
 type AssetFactor struct {

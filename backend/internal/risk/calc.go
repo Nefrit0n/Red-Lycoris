@@ -45,16 +45,24 @@ func calculateImpact(inputs RiskInputs) (float64, ImpactFactor) {
 
 func calculateLikelihood(inputs RiskInputs, weights RiskWeights) (float64, LikelihoodFactor) {
 	likelihood := 0.0
+	known := false
+	reason := "no_epss_or_kev"
 	if inputs.EPSSScore != nil {
 		likelihood = clamp01(*inputs.EPSSScore)
+		known = true
+		reason = "epss"
 	}
 	if inputs.KEV && weights.KevFloor > 0 {
 		likelihood = math.Max(likelihood, weights.KevFloor)
+		known = true
+		reason = "kev"
 	}
 	return likelihood, LikelihoodFactor{
 		EPSSScore: inputs.EPSSScore,
 		KEV:       inputs.KEV,
 		Value:     likelihood,
+		Known:     known,
+		Reason:    reason,
 	}
 }
 
