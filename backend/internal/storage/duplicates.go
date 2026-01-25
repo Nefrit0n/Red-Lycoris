@@ -34,7 +34,7 @@ func GetFindingDuplicateGroup(ctx context.Context, db *sql.DB, findingID uuid.UU
 		masterID = duplicateID.UUID
 	}
 
-	master, err := GetFindingByID(ctx, db, masterID)
+	master, err := GetFindingDetailByID(ctx, db, masterID)
 	if err != nil || master == nil {
 		return nil, err
 	}
