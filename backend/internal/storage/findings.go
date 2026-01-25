@@ -39,8 +39,10 @@ type FindingListItem struct {
 }
 
 type FindingNeighborsResult struct {
-	PrevID *uuid.UUID
-	NextID *uuid.UUID
+	PrevID   *uuid.UUID
+	NextID   *uuid.UUID
+	Position int
+	Total    int
 }
 
 type FindingFilters struct {
@@ -498,16 +500,19 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, currentID uuid.UUID, f
 		WITH ranked AS (
 			SELECT
 				f.id,
-				ROW_NUMBER() OVER (%s) AS rn
+				ROW_NUMBER() OVER (%s) AS rn,
+				COUNT(*) OVER () AS total
 			%s
 			WHERE %s
 		),
 		cur AS (
-			SELECT rn FROM ranked WHERE id = $17
+			SELECT rn, total FROM ranked WHERE id = $17
 		)
 		SELECT
 			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn - 1) AS prev_id,
-			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn + 1) AS next_id
+			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn + 1) AS next_id,
+			cur.rn AS position,
+			cur.total
 		FROM cur`,
 		buildFindingOrderBy(sortOrder),
 		findingBaseJoins,
@@ -515,7 +520,7 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, currentID uuid.UUID, f
 
 	row := db.QueryRowContext(ctx, query, args...)
 	var res FindingNeighborsResult
-	if err := row.Scan(&res.PrevID, &res.NextID); err != nil {
+	if err := row.Scan(&res.PrevID, &res.NextID, &res.Position, &res.Total); err != nil {
 		if err == sql.ErrNoRows {
 			return res, nil
 		}
