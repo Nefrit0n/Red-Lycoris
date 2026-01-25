@@ -95,7 +95,7 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized: tenant id missing"})
 	}
 
-	product, productCreated, err := h.resolveProduct(c.Context(), tenantID, req)
+	product, productCreated, err := h.resolveProduct(c.Context(), req, tenantID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to resolve product"})
 	}
@@ -361,7 +361,7 @@ func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadReque
 	}, nil
 }
 
-func (h *ScanUploadHandler) resolveProduct(ctx context.Context, tenantID *uuid.UUID, req ScanUploadRequest) (*models.Product, bool, error) {
+func (h *ScanUploadHandler) resolveProduct(ctx context.Context, req ScanUploadRequest, tenantID *uuid.UUID) (*models.Product, bool, error) {
 	identifier := strings.TrimSpace(req.ProductIdentifier)
 	name := strings.TrimSpace(req.ProductName)
 	version := strings.TrimSpace(req.ProductVersion)
@@ -432,6 +432,7 @@ func (h *ScanUploadHandler) createProduct(ctx context.Context, tenantID *uuid.UU
 		Slug:       slug,
 		Identifier: identifier,
 	}
+
 	if version != "" {
 		product.Version = &version
 	}
