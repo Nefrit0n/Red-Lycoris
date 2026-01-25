@@ -162,7 +162,7 @@ func main() {
 	if roles.has("risk_scheduler") {
 		intelEPSSSub, err = js.PullSubscribe(
 			events.IntelEPSSRefreshedSubject,
-			riskScheduler,
+			"risk-scheduler-epss",
 			nats.BindStream(events.IntelStreamName),
 			nats.MaxAckPending(16),
 			nats.AckExplicit(),
@@ -173,7 +173,7 @@ func main() {
 		}
 		intelKEVSub, err = js.PullSubscribe(
 			events.IntelKEVRefreshedSubject,
-			riskScheduler,
+			"risk-scheduler-kev",
 			nats.BindStream(events.IntelStreamName),
 			nats.MaxAckPending(16),
 			nats.AckExplicit(),
@@ -184,7 +184,7 @@ func main() {
 		}
 		intelNVDSub, err = js.PullSubscribe(
 			events.IntelNVDRefreshedSubject,
-			riskScheduler,
+			"risk-scheduler-nvd",
 			nats.BindStream(events.IntelStreamName),
 			nats.MaxAckPending(16),
 			nats.AckExplicit(),
@@ -195,7 +195,7 @@ func main() {
 		}
 		assetContextSub, err = js.PullSubscribe(
 			events.AssetContextUpdatedSubject,
-			riskScheduler,
+			"risk-scheduler-asset-context",
 			nats.BindStream(events.AnalysisStreamName),
 			nats.MaxAckPending(32),
 			nats.AckExplicit(),
@@ -206,7 +206,7 @@ func main() {
 		}
 		riskModelSub, err = js.PullSubscribe(
 			events.RiskModelActivatedSubject,
-			riskScheduler,
+			"risk-scheduler-model",
 			nats.BindStream(events.AnalysisStreamName),
 			nats.MaxAckPending(8),
 			nats.AckExplicit(),

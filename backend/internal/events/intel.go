@@ -17,5 +17,9 @@ type IntelEnrichRequest struct {
 }
 
 func EnsureIntelConsumer(js nats.JetStreamContext, durable string) error {
-	return ensureConsumerForSubject(js, IntelStreamName, durable, IntelEnrichRequested)
+	_, err := ensureConsumerForSubject(js, IntelStreamName, durable, IntelEnrichRequested)
+	if err != nil {
+		return err
+	}
+	return nil
 }
