@@ -1,0 +1,80 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Design System/Introduction" />
+
+# Lotus Warden Design System
+
+A comprehensive design system inspired by the lotus flower - emerging from darkness into light, 
+symbolizing the journey of security: finding vulnerabilities in the shadows and bringing clarity 
+through illumination.
+
+## Philosophy
+
+The lotus flower grows in murky waters but rises above to bloom in beauty. Similarly, security 
+work involves diving into the dark depths of code to find vulnerabilities, then bringing them 
+to light so they can be resolved.
+
+Our design language reflects this journey:
+
+- **Night Waters** - Deep, dark backgrounds representing the depths where vulnerabilities hide
+- **Lotus** - Our primary purple, representing the flower that rises from darkness
+- **Petal** - Pink accents, like individual petals catching light
+- **Jade** - Cool greens, representing the leaves and calm waters
+- **Gold** - Warm highlights, like the enlightened center of the lotus
+
+## Core Principles
+
+### 1. Clarity
+Every element should communicate its purpose clearly. In security, ambiguity can be dangerous.
+
+### 2. Hierarchy
+Important information (like critical vulnerabilities) should stand out immediately.
+
+### 3. Consistency
+Consistent patterns reduce cognitive load, allowing users to focus on the security work.
+
+### 4. Accessibility
+Security tools should be usable by everyone, including those with visual impairments.
+
+## Structure
+
+```
+design-system/
+├── tokens/           # Design tokens (colors, spacing, etc.)
+├── theme/            # MUI theme configuration
+├── components/       # UI components
+└── utils/            # Utility functions
+```
+
+## Quick Start
+
+```tsx
+// Import components
+import { Button, GlassCard, StatusBadge } from '@/design-system';
+
+// Import tokens
+import { primitives, semantic } from '@/design-system';
+
+// Import theme
+import { darkTheme, lightTheme } from '@/design-system';
+
+// Import utilities
+import { getSeverityColor, getRiskBandFromScore } from '@/design-system';
+```
+
+## Components
+
+- **Button** - Buttons with glass and glow variants
+- **GlassCard** - Cards with glassmorphism effects
+- **StatusBadge** - Badges for severity, status, and risk
+- **MetricDisplay** - Dashboard metrics with trends and sparklines
+
+## Tokens
+
+- **Colors** - Night waters, lotus, petal, jade, gold palettes
+- **Typography** - Inter font family with Perfect Fourth scale
+- **Spacing** - 4px grid system
+- **Shadows** - Elevation and glow effects
+- **Borders** - Radius and border styles
+- **Effects** - Glassmorphism, overlays, filters
+- **Animations** - Durations, easings, keyframes
