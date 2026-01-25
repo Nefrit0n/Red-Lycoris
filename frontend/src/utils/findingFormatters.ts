@@ -92,3 +92,20 @@ export function buildFindingLink(findingId: string, returnToParam?: string): str
   const query = returnToParam ? `?returnTo=${returnToParam}` : "";
   return `/findings/${findingId}${query}`;
 }
+
+/**
+ * Format a unit-interval value (0..1) as percent for UI.
+ *
+ * Examples:
+ *  - 0.003   -> "0.30%"
+ *  - 0.00005 -> "<0.01%"
+ */
+export function formatPercent01(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  const pct = value * 100;
+  if (pct <= 0) return "0%";
+  if (pct < 0.01) return "<0.01%";
+  if (pct < 1) return `${pct.toFixed(2)}%`;
+  if (pct < 10) return `${pct.toFixed(1)}%`;
+  return `${pct.toFixed(0)}%`;
+}

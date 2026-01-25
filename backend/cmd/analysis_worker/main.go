@@ -36,15 +36,7 @@ const (
 	analysisConsumer = "analysis-worker"
 	sbomConsumer     = "sbom-worker" // durable consumer name, но работает внутри того же процесса/контейнера
 	riskConsumer     = "risk-worker"
-
-	// JetStream durable consumers are bound to a single FilterSubject.
-	// Never reuse the same durable name for multiple subjects (or across streams),
-	// otherwise JetStream will crash with: "nats: subject does not match consumer".
-	riskSchedulerEPSS      = "risk-scheduler-intel-epss-v1"
-	riskSchedulerKEV       = "risk-scheduler-intel-kev-v1"
-	riskSchedulerNVD       = "risk-scheduler-intel-nvd-v1"
-	riskSchedulerAssetCtx  = "risk-scheduler-asset-context-v1"
-	riskSchedulerRiskModel = "risk-scheduler-risk-model-v1"
+	riskScheduler    = "risk-scheduler"
 
 	fetchBatchSize = 1
 
@@ -170,7 +162,7 @@ func main() {
 	if roles.has("risk_scheduler") {
 		intelEPSSSub, err = js.PullSubscribe(
 			events.IntelEPSSRefreshedSubject,
-			riskSchedulerEPSS,
+			riskScheduler,
 			nats.BindStream(events.IntelStreamName),
 			nats.MaxAckPending(16),
 			nats.AckExplicit(),
@@ -181,7 +173,7 @@ func main() {
 		}
 		intelKEVSub, err = js.PullSubscribe(
 			events.IntelKEVRefreshedSubject,
-			riskSchedulerKEV,
+			riskScheduler,
 			nats.BindStream(events.IntelStreamName),
 			nats.MaxAckPending(16),
 			nats.AckExplicit(),
@@ -192,7 +184,7 @@ func main() {
 		}
 		intelNVDSub, err = js.PullSubscribe(
 			events.IntelNVDRefreshedSubject,
-			riskSchedulerNVD,
+			riskScheduler,
 			nats.BindStream(events.IntelStreamName),
 			nats.MaxAckPending(16),
 			nats.AckExplicit(),
@@ -203,7 +195,7 @@ func main() {
 		}
 		assetContextSub, err = js.PullSubscribe(
 			events.AssetContextUpdatedSubject,
-			riskSchedulerAssetCtx,
+			riskScheduler,
 			nats.BindStream(events.AnalysisStreamName),
 			nats.MaxAckPending(32),
 			nats.AckExplicit(),
@@ -214,7 +206,7 @@ func main() {
 		}
 		riskModelSub, err = js.PullSubscribe(
 			events.RiskModelActivatedSubject,
-			riskSchedulerRiskModel,
+			riskScheduler,
 			nats.BindStream(events.AnalysisStreamName),
 			nats.MaxAckPending(8),
 			nats.AckExplicit(),

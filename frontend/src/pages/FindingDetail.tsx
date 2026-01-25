@@ -45,7 +45,7 @@ import {
   RISK_BAND_COLORS,
   RISK_BAND_LABELS,
 } from "../utils/findingConstants";
-import { formatDateRu, EventCategory } from "../utils/findingFormatters";
+import { formatDateRu, EventCategory, formatPercent01 } from "../utils/findingFormatters";
 import { FindingComment, SemgrepEvidence } from "../types/findings";
 
 type FindingDetailContentProps = {
@@ -225,6 +225,8 @@ export const FindingDetailContent = ({
   const sastDetails = resolvedDetails.category === "SAST" ? resolvedDetails.details : null;
   const showScaTab = resolvedDetails.category === "SCA";
   const showSastTab = resolvedDetails.category === "SAST";
+  // NOTE: `data` is null until the detail request resolves.
+  // Avoid crashing the render during the initial (loading) pass.
   const riskScore =
     typeof data?.riskScore === "number" ? Math.round(data.riskScore) : null;
   const riskBand = data?.riskBand ?? null;
@@ -584,11 +586,20 @@ export const FindingDetailContent = ({
                         Likelihood
                       </Typography>
                       <Typography variant="body2">
-                        {typeof riskFactors?.likelihood?.value === "number"
-                          ? riskFactors.likelihood.value.toFixed(2)
-                          : "—"}
+                        {(() => {
+                          const v = riskFactors?.likelihood?.value;
+                          const known =
+                            typeof riskFactors?.likelihood?.known === "boolean"
+                              ? Boolean(riskFactors.likelihood.known)
+                              : typeof riskFactors?.likelihood?.epss_score === "number" ||
+                                Boolean(riskFactors?.likelihood?.kev);
+
+                          if (!known) return "— · no EPSS/KEV intel";
+                          if (typeof v !== "number") return "—";
+                          return `${v.toFixed(4)} · ${formatPercent01(v)}`;
+                        })()}
                         {typeof riskFactors?.likelihood?.epss_score === "number"
-                          ? ` · EPSS ${(riskFactors.likelihood.epss_score * 100).toFixed(1)}%`
+                          ? ` · EPSS ${formatPercent01(riskFactors.likelihood.epss_score)}`
                           : ""}
                         {riskFactors?.likelihood?.kev ? " · KEV" : ""}
                       </Typography>

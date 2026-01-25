@@ -24,6 +24,7 @@ type FindingFilterParams struct {
 	DateTo           *time.Time
 	Severity         string
 	Status           string
+	RiskBand         string
 	OccurrenceStatus string
 	ScannerType      string
 	SourceType       string
@@ -40,6 +41,7 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 	params := &FindingFilterParams{
 		Severity:         strings.TrimSpace(c.Query("severity")),
 		Status:           strings.TrimSpace(c.Query("status")),
+		RiskBand:         strings.TrimSpace(c.Query("riskBand")),
 		OccurrenceStatus: strings.TrimSpace(c.Query("occurrenceStatus")),
 		ScannerType:      strings.TrimSpace(c.Query("scannerType")),
 		SourceType:       strings.TrimSpace(c.Query("sourceType")),
@@ -92,6 +94,10 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 		return nil, fmt.Errorf("invalid policyDecision")
 	}
 
+	if params.RiskBand != "" && !isValidRiskBand(params.RiskBand) {
+		return nil, fmt.Errorf("invalid riskBand")
+	}
+
 	// Parse date range
 	if raw := strings.TrimSpace(c.Query("dateFrom")); raw != "" {
 		parsed, err := parseDateParam(raw, false)
@@ -117,6 +123,7 @@ func (p *FindingFilterParams) toStorageFilters(limit, offset int) storage.Findin
 		TenantID:         p.TenantID,
 		Severity:         p.Severity,
 		Status:           p.Status,
+		RiskBand:         p.RiskBand,
 		OccurrenceStatus: p.OccurrenceStatus,
 		ScannerType:      p.ScannerType,
 		SourceType:       p.SourceType,
