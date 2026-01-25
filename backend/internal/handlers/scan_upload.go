@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"lotus-warden/backend/internal/events"
@@ -89,7 +90,12 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	product, productCreated, err := h.resolveProduct(c.Context(), req)
+	tenantID := extractTenantIDFromContext(c)
+	if tenantID == nil {
+		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized: tenant id missing"})
+	}
+
+	product, productCreated, err := h.resolveProduct(c.Context(), tenantID, req)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to resolve product"})
 	}
@@ -97,10 +103,6 @@ func (h *ScanUploadHandler) Handle(c *fiber.Ctx) error {
 	var productID *uuid.UUID
 	if product != nil {
 		productID = &product.ID
-	}
-	var tenantID *uuid.UUID
-	if product != nil && product.TenantID != nil {
-		tenantID = product.TenantID
 	}
 
 	auditMeta := auditMetadataFromContext(c)
@@ -359,7 +361,7 @@ func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadReque
 	}, nil
 }
 
-func (h *ScanUploadHandler) resolveProduct(ctx context.Context, req ScanUploadRequest) (*models.Product, bool, error) {
+func (h *ScanUploadHandler) resolveProduct(ctx context.Context, tenantID *uuid.UUID, req ScanUploadRequest) (*models.Product, bool, error) {
 	identifier := strings.TrimSpace(req.ProductIdentifier)
 	name := strings.TrimSpace(req.ProductName)
 	version := strings.TrimSpace(req.ProductVersion)
@@ -369,7 +371,7 @@ func (h *ScanUploadHandler) resolveProduct(ctx context.Context, req ScanUploadRe
 	}
 
 	if identifier != "" {
-		product, err := storage.FindProductByIdentifier(ctx, h.db, identifier, nil)
+		product, err := storage.FindProductByIdentifier(ctx, h.db, identifier, tenantID)
 		if err != nil {
 			return nil, false, err
 		}
@@ -379,7 +381,7 @@ func (h *ScanUploadHandler) resolveProduct(ctx context.Context, req ScanUploadRe
 		if name == "" {
 			name = identifier
 		}
-		return h.createProduct(ctx, name, version, &identifier)
+		return h.createProduct(ctx, tenantID, name, version, &identifier)
 	}
 
 	if name != "" {
@@ -387,34 +389,34 @@ func (h *ScanUploadHandler) resolveProduct(ctx context.Context, req ScanUploadRe
 		if version != "" {
 			versionPtr = &version
 		}
-		product, err := storage.FindProductByNameVersion(ctx, h.db, name, versionPtr, nil)
+		product, err := storage.FindProductByNameVersion(ctx, h.db, name, versionPtr, tenantID)
 		if err != nil {
 			return nil, false, err
 		}
 		if product != nil {
 			return product, false, nil
 		}
-		return h.createProduct(ctx, name, version, nil)
+		return h.createProduct(ctx, tenantID, name, version, nil)
 	}
 
-	unassigned, err := storage.FindProductBySlug(ctx, h.db, "unassigned", nil)
+	unassigned, err := storage.FindProductBySlug(ctx, h.db, "unassigned", tenantID)
 	if err != nil {
 		return nil, false, err
 	}
 	if unassigned != nil {
 		return unassigned, false, nil
 	}
-	return h.createProduct(ctx, "Unassigned", "", nil)
+	return h.createProduct(ctx, tenantID, "Unassigned", "", nil)
 }
 
-func (h *ScanUploadHandler) createProduct(ctx context.Context, name, version string, identifier *string) (*models.Product, bool, error) {
+func (h *ScanUploadHandler) createProduct(ctx context.Context, tenantID *uuid.UUID, name, version string, identifier *string) (*models.Product, bool, error) {
 	slug := slugify(name)
 	if version != "" {
 		slug = slugify(fmt.Sprintf("%s-%s", name, version))
 	}
 	baseSlug := slug
 	for i := 1; i <= 5; i++ {
-		existing, err := storage.FindProductBySlug(ctx, h.db, slug, nil)
+		existing, err := storage.FindProductBySlug(ctx, h.db, slug, tenantID)
 		if err != nil {
 			return nil, false, err
 		}
@@ -425,6 +427,7 @@ func (h *ScanUploadHandler) createProduct(ctx context.Context, name, version str
 	}
 
 	product := &models.Product{
+		TenantID:   tenantID,
 		Name:       name,
 		Slug:       slug,
 		Identifier: identifier,
@@ -519,4 +522,40 @@ func publishRiskRecompute(ctx context.Context, publisher *events.Publisher, find
 	if err := publisher.PublishJSON(ctx, events.RiskRecomputeRequestedSubject, payload); err != nil {
 		log.Printf("risk recompute publish failed: %v", err)
 	}
+}
+func extractTenantIDFromContext(c *fiber.Ctx) *uuid.UUID {
+	// 1) middleware мог положить в Locals
+	if v := c.Locals("tenant_id"); v != nil {
+		switch t := v.(type) {
+		case uuid.UUID:
+			if t != uuid.Nil {
+				id := t
+				return &id
+			}
+		case *uuid.UUID:
+			if t != nil && *t != uuid.Nil {
+				return t
+			}
+		case string:
+			if id, err := uuid.Parse(t); err == nil && id != uuid.Nil {
+				return &id
+			}
+		}
+	}
+
+	// 2) опционально из заголовка (удобно для dev/тестов)
+	if hdr := strings.TrimSpace(c.Get("X-Tenant-ID")); hdr != "" {
+		if id, err := uuid.Parse(hdr); err == nil && id != uuid.Nil {
+			return &id
+		}
+	}
+
+	// 3) dev fallback (чтобы не блокироваться, если tenant middleware ещё не подключён)
+	if s := strings.TrimSpace(os.Getenv("DEFAULT_TENANT_ID")); s != "" {
+		if id, err := uuid.Parse(s); err == nil && id != uuid.Nil {
+			return &id
+		}
+	}
+
+	return nil
 }
