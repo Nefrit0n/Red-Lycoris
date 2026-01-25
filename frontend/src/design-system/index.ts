@@ -38,14 +38,24 @@ export {
 } from './tokens';
 
 // ============================================================
-// FUTURE EXPORTS (placeholders for Phase 2+)
+// THEME EXPORTS
+// ============================================================
+
+export * from './theme';
+export {
+  darkTheme,
+  lightTheme,
+  theme,
+  getTheme,
+  type ThemeMode,
+} from './theme';
+
+// ============================================================
+// FUTURE EXPORTS (placeholders for Phase 3+)
 // ============================================================
 
 // Components will be exported here in Phase 3
 // export * from './components';
-
-// Theme utilities will be exported here in Phase 2
-// export * from './theme';
 
 // ============================================================
 // VERSION INFO
