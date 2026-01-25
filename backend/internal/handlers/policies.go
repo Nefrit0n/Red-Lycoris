@@ -230,13 +230,17 @@ func (h *PoliciesHandler) Update(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "policy not found"})
 	}
 
-	updated, err := storage.UpdatePolicy(c.Context(), h.db, policyID, storage.UpdatePolicyParams{
+	if err := storage.UpdatePolicy(c.Context(), h.db, policyID, storage.UpdatePolicyParams{
 		Name:        req.Name,
 		Description: req.Description,
 		Status:      req.Status,
-	})
-	if err != nil {
+	}); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to update policy"})
+	}
+
+	updated, err := storage.GetPolicyByID(c.Context(), h.db, policyID, tenantID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch policy"})
 	}
 	if updated == nil {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "policy not found"})
@@ -599,7 +603,7 @@ func insertPolicyRule(ctx context.Context, tx *sql.Tx, policyID uuid.UUID, input
 		strings.TrimSpace(input.Format),
 		content,
 		sha,
-		nullableStringOrNil(input.Entrypoint),
+		nullableStringArg(input.Entrypoint),
 	)
 
 	var rule storage.PolicyRuleRecord
@@ -753,7 +757,7 @@ func mapPolicyAssignmentsAuditPayload(assignments []storage.PolicyAssignmentReco
 	return payload
 }
 
-func nullableStringOrNil(value *string) interface{} {
+func nullableStringArg(value *string) interface{} {
 	if value == nil {
 		return nil
 	}

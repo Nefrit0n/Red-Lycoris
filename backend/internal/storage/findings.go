@@ -97,7 +97,7 @@ type UpdateFindingParams struct {
 	SLADueAt      *time.Time
 	SLABreached   *bool
 	SLABreachedAt *time.Time
-	SLAProfile    *json.RawMessage
+	SLAProfile    *string
 	SLASource     *string
 }
 

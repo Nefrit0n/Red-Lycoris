@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -295,6 +297,32 @@ func CreatePolicyAssignment(ctx context.Context, db *sql.DB, policyID uuid.UUID,
 		scope,
 		anyUUIDPtr(scopeID),
 		priority,
+	)
+	var id uuid.UUID
+	if err := row.Scan(&id); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &id, nil
+}
+func DeletePolicy(ctx context.Context, db *sql.DB, policyID uuid.UUID) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM policies WHERE id = $1`, policyID)
+	return err
+}
+
+func GetPolicyRuleIDByVersion(ctx context.Context, db *sql.DB, policyID uuid.UUID, version string) (*uuid.UUID, error) {
+	v, err := strconv.Atoi(version)
+	if err != nil {
+		return nil, fmt.Errorf("invalid version: %w", err)
+	}
+
+	row := db.QueryRowContext(
+		ctx,
+		`SELECT id FROM policy_rules WHERE policy_id = $1 AND version = $2`,
+		policyID,
+		v,
 	)
 	var id uuid.UUID
 	if err := row.Scan(&id); err != nil {

@@ -126,3 +126,37 @@ func CountFindingsByProduct(ctx context.Context, db *sql.DB, filters FindingFilt
 	}
 	return scanGroupedCounts(rows)
 }
+
+func CountFindingsByCategory(ctx context.Context, db *sql.DB, filters FindingFilters) ([]CategoryCount, error) {
+	if filters.TenantID == nil {
+		return nil, fmt.Errorf("tenant_id is required")
+	}
+
+	args := buildFindingFilterArgs(filters)
+	query := fmt.Sprintf(`SELECT f.category, COUNT(*) %s WHERE %s GROUP BY f.category`,
+		findingBaseJoins, findingFilterWhereClause)
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make([]CategoryCount, 0)
+	for rows.Next() {
+		var category sql.NullString
+		var count int
+		if err := rows.Scan(&category, &count); err != nil {
+			return nil, err
+		}
+		cat := category.String
+		if !category.Valid {
+			cat = ""
+		}
+		res = append(res, CategoryCount{Category: cat, Count: count})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
