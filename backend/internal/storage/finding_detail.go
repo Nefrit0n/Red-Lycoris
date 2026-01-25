@@ -3,11 +3,13 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+// FindingDetail — "расширенная" модель для выдачи detail-строк с join'ами (product_name и т.п.)
 type FindingDetail struct {
 	ID uuid.UUID
 
@@ -20,7 +22,7 @@ type FindingDetail struct {
 	Fingerprint string
 	Severity    string
 	Status      string
-	Category    string
+	Category    sql.NullString
 
 	// Relations
 	ProductID   uuid.NullUUID
@@ -34,6 +36,15 @@ type FindingDetail struct {
 	LastSeenAt  sql.NullTime
 	RepeatCount int
 	DuplicateID uuid.NullUUID
+
+	SourceType    sql.NullString
+	SourceVersion sql.NullString
+
+	EndpointMethod sql.NullString
+	EndpointPath   sql.NullString
+
+	Evidence    json.RawMessage
+	RiskFactors json.RawMessage
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -59,95 +70,55 @@ type FindingDetail struct {
 	RiskModel     sql.NullString
 }
 
+// GetFindingDetailByID — отдельный метод для "детального" селекта (НЕ трогаем существующий GetFindingByID).
 func GetFindingDetailByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*FindingDetail, error) {
-	row := db.QueryRowContext(ctx, `
-		SELECT
-			f.id,
-			f.tenant_id,
-			f.title,
-			f.description,
-			f.fingerprint,
-			f.severity,
-			f.status,
-			COALESCE(f.category, '') AS category,
-
-			f.product_id,
-			p.name AS product_name,
-
-			f.assignee_id,
-			f.import_job_id,
-
-			f.first_seen_at,
-			f.last_seen_at,
-			f.repeat_count,
-			f.duplicate_id,
-
-			f.created_at,
-			f.updated_at,
-			f.deleted_at,
-
-			f.source_type,
-			NULL::text AS source_version,
-			NULL::text AS endpoint_method,
-			NULL::text AS endpoint_path,
-
-			f.sla_due_at,
-			f.sla_breached,
-			f.sla_breached_at,
-			f.sla_profile::text,
-			f.sla_source,
-
-			fr.risk_score,
-			fr.risk_band,
-			NULL::timestamptz AS risk_updated_at,
-			NULL::text AS risk_model_version
+	row := db.QueryRowContext(
+		ctx,
+		`SELECT
+			f.id, f.tenant_id, f.title, f.description, f.fingerprint, f.severity, f.status, f.category,
+			f.product_id, p.name,
+			f.assignee_id, f.import_job_id,
+			f.first_seen_at, f.last_seen_at,
+			f.repeat_count, f.duplicate_id,
+			f.source_type, f.source_version,
+			f.endpoint_method, f.endpoint_path,
+			f.evidence, fr.risk_factors,
+			f.created_at, f.updated_at, f.deleted_at
 		FROM findings f
 		LEFT JOIN products p ON p.id = f.product_id
 		LEFT JOIN finding_risk fr ON fr.finding_id = f.id
-		WHERE f.id = $1
-	`, findingID)
+		WHERE f.id = $1 AND f.deleted_at IS NULL`,
+		findingID,
+	)
 
-	var item FindingDetail
+	var d FindingDetail
+	var evidence, riskFactors []byte
 	if err := row.Scan(
-		&item.ID,
-		&item.TenantID,
-		&item.Title,
-		&item.Description,
-		&item.Fingerprint,
-		&item.Severity,
-		&item.Status,
-		&item.Category,
-
-		&item.ProductID,
-		&item.ProductName,
-
-		&item.AssigneeID,
-		&item.ImportJobID,
-
-		&item.FirstSeenAt,
-		&item.LastSeenAt,
-		&item.RepeatCount,
-		&item.DuplicateID,
-
-		&item.CreatedAt,
-		&item.UpdatedAt,
-		&item.DeletedAt,
-
-		&item.SourceType,
-		&item.SourceVersion,
-		&item.EndpointMethod,
-		&item.EndpointPath,
-
-		&item.SLADueAt,
-		&item.SLABreached,
-		&item.SLABreachedAt,
-		&item.SLAProfile,
-		&item.SLASource,
-
-		&item.RiskScore,
-		&item.RiskBand,
-		&item.RiskUpdatedAt,
-		&item.RiskModel,
+		&d.ID,
+		&d.TenantID,
+		&d.Title,
+		&d.Description,
+		&d.Fingerprint,
+		&d.Severity,
+		&d.Status,
+		&d.Category,
+		&d.ProductID,
+		&d.ProductName,
+		&d.AssigneeID,
+		&d.ImportJobID,
+		&d.FirstSeenAt,
+		&d.LastSeenAt,
+		&d.RepeatCount,
+		&d.DuplicateID,
+		&d.SourceType,
+		&d.SourceVersion,
+		&d.EndpointMethod,
+		&d.EndpointPath,
+		&evidence,
+		&riskFactors,
+		&d.CreatedAt,
+		&d.UpdatedAt,
+		&d.DeletedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -155,5 +126,12 @@ func GetFindingDetailByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) 
 		return nil, err
 	}
 
-	return &item, nil
+	if len(evidence) > 0 {
+		d.Evidence = json.RawMessage(evidence)
+	}
+	if len(riskFactors) > 0 {
+		d.RiskFactors = json.RawMessage(riskFactors)
+	}
+
+	return &d, nil
 }
