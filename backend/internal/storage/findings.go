@@ -279,35 +279,27 @@ func GetFindingByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*mode
 		finding.SourceType = &sourceType.String
 	}
 	if category.Valid {
-		finding.Category = &category.String
+		finding.Category = category.String
 	}
+
 	if firstSeenAt.Valid {
-		finding.FirstSeenAt = &firstSeenAt.Time
+		finding.FirstSeenAt = firstSeenAt.Time
 	}
 	if lastSeenAt.Valid {
-		finding.LastSeenAt = &lastSeenAt.Time
+		finding.LastSeenAt = lastSeenAt.Time
 	}
-	if slaDueAt.Valid {
-		finding.SLADueAt = &slaDueAt.Time
-	}
+
 	if slaBreached.Valid {
-		finding.SLABreached = &slaBreached.Bool
+		finding.SLABreached = slaBreached.Bool
 	}
-	if slaBreachedAt.Valid {
-		finding.SLABreachedAt = &slaBreachedAt.Time
-	}
+
 	if len(slaProfile) > 0 {
-		jp := json.RawMessage(slaProfile)
-		finding.SLAProfile = &jp
+		s := string(slaProfile)
+		finding.SLAProfile = &s
 	}
-	if slaSource.Valid {
-		finding.SLASource = &slaSource.String
-	}
+
 	if len(evidence) > 0 {
-		var obj any
-		if err := json.Unmarshal(evidence, &obj); err == nil {
-			finding.Evidence = obj
-		}
+		finding.Evidence = json.RawMessage(evidence)
 	}
 
 	return &finding, nil
@@ -810,35 +802,27 @@ func UpdateFinding(ctx context.Context, db *sql.DB, findingID uuid.UUID, params 
 		finding.SourceType = &sourceType.String
 	}
 	if category.Valid {
-		finding.Category = &category.String
+		finding.Category = category.String
 	}
+
 	if firstSeenAt.Valid {
-		finding.FirstSeenAt = &firstSeenAt.Time
+		finding.FirstSeenAt = firstSeenAt.Time
 	}
 	if lastSeenAt.Valid {
-		finding.LastSeenAt = &lastSeenAt.Time
+		finding.LastSeenAt = lastSeenAt.Time
 	}
-	if slaDueAt.Valid {
-		finding.SLADueAt = &slaDueAt.Time
-	}
+
 	if slaBreached.Valid {
-		finding.SLABreached = &slaBreached.Bool
+		finding.SLABreached = slaBreached.Bool
 	}
-	if slaBreachedAt.Valid {
-		finding.SLABreachedAt = &slaBreachedAt.Time
-	}
+
 	if len(slaProfile) > 0 {
-		jp := json.RawMessage(slaProfile)
-		finding.SLAProfile = &jp
+		s := string(slaProfile)
+		finding.SLAProfile = &s
 	}
-	if slaSource.Valid {
-		finding.SLASource = &slaSource.String
-	}
+
 	if len(evidence) > 0 {
-		var obj any
-		if err := json.Unmarshal(evidence, &obj); err == nil {
-			finding.Evidence = obj
-		}
+		finding.Evidence = json.RawMessage(evidence)
 	}
 
 	return &finding, nil
