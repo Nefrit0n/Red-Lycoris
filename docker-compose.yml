@@ -174,6 +174,9 @@ services:
     environment:
       <<: [ *db-env, *object-store-env, *analysis-env, *intel-env ]
       NATS_URL: ${NATS_URL:-nats://nats:4222}
+      JWT_SECRET: ${JWT_SECRET}
+      ROOT_EMAIL: ${ROOT_EMAIL:-root@localhost}
+      ROOT_PASSWORD: ${ROOT_PASSWORD:-root}
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -199,6 +202,9 @@ services:
     environment:
       <<: [ *db-env, *intel-env ]
       NATS_URL: ${NATS_URL:-nats://nats:4222}
+      JWT_SECRET: ${JWT_SECRET}
+      ROOT_EMAIL: ${ROOT_EMAIL:-root@localhost}
+      ROOT_PASSWORD: ${ROOT_PASSWORD:-root}
     depends_on:
       db-migrate:
         condition: service_completed_successfully
