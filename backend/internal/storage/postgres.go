@@ -40,7 +40,14 @@ func Connect(cfg config.Config) (*sql.DB, error) {
 		cancel()
 
 		if err == nil {
-			log.Printf("postgres ready (attempt %d)", i)
+			// Configure connection pool
+			db.SetMaxOpenConns(cfg.DBMaxOpenConns)
+			db.SetMaxIdleConns(cfg.DBMaxIdleConns)
+			db.SetConnMaxLifetime(time.Duration(cfg.DBConnMaxLifetimeMinutes) * time.Minute)
+			db.SetConnMaxIdleTime(time.Duration(cfg.DBConnMaxIdleMinutes) * time.Minute)
+
+			log.Printf("postgres ready (attempt %d), pool: maxOpen=%d, maxIdle=%d, maxLifetime=%dm, maxIdleTime=%dm",
+				i, cfg.DBMaxOpenConns, cfg.DBMaxIdleConns, cfg.DBConnMaxLifetimeMinutes, cfg.DBConnMaxIdleMinutes)
 			return db, nil
 		}
 
