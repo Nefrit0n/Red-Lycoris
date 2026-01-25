@@ -51,11 +51,19 @@ export {
 } from './theme';
 
 // ============================================================
-// FUTURE EXPORTS (placeholders for Phase 3+)
+// COMPONENT EXPORTS
 // ============================================================
 
-// Components will be exported here in Phase 3
-// export * from './components';
+export * from './components';
+export {
+  Button,
+  StatusBadge,
+  SeverityBadge,
+  FindingStatusBadge,
+  RiskBadge,
+  GlassCard,
+  MetricDisplay,
+} from './components';
 
 // ============================================================
 // VERSION INFO
