@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 
 	"github.com/google/uuid"
 
@@ -20,18 +19,26 @@ func NewPolicyRepository(db *sql.DB) *PolicyRepository {
 }
 
 func (r *PolicyRepository) GetAssignments(ctx context.Context, scope policies.AssignmentScope) ([]policies.PolicyAssignment, error) {
-	query := `SELECT pa.id, pa.policy_id, pa.policy_rule_id, pa.scope, pa.scope_id, pa.priority
-		FROM policy_assignments pa
-		JOIN policies p ON p.id = pa.policy_id
-		WHERE pa.scope = $1 AND p.status = 'enabled'`
-	args := []any{scope.Scope}
+	var (
+		query string
+		args  []any
+	)
+
 	if scope.ScopeID == nil {
-		query += " AND pa.scope_id IS NULL"
+		query = `SELECT pa.id, pa.policy_id, pa.policy_rule_id, pa.scope, pa.scope_id, pa.priority
+			FROM policy_assignments pa
+			JOIN policies p ON p.id = pa.policy_id
+			WHERE pa.scope = $1 AND pa.scope_id IS NULL AND p.status = 'enabled'
+			ORDER BY pa.priority DESC, pa.created_at ASC`
+		args = []any{scope.Scope}
 	} else {
-		query += fmt.Sprintf(" AND pa.scope_id = $%d", len(args)+1)
-		args = append(args, *scope.ScopeID)
+		query = `SELECT pa.id, pa.policy_id, pa.policy_rule_id, pa.scope, pa.scope_id, pa.priority
+			FROM policy_assignments pa
+			JOIN policies p ON p.id = pa.policy_id
+			WHERE pa.scope = $1 AND pa.scope_id = $2 AND p.status = 'enabled'
+			ORDER BY pa.priority DESC, pa.created_at ASC`
+		args = []any{scope.Scope, *scope.ScopeID}
 	}
-	query += " ORDER BY pa.priority DESC, pa.created_at ASC"
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {

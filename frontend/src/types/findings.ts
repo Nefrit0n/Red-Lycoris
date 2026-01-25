@@ -227,6 +227,8 @@ export interface RiskFactors {
     epss_score?: number;
     kev?: boolean;
     value?: number;
+    known?: boolean;
+    reason?: string;
   };
   asset?: {
     criticality?: string;

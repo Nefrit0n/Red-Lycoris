@@ -21,9 +21,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// NOTE: JetStream consumer names must be valid NATS names.
-// Dots in consumer names cause: "nats: invalid consumer name".
-const intelConsumer = "intel-worker-enrich-v1"
+const intelConsumer = "intel-worker.enrich.v1"
 const intelBackoffCap = 6
 
 var jitterRand = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -47,6 +45,10 @@ func main() {
 	js := publisher.JetStream()
 	if js == nil {
 		log.Fatalf("jetstream unavailable")
+	}
+
+	if err := events.EnsureIntelConsumer(js, intelConsumer); err != nil {
+		log.Fatalf("failed to ensure intel consumer: %v", err)
 	}
 
 	sub, err := js.PullSubscribe(events.IntelEnrichRequested, intelConsumer)

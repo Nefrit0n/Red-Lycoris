@@ -3,8 +3,6 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,75 +63,113 @@ func ListPolicyResults(ctx context.Context, db *sql.DB, filters PolicyResultFilt
 		filters.Offset = 0
 	}
 
-	where := []string{"1=1"}
-	args := []interface{}{}
+	decision := nilIfEmpty(filters.Decision)
 
-	if filters.Decision != "" {
-		args = append(args, filters.Decision)
-		where = append(where, fmt.Sprintf("pr.decision = $%d", len(args)))
-	}
+	var policyID any
 	if filters.PolicyID != nil {
-		args = append(args, *filters.PolicyID)
-		where = append(where, fmt.Sprintf("pr.policy_id = $%d", len(args)))
+		policyID = *filters.PolicyID
 	}
+
+	var from any
 	if filters.From != nil {
-		args = append(args, *filters.From)
-		where = append(where, fmt.Sprintf("pr.evaluated_at >= $%d", len(args)))
+		from = *filters.From
 	}
+
+	var to any
 	if filters.To != nil {
-		args = append(args, *filters.To)
-		where = append(where, fmt.Sprintf("pr.evaluated_at <= $%d", len(args)))
+		to = *filters.To
 	}
+
+	var productID any
 	if filters.ProductID != nil {
-		args = append(args, *filters.ProductID)
-		where = append(where, fmt.Sprintf(`(
-            (pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.product_id = $%d))
-            OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.product_id = $%d))
-            OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.product_id = $%d))
-        )`, len(args), len(args), len(args)))
+		productID = *filters.ProductID
 	}
+
+	var importJobID any
 	if filters.ImportJobID != nil {
-		args = append(args, *filters.ImportJobID)
-		where = append(where, fmt.Sprintf(`(
-            (pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.import_job_id = $%d))
-            OR (pr.subject_type = 'import_job' AND pr.subject_id = $%d)
-            OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.import_job_id = $%d))
-        )`, len(args), len(args), len(args)))
+		importJobID = *filters.ImportJobID
 	}
+
+	var tenantID any
 	if filters.TenantID != nil {
-		args = append(args, *filters.TenantID)
-		where = append(where, fmt.Sprintf(`(
-            (pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $%d))
-            OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $%d))
-            OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $%d))
-        )`, len(args), len(args), len(args)))
+		tenantID = *filters.TenantID
 	}
 
-	whereClause := "WHERE " + strings.Join(where, " AND ")
-
+	// COUNT
 	var total int
-	countQuery := "SELECT COUNT(*) FROM policy_results pr " + whereClause
-	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*)
+		 FROM policy_results pr
+		 WHERE ($1::text IS NULL OR pr.decision = $1)
+		   AND ($2::uuid IS NULL OR pr.policy_id = $2)
+		   AND ($3::timestamptz IS NULL OR pr.evaluated_at >= $3)
+		   AND ($4::timestamptz IS NULL OR pr.evaluated_at <= $4)
+		   AND ($5::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.product_id = $5))
+				OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.product_id = $5))
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.product_id = $5))
+			))
+		   AND ($6::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.import_job_id = $6))
+				OR (pr.subject_type = 'import_job' AND pr.subject_id = $6)
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.import_job_id = $6))
+			))
+		   AND ($7::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $7))
+				OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $7))
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $7))
+			))`,
+		decision,
+		policyID,
+		from,
+		to,
+		productID,
+		importJobID,
+		tenantID,
+	).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
-	args = append(args, filters.Limit, filters.Offset)
-	listQuery := fmt.Sprintf(`
-        SELECT
-            pr.id, pr.policy_id, pr.policy_rule_id, pr.subject_type, pr.subject_id,
-            pr.decision, pr.violations, pr.input_hash, pr.evaluated_at,
-            prule.version
-        FROM policy_results pr
-        LEFT JOIN policy_rules prule ON prule.id = pr.policy_rule_id
-        %s
-        ORDER BY pr.evaluated_at DESC
-        LIMIT $%d OFFSET $%d`,
-		whereClause,
-		len(args)-1,
-		len(args),
+	rows, err := db.QueryContext(
+		ctx,
+		`SELECT
+			pr.id, pr.policy_id, pr.policy_rule_id, pr.subject_type, pr.subject_id,
+			pr.decision, pr.violations, pr.input_hash, pr.evaluated_at,
+			prule.version
+		 FROM policy_results pr
+		 LEFT JOIN policy_rules prule ON prule.id = pr.policy_rule_id
+		 WHERE ($1::text IS NULL OR pr.decision = $1)
+		   AND ($2::uuid IS NULL OR pr.policy_id = $2)
+		   AND ($3::timestamptz IS NULL OR pr.evaluated_at >= $3)
+		   AND ($4::timestamptz IS NULL OR pr.evaluated_at <= $4)
+		   AND ($5::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.product_id = $5))
+				OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.product_id = $5))
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.product_id = $5))
+			))
+		   AND ($6::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.import_job_id = $6))
+				OR (pr.subject_type = 'import_job' AND pr.subject_id = $6)
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.import_job_id = $6))
+			))
+		   AND ($7::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $7))
+				OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $7))
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $7))
+			))
+		 ORDER BY pr.evaluated_at DESC
+		 LIMIT $8 OFFSET $9`,
+		decision,
+		policyID,
+		from,
+		to,
+		productID,
+		importJobID,
+		tenantID,
+		filters.Limit,
+		filters.Offset,
 	)
-
-	rows, err := db.QueryContext(ctx, listQuery, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -166,27 +202,28 @@ func ListPolicyResults(ctx context.Context, db *sql.DB, filters PolicyResultFilt
 }
 
 func GetPolicyResultByID(ctx context.Context, db *sql.DB, id uuid.UUID, tenantID *uuid.UUID) (*PolicyResultDetail, error) {
-	args := []interface{}{id}
-	tenantClause := ""
+	var tenant any
 	if tenantID != nil {
-		args = append(args, *tenantID)
-		tenantClause = fmt.Sprintf(` AND (
-            (pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $%d))
-            OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $%d))
-            OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $%d))
-         )`, len(args), len(args), len(args))
+		tenant = *tenantID
 	}
+
 	row := db.QueryRowContext(
 		ctx,
 		`SELECT
-            pr.id, pr.policy_id, pr.policy_rule_id, pr.subject_type, pr.subject_id,
-            pr.decision, pr.violations, pr.input_hash, pr.evaluated_at,
-            prule.version, p.name, p.kind, prule.format, prule.entrypoint
-         FROM policy_results pr
-         LEFT JOIN policy_rules prule ON prule.id = pr.policy_rule_id
-         LEFT JOIN policies p ON p.id = pr.policy_id
-         WHERE pr.id = $1`+tenantClause,
-		args...,
+			pr.id, pr.policy_id, pr.policy_rule_id, pr.subject_type, pr.subject_id,
+			pr.decision, pr.violations, pr.input_hash, pr.evaluated_at,
+			prule.version, p.name, p.kind, prule.format, prule.entrypoint
+		 FROM policy_results pr
+		 LEFT JOIN policy_rules prule ON prule.id = pr.policy_rule_id
+		 LEFT JOIN policies p ON p.id = pr.policy_id
+		 WHERE pr.id = $1
+		   AND ($2::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $2))
+				OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $2))
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $2))
+			))`,
+		id,
+		tenant,
 	)
 
 	var detail PolicyResultDetail
@@ -220,55 +257,41 @@ func QueryPolicyResultsExport(ctx context.Context, db *sql.DB, filters PolicyRes
 		filters.Limit = 5000
 	}
 
-	where := []string{"1=1"}
-	args := []interface{}{}
+	decision := nilIfEmpty(filters.Decision)
 
-	if filters.Decision != "" {
-		args = append(args, filters.Decision)
-		where = append(where, fmt.Sprintf("pr.decision = $%d", len(args)))
-	}
+	var policyID any
 	if filters.PolicyID != nil {
-		args = append(args, *filters.PolicyID)
-		where = append(where, fmt.Sprintf("pr.policy_id = $%d", len(args)))
+		policyID = *filters.PolicyID
 	}
+
+	var from any
 	if filters.From != nil {
-		args = append(args, *filters.From)
-		where = append(where, fmt.Sprintf("pr.evaluated_at >= $%d", len(args)))
+		from = *filters.From
 	}
+
+	var to any
 	if filters.To != nil {
-		args = append(args, *filters.To)
-		where = append(where, fmt.Sprintf("pr.evaluated_at <= $%d", len(args)))
+		to = *filters.To
 	}
+
+	var productID any
 	if filters.ProductID != nil {
-		args = append(args, *filters.ProductID)
-		where = append(where, fmt.Sprintf(`(
-			(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.product_id = $%d))
-			OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.product_id = $%d))
-			OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.product_id = $%d))
-		)`, len(args), len(args), len(args)))
+		productID = *filters.ProductID
 	}
+
+	var importJobID any
 	if filters.ImportJobID != nil {
-		args = append(args, *filters.ImportJobID)
-		where = append(where, fmt.Sprintf(`(
-			(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.import_job_id = $%d))
-			OR (pr.subject_type = 'import_job' AND pr.subject_id = $%d)
-			OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.import_job_id = $%d))
-		)`, len(args), len(args), len(args)))
+		importJobID = *filters.ImportJobID
 	}
+
+	var tenantID any
 	if filters.TenantID != nil {
-		args = append(args, *filters.TenantID)
-		where = append(where, fmt.Sprintf(`(
-			(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $%d))
-			OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $%d))
-			OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $%d))
-		)`, len(args), len(args), len(args)))
+		tenantID = *filters.TenantID
 	}
 
-	whereClause := "WHERE " + strings.Join(where, " AND ")
-	args = append(args, filters.Limit)
-
-	query := fmt.Sprintf(`
-		SELECT
+	return db.QueryContext(
+		ctx,
+		`SELECT
 			pr.evaluated_at,
 			pr.policy_id,
 			prule.version,
@@ -276,14 +299,36 @@ func QueryPolicyResultsExport(ctx context.Context, db *sql.DB, filters PolicyRes
 			pr.subject_id,
 			pr.decision,
 			pr.violations
-		FROM policy_results pr
-		LEFT JOIN policy_rules prule ON prule.id = pr.policy_rule_id
-		%s
-		ORDER BY pr.evaluated_at DESC
-		LIMIT $%d`,
-		whereClause,
-		len(args),
+		 FROM policy_results pr
+		 LEFT JOIN policy_rules prule ON prule.id = pr.policy_rule_id
+		 WHERE ($1::text IS NULL OR pr.decision = $1)
+		   AND ($2::uuid IS NULL OR pr.policy_id = $2)
+		   AND ($3::timestamptz IS NULL OR pr.evaluated_at >= $3)
+		   AND ($4::timestamptz IS NULL OR pr.evaluated_at <= $4)
+		   AND ($5::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.product_id = $5))
+				OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.product_id = $5))
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.product_id = $5))
+			))
+		   AND ($6::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.import_job_id = $6))
+				OR (pr.subject_type = 'import_job' AND pr.subject_id = $6)
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.import_job_id = $6))
+			))
+		   AND ($7::uuid IS NULL OR (
+				(pr.subject_type = 'finding' AND EXISTS (SELECT 1 FROM findings f WHERE f.id = pr.subject_id AND f.tenant_id = $7))
+				OR (pr.subject_type = 'import_job' AND EXISTS (SELECT 1 FROM import_jobs ij WHERE ij.id = pr.subject_id AND ij.tenant_id = $7))
+				OR (pr.subject_type = 'scan_result' AND EXISTS (SELECT 1 FROM scan_results sr WHERE sr.id = pr.subject_id AND sr.tenant_id = $7))
+			))
+		 ORDER BY pr.evaluated_at DESC
+		 LIMIT $8`,
+		decision,
+		policyID,
+		from,
+		to,
+		productID,
+		importJobID,
+		tenantID,
+		filters.Limit,
 	)
-
-	return db.QueryContext(ctx, query, args...)
 }

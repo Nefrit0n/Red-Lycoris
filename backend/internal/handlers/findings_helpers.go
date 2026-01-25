@@ -90,6 +90,15 @@ func validateFindingStatus(status string) error {
 	}
 }
 
+func isValidRiskBand(band string) bool {
+	switch strings.ToLower(strings.TrimSpace(band)) {
+	case "low", "medium", "high", "critical":
+		return true
+	default:
+		return false
+	}
+}
+
 func validateFindingCategory(category string) error {
 	switch category {
 	case models.CategorySAST, models.CategorySCA, models.CategorySecrets, models.CategoryConfig:
