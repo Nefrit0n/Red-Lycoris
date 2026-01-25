@@ -9,46 +9,43 @@ import (
 	"github.com/google/uuid"
 )
 
-// FindingDetail — "расширенная" модель для выдачи detail-строк с join'ами (product_name и т.п.)
+// FindingDetail is an extended shape for Findings detail view (with joins).
+// Optional/nullable DB fields use sql.Null* types (see database/sql docs). :contentReference[oaicite:0]{index=0}
 type FindingDetail struct {
-	ID uuid.UUID
+	ID           uuid.UUID
+	TenantID     uuid.NullUUID
+	ScanResultID uuid.NullUUID
+	ProductID    uuid.NullUUID
+	ImportJobID  uuid.NullUUID
+	Fingerprint  string
 
-	// Multi-tenancy / ownership
-	TenantID uuid.NullUUID
-
-	// Core fields
+	// Category is NOT NULL in schema, so keep as plain string.
+	Category    string
 	Title       string
 	Description sql.NullString
-	Fingerprint string
 	Severity    string
 	Status      string
-	Category    sql.NullString
-
-	// Relations
-	ProductID   uuid.NullUUID
-	ProductName sql.NullString
-
-	AssigneeID  uuid.NullUUID
-	ImportJobID uuid.NullUUID
-
-	// Lifecycle
-	FirstSeenAt sql.NullTime
-	LastSeenAt  sql.NullTime
-	RepeatCount int
 	DuplicateID uuid.NullUUID
+	AssigneeID  uuid.NullUUID
 
-	SourceType    sql.NullString
-	SourceVersion sql.NullString
+	FirstSeenAt  sql.NullTime
+	LastSeenAt   sql.NullTime
+	RepeatCount  int
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	DeletedAt    sql.NullTime
+	LastActivity time.Time
 
-	EndpointMethod sql.NullString
-	EndpointPath   sql.NullString
+	// SLA
+	SLADueAt      sql.NullTime
+	SLABreached   sql.NullBool
+	SLABreachedAt sql.NullTime
+	SLAProfile    sql.NullString
+	SLASource     sql.NullString
 
-	Evidence    json.RawMessage
-	RiskFactors json.RawMessage
-
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt sql.NullTime
+	// Evidence / raw
+	Evidence json.RawMessage
+	RawData  json.RawMessage
 
 	// Source metadata (optional)
 	SourceType     sql.NullString
@@ -56,69 +53,123 @@ type FindingDetail struct {
 	EndpointMethod sql.NullString
 	EndpointPath   sql.NullString
 
-	// SLA (optional)
-	SLADueAt      sql.NullTime
-	SLABreached   sql.NullBool
-	SLABreachedAt sql.NullTime
-	SLAProfile    sql.NullString
-	SLASource     sql.NullString
-
-	// Risk (optional)
+	// Risk (optional, from finding_risk)
 	RiskScore     sql.NullFloat64
 	RiskBand      sql.NullString
+	RiskFactors   json.RawMessage
 	RiskUpdatedAt sql.NullTime
 	RiskModel     sql.NullString
+
+	// Extra joins
+	ProductName   sql.NullString
+	Scanner       sql.NullString
+	ScanCreatedAt sql.NullTime
 }
 
-// GetFindingDetailByID — отдельный метод для "детального" селекта (НЕ трогаем существующий GetFindingByID).
-func GetFindingDetailByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*FindingDetail, error) {
-	row := db.QueryRowContext(
-		ctx,
-		`SELECT
-			f.id, f.tenant_id, f.title, f.description, f.fingerprint, f.severity, f.status, f.category,
-			f.product_id, p.name,
-			f.assignee_id, f.import_job_id,
-			f.first_seen_at, f.last_seen_at,
-			f.repeat_count, f.duplicate_id,
-			f.source_type, f.source_version,
-			f.endpoint_method, f.endpoint_path,
-			f.evidence, fr.risk_factors,
-			f.created_at, f.updated_at, f.deleted_at
-		FROM findings f
-		LEFT JOIN products p ON p.id = f.product_id
-		LEFT JOIN finding_risk fr ON fr.finding_id = f.id
-		WHERE f.id = $1 AND f.deleted_at IS NULL`,
-		findingID,
-	)
+func GetFindingDetailByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*FindingDetail, error) {
+	row := db.QueryRowContext(ctx, `
+SELECT
+  f.id,
+  f.tenant_id,
+  f.scan_result_id,
+  f.product_id,
+  f.import_job_id,
+  f.fingerprint,
+  f.category,
+  f.title,
+  f.description,
+  f.severity,
+  f.status,
+  f.duplicate_id,
+  f.assignee_id,
+
+  f.first_seen_at,
+  f.last_seen_at,
+  f.repeat_count,
+  f.created_at,
+  f.updated_at,
+  f.deleted_at,
+  COALESCE(f.last_seen_at, f.created_at) AS last_activity,
+
+  f.sla_due_at,
+  f.sla_breached,
+  f.sla_breached_at,
+  f.sla_profile,
+  f.sla_source,
+
+  f.evidence,
+  f.raw_data,
+
+  f.source_type,
+  f.source_version,
+  f.endpoint_method,
+  f.endpoint_path,
+
+  fr.risk_score,
+  fr.risk_band,
+  fr.factors,
+  fr.computed_at,
+  fr.model_version,
+
+  p.name AS product_name,
+  sr.scanner,
+  sr.created_at AS scan_created_at
+FROM findings f
+LEFT JOIN finding_risk fr ON fr.finding_id = f.id
+LEFT JOIN products p ON p.id = f.product_id
+LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
+WHERE f.id = $1 AND f.deleted_at IS NULL
+`, id)
 
 	var d FindingDetail
-	var evidence, riskFactors []byte
+	var evidence, rawData, riskFactors []byte
+
 	if err := row.Scan(
 		&d.ID,
 		&d.TenantID,
+		&d.ScanResultID,
+		&d.ProductID,
+		&d.ImportJobID,
+		&d.Fingerprint,
+		&d.Category,
 		&d.Title,
 		&d.Description,
-		&d.Fingerprint,
 		&d.Severity,
 		&d.Status,
-		&d.Category,
-		&d.ProductID,
-		&d.ProductName,
+		&d.DuplicateID,
 		&d.AssigneeID,
-		&d.ImportJobID,
+
 		&d.FirstSeenAt,
 		&d.LastSeenAt,
 		&d.RepeatCount,
-		&d.DuplicateID,
+		&d.CreatedAt,
+		&d.UpdatedAt,
+		&d.DeletedAt,
+		&d.LastActivity,
+
+		&d.SLADueAt,
+		&d.SLABreached,
+		&d.SLABreachedAt,
+		&d.SLAProfile,
+		&d.SLASource,
+
+		&evidence,
+		&rawData,
+
 		&d.SourceType,
 		&d.SourceVersion,
 		&d.EndpointMethod,
 		&d.EndpointPath,
-		&evidence,
+
+		&d.RiskScore,
+		&d.RiskBand,
 		&riskFactors,
-		&d.CreatedAt,
-		&d.UpdatedAt,
-		&d.DeletedAt,
+		&d.RiskUpdatedAt,
+		&d.RiskModel,
+
+		&d.ProductName,
+		&d.Scanner,
+		&d.ScanCreatedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -126,10 +177,13 @@ func GetFindingDetailByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) 
 		return nil, err
 	}
 
-	if len(evidence) > 0 {
-		d.Evidence = json.RawMessage(evidence)
+	if evidence != nil {
+		d.Evidence = json.RawMessage(evidence) // RawMessage is raw JSON bytes :contentReference[oaicite:1]{index=1}
 	}
-	if len(riskFactors) > 0 {
+	if rawData != nil {
+		d.RawData = json.RawMessage(rawData)
+	}
+	if riskFactors != nil {
 		d.RiskFactors = json.RawMessage(riskFactors)
 	}
 

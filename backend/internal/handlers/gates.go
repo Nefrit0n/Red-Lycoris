@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -91,7 +93,7 @@ func (h *GateCheckHandler) Check(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to compute severity counts"})
 	}
-	categoryCounts, err := storage.CountFindingsByCategory(c.Context(), h.db, storage.FindingFilters{
+	categoryCounts, err := countFindingsByCategory(c.Context(), h.db, storage.FindingFilters{
 		ImportJobID:    &importJobID,
 		CanonicalOnly:  true,
 		IncludeRepeats: false,
@@ -128,7 +130,7 @@ func (h *GateCheckHandler) Check(c *fiber.Ctx) error {
 			FindingsNew:     job.FindingsNew,
 			DuplicatesTotal: job.DuplicatesTotal,
 			CreatedAt:       job.CreatedAt.Format(time.RFC3339),
-			SeverityCounts:  buildPolicySeverityCounts(severityCounts),
+			SeverityCounts:  buildPolicySeverityCounts(convertSeverityCounts(severityCounts)),
 			CategoryCounts:  buildPolicyCategoryCounts(categoryCounts),
 		},
 	}
@@ -248,6 +250,53 @@ func (h *GateCheckHandler) resolveBlockingFindings(c *fiber.Ctx, violations []po
 	}
 	return results, nil
 }
+
+func convertSeverityCounts(counts storage.SeverityCounts) storage.SeverityCounts {
+	// Сейчас CountFindingsBySeverity уже отдаёт storage.SeverityCounts,
+	// но оставляем хелпер, чтобы не ломать контракт, если источник поменяется.
+	return counts
+}
+
+func countFindingsByCategory(ctx context.Context, db *sql.DB, filters storage.FindingFilters) ([]storage.CategoryCount, error) {
+	where := []string{"deleted_at IS NULL"}
+	args := []interface{}{}
+	argN := 1
+
+	if filters.ImportJobID != nil {
+		where = append(where, fmt.Sprintf("import_job_id = $%d", argN))
+		args = append(args, *filters.ImportJobID)
+		argN++
+	}
+	if filters.CanonicalOnly {
+		// Канонические = не дубликаты.
+		where = append(where, "duplicate_id IS NULL")
+	}
+
+	query := `SELECT category, COUNT(*)
+			FROM findings
+			WHERE ` + strings.Join(where, " AND ") + `
+			GROUP BY category`
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := []storage.CategoryCount{}
+	for rows.Next() {
+		var entry storage.CategoryCount
+		if err := rows.Scan(&entry.Category, &entry.Count); err != nil {
+			return nil, err
+		}
+		res = append(res, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 
 func buildPolicySeverityCounts(counts storage.SeverityCounts) []policies.SeverityCount {
 	results := []policies.SeverityCount{}

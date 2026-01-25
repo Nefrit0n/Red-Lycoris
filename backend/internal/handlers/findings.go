@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -186,6 +187,7 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 	if finding == nil {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
+	includeRiskFactors := strings.EqualFold(c.Query("includeRiskFactors"), "true") || c.Query("includeRiskFactors") == "1"
 
 	masterID := finding.ID
 	if finding.DuplicateID.Valid {
@@ -259,7 +261,7 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		ScaDetails:         v1mapper.ScaDetail(scaDetail, evidence),
 		IntelDetails:       v1mapper.IntelDetail(intelDetail),
 	}
-	if len(finding.RiskFactors) > 0 {
+	if includeRiskFactors && len(finding.RiskFactors) > 0 {
 		var factors map[string]interface{}
 		if err := json.Unmarshal(finding.RiskFactors, &factors); err == nil {
 			resp.RiskFactors = factors
@@ -471,14 +473,9 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
 
-	currentCategory := ""
-	if current.Category.Valid {
-		currentCategory = current.Category.String
-	}
-
 	if req.Status != nil && *req.Status != current.Status && h.policyEngine != nil {
 		var fixedVersion *string
-		if strings.EqualFold(currentCategory, models.CategorySCA) {
+		if strings.EqualFold(current.Category, models.CategorySCA) {
 			if detail, err := storage.GetScaFindingDetail(c.Context(), h.db, current.ID); err == nil && detail != nil && detail.FixedVersion.Valid {
 				value := detail.FixedVersion.String
 				fixedVersion = &value
@@ -572,9 +569,7 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 			}
 			if sla.ShouldUpdateDueAt(existingDueAt, dueAt) {
 				slaDueAt = &dueAt
-				profile := sla.DefaultProfile
 				source := sla.DefaultSource
-				slaProfile = &profile
 				slaSource = &source
 			}
 		}
@@ -663,7 +658,7 @@ func (h *FindingsHandler) Delete(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid finding id"})
 	}
 
-	deleted, err := storage.SoftDeleteFinding(c.Context(), h.db, id)
+	deleted, err := softDeleteFinding(c.Context(), h.db, id)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to delete finding"})
 	}
@@ -718,8 +713,8 @@ func (h *FindingsHandler) AddComment(c *fiber.Ctx) error {
 		"comment_id": comment.ID.String(),
 	})
 	scopeID := (*uuid.UUID)(nil)
-	if finding, err := storage.GetFindingByID(c.Context(), h.db, id); err == nil && finding != nil && finding.ProductID.Valid {
-		scopeID = &finding.ProductID.UUID
+	if finding, err := storage.GetFindingByID(c.Context(), h.db, id); err == nil && finding != nil && finding.ProductID != nil {
+		scopeID = finding.ProductID
 	}
 	_ = createAuditLog(c.Context(), h.db, &models.AuditLog{
 		ActorID:    authorID,
@@ -861,4 +856,30 @@ func (h *FindingsHandler) UnlinkDuplicate(c *fiber.Ctx) error {
 	})
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true})
+}
+
+// softDeleteFinding is a small helper to keep Delete handler working until we move it to storage layer.
+// TODO: move into internal/storage as SoftDeleteFinding (and reuse across handlers/workers).
+func softDeleteFinding(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*models.Finding, error) {
+	current, err := storage.GetFindingByID(ctx, db, findingID)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		return nil, nil
+	}
+
+	now := time.Now().UTC()
+	res, err := db.ExecContext(ctx, `UPDATE findings SET deleted_at = $1, updated_at = $1 WHERE id = $2 AND deleted_at IS NULL`, now, findingID)
+	if err != nil {
+		return nil, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return nil, nil
+	}
+
+	current.DeletedAt = &now
+	current.UpdatedAt = now
+	return current, nil
 }
