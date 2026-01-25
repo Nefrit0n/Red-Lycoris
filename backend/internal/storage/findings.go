@@ -14,28 +14,47 @@ import (
 )
 
 type FindingListItem struct {
-	ID             uuid.UUID
-	Fingerprint    string
-	Title          string
-	Severity       string
-	Status         string
-	Category       sql.NullString
-	ProductID      uuid.NullUUID
-	ProductName    sql.NullString
-	DuplicateID    uuid.NullUUID
-	RepeatCount    int
-	FirstSeenAt    sql.NullTime
-	LastSeenAt     sql.NullTime
-	LastScanAt     sql.NullTime
-	Scanner        sql.NullString
-	AssigneeID     uuid.NullUUID
-	AssigneeName   sql.NullString
+	ID          uuid.UUID
+	TenantID    uuid.NullUUID
+	ImportJobID uuid.NullUUID
+
+	Fingerprint string
+	Title       string
+	Severity    string
+	Status      string
+	Category    string
+
+	ProductID   uuid.NullUUID
+	ProductName sql.NullString
+
+	DuplicateID uuid.NullUUID
+	RepeatCount int
+
+	FirstSeenAt sql.NullTime
+	LastSeenAt  sql.NullTime
+
+	SLADueAt      sql.NullTime
+	SLABreached   sql.NullBool
+	SLABreachedAt sql.NullTime
+	SLAProfile    sql.NullString
+	SLASource     sql.NullString
+
+	LastScanAt sql.NullTime
+	Scanner    sql.NullString
+
+	AssigneeID   uuid.NullUUID
+	AssigneeName sql.NullString
+
 	PolicyDecision sql.NullString
-	RiskScore      sql.NullFloat64
-	RiskBand       sql.NullString
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	SourceType     sql.NullString
+
+	RiskScore     sql.NullFloat64
+	RiskBand      sql.NullString
+	RiskUpdatedAt sql.NullTime   // placeholder (пока NULL в SELECT)
+	RiskModel     sql.NullString // placeholder (пока NULL в SELECT)
+
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	SourceType sql.NullString
 }
 
 type FindingNeighborsResult struct {
@@ -423,10 +442,15 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 
 	selectFields := `
 		SELECT
-			f.id, f.fingerprint, f.title, f.severity, f.status, f.category,
+			f.id,
+			f.tenant_id,
+			f.import_job_id,
+			f.fingerprint, f.title, f.severity, f.status, COALESCE(f.category, '') AS category,
 			f.product_id, p.name,
 			f.duplicate_id, f.repeat_count,
 			f.first_seen_at, f.last_seen_at,
+			f.sla_due_at, f.sla_breached, f.sla_breached_at,
+			f.sla_profile::text, f.sla_source,
 			MAX(sr.created_at) OVER (PARTITION BY f.product_id) AS last_scan_at,
 			sr.scanner,
 			f.assignee_id, u.username,
@@ -451,24 +475,43 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 		var item FindingListItem
 		if err := rows.Scan(
 			&item.ID,
+			&item.TenantID,
+			&item.ImportJobID,
+
 			&item.Fingerprint,
 			&item.Title,
 			&item.Severity,
 			&item.Status,
 			&item.Category,
+
 			&item.ProductID,
 			&item.ProductName,
+
 			&item.DuplicateID,
 			&item.RepeatCount,
+
 			&item.FirstSeenAt,
 			&item.LastSeenAt,
+
+			&item.SLADueAt,
+			&item.SLABreached,
+			&item.SLABreachedAt,
+			&item.SLAProfile,
+			&item.SLASource,
+
 			&item.LastScanAt,
 			&item.Scanner,
+
 			&item.AssigneeID,
 			&item.AssigneeName,
+
 			&item.PolicyDecision,
+
 			&item.RiskScore,
 			&item.RiskBand,
+			&item.RiskUpdatedAt,
+			&item.RiskModel,
+
 			&item.CreatedAt,
 			&item.UpdatedAt,
 			&item.SourceType,
