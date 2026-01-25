@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -79,13 +80,94 @@ type UpdateFindingParams struct {
 	SLASource     *string
 }
 
-// buildFindingFilterArgs normalizes filters into a stable argument list for SQL queries.
+// findingFilterWhereClause contains the common WHERE conditions for finding queries.
 // Placeholder order (1..15):
 // 1 tenant_id, 2 severity, 3 status, 4 product_id, 5 import_job_id,
 // 6 policy_id, 7 policy_decision, 8 risk_band,
 // 9 query_pattern, 10 scanner, 11 source_type,
 // 12 occurrence_status, 13 date_from, 14 date_to,
 // 15 canonical_only_flag.
+const findingFilterWhereClause = `
+f.deleted_at IS NULL
+  AND (f.tenant_id = $1)
+  AND ($2::text IS NULL OR f.severity = $2)
+  AND ($3::text IS NULL OR f.status = $3)
+  AND ($4::uuid IS NULL OR f.product_id = $4)
+  AND ($5::uuid IS NULL OR f.import_job_id = $5)
+  AND ($6::uuid IS NULL OR EXISTS (
+		SELECT 1 FROM policy_results pr
+		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $6
+	))
+  AND ($7::text IS NULL OR (
+		SELECT pr.decision FROM policy_results pr
+		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
+		ORDER BY pr.evaluated_at DESC
+		LIMIT 1
+	) = $7)
+  AND ($8::text IS NULL OR fr.risk_band = $8)
+  AND ($9::text IS NULL OR (f.title ILIKE $9 OR f.description ILIKE $9 OR f.fingerprint ILIKE $9 OR p.identifier ILIKE $9 OR p.name ILIKE $9))
+  AND ($10::text IS NULL OR sr.scanner = $10)
+  AND ($11::text IS NULL OR f.source_type = $11)
+  AND ($12::text IS NULL OR (
+		($12 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
+		OR ($12 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
+	))
+  AND ($13::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $13)
+  AND ($14::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $14)
+  AND ($15::bool = FALSE OR f.duplicate_id IS NULL)`
+
+// findingBaseJoins contains the common JOIN clauses for finding queries.
+const findingBaseJoins = `
+FROM findings f
+LEFT JOIN finding_risk fr ON fr.finding_id = f.id
+LEFT JOIN products p ON p.id = f.product_id
+LEFT JOIN scan_results sr ON sr.id = f.scan_result_id`
+
+// findingListJoins extends base joins with user and policy_results for list queries.
+// Uses DISTINCT ON instead of LATERAL for better performance on large result sets.
+const findingListJoins = findingBaseJoins + `
+LEFT JOIN users u ON u.id = f.assignee_id
+LEFT JOIN (
+	SELECT DISTINCT ON (subject_id) subject_id, decision
+	FROM policy_results
+	WHERE subject_type = 'finding'
+	ORDER BY subject_id, evaluated_at DESC
+) pr_latest ON pr_latest.subject_id = f.id`
+
+// buildFindingOrderBy generates ORDER BY clause for the given sort field and order.
+// Parameter $16 is the sort field.
+func buildFindingOrderBy(sortOrder string) string {
+	nullsOrder := "NULLS LAST"
+	order := "DESC"
+	if sortOrder == "asc" {
+		order = "ASC"
+	}
+
+	return fmt.Sprintf(`ORDER BY
+	CASE WHEN $16 = 'slaDueAt' THEN CASE WHEN f.sla_due_at IS NULL THEN 1 ELSE 0 END END ASC,
+	CASE WHEN $16 = 'slaDueAt' THEN f.sla_due_at END %s %s,
+	CASE WHEN $16 = 'title' THEN f.title END %s %s,
+	CASE WHEN $16 = 'productName' THEN p.name END %s %s,
+	CASE WHEN $16 = 'severity' THEN (CASE LOWER(f.severity) WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) END %s %s,
+	CASE WHEN $16 = 'status' THEN f.status END %s %s,
+	CASE WHEN $16 = 'lastSeenAt' THEN COALESCE(f.last_seen_at, f.created_at) END %s %s,
+	CASE WHEN $16 = 'createdAt' THEN f.created_at END %s %s,
+	CASE WHEN $16 = 'updatedAt' THEN f.updated_at END %s %s,
+	CASE WHEN $16 = 'riskScore' THEN fr.risk_score END %s %s,
+	f.id %s`,
+		order, nullsOrder,
+		order, nullsOrder,
+		order, nullsOrder,
+		order, nullsOrder,
+		order, nullsOrder,
+		order, nullsOrder,
+		order, nullsOrder,
+		order, nullsOrder,
+		order, nullsOrder,
+		order)
+}
+
+// buildFindingFilterArgs normalizes filters into a stable argument list for SQL queries.
 func buildFindingFilterArgs(filters FindingFilters) []any {
 	var tenant any
 	if filters.TenantID != nil {
@@ -181,6 +263,84 @@ func normalizeSortOrder(order string) string {
 	return "desc"
 }
 
+// findingScanFields is the list of fields to scan from a finding query result.
+type findingScanFields struct {
+	scanResultID  sql.NullString
+	productID     sql.NullString
+	importJobID   sql.NullString
+	duplicateID   sql.NullString
+	assigneeID    sql.NullString
+	createdAt     time.Time
+	updatedAt     time.Time
+	deletedAt     sql.NullTime
+	description   sql.NullString
+	evidence      []byte
+	sourceType    sql.NullString
+	category      sql.NullString
+	firstSeenAt   sql.NullTime
+	lastSeenAt    sql.NullTime
+	slaDueAt      sql.NullTime
+	slaBreached   sql.NullBool
+	slaBreachedAt sql.NullTime
+	slaProfile    []byte
+	slaSource     sql.NullString
+}
+
+// populateFinding fills a Finding model from scanned fields.
+func populateFinding(finding *models.Finding, f *findingScanFields) {
+	finding.CreatedAt = f.createdAt
+	finding.UpdatedAt = f.updatedAt
+	if f.deletedAt.Valid {
+		finding.DeletedAt = &f.deletedAt.Time
+	}
+
+	if f.scanResultID.Valid {
+		id, _ := uuid.Parse(f.scanResultID.String)
+		finding.ScanResultID = &id
+	}
+	if f.productID.Valid {
+		id, _ := uuid.Parse(f.productID.String)
+		finding.ProductID = &id
+	}
+	if f.importJobID.Valid {
+		id, _ := uuid.Parse(f.importJobID.String)
+		finding.ImportJobID = &id
+	}
+	if f.duplicateID.Valid {
+		id, _ := uuid.Parse(f.duplicateID.String)
+		finding.DuplicateID = &id
+	}
+	if f.assigneeID.Valid {
+		id, _ := uuid.Parse(f.assigneeID.String)
+		finding.AssigneeID = &id
+	}
+	if f.description.Valid {
+		finding.Description = &f.description.String
+	}
+	if f.sourceType.Valid {
+		finding.SourceType = &f.sourceType.String
+	}
+	if f.category.Valid {
+		finding.Category = f.category.String
+	}
+	if f.firstSeenAt.Valid {
+		finding.FirstSeenAt = f.firstSeenAt.Time
+	}
+	if f.lastSeenAt.Valid {
+		finding.LastSeenAt = f.lastSeenAt.Time
+	}
+	if f.slaBreached.Valid {
+		finding.SLABreached = f.slaBreached.Bool
+	}
+	if len(f.slaProfile) > 0 {
+		s := string(f.slaProfile)
+		finding.SLAProfile = &s
+	}
+	if len(f.evidence) > 0 {
+		finding.Evidence = json.RawMessage(f.evidence)
+	}
+}
+
 func GetFindingByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*models.Finding, error) {
 	row := db.QueryRowContext(
 		ctx,
@@ -192,53 +352,33 @@ func GetFindingByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*mode
 	)
 
 	var finding models.Finding
-	var (
-		scanResultID  sql.NullString
-		productID     sql.NullString
-		importJobID   sql.NullString
-		duplicateID   sql.NullString
-		assigneeID    sql.NullString
-		createdAt     time.Time
-		updatedAt     time.Time
-		deletedAt     sql.NullTime
-		description   sql.NullString
-		evidence      []byte
-		sourceType    sql.NullString
-		category      sql.NullString
-		firstSeenAt   sql.NullTime
-		lastSeenAt    sql.NullTime
-		slaDueAt      sql.NullTime
-		slaBreached   sql.NullBool
-		slaBreachedAt sql.NullTime
-		slaProfile    []byte
-		slaSource     sql.NullString
-	)
+	var f findingScanFields
 	if err := row.Scan(
 		&finding.ID,
-		&scanResultID,
-		&productID,
-		&importJobID,
+		&f.scanResultID,
+		&f.productID,
+		&f.importJobID,
 		&finding.Fingerprint,
 		&finding.Title,
-		&description,
+		&f.description,
 		&finding.Severity,
 		&finding.Status,
-		&duplicateID,
+		&f.duplicateID,
 		&finding.RepeatCount,
-		&firstSeenAt,
-		&lastSeenAt,
-		&createdAt,
-		&updatedAt,
-		&deletedAt,
-		&evidence,
-		&sourceType,
-		&category,
-		&slaDueAt,
-		&slaBreached,
-		&slaBreachedAt,
-		&slaProfile,
-		&slaSource,
-		&assigneeID,
+		&f.firstSeenAt,
+		&f.lastSeenAt,
+		&f.createdAt,
+		&f.updatedAt,
+		&f.deletedAt,
+		&f.evidence,
+		&f.sourceType,
+		&f.category,
+		&f.slaDueAt,
+		&f.slaBreached,
+		&f.slaBreachedAt,
+		&f.slaProfile,
+		&f.slaSource,
+		&f.assigneeID,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -246,66 +386,15 @@ func GetFindingByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*mode
 		return nil, err
 	}
 
-	finding.CreatedAt = createdAt
-	finding.UpdatedAt = updatedAt
-	if deletedAt.Valid {
-		finding.DeletedAt = &deletedAt.Time
-	}
-
-	if scanResultID.Valid {
-		id, _ := uuid.Parse(scanResultID.String)
-		finding.ScanResultID = &id
-	}
-	if productID.Valid {
-		id, _ := uuid.Parse(productID.String)
-		finding.ProductID = &id
-	}
-	if importJobID.Valid {
-		id, _ := uuid.Parse(importJobID.String)
-		finding.ImportJobID = &id
-	}
-	if duplicateID.Valid {
-		id, _ := uuid.Parse(duplicateID.String)
-		finding.DuplicateID = &id
-	}
-	if assigneeID.Valid {
-		id, _ := uuid.Parse(assigneeID.String)
-		finding.AssigneeID = &id
-	}
-	if description.Valid {
-		finding.Description = &description.String
-	}
-	if sourceType.Valid {
-		finding.SourceType = &sourceType.String
-	}
-	if category.Valid {
-		finding.Category = category.String
-	}
-
-	if firstSeenAt.Valid {
-		finding.FirstSeenAt = firstSeenAt.Time
-	}
-	if lastSeenAt.Valid {
-		finding.LastSeenAt = lastSeenAt.Time
-	}
-
-	if slaBreached.Valid {
-		finding.SLABreached = slaBreached.Bool
-	}
-
-	if len(slaProfile) > 0 {
-		s := string(slaProfile)
-		finding.SLAProfile = &s
-	}
-
-	if len(evidence) > 0 {
-		finding.Evidence = json.RawMessage(evidence)
-	}
-
+	populateFinding(&finding, &f)
 	return &finding, nil
 }
 
 func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]FindingListItem, int, error) {
+	if filters.TenantID == nil {
+		return nil, 0, fmt.Errorf("tenant_id is required for listing findings")
+	}
+
 	if filters.Limit <= 0 {
 		filters.Limit = 20
 	}
@@ -321,52 +410,18 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 
 	argsBase := buildFindingFilterArgs(filters)
 
-	// COUNT
+	// COUNT query
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) %s WHERE %s`, findingBaseJoins, findingFilterWhereClause)
+
 	var total int
-	if err := db.QueryRowContext(
-		ctx,
-		`SELECT COUNT(*)
-		 FROM findings f
-		 LEFT JOIN finding_risk fr ON fr.finding_id = f.id
-		 LEFT JOIN products p ON p.id = f.product_id
-		 LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
-		 WHERE f.deleted_at IS NULL
-		   AND ($1::uuid IS NULL OR f.tenant_id = $1)
-		   AND ($2::text IS NULL OR f.severity = $2)
-		   AND ($3::text IS NULL OR f.status = $3)
-		   AND ($4::uuid IS NULL OR f.product_id = $4)
-		   AND ($5::uuid IS NULL OR f.import_job_id = $5)
-		   AND ($6::uuid IS NULL OR EXISTS (
-				SELECT 1 FROM policy_results pr
-				WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $6
-			))
-		   AND ($7::text IS NULL OR (
-				SELECT pr.decision FROM policy_results pr
-				WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
-				ORDER BY pr.evaluated_at DESC
-				LIMIT 1
-			) = $7)
-		   AND ($8::text IS NULL OR fr.risk_band = $8)
-		   AND ($9::text IS NULL OR (f.title ILIKE $9 OR f.description ILIKE $9 OR f.fingerprint ILIKE $9 OR p.identifier ILIKE $9 OR p.name ILIKE $9))
-		   AND ($10::text IS NULL OR sr.scanner = $10)
-		   AND ($11::text IS NULL OR f.source_type = $11)
-		   AND ($12::text IS NULL OR (
-				($12 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
-				OR ($12 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
-			))
-		   AND ($13::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $13)
-		   AND ($14::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $14)
-		   AND ($15::bool = FALSE OR f.duplicate_id IS NULL)`,
-		argsBase...,
-	).Scan(&total); err != nil {
+	if err := db.QueryRowContext(ctx, countQuery, argsBase...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
+	// SELECT query with pagination
 	args := append(append([]any{}, argsBase...), sortField, filters.Limit, filters.Offset)
 
-	var query string
-	if sortOrder == "asc" {
-		query = `
+	selectFields := `
 		SELECT
 			f.id, f.fingerprint, f.title, f.severity, f.status, f.category,
 			f.product_id, p.name,
@@ -377,125 +432,13 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			f.assignee_id, u.username,
 			pr_latest.decision,
 			fr.risk_score, fr.risk_band,
-			f.created_at, f.updated_at, f.source_type
-		FROM findings f
-		LEFT JOIN finding_risk fr ON fr.finding_id = f.id
-		LEFT JOIN products p ON p.id = f.product_id
-		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
-		LEFT JOIN users u ON u.id = f.assignee_id
-		LEFT JOIN LATERAL (
-			SELECT pr.decision
-			FROM policy_results pr
-			WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
-			ORDER BY pr.evaluated_at DESC
-			LIMIT 1
-		) pr_latest ON true
-		WHERE f.deleted_at IS NULL
-		  AND ($1::uuid IS NULL OR f.tenant_id = $1)
-		  AND ($2::text IS NULL OR f.severity = $2)
-		  AND ($3::text IS NULL OR f.status = $3)
-		  AND ($4::uuid IS NULL OR f.product_id = $4)
-		  AND ($5::uuid IS NULL OR f.import_job_id = $5)
-		  AND ($6::uuid IS NULL OR EXISTS (
-				SELECT 1 FROM policy_results pr
-				WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $6
-			))
-		  AND ($7::text IS NULL OR (
-				SELECT pr.decision FROM policy_results pr
-				WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
-				ORDER BY pr.evaluated_at DESC
-				LIMIT 1
-			) = $7)
-		  AND ($8::text IS NULL OR fr.risk_band = $8)
-		  AND ($9::text IS NULL OR (f.title ILIKE $9 OR f.description ILIKE $9 OR f.fingerprint ILIKE $9 OR p.identifier ILIKE $9 OR p.name ILIKE $9))
-		  AND ($10::text IS NULL OR sr.scanner = $10)
-		  AND ($11::text IS NULL OR f.source_type = $11)
-		  AND ($12::text IS NULL OR (
-				($12 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
-				OR ($12 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
-			))
-		  AND ($13::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $13)
-		  AND ($14::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $14)
-		  AND ($15::bool = FALSE OR f.duplicate_id IS NULL)
-		ORDER BY
-			CASE WHEN $16 = 'slaDueAt' THEN CASE WHEN f.sla_due_at IS NULL THEN 1 ELSE 0 END END ASC,
-			CASE WHEN $16 = 'slaDueAt' THEN f.sla_due_at END ASC NULLS LAST,
-			CASE WHEN $16 = 'title' THEN f.title END ASC NULLS LAST,
-			CASE WHEN $16 = 'productName' THEN p.name END ASC NULLS LAST,
-			CASE WHEN $16 = 'severity' THEN (CASE LOWER(f.severity) WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) END ASC NULLS LAST,
-			CASE WHEN $16 = 'status' THEN f.status END ASC NULLS LAST,
-			CASE WHEN $16 = 'lastSeenAt' THEN COALESCE(f.last_seen_at, f.created_at) END ASC NULLS LAST,
-			CASE WHEN $16 = 'createdAt' THEN f.created_at END ASC NULLS LAST,
-			CASE WHEN $16 = 'updatedAt' THEN f.updated_at END ASC NULLS LAST,
-			CASE WHEN $16 = 'riskScore' THEN fr.risk_score END ASC NULLS LAST,
-			f.id ASC
-		LIMIT $17 OFFSET $18`
-	} else {
-		query = `
-		SELECT
-			f.id, f.fingerprint, f.title, f.severity, f.status, f.category,
-			f.product_id, p.name,
-			f.duplicate_id, f.repeat_count,
-			f.first_seen_at, f.last_seen_at,
-			MAX(sr.created_at) OVER (PARTITION BY f.product_id) AS last_scan_at,
-			sr.scanner,
-			f.assignee_id, u.username,
-			pr_latest.decision,
-			fr.risk_score, fr.risk_band,
-			f.created_at, f.updated_at, f.source_type
-		FROM findings f
-		LEFT JOIN finding_risk fr ON fr.finding_id = f.id
-		LEFT JOIN products p ON p.id = f.product_id
-		LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
-		LEFT JOIN users u ON u.id = f.assignee_id
-		LEFT JOIN LATERAL (
-			SELECT pr.decision
-			FROM policy_results pr
-			WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
-			ORDER BY pr.evaluated_at DESC
-			LIMIT 1
-		) pr_latest ON true
-		WHERE f.deleted_at IS NULL
-		  AND ($1::uuid IS NULL OR f.tenant_id = $1)
-		  AND ($2::text IS NULL OR f.severity = $2)
-		  AND ($3::text IS NULL OR f.status = $3)
-		  AND ($4::uuid IS NULL OR f.product_id = $4)
-		  AND ($5::uuid IS NULL OR f.import_job_id = $5)
-		  AND ($6::uuid IS NULL OR EXISTS (
-				SELECT 1 FROM policy_results pr
-				WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $6
-			))
-		  AND ($7::text IS NULL OR (
-				SELECT pr.decision FROM policy_results pr
-				WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
-				ORDER BY pr.evaluated_at DESC
-				LIMIT 1
-			) = $7)
-		  AND ($8::text IS NULL OR fr.risk_band = $8)
-		  AND ($9::text IS NULL OR (f.title ILIKE $9 OR f.description ILIKE $9 OR f.fingerprint ILIKE $9 OR p.identifier ILIKE $9 OR p.name ILIKE $9))
-		  AND ($10::text IS NULL OR sr.scanner = $10)
-		  AND ($11::text IS NULL OR f.source_type = $11)
-		  AND ($12::text IS NULL OR (
-				($12 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
-				OR ($12 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
-			))
-		  AND ($13::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $13)
-		  AND ($14::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $14)
-		  AND ($15::bool = FALSE OR f.duplicate_id IS NULL)
-		ORDER BY
-			CASE WHEN $16 = 'slaDueAt' THEN CASE WHEN f.sla_due_at IS NULL THEN 1 ELSE 0 END END ASC,
-			CASE WHEN $16 = 'slaDueAt' THEN f.sla_due_at END DESC NULLS LAST,
-			CASE WHEN $16 = 'title' THEN f.title END DESC NULLS LAST,
-			CASE WHEN $16 = 'productName' THEN p.name END DESC NULLS LAST,
-			CASE WHEN $16 = 'severity' THEN (CASE LOWER(f.severity) WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) END DESC NULLS LAST,
-			CASE WHEN $16 = 'status' THEN f.status END DESC NULLS LAST,
-			CASE WHEN $16 = 'lastSeenAt' THEN COALESCE(f.last_seen_at, f.created_at) END DESC NULLS LAST,
-			CASE WHEN $16 = 'createdAt' THEN f.created_at END DESC NULLS LAST,
-			CASE WHEN $16 = 'updatedAt' THEN f.updated_at END DESC NULLS LAST,
-			CASE WHEN $16 = 'riskScore' THEN fr.risk_score END DESC NULLS LAST,
-			f.id DESC
-		LIMIT $17 OFFSET $18`
-	}
+			f.created_at, f.updated_at, f.source_type`
+
+	query := fmt.Sprintf(`%s %s WHERE %s %s LIMIT $17 OFFSET $18`,
+		selectFields,
+		findingListJoins,
+		findingFilterWhereClause,
+		buildFindingOrderBy(sortOrder))
 
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -542,62 +485,22 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 }
 
 func GetFindingNeighbors(ctx context.Context, db *sql.DB, currentID uuid.UUID, filters FindingFilters) (FindingNeighborsResult, error) {
+	if filters.TenantID == nil {
+		return FindingNeighborsResult{}, fmt.Errorf("tenant_id is required for finding neighbors")
+	}
+
 	sortField := normalizeFindingSortField(filters.SortField)
 	sortOrder := normalizeSortOrder(filters.SortOrder)
 
 	args := append(buildFindingFilterArgs(filters), sortField, currentID)
 
-	var query string
-	if sortOrder == "asc" {
-		query = `
+	query := fmt.Sprintf(`
 		WITH ranked AS (
 			SELECT
 				f.id,
-				ROW_NUMBER() OVER (
-					ORDER BY
-						CASE WHEN $16 = 'slaDueAt' THEN CASE WHEN f.sla_due_at IS NULL THEN 1 ELSE 0 END END ASC,
-						CASE WHEN $16 = 'slaDueAt' THEN f.sla_due_at END ASC NULLS LAST,
-						CASE WHEN $16 = 'title' THEN f.title END ASC NULLS LAST,
-						CASE WHEN $16 = 'productName' THEN p.name END ASC NULLS LAST,
-						CASE WHEN $16 = 'severity' THEN (CASE LOWER(f.severity) WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) END ASC NULLS LAST,
-						CASE WHEN $16 = 'status' THEN f.status END ASC NULLS LAST,
-						CASE WHEN $16 = 'lastSeenAt' THEN COALESCE(f.last_seen_at, f.created_at) END ASC NULLS LAST,
-						CASE WHEN $16 = 'createdAt' THEN f.created_at END ASC NULLS LAST,
-						CASE WHEN $16 = 'updatedAt' THEN f.updated_at END ASC NULLS LAST,
-						CASE WHEN $16 = 'riskScore' THEN fr.risk_score END ASC NULLS LAST,
-						f.id ASC
-				) AS rn
-			FROM findings f
-			LEFT JOIN finding_risk fr ON fr.finding_id = f.id
-			LEFT JOIN products p ON p.id = f.product_id
-			LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
-			WHERE f.deleted_at IS NULL
-			  AND ($1::uuid IS NULL OR f.tenant_id = $1)
-			  AND ($2::text IS NULL OR f.severity = $2)
-			  AND ($3::text IS NULL OR f.status = $3)
-			  AND ($4::uuid IS NULL OR f.product_id = $4)
-			  AND ($5::uuid IS NULL OR f.import_job_id = $5)
-			  AND ($6::uuid IS NULL OR EXISTS (
-					SELECT 1 FROM policy_results pr
-					WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $6
-				))
-			  AND ($7::text IS NULL OR (
-					SELECT pr.decision FROM policy_results pr
-					WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
-					ORDER BY pr.evaluated_at DESC
-					LIMIT 1
-				) = $7)
-			  AND ($8::text IS NULL OR fr.risk_band = $8)
-			  AND ($9::text IS NULL OR (f.title ILIKE $9 OR f.description ILIKE $9 OR f.fingerprint ILIKE $9 OR p.identifier ILIKE $9 OR p.name ILIKE $9))
-			  AND ($10::text IS NULL OR sr.scanner = $10)
-			  AND ($11::text IS NULL OR f.source_type = $11)
-			  AND ($12::text IS NULL OR (
-					($12 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
-					OR ($12 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
-				))
-			  AND ($13::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $13)
-			  AND ($14::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $14)
-			  AND ($15::bool = FALSE OR f.duplicate_id IS NULL)
+				ROW_NUMBER() OVER (%s) AS rn
+			%s
+			WHERE %s
 		),
 		cur AS (
 			SELECT rn FROM ranked WHERE id = $17
@@ -605,66 +508,10 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, currentID uuid.UUID, f
 		SELECT
 			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn - 1) AS prev_id,
 			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn + 1) AS next_id
-		FROM cur`
-	} else {
-		query = `
-		WITH ranked AS (
-			SELECT
-				f.id,
-				ROW_NUMBER() OVER (
-					ORDER BY
-						CASE WHEN $16 = 'slaDueAt' THEN CASE WHEN f.sla_due_at IS NULL THEN 1 ELSE 0 END END ASC,
-						CASE WHEN $16 = 'slaDueAt' THEN f.sla_due_at END DESC NULLS LAST,
-						CASE WHEN $16 = 'title' THEN f.title END DESC NULLS LAST,
-						CASE WHEN $16 = 'productName' THEN p.name END DESC NULLS LAST,
-						CASE WHEN $16 = 'severity' THEN (CASE LOWER(f.severity) WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) END DESC NULLS LAST,
-						CASE WHEN $16 = 'status' THEN f.status END DESC NULLS LAST,
-						CASE WHEN $16 = 'lastSeenAt' THEN COALESCE(f.last_seen_at, f.created_at) END DESC NULLS LAST,
-						CASE WHEN $16 = 'createdAt' THEN f.created_at END DESC NULLS LAST,
-						CASE WHEN $16 = 'updatedAt' THEN f.updated_at END DESC NULLS LAST,
-						CASE WHEN $16 = 'riskScore' THEN fr.risk_score END DESC NULLS LAST,
-						f.id DESC
-				) AS rn
-			FROM findings f
-			LEFT JOIN finding_risk fr ON fr.finding_id = f.id
-			LEFT JOIN products p ON p.id = f.product_id
-			LEFT JOIN scan_results sr ON sr.id = f.scan_result_id
-			WHERE f.deleted_at IS NULL
-			  AND ($1::uuid IS NULL OR f.tenant_id = $1)
-			  AND ($2::text IS NULL OR f.severity = $2)
-			  AND ($3::text IS NULL OR f.status = $3)
-			  AND ($4::uuid IS NULL OR f.product_id = $4)
-			  AND ($5::uuid IS NULL OR f.import_job_id = $5)
-			  AND ($6::uuid IS NULL OR EXISTS (
-					SELECT 1 FROM policy_results pr
-					WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $6
-				))
-			  AND ($7::text IS NULL OR (
-					SELECT pr.decision FROM policy_results pr
-					WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
-					ORDER BY pr.evaluated_at DESC
-					LIMIT 1
-				) = $7)
-			  AND ($8::text IS NULL OR fr.risk_band = $8)
-			  AND ($9::text IS NULL OR (f.title ILIKE $9 OR f.description ILIKE $9 OR f.fingerprint ILIKE $9 OR p.identifier ILIKE $9 OR p.name ILIKE $9))
-			  AND ($10::text IS NULL OR sr.scanner = $10)
-			  AND ($11::text IS NULL OR f.source_type = $11)
-			  AND ($12::text IS NULL OR (
-					($12 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
-					OR ($12 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
-				))
-			  AND ($13::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $13)
-			  AND ($14::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $14)
-			  AND ($15::bool = FALSE OR f.duplicate_id IS NULL)
-		),
-		cur AS (
-			SELECT rn FROM ranked WHERE id = $17
-		)
-		SELECT
-			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn - 1) AS prev_id,
-			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn + 1) AS next_id
-		FROM cur`
-	}
+		FROM cur`,
+		buildFindingOrderBy(sortOrder),
+		findingBaseJoins,
+		findingFilterWhereClause)
 
 	row := db.QueryRowContext(ctx, query, args...)
 	var res FindingNeighborsResult
@@ -720,51 +567,32 @@ func UpdateFinding(ctx context.Context, db *sql.DB, findingID uuid.UUID, params 
 	)
 
 	var finding models.Finding
-	var (
-		scanResultID  sql.NullString
-		productID     sql.NullString
-		importJobID   sql.NullString
-		duplicateID   sql.NullString
-		assigneeID    sql.NullString
-		description   sql.NullString
-		evidence      []byte
-		sourceType    sql.NullString
-		category      sql.NullString
-		firstSeenAt   sql.NullTime
-		lastSeenAt    sql.NullTime
-		slaDueAt      sql.NullTime
-		slaBreached   sql.NullBool
-		slaBreachedAt sql.NullTime
-		slaProfile    []byte
-		slaSource     sql.NullString
-		createdAt     time.Time
-		updatedAtRet  time.Time
-	)
+	var f findingScanFields
 	if err := row.Scan(
 		&finding.ID,
-		&scanResultID,
-		&productID,
-		&importJobID,
+		&f.scanResultID,
+		&f.productID,
+		&f.importJobID,
 		&finding.Fingerprint,
 		&finding.Title,
-		&description,
+		&f.description,
 		&finding.Severity,
 		&finding.Status,
-		&duplicateID,
+		&f.duplicateID,
 		&finding.RepeatCount,
-		&firstSeenAt,
-		&lastSeenAt,
-		&createdAt,
-		&updatedAtRet,
-		&evidence,
-		&sourceType,
-		&category,
-		&slaDueAt,
-		&slaBreached,
-		&slaBreachedAt,
-		&slaProfile,
-		&slaSource,
-		&assigneeID,
+		&f.firstSeenAt,
+		&f.lastSeenAt,
+		&f.createdAt,
+		&f.updatedAt,
+		&f.evidence,
+		&f.sourceType,
+		&f.category,
+		&f.slaDueAt,
+		&f.slaBreached,
+		&f.slaBreachedAt,
+		&f.slaProfile,
+		&f.slaSource,
+		&f.assigneeID,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -772,58 +600,6 @@ func UpdateFinding(ctx context.Context, db *sql.DB, findingID uuid.UUID, params 
 		return nil, err
 	}
 
-	finding.CreatedAt = createdAt
-	finding.UpdatedAt = updatedAtRet
-
-	if scanResultID.Valid {
-		id, _ := uuid.Parse(scanResultID.String)
-		finding.ScanResultID = &id
-	}
-	if productID.Valid {
-		id, _ := uuid.Parse(productID.String)
-		finding.ProductID = &id
-	}
-	if importJobID.Valid {
-		id, _ := uuid.Parse(importJobID.String)
-		finding.ImportJobID = &id
-	}
-	if duplicateID.Valid {
-		id, _ := uuid.Parse(duplicateID.String)
-		finding.DuplicateID = &id
-	}
-	if assigneeID.Valid {
-		id, _ := uuid.Parse(assigneeID.String)
-		finding.AssigneeID = &id
-	}
-	if description.Valid {
-		finding.Description = &description.String
-	}
-	if sourceType.Valid {
-		finding.SourceType = &sourceType.String
-	}
-	if category.Valid {
-		finding.Category = category.String
-	}
-
-	if firstSeenAt.Valid {
-		finding.FirstSeenAt = firstSeenAt.Time
-	}
-	if lastSeenAt.Valid {
-		finding.LastSeenAt = lastSeenAt.Time
-	}
-
-	if slaBreached.Valid {
-		finding.SLABreached = slaBreached.Bool
-	}
-
-	if len(slaProfile) > 0 {
-		s := string(slaProfile)
-		finding.SLAProfile = &s
-	}
-
-	if len(evidence) > 0 {
-		finding.Evidence = json.RawMessage(evidence)
-	}
-
+	populateFinding(&finding, &f)
 	return &finding, nil
 }
