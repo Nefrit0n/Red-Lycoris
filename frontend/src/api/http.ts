@@ -13,10 +13,17 @@ export const clearToken = (): void => {
   localStorage.removeItem(TOKEN_KEY);
 };
 
+export const clearAuthStorage = (): void => {
+  clearToken();
+  localStorage.removeItem("lotus_warden_needs_pwd_change");
+  localStorage.removeItem("lotus_warden_user_profile");
+};
+
 export const getAuthHeaders = (): HeadersInit => {
   const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
+
 
 /**
  * JSON requests only
@@ -137,6 +144,16 @@ const readPayloadOrThrow = async (response: Response): Promise<unknown> => {
           : "HTTP_ERROR";
 
     const msg = extractErrorMessage(payload, rawText, status);
+
+    // >>> CHANGE: если токен протух/стал невалидным — чистим, чтобы UI не зацикливался на 401
+    if (status === 401) {
+      try {
+        clearToken();
+      } catch {
+        // ignore
+      }
+    }
+    // <<< CHANGE
 
     throw new ApiError(msg, {
       status,
