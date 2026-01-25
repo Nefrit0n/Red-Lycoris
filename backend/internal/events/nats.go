@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/nats-io/nats.go"
 )
@@ -80,39 +82,43 @@ func NewPublisher(url string) (*Publisher, error) {
 	return &Publisher{nc: nc, js: js}, nil
 }
 
-func ensureConsumerForSubject(js nats.JetStreamContext, stream string, durable string, filterSubject string) error {
-	ci, err := js.ConsumerInfo(stream, durable)
+func ensureConsumerForSubject(js nats.JetStreamContext, stream string, durable string, filterSubject string) (string, error) {
+	safeDurable := sanitizeConsumerName(durable)
+
+	ci, err := js.ConsumerInfo(stream, safeDurable)
 	if err != nil {
 		if err == nats.ErrConsumerNotFound {
 			_, err := js.AddConsumer(stream, &nats.ConsumerConfig{
-				Durable:       durable,
+				Durable:       safeDurable,
+				Name:          safeDurable,
 				AckPolicy:     nats.AckExplicitPolicy,
 				DeliverPolicy: nats.DeliverAllPolicy,
 				FilterSubject: filterSubject,
 				AckWait:       60 * time.Second,
 				MaxAckPending: 2048,
 			})
-			return err
+			return safeDurable, err
 		}
-		return err
+		return safeDurable, err
 	}
 
 	if ci.Config.FilterSubject != filterSubject {
-		if err := js.DeleteConsumer(stream, durable); err != nil {
-			return fmt.Errorf("delete consumer %s/%s failed: %w", stream, durable, err)
+		if err := js.DeleteConsumer(stream, safeDurable); err != nil {
+			return safeDurable, fmt.Errorf("delete consumer %s/%s failed: %w", stream, safeDurable, err)
 		}
 		_, err := js.AddConsumer(stream, &nats.ConsumerConfig{
-			Durable:       durable,
+			Durable:       safeDurable,
+			Name:          safeDurable,
 			AckPolicy:     nats.AckExplicitPolicy,
 			DeliverPolicy: nats.DeliverAllPolicy,
 			FilterSubject: filterSubject,
 			AckWait:       60 * time.Second,
 			MaxAckPending: 2048,
 		})
-		return err
+		return safeDurable, err
 	}
 
-	return nil
+	return safeDurable, nil
 }
 
 func ensureStream(js nats.JetStreamContext, desired *nats.StreamConfig) error {
@@ -135,6 +141,53 @@ func ensureStream(js nats.JetStreamContext, desired *nats.StreamConfig) error {
 
 	_, err = js.UpdateStream(desired)
 	return err
+}
+
+func sanitizeConsumerName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "consumer"
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	prevUnderscore := false
+
+	for _, r := range s {
+		ok := (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' || r == '_'
+
+		if ok {
+			b.WriteRune(r)
+			prevUnderscore = false
+			continue
+		}
+		// заменяем всё остальное на "_"
+		if !prevUnderscore {
+			b.WriteByte('_')
+			prevUnderscore = true
+		}
+	}
+
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		return "consumer"
+	}
+	// JetStream не любит слишком длинные имена — держим разумный лимит
+	if len(out) > 128 {
+		out = out[:128]
+	}
+	// нормализуем (не обязательно, но приятно)
+	out = strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return '_'
+		}
+		return r
+	}, out)
+
+	return out
 }
 
 func sameStringSet(a, b []string) bool {
