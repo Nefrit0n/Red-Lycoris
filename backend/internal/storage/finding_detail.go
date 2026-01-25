@@ -11,8 +11,12 @@ import (
 
 // FindingDetail — "расширенная" модель для выдачи detail-строк с join'ами (product_name и т.п.)
 type FindingDetail struct {
-	ID          uuid.UUID
-	TenantID    uuid.UUID
+	ID uuid.UUID
+
+	// Multi-tenancy / ownership
+	TenantID uuid.NullUUID
+
+	// Core fields
 	Title       string
 	Description sql.NullString
 	Fingerprint string
@@ -20,15 +24,16 @@ type FindingDetail struct {
 	Status      string
 	Category    sql.NullString
 
+	// Relations
 	ProductID   uuid.NullUUID
 	ProductName sql.NullString
 
 	AssigneeID  uuid.NullUUID
 	ImportJobID uuid.NullUUID
 
+	// Lifecycle
 	FirstSeenAt sql.NullTime
 	LastSeenAt  sql.NullTime
-
 	RepeatCount int
 	DuplicateID uuid.NullUUID
 
@@ -44,6 +49,25 @@ type FindingDetail struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt sql.NullTime
+
+	// Source metadata (optional)
+	SourceType     sql.NullString
+	SourceVersion  sql.NullString
+	EndpointMethod sql.NullString
+	EndpointPath   sql.NullString
+
+	// SLA (optional)
+	SLADueAt      sql.NullTime
+	SLABreached   sql.NullBool
+	SLABreachedAt sql.NullTime
+	SLAProfile    sql.NullString
+	SLASource     sql.NullString
+
+	// Risk (optional)
+	RiskScore     sql.NullFloat64
+	RiskBand      sql.NullString
+	RiskUpdatedAt sql.NullTime
+	RiskModel     sql.NullString
 }
 
 // GetFindingDetailByID — отдельный метод для "детального" селекта (НЕ трогаем существующий GetFindingByID).
