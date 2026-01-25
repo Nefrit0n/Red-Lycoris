@@ -21,7 +21,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-const intelConsumer = "intel-worker.enrich.v1"
+const intelConsumer = "intel-worker-enrich-v1"
 const intelBackoffCap = 6
 
 var jitterRand = rand.New(rand.NewSource(time.Now().UnixNano()))

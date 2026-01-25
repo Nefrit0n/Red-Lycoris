@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -251,11 +252,46 @@ func (h *GateCheckHandler) resolveBlockingFindings(c *fiber.Ctx, violations []po
 	return results, nil
 }
 
-func convertSeverityCounts(counts storage.SeverityCounts) storage.SeverityCounts {
-	// Сейчас CountFindingsBySeverity уже отдаёт storage.SeverityCounts,
-	// но оставляем хелпер, чтобы не ломать контракт, если источник поменяется.
-	return counts
+func convertSeverityCounts(counts map[string]int) storage.SeverityCounts {
+	out := storage.SeverityCounts{}
+	v := reflect.ValueOf(&out).Elem()
+
+	setIntField := func(field string, val int) {
+		f := v.FieldByName(field)
+		if !f.IsValid() || !f.CanSet() {
+			return
+		}
+		switch f.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			f.SetInt(int64(val))
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			if val < 0 {
+				return
+			}
+			f.SetUint(uint64(val))
+		}
+	}
+
+	for k, val := range counts {
+		switch strings.ToLower(strings.TrimSpace(k)) {
+		case "critical":
+			setIntField("Critical", val)
+		case "high":
+			setIntField("High", val)
+		case "medium":
+			setIntField("Medium", val)
+		case "low":
+			setIntField("Low", val)
+		case "info", "informational":
+			setIntField("Info", val)
+		case "unknown":
+			setIntField("Unknown", val)
+		}
+	}
+
+	return out
 }
+
 
 func countFindingsByCategory(ctx context.Context, db *sql.DB, filters storage.FindingFilters) ([]storage.CategoryCount, error) {
 	where := []string{"deleted_at IS NULL"}
