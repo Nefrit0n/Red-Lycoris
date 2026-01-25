@@ -179,20 +179,19 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid finding id"})
 	}
 
-	finding, err := storage.GetFindingByID(c.Context(), h.db, id)
+	finding, err := storage.GetFindingDetailByID(c.Context(), h.db, id)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch finding"})
 	}
 	if finding == nil {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
-	includeRiskFactors := strings.EqualFold(c.Query("includeRiskFactors"), "true") || c.Query("includeRiskFactors") == "1"
 
 	masterID := finding.ID
 	if finding.DuplicateID.Valid {
 		masterID = finding.DuplicateID.UUID
 		if masterID != finding.ID {
-			masterFinding, err := storage.GetFindingByID(c.Context(), h.db, masterID)
+			masterFinding, err := storage.GetFindingDetailByID(c.Context(), h.db, masterID)
 			if err != nil {
 				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch finding"})
 			}
@@ -260,7 +259,7 @@ func (h *FindingsHandler) Get(c *fiber.Ctx) error {
 		ScaDetails:         v1mapper.ScaDetail(scaDetail, evidence),
 		IntelDetails:       v1mapper.IntelDetail(intelDetail),
 	}
-	if includeRiskFactors && len(finding.RiskFactors) > 0 {
+	if len(finding.RiskFactors) > 0 {
 		var factors map[string]interface{}
 		if err := json.Unmarshal(finding.RiskFactors, &factors); err == nil {
 			resp.RiskFactors = factors
@@ -302,7 +301,7 @@ func (h *FindingsHandler) Neighbors(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch neighbors"})
 	}
-	if neighbors == nil {
+	if neighbors.Total == 0 {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
 
@@ -464,7 +463,7 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 		assigneeID = &parsed
 	}
 
-	current, err := storage.GetFindingByID(c.Context(), h.db, id)
+	current, err := storage.GetFindingDetailByID(c.Context(), h.db, id)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch finding"})
 	}
@@ -472,9 +471,14 @@ func (h *FindingsHandler) Update(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "finding not found"})
 	}
 
+	currentCategory := ""
+	if current.Category.Valid {
+		currentCategory = current.Category.String
+	}
+
 	if req.Status != nil && *req.Status != current.Status && h.policyEngine != nil {
 		var fixedVersion *string
-		if strings.EqualFold(current.Category, models.CategorySCA) {
+		if strings.EqualFold(currentCategory, models.CategorySCA) {
 			if detail, err := storage.GetScaFindingDetail(c.Context(), h.db, current.ID); err == nil && detail != nil && detail.FixedVersion.Valid {
 				value := detail.FixedVersion.String
 				fixedVersion = &value

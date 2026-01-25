@@ -599,7 +599,7 @@ func insertPolicyRule(ctx context.Context, tx *sql.Tx, policyID uuid.UUID, input
 		strings.TrimSpace(input.Format),
 		content,
 		sha,
-		nullableString(input.Entrypoint),
+		nullableStringOrNil(input.Entrypoint),
 	)
 
 	var rule storage.PolicyRuleRecord
@@ -753,7 +753,7 @@ func mapPolicyAssignmentsAuditPayload(assignments []storage.PolicyAssignmentReco
 	return payload
 }
 
-func nullableString(value *string) interface{} {
+func nullableStringOrNil(value *string) interface{} {
 	if value == nil {
 		return nil
 	}
