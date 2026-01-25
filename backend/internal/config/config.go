@@ -18,6 +18,10 @@ type Config struct {
 	DBPass                   string
 	DBName                   string
 	DBSSL                    string
+	DBMaxOpenConns           int
+	DBMaxIdleConns           int
+	DBConnMaxLifetimeMinutes int
+	DBConnMaxIdleMinutes     int
 	RedisURL                 string
 	NatsURL                  string
 	ObjectStoreEndpoint      string
@@ -60,6 +64,10 @@ func Load() Config {
 		DBPass:                   getEnv("DB_PASSWORD", "postgres"),
 		DBName:                   getEnv("DB_NAME", "lotus_warden"),
 		DBSSL:                    getEnv("DB_SSLMODE", "disable"),
+		DBMaxOpenConns:           getEnvAsInt("DB_MAX_OPEN_CONNS", 25),
+		DBMaxIdleConns:           getEnvAsInt("DB_MAX_IDLE_CONNS", 5),
+		DBConnMaxLifetimeMinutes: getEnvAsInt("DB_CONN_MAX_LIFETIME_MINUTES", 5),
+		DBConnMaxIdleMinutes:     getEnvAsInt("DB_CONN_MAX_IDLE_MINUTES", 1),
 		RedisURL:                 getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:                  getEnv("NATS_URL", "nats://localhost:4222"),
 		ObjectStoreEndpoint:      getEnv("OBJECT_STORE_ENDPOINT", "localhost:9000"),
