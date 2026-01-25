@@ -73,12 +73,16 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 		"type":    "vulnerability",
 		"package": vuln.PkgName,
 	}
+
 	if rawSource := decodeTrivyRaw(vuln.Raw); len(rawSource) > 0 {
 		rawData["source"] = rawSource
 	}
-	if strings.HasPrefix(strings.ToLower(vuln.PkgID), "pkg:") {
-		rawData["purl"] = vuln.PkgID
+
+	// PURL (prefer PkgIdentifier.PURL, fallback to PkgID if it is a purl, else synthesize)
+	if purl := buildTrivyPurl(result, vuln); purl != "" {
+		rawData["purl"] = purl
 	}
+
 	if vuln.PrimaryURL != "" {
 		rawData["url"] = vuln.PrimaryURL
 	}
@@ -120,6 +124,13 @@ func (p *TrivyParser) buildVulnerabilityFinding(result trivyResult, vuln trivyVu
 	}
 	if result.Type != "" {
 		rawData["target_type"] = result.Type
+		eco, raw := normalizeTrivyEcosystem(result.Type)
+		if eco != "" {
+			rawData["ecosystem"] = eco
+		}
+		if raw != "" && strings.ToLower(raw) != strings.ToLower(eco) {
+			rawData["ecosystem_raw"] = raw
+		}
 	}
 	if result.Class != "" {
 		rawData["class"] = result.Class
@@ -188,13 +199,19 @@ func buildVulnerabilityEvidence(result trivyResult, vuln trivyVulnerability) map
 		evidence["target"] = result.Target
 	}
 	if result.Type != "" {
-		evidence["ecosystem"] = result.Type
+		eco, raw := normalizeTrivyEcosystem(result.Type)
+		evidence["ecosystem"] = eco
+		if raw != "" && strings.ToLower(raw) != strings.ToLower(eco) {
+			evidence["ecosystemRaw"] = raw
+		}
 	}
 	if result.Class != "" {
 		evidence["class"] = result.Class
 	}
-	if strings.HasPrefix(strings.ToLower(vuln.PkgID), "pkg:") {
-		evidence["purl"] = vuln.PkgID
+
+	// PURL (prefer PkgIdentifier.PURL, fallback to PkgID if it is a purl, else synthesize)
+	if purl := buildTrivyPurl(result, vuln); purl != "" {
+		evidence["purl"] = purl
 	}
 
 	// Include CVSS data if available
@@ -518,8 +535,9 @@ const maxFindingTitleLen = 200
 func buildTrivyVulnTitle(v trivyVulnerability) string {
 	// 1) Пытаемся собрать из PkgID (обычно он уже "pkg@ver")
 	// Пример из Trivy: "github.com/opencontainers/runc@v1.2.6"
+	// ВАЖНО: если PkgID это purl (pkg:...), не используем его для title — иначе будет "pkg:npm/..." в UI.
 	pkgID := strings.TrimSpace(v.PkgID)
-	if pkgID != "" && strings.Contains(pkgID, "@") {
+	if pkgID != "" && !strings.HasPrefix(strings.ToLower(pkgID), "pkg:") && strings.Contains(pkgID, "@") {
 		at := strings.LastIndex(pkgID, "@")
 		pkgPart := strings.TrimSpace(pkgID[:at])
 		verPart := strings.TrimSpace(pkgID[at+1:])
@@ -635,7 +653,11 @@ type trivyVulnerability struct {
 	LastModifiedDate string               `json:"LastModifiedDate"`
 	Layer            *trivyLayer          `json:"Layer"`
 	DataSource       *trivyDataSource     `json:"DataSource"`
-	Raw              json.RawMessage      `json:"-"`
+
+	// Trivy JSON может отдавать PURL здесь
+	PkgIdentifier *trivyPkgIdentifier `json:"PkgIdentifier"`
+
+	Raw json.RawMessage `json:"-"`
 }
 
 func (v *trivyVulnerability) UnmarshalJSON(data []byte) error {
@@ -647,6 +669,10 @@ func (v *trivyVulnerability) UnmarshalJSON(data []byte) error {
 	*v = trivyVulnerability(decoded)
 	v.Raw = append(v.Raw[:0], data...)
 	return nil
+}
+
+type trivyPkgIdentifier struct {
+	PURL string `json:"PURL"`
 }
 
 type trivyCVSS struct {
@@ -763,6 +789,87 @@ func (l *trivyLicense) UnmarshalJSON(data []byte) error {
 }
 
 // ---------- Helpers ----------
+
+func normalizeTrivyEcosystem(t string) (canonical string, raw string) {
+	raw = strings.TrimSpace(t)
+	lt := strings.ToLower(raw)
+
+	switch lt {
+	// Node.js package managers -> canonical ecosystem "npm"
+	case "npm", "pnpm", "yarn", "bun":
+		return "npm", raw
+
+	// Go modules -> canonical "golang"
+	case "gomod":
+		return "golang", raw
+
+	default:
+		if lt == "" {
+			return "", raw
+		}
+		return lt, raw
+	}
+}
+
+func buildTrivyPurl(result trivyResult, v trivyVulnerability) string {
+	// 1) Prefer explicitly provided PURL
+	if p := trivyPickPurl(v); p != "" {
+		return p
+	}
+
+	// 2) Synthesize ONLY when we have version, to avoid cross-version collisions
+	name := strings.TrimSpace(v.PkgName)
+	ver := strings.TrimSpace(v.InstalledVersion)
+	if name == "" || ver == "" {
+		return ""
+	}
+
+	eco, _ := normalizeTrivyEcosystem(result.Type)
+	if eco == "" {
+		return ""
+	}
+
+	// npm scoped packages: @scope/name -> %40scope/name
+	if eco == "npm" && strings.HasPrefix(name, "@") {
+		name = "%40" + name[1:]
+	}
+
+	p := fmt.Sprintf("pkg:%s/%s@%s", eco, name, ver)
+	return normalizePurl(p)
+}
+
+func trivyPickPurl(v trivyVulnerability) string {
+	// 1) Prefer PkgIdentifier.PURL
+	if v.PkgIdentifier != nil {
+		p := strings.TrimSpace(v.PkgIdentifier.PURL)
+		if strings.HasPrefix(strings.ToLower(p), "pkg:") {
+			return normalizePurl(p)
+		}
+	}
+
+	// 2) Fallback: sometimes PkgID can be a purl
+	p := strings.TrimSpace(v.PkgID)
+	if strings.HasPrefix(strings.ToLower(p), "pkg:") {
+		return normalizePurl(p)
+	}
+
+	return ""
+}
+
+func normalizePurl(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+
+	// npm scoped packages: pkg:npm/@scope/... -> pkg:npm/%40scope/...
+	lp := strings.ToLower(p)
+	if strings.HasPrefix(lp, "pkg:npm/@") {
+		return "pkg:npm/%40" + p[len("pkg:npm/@"):]
+	}
+
+	return p
+}
 
 func mapTrivySeverity(raw string) string {
 	switch strings.ToUpper(strings.TrimSpace(raw)) {

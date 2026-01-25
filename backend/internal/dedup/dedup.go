@@ -23,36 +23,51 @@ func ComputeFingerprint(scannerType string, finding parser.Finding) string {
 	ruleID := strings.ToLower(strings.TrimSpace(finding.RuleID))
 
 	// --- SCA (keep as-is, already "Trivy-like") ---
-	if strings.EqualFold(finding.Category, "SCA") {
-		vulnID := strings.ToLower(strings.TrimSpace(firstNonEmpty(
-			extractString(finding.Evidence, "vulnerabilityId"),
-			extractString(finding.Evidence, "vulnerability_id"),
-			finding.RuleID,
-		)))
-		pkgName := strings.ToLower(strings.TrimSpace(firstNonEmpty(
-			extractString(finding.Evidence, "pkgName"),
-			extractString(finding.Evidence, "package"),
-			extractString(finding.RawData, "package"),
-		)))
-		installedVersion := strings.ToLower(strings.TrimSpace(firstNonEmpty(
-			extractString(finding.Evidence, "installedVersion"),
-			extractString(finding.Evidence, "installed_version"),
-			extractString(finding.RawData, "installed_version"),
-		)))
-		target := strings.ToLower(strings.TrimSpace(firstNonEmpty(
-			extractString(finding.Evidence, "target"),
-			extractString(finding.RawData, "target"),
-		)))
-		ecosystem := strings.ToLower(strings.TrimSpace(firstNonEmpty(
-			extractString(finding.Evidence, "ecosystem"),
-			extractString(finding.RawData, "target_type"),
-		)))
-		class := strings.ToLower(strings.TrimSpace(firstNonEmpty(
-			extractString(finding.Evidence, "class"),
-			extractString(finding.RawData, "class"),
-		)))
+	if category == "sca" {
+		vulnID := strings.TrimSpace(finding.RuleID)
+		pkg := strings.TrimSpace(getString(finding.Evidence, "pkgName"))
+		version := strings.TrimSpace(getString(finding.Evidence, "installedVersion"))
+		ecosystem := strings.TrimSpace(getString(finding.Evidence, "ecosystem"))
+		class := strings.TrimSpace(getString(finding.Evidence, "class"))
 
-		seed := strings.Join([]string{vulnID, pkgName, installedVersion, target, ecosystem, class, scanner}, "|")
+		// Prefer purl for stable identity across SBOM and scanners
+		purl := strings.TrimSpace(getString(finding.Evidence, "purl"))
+		if purl == "" {
+			purl = strings.TrimSpace(getString(finding.RawData, "purl"))
+		}
+		if purl == "" {
+			purl = strings.TrimSpace(getString(finding.RawData, "pkg_id"))
+		}
+		purl = strings.ToLower(purl)
+
+		seedParts := []string{category}
+		if vulnID != "" {
+			seedParts = append(seedParts, vulnID)
+		}
+
+		if purl != "" {
+			seedParts = append(seedParts, purl)
+		} else {
+			// fallback when purl is missing
+			if pkg != "" {
+				seedParts = append(seedParts, pkg)
+			}
+			if version != "" {
+				seedParts = append(seedParts, version)
+			}
+			if ecosystem != "" {
+				seedParts = append(seedParts, ecosystem)
+			}
+			if class != "" {
+				seedParts = append(seedParts, class)
+			}
+		}
+
+		if scannerType != "" {
+			seedParts = append(seedParts, scannerType)
+		}
+
+		seed := strings.Join(seedParts, "|")
 		return sha256Hex(seed)
 	}
 
