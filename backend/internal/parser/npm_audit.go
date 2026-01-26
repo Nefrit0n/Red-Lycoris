@@ -249,9 +249,9 @@ func mapNpmSeverity(raw string) string {
 // npm audit v2 structures
 
 type npmAuditReportV2 struct {
-	AuditReportVersion int                         `json:"auditReportVersion"`
-	Vulnerabilities    map[string]npmAuditVulnV2   `json:"vulnerabilities"`
-	Metadata           json.RawMessage             `json:"metadata"`
+	AuditReportVersion int                       `json:"auditReportVersion"`
+	Vulnerabilities    map[string]npmAuditVulnV2 `json:"vulnerabilities"`
+	Metadata           json.RawMessage           `json:"metadata"`
 }
 
 type npmAuditVulnV2 struct {

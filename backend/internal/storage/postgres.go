@@ -12,7 +12,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-
 func Connect(cfg config.Config) (*sql.DB, error) {
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
@@ -61,16 +60,16 @@ func Connect(cfg config.Config) (*sql.DB, error) {
 
 // DBHealth contains database health check results.
 type DBHealth struct {
-	Status      string `json:"status"`
-	Latency     string `json:"latency"`
-	OpenConns   int    `json:"open_connections"`
-	InUse       int    `json:"in_use"`
-	Idle        int    `json:"idle"`
-	MaxOpen     int    `json:"max_open"`
-	WaitCount   int64  `json:"wait_count"`
-	WaitTime    string `json:"wait_time"`
-	MaxIdleClosed int64 `json:"max_idle_closed"`
-	MaxLifetimeClosed int64 `json:"max_lifetime_closed"`
+	Status            string `json:"status"`
+	Latency           string `json:"latency"`
+	OpenConns         int    `json:"open_connections"`
+	InUse             int    `json:"in_use"`
+	Idle              int    `json:"idle"`
+	MaxOpen           int    `json:"max_open"`
+	WaitCount         int64  `json:"wait_count"`
+	WaitTime          string `json:"wait_time"`
+	MaxIdleClosed     int64  `json:"max_idle_closed"`
+	MaxLifetimeClosed int64  `json:"max_lifetime_closed"`
 }
 
 // HealthCheck performs a database health check and returns stats.
@@ -109,13 +108,13 @@ func HealthCheck(ctx context.Context, db *sql.DB) (*DBHealth, error) {
 func GetPoolStats(db *sql.DB) map[string]interface{} {
 	stats := db.Stats()
 	return map[string]interface{}{
-		"open_connections":     stats.OpenConnections,
-		"in_use":               stats.InUse,
-		"idle":                 stats.Idle,
-		"max_open":             stats.MaxOpenConnections,
-		"wait_count":           stats.WaitCount,
-		"wait_duration_ms":     stats.WaitDuration.Milliseconds(),
-		"max_idle_closed":      stats.MaxIdleClosed,
-		"max_lifetime_closed":  stats.MaxLifetimeClosed,
+		"open_connections":    stats.OpenConnections,
+		"in_use":              stats.InUse,
+		"idle":                stats.Idle,
+		"max_open":            stats.MaxOpenConnections,
+		"wait_count":          stats.WaitCount,
+		"wait_duration_ms":    stats.WaitDuration.Milliseconds(),
+		"max_idle_closed":     stats.MaxIdleClosed,
+		"max_lifetime_closed": stats.MaxLifetimeClosed,
 	}
 }

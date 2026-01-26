@@ -128,10 +128,10 @@ func buildDetectSecretsEvidence(filename string, secret detectSecretsSecret) map
 // detect-secrets report structures
 
 type detectSecretsReport struct {
-	Version        string                               `json:"version"`
-	PluginsUsed    []detectSecretsPlugin                `json:"plugins_used"`
-	Results        map[string][]detectSecretsSecret     `json:"results"`
-	GeneratedAt    string                               `json:"generated_at"`
+	Version     string                           `json:"version"`
+	PluginsUsed []detectSecretsPlugin            `json:"plugins_used"`
+	Results     map[string][]detectSecretsSecret `json:"results"`
+	GeneratedAt string                           `json:"generated_at"`
 }
 
 type detectSecretsPlugin struct {

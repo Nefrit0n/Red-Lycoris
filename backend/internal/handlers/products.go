@@ -115,4 +115,3 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 	response := v1mapper.ProductDetailFromListItem(*product)
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response})
 }
-
