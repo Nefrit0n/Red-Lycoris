@@ -34,6 +34,9 @@ type FindingListItemDTO struct {
 	RiskUpdatedAt    *string       `json:"riskUpdatedAt,omitempty"`
 	RiskModelVersion *string       `json:"modelVersion,omitempty"`
 	IntelSummary     *IntelSummary `json:"intel_summary,omitempty"`
+	// SAST-specific fields (populated from evidence for SAST category)
+	CWE   []string `json:"cwe,omitempty"`
+	OWASP []string `json:"owasp,omitempty"`
 }
 
 type FindingDetailsSAST struct {
