@@ -42,6 +42,7 @@ jobs:
       DB_PASSWORD: postgres
       DB_NAME: lotus_warden
       DB_SSLMODE: disable
+      MIGRATIONS_PATH: migrations 
 
     steps:
       - uses: actions/checkout@v4
