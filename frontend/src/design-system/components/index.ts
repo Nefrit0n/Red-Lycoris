@@ -49,3 +49,15 @@ export type {
   TrendInfo,
   MetricColor,
 } from './MetricDisplay';
+
+// ============================================================
+// CHART COMPONENTS
+// ============================================================
+
+export { ChartContainer, ChartTooltip, SimpleTooltip } from './Chart';
+export type {
+  ChartContainerProps,
+  ChartTooltipProps,
+  SimpleTooltipProps,
+  TooltipPayload,
+} from './Chart';

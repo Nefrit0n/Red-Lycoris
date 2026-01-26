@@ -155,6 +155,25 @@ export {
 } from './animations';
 
 // ============================================================
+// CHART TOKENS
+// ============================================================
+
+export {
+  chartColors,
+  chartAxis,
+  chartTooltip,
+  chartLegend,
+  chartCursor,
+  lineChartConfig,
+  barChartConfig,
+  pieChartConfig,
+  progressBarConfig,
+  type ChartColors,
+  type ChartAxis,
+  type ChartTooltipConfig,
+} from './charts';
+
+// ============================================================
 // CONVENIENCE EXPORTS - Grouped by category
 // ============================================================
 
@@ -222,6 +241,18 @@ import {
   transition,
   reducedMotion,
 } from './animations';
+
+import {
+  chartColors,
+  chartAxis,
+  chartTooltip,
+  chartLegend,
+  chartCursor,
+  lineChartConfig,
+  barChartConfig,
+  pieChartConfig,
+  progressBarConfig,
+} from './charts';
 
 /**
  * All color-related tokens grouped together
@@ -310,6 +341,21 @@ export const motion = {
 } as const;
 
 /**
+ * All chart visualization tokens grouped together
+ */
+export const charts = {
+  colors: chartColors,
+  axis: chartAxis,
+  tooltip: chartTooltip,
+  legend: chartLegend,
+  cursor: chartCursor,
+  line: lineChartConfig,
+  bar: barChartConfig,
+  pie: pieChartConfig,
+  progress: progressBarConfig,
+} as const;
+
+/**
  * Complete token collection
  */
 export const tokens = {
@@ -320,6 +366,7 @@ export const tokens = {
   borders,
   effects,
   motion,
+  charts,
 } as const;
 
 export type Tokens = typeof tokens;
