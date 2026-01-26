@@ -1,0 +1,144 @@
+import { Meta, ColorPalette, ColorItem } from '@storybook/blocks';
+
+<Meta title="Design System/Tokens/Colors" />
+
+# Color Tokens
+
+The Lotus Warden color system is inspired by the lotus flower - emerging from dark depths into light. 
+This symbolizes the security journey: finding vulnerabilities in the shadows and bringing clarity through illumination.
+
+## Brand Colors
+
+### Lotus (Primary)
+The main brand color - a vibrant purple inspired by lotus petals.
+
+<ColorPalette>
+  <ColorItem
+    title="Lotus"
+    subtitle="Primary brand color"
+    colors={{
+      '500 (Main)': '#a855f7',
+      '400 (Light)': '#b97afc',
+      '600 (Dark)': '#8b31b8',
+    }}
+  />
+</ColorPalette>
+
+### Petal (Accent)
+A pink-magenta accent for highlights and calls-to-action.
+
+<ColorPalette>
+  <ColorItem
+    title="Petal"
+    subtitle="Accent color"
+    colors={{
+      '500 (Main)': '#e855a8',
+      '400 (Light)': '#f080be',
+      '600 (Dark)': '#c7328f',
+    }}
+  />
+</ColorPalette>
+
+### Jade (Secondary)
+A calming teal-cyan for secondary elements and success states.
+
+<ColorPalette>
+  <ColorItem
+    title="Jade"
+    subtitle="Secondary color"
+    colors={{
+      '500 (Main)': '#22d3ce',
+      '400 (Light)': '#4eeae5',
+      '600 (Dark)': '#18b4af',
+    }}
+  />
+</ColorPalette>
+
+### Gold (Highlight)
+A warm amber for highlights and important elements.
+
+<ColorPalette>
+  <ColorItem
+    title="Gold"
+    subtitle="Highlight color"
+    colors={{
+      '500 (Main)': '#f0a500',
+      '400 (Light)': '#ffbe30',
+      '600 (Dark)': '#c98600',
+    }}
+  />
+</ColorPalette>
+
+## Night Waters (Backgrounds)
+
+Deep background colors inspired by moonlit water.
+
+<ColorPalette>
+  <ColorItem
+    title="Night"
+    subtitle="Background colors"
+    colors={{
+      '950 (Void)': '#05060a',
+      '800 (Base)': '#0f1117',
+      '700 (Surface)': '#171a24',
+      '600 (Elevated)': '#21263b',
+      '500 (Border)': '#343c5a',
+    }}
+  />
+</ColorPalette>
+
+## Semantic Colors
+
+### Severity
+
+<ColorPalette>
+  <ColorItem
+    title="Severity"
+    subtitle="Vulnerability severity levels"
+    colors={{
+      'Critical': '#9333ea',
+      'High': '#dc2626',
+      'Medium': '#ea580c',
+      'Low': '#16a34a',
+      'Info': '#0ea5e9',
+    }}
+  />
+</ColorPalette>
+
+### Feedback
+
+<ColorPalette>
+  <ColorItem
+    title="Feedback"
+    subtitle="User feedback colors"
+    colors={{
+      'Success': '#10b981',
+      'Warning': '#f59e0b',
+      'Error': '#ef4444',
+      'Info': '#3b82f6',
+    }}
+  />
+</ColorPalette>
+
+## Gradients
+
+The design system includes several gradient presets:
+
+- **Lotus Gradient**: `linear-gradient(135deg, #a855f7 0%, #e855a8 100%)`
+- **Jade Gradient**: `linear-gradient(135deg, #22d3ce 0%, #3b82f6 100%)`
+- **Gold Gradient**: `linear-gradient(135deg, #f0a500 0%, #ff6b6b 100%)`
+
+## Usage
+
+```tsx
+import { primitives, semantic, darkTheme } from '@/design-system';
+
+// Primitive colors
+const purple = primitives.lotus[500]; // '#a855f7'
+
+// Semantic colors
+const criticalColor = semantic.severity.critical.base;
+
+// Theme colors
+const bgColor = darkTheme.bg.surface;
+```

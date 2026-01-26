@@ -3,6 +3,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CheckIcon from "@mui/icons-material/Check";
 import { useEffect, useRef, useState } from "react";
 import hljs from "highlight.js/lib/core";
+import { primitives, alpha } from "../design-system/tokens/colors";
 
 // Import common languages
 import javascript from "highlight.js/lib/languages/javascript";
@@ -127,7 +128,7 @@ const CodeBlock = ({
         overflow: "hidden",
         border: "1px solid",
         borderColor: "divider",
-        bgcolor: "#1e1e2e",
+        bgcolor: primitives.night[850],
       }}
     >
       {/* Header */}
