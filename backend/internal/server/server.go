@@ -172,4 +172,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 
 	riskMetricsHandler := handlers.NewRiskMetricsHandler(db)
 	secured.Get("/metrics/risk", riskMetricsHandler.Get)
+
+	dashboardHandler := handlers.NewDashboardHandler(db)
+	secured.Get("/dashboard", dashboardHandler.Get)
 }
