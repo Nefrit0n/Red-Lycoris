@@ -128,6 +128,18 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 	}
 	repeatCount := item.RepeatCount
 	occurrence := computeOccurrenceStatus(repeatCount, duplicateID)
+
+	// Extract CWE/OWASP from evidence for SAST findings
+	var cwe []string
+	var owasp []string
+	if item.Category == string(models.CategorySAST) && len(item.Evidence) > 0 {
+		var evidence map[string]interface{}
+		if err := json.Unmarshal(item.Evidence, &evidence); err == nil {
+			cwe = extractStringSlice(evidence, "cwe")
+			owasp = extractStringSlice(evidence, "owasp")
+		}
+	}
+
 	return v1dto.FindingListItemDTO{
 		ID:               item.ID.String(),
 		TenantID:         tenantID,
@@ -159,6 +171,8 @@ func FindingListItem(item storage.FindingListItem) v1dto.FindingListItemDTO {
 		RiskBand:         riskBand,
 		RiskUpdatedAt:    riskUpdatedAt,
 		RiskModelVersion: riskModelVersion,
+		CWE:              cwe,
+		OWASP:            owasp,
 	}
 }
 
