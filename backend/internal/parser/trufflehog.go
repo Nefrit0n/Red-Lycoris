@@ -109,7 +109,11 @@ func buildTruffleHogDescription(r truffleHogResult) string {
 	}
 
 	if r.Commit != "" {
-		parts = append(parts, fmt.Sprintf("Commit: %s", r.Commit[:min(8, len(r.Commit))]))
+		commitLen := len(r.Commit)
+		if commitLen > 8 {
+			commitLen = 8
+		}
+		parts = append(parts, fmt.Sprintf("Commit: %s", r.Commit[:commitLen]))
 	}
 
 	if r.Author != "" {
@@ -204,7 +208,11 @@ func buildTruffleHogEvidence(r truffleHogResult) map[string]any {
 		redactedContext := make(map[string]string)
 		for lineNum, content := range r.Context {
 			if r.Secret != "" && strings.Contains(content, r.Secret) {
-				redacted := strings.Repeat("*", min(len(r.Secret), 8)) + "..."
+				secretLen := len(r.Secret)
+				if secretLen > 8 {
+					secretLen = 8
+				}
+				redacted := strings.Repeat("*", secretLen) + "..."
 				redactedContext[lineNum] = strings.Replace(content, r.Secret, redacted, 1)
 			} else {
 				redactedContext[lineNum] = content
