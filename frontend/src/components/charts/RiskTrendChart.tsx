@@ -1,4 +1,9 @@
-import { Box, Paper, Skeleton, Typography } from "@mui/material";
+/**
+ * RiskTrendChart - Displays risk score trend with critical count
+ *
+ * Uses design system tokens for consistent styling.
+ */
+
 import {
   CartesianGrid,
   Legend,
@@ -8,7 +13,13 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from "recharts";
+} from 'recharts';
+import { ChartContainer, ChartTooltip } from '../../design-system/components';
+import { chartColors, chartAxis, chartLegend, lineChartConfig } from '../../design-system/tokens';
+
+// ============================================================
+// TYPES
+// ============================================================
 
 export type RiskTrendDataPoint = {
   date: string;
@@ -22,114 +33,87 @@ type RiskTrendChartProps = {
   loading?: boolean;
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <Paper sx={{ p: 1.5, bgcolor: "background.paper" }}>
-        <Typography variant="body2" fontWeight={600} gutterBottom>
-          {label}
-        </Typography>
-        {payload.map((entry: any, index: number) => (
-          <Typography key={index} variant="body2" sx={{ color: entry.color }}>
-            {entry.name}: {entry.value}
-          </Typography>
-        ))}
-      </Paper>
-    );
-  }
-  return null;
-};
+// ============================================================
+// COMPONENT
+// ============================================================
 
 const RiskTrendChart = ({
   data,
-  title = "Risk trend",
+  title = 'Risk trend',
   loading = false,
 }: RiskTrendChartProps) => {
-  if (loading) {
-    return (
-      <Paper sx={{ p: 3, height: "100%" }}>
-        <Skeleton variant="text" width="60%" height={28} />
-        <Skeleton variant="rectangular" height={240} sx={{ mt: 2, borderRadius: 1 }} />
-      </Paper>
-    );
-  }
-
   const hasData = data.length > 0;
 
   return (
-    <Paper sx={{ p: 3, height: "100%" }}>
-      <Typography variant="h6" fontWeight={600} gutterBottom>
-        {title}
-      </Typography>
-      {!hasData ? (
-        <Box
-          sx={{
-            height: 240,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Typography color="text.secondary">No risk trend data</Typography>
-        </Box>
-      ) : (
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#24283b" />
-            <XAxis
-              dataKey="date"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#a5adba", fontSize: 11 }}
-              dy={10}
-            />
-            <YAxis
-              yAxisId="left"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#a5adba", fontSize: 11 }}
-              domain={[0, 100]}
-            />
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#a5adba", fontSize: 11 }}
-              allowDecimals={false}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend
-              verticalAlign="top"
-              height={36}
-              formatter={(value) => (
-                <span style={{ color: "#a5adba", fontSize: 12 }}>{value}</span>
-              )}
-            />
-            <Line
-              yAxisId="left"
-              type="monotone"
-              dataKey="avgRisk"
-              name="Avg risk"
-              stroke="#7aa2f7"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-            <Line
-              yAxisId="right"
-              type="monotone"
-              dataKey="criticalCount"
-              name="Critical count"
-              stroke="#d32f2f"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
-    </Paper>
+    <ChartContainer
+      title={title}
+      loading={loading}
+      hasData={hasData}
+      loadingVariant="line"
+      emptyMessage="No risk trend data"
+      height={240}
+    >
+      <ResponsiveContainer width="100%" height={240}>
+        <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+          <CartesianGrid
+            strokeDasharray={chartAxis.grid.strokeDasharray}
+            stroke={chartAxis.grid.stroke}
+          />
+          <XAxis
+            dataKey="date"
+            axisLine={chartAxis.axisLine}
+            tickLine={chartAxis.tickLine}
+            tick={chartAxis.tick}
+            dy={10}
+          />
+          <YAxis
+            yAxisId="left"
+            axisLine={chartAxis.axisLine}
+            tickLine={chartAxis.tickLine}
+            tick={chartAxis.tick}
+            domain={[0, 100]}
+          />
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            axisLine={chartAxis.axisLine}
+            tickLine={chartAxis.tickLine}
+            tick={chartAxis.tick}
+            allowDecimals={false}
+          />
+          <Tooltip content={<ChartTooltip />} />
+          <Legend
+            verticalAlign="top"
+            height={36}
+            formatter={(value) => (
+              <span style={{ color: chartLegend.textColor, fontSize: chartLegend.fontSize }}>
+                {value}
+              </span>
+            )}
+          />
+          <Line
+            yAxisId="left"
+            type={lineChartConfig.type}
+            dataKey="avgRisk"
+            name="Avg risk"
+            stroke={chartColors.risk.avgRisk}
+            strokeWidth={lineChartConfig.strokeWidth}
+            dot={lineChartConfig.dot}
+            activeDot={{ r: 4 }}
+          />
+          <Line
+            yAxisId="right"
+            type={lineChartConfig.type}
+            dataKey="criticalCount"
+            name="Critical count"
+            stroke={chartColors.risk.critical}
+            strokeWidth={lineChartConfig.strokeWidth}
+            dot={lineChartConfig.dot}
+            activeDot={{ r: 4 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartContainer>
   );
 };
 

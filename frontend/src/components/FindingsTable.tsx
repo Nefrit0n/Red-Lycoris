@@ -44,17 +44,23 @@ import {
   RiskBand,
 } from "../types/findings";
 import { RISK_BAND_COLORS } from "../utils/findingConstants";
+import {
+  tableColumnWidths,
+  tableStyles,
+  slaStyles,
+} from "../design-system/utils";
+import { semantic, primitives, alpha } from "../design-system/tokens/colors";
 
 /**
  * Ширины колонок.
  * Issue details занимает всё оставшееся место.
  */
-const COL_CHECKBOX = 44;
-const COL_SEVERITY = 140;
-const COL_RISK = 120;
-const COL_STATUS = 160;
-const COL_SLA = 130;
-const COL_ACTIONS = 56;
+const COL_CHECKBOX = tableColumnWidths.checkbox;
+const COL_SEVERITY = tableColumnWidths.severity;
+const COL_RISK = tableColumnWidths.risk;
+const COL_STATUS = tableColumnWidths.status;
+const COL_SLA = tableColumnWidths.sla;
+const COL_ACTIONS = tableColumnWidths.actions;
 
 const severityLabels: Record<FindingSeverity, string> = {
   low: "Low",
@@ -70,7 +76,7 @@ const riskBandShortLabels: Record<RiskBand, string> = {
   critical: "CRIT",
 };
 
-// Новая конфигурация severity с заливкой и иконками
+// Severity configuration using design system
 const severityConfig: Record<FindingSeverity, {
   bgcolor: string;
   color: string;
@@ -79,50 +85,51 @@ const severityConfig: Record<FindingSeverity, {
   glow?: string;
 }> = {
   critical: {
-    bgcolor: "linear-gradient(135deg, #d32f2f 0%, #7b1fa2 100%)",
-    color: "#ffffff",
+    bgcolor: `linear-gradient(135deg, ${semantic.severity.high.base} 0%, ${semantic.severity.critical.base} 100%)`,
+    color: primitives.white,
     icon: <ErrorOutlineIcon sx={{ fontSize: 14 }} />,
-    glow: "0 0 12px rgba(211, 47, 47, 0.4)",
+    glow: `0 0 12px ${semantic.severity.high.subtle}`,
   },
   high: {
-    bgcolor: "#d32f2f",
-    color: "#ffffff",
+    bgcolor: semantic.severity.high.base,
+    color: primitives.white,
     icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
   },
   medium: {
-    bgcolor: "rgba(255, 152, 0, 0.15)",
-    color: "#ffb74d",
-    borderColor: "rgba(255, 152, 0, 0.5)",
+    bgcolor: semantic.severity.medium.subtle,
+    color: semantic.severity.medium.text,
+    borderColor: `rgba(234, 88, 12, 0.5)`,
     icon: <ReportProblemOutlinedIcon sx={{ fontSize: 14 }} />,
   },
   low: {
-    bgcolor: "rgba(76, 175, 80, 0.1)",
-    color: "#81c784",
-    borderColor: "rgba(76, 175, 80, 0.3)",
+    bgcolor: semantic.severity.low.subtle,
+    color: semantic.severity.low.text,
+    borderColor: `rgba(22, 163, 74, 0.3)`,
     icon: <InfoOutlinedIcon sx={{ fontSize: 14 }} />,
   },
 };
 
-// Цвета для левой индикационной полосы
+// Border colors using design system
 const severityBorderColors: Record<FindingSeverity, string> = {
-  low: "#4caf50",
-  medium: "#ff9800",
-  high: "#f44336",
-  critical: "#d32f2f",
+  low: semantic.severity.low.base,
+  medium: semantic.severity.medium.base,
+  high: semantic.severity.high.base,
+  critical: semantic.severity.critical.base,
 };
 
-// Цвета фона строк для critical/high findings (subtle tint)
+// Row backgrounds using design system
 const severityRowBgColors: Record<FindingSeverity, string | null> = {
-  critical: "rgba(211, 47, 47, 0.06)",
-  high: "rgba(244, 67, 54, 0.04)",
+  critical: semantic.severity.high.subtle,
+  high: `rgba(244, 67, 54, 0.04)`,
   medium: null,
   low: null,
 };
 
+// Policy decision styles using design system
 const policyDecisionStyles: Record<string, { label: string; color: string; border: string }> = {
-  pass: { label: "PASS", color: "#81c784", border: "rgba(129, 199, 132, 0.45)" },
-  warn: { label: "WARN", color: "#ffb74d", border: "rgba(255, 183, 77, 0.45)" },
-  fail: { label: "FAIL", color: "#ef5350", border: "rgba(239, 83, 80, 0.5)" },
+  pass: { label: "PASS", color: semantic.severity.low.text, border: "rgba(129, 199, 132, 0.45)" },
+  warn: { label: "WARN", color: semantic.severity.medium.text, border: "rgba(255, 183, 77, 0.45)" },
+  fail: { label: "FAIL", color: semantic.severity.high.light, border: "rgba(239, 83, 80, 0.5)" },
 };
 
 const statusLabels: Record<FindingStatus, string> = {
@@ -136,65 +143,65 @@ const statusLabels: Record<FindingStatus, string> = {
   duplicate: "Duplicate",
 };
 
-// Новая конфигурация статусов с иконками и семантической группировкой
+// Status configuration using design system
 const statusConfig: Record<FindingStatus, {
   icon: React.ReactNode;
   bgcolor: string;
   color: string;
   borderColor?: string;
-  pulse?: boolean; // для "New" статуса
+  pulse?: boolean;
 }> = {
-  // === Требует внимания (Action Required) ===
+  // Action Required
   new: {
     icon: <FiberNewIcon sx={{ fontSize: 14 }} />,
-    bgcolor: "rgba(33, 150, 243, 0.15)",
-    color: "#64b5f6",
-    borderColor: "rgba(33, 150, 243, 0.5)",
+    bgcolor: semantic.status.new.subtle,
+    color: semantic.status.new.text,
+    borderColor: `rgba(59, 130, 246, 0.5)`,
     pulse: true,
   },
   under_review: {
     icon: <VisibilityIcon sx={{ fontSize: 14 }} />,
-    bgcolor: "rgba(255, 152, 0, 0.12)",
-    color: "#ffb74d",
-    borderColor: "rgba(255, 152, 0, 0.4)",
+    bgcolor: semantic.status.inProgress.subtle,
+    color: semantic.status.inProgress.text,
+    borderColor: `rgba(245, 158, 11, 0.4)`,
   },
   confirmed: {
     icon: <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />,
-    bgcolor: "rgba(244, 67, 54, 0.12)",
-    color: "#ef5350",
-    borderColor: "rgba(244, 67, 54, 0.4)",
+    bgcolor: semantic.feedback.error.subtle,
+    color: semantic.feedback.error.light,
+    borderColor: `rgba(244, 67, 54, 0.4)`,
   },
 
-  // === Закрыто (Resolved) ===
+  // Resolved
   mitigated: {
     icon: <VerifiedIcon sx={{ fontSize: 14 }} />,
-    bgcolor: "rgba(76, 175, 80, 0.12)",
-    color: "#81c784",
-    borderColor: "rgba(76, 175, 80, 0.4)",
+    bgcolor: semantic.status.resolved.subtle,
+    color: semantic.status.resolved.text,
+    borderColor: `rgba(16, 185, 129, 0.4)`,
   },
   false_positive: {
     icon: <BlockIcon sx={{ fontSize: 14 }} />,
-    bgcolor: "rgba(158, 158, 158, 0.1)",
-    color: "#9e9e9e",
-    borderColor: "rgba(158, 158, 158, 0.3)",
+    bgcolor: semantic.status.dismissed.subtle,
+    color: semantic.status.dismissed.text,
+    borderColor: `rgba(107, 114, 128, 0.3)`,
   },
   out_of_scope: {
     icon: <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />,
-    bgcolor: "rgba(158, 158, 158, 0.1)",
-    color: "#9e9e9e",
-    borderColor: "rgba(158, 158, 158, 0.3)",
+    bgcolor: semantic.status.dismissed.subtle,
+    color: semantic.status.dismissed.text,
+    borderColor: `rgba(107, 114, 128, 0.3)`,
   },
   risk_accepted: {
     icon: <ThumbUpAltOutlinedIcon sx={{ fontSize: 14 }} />,
-    bgcolor: "rgba(255, 193, 7, 0.1)",
-    color: "#ffd54f",
-    borderColor: "rgba(255, 193, 7, 0.3)",
+    bgcolor: semantic.feedback.warning.subtle,
+    color: primitives.gold[300],
+    borderColor: `rgba(255, 193, 7, 0.3)`,
   },
   duplicate: {
     icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
-    bgcolor: "rgba(158, 158, 158, 0.1)",
-    color: "#9e9e9e",
-    borderColor: "rgba(158, 158, 158, 0.3)",
+    bgcolor: semantic.status.dismissed.subtle,
+    color: semantic.status.dismissed.text,
+    borderColor: `rgba(107, 114, 128, 0.3)`,
   },
 };
 
@@ -313,10 +320,10 @@ const formatDateTimeRuCompact = (value?: string | null) => {
 const resolveSlaDisplay = (finding: FindingListItemDTO, now: Date) => {
   if (!finding.slaDueAt) {
     return {
-      label: "—",
-      color: "text.secondary",
-      bgcolor: "transparent",
-      borderColor: "rgba(255, 255, 255, 0.12)",
+      label: slaStyles.none.label,
+      color: slaStyles.none.color,
+      bgcolor: slaStyles.none.bgcolor,
+      borderColor: slaStyles.none.borderColor,
       dueAtLabel: "",
     };
   }
@@ -331,29 +338,29 @@ const resolveSlaDisplay = (finding: FindingListItemDTO, now: Date) => {
 
   if (isBreached || daysRemaining < 0) {
     return {
-      label: "BREACHED",
-      color: "#ef5350",
-      bgcolor: "rgba(244, 67, 54, 0.15)",
-      borderColor: "rgba(244, 67, 54, 0.4)",
+      label: slaStyles.breached.label,
+      color: slaStyles.breached.color,
+      bgcolor: slaStyles.breached.bgcolor,
+      borderColor: slaStyles.breached.borderColor,
       dueAtLabel: formatDateTimeRuCompact(finding.slaDueAt),
     };
   }
 
   if (daysRemaining === 0) {
     return {
-      label: "due today",
-      color: "#ffb74d",
-      bgcolor: "rgba(255, 152, 0, 0.16)",
-      borderColor: "rgba(255, 152, 0, 0.4)",
+      label: slaStyles.dueToday.label,
+      color: slaStyles.dueToday.color,
+      bgcolor: slaStyles.dueToday.bgcolor,
+      borderColor: slaStyles.dueToday.borderColor,
       dueAtLabel: formatDateTimeRuCompact(finding.slaDueAt),
     };
   }
 
   return {
     label: `${daysRemaining}d left`,
-    color: "#81c784",
-    bgcolor: "rgba(76, 175, 80, 0.14)",
-    borderColor: "rgba(129, 199, 132, 0.35)",
+    color: slaStyles.onTrack.color,
+    bgcolor: slaStyles.onTrack.bgcolor,
+    borderColor: slaStyles.onTrack.borderColor,
     dueAtLabel: formatDateTimeRuCompact(finding.slaDueAt),
   };
 };
