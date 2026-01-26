@@ -1,0 +1,50 @@
+{
+    "errors": [],
+    "generated_at": "2015-12-16T22:27:34Z",
+    "metrics": {
+        "_totals": {
+            "CONFIDENCE.HIGH": 1,
+            "CONFIDENCE.LOW": 0,
+            "CONFIDENCE.MEDIUM": 0,
+            "CONFIDENCE.UNDEFINED": 0,
+            "SEVERITY.HIGH": 0,
+            "SEVERITY.LOW": 0,
+            "SEVERITY.MEDIUM": 1,
+            "SEVERITY.UNDEFINED": 0,
+            "loc": 5,
+            "nosec": 0
+        },
+        "examples/yaml_load.py": {
+            "CONFIDENCE.HIGH": 1,
+            "CONFIDENCE.LOW": 0,
+            "CONFIDENCE.MEDIUM": 0,
+            "CONFIDENCE.UNDEFINED": 0,
+            "SEVERITY.HIGH": 0,
+            "SEVERITY.LOW": 0,
+            "SEVERITY.MEDIUM": 1,
+            "SEVERITY.UNDEFINED": 0,
+            "loc": 5,
+            "nosec": 0
+        }
+    },
+    "results": [
+        {
+            "code": "4     ystr = yaml.dump({'a' : 1, 'b' : 2, 'c' : 3})\n5
+                     y = yaml.load(ystr)\n6     yaml.dump(y)\n","filename": "examples/yaml_load.py",
+            "issue_confidence": "HIGH",
+            "issue_severity": "MEDIUM",
+            "issue_cwe": {
+                "id": 20,
+                "link": "https://cwe.mitre.org/data/definitions/20.html"
+            },
+            "issue_text": "Use of unsafe yaml load. Allows instantiation of
+                     arbitrary objects. Consider yaml.safe_load().\n","line_number": 5,
+            "line_range": [
+                5
+            ],
+            "more_info": "https://bandit.readthedocs.io/en/latest/",
+            "test_name": "blacklist_calls",
+            "test_id": "B301"
+        }
+    ]
+}
