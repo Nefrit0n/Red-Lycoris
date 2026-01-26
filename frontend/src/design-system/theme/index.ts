@@ -5,8 +5,7 @@
  * import { darkTheme, lightTheme, getTheme } from '@/design-system/theme';
  */
 
-// Theme augmentation (must be imported for types to work)
-import './augmentation';
+// Note: Theme augmentation is in augmentation.d.ts and is automatically included by TypeScript
 
 // Export themes
 export { darkTheme, lightTheme, default as theme, getTheme } from './theme';

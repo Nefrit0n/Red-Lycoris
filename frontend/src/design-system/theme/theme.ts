@@ -28,8 +28,7 @@ import {
   easing,
 } from '../tokens';
 
-// Import augmentation for type support
-import './augmentation';
+// Note: Type augmentation is in augmentation.d.ts and is automatically included by TypeScript
 
 // ============================================================
 // SHARED THEME OPTIONS (common to both themes)
