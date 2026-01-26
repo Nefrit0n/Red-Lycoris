@@ -220,21 +220,38 @@ const Dashboard = () => {
         }}
       >
         <Box>
-          <Typography variant="h4" component="h1" fontWeight={600}>
+          <Typography
+            variant="h4"
+            component="h1"
+            fontWeight={700}
+            sx={{
+              background: "linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%)",
+              backgroundClip: "text",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
             Dashboard
           </Typography>
-          <Typography variant="body1" color="text.secondary">
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             Обзор безопасности приложений
           </Typography>
         </Box>
-        <IconButton
-          onClick={handleRefresh}
-          disabled={loading}
-          sx={{ color: "text.secondary" }}
-          title="Обновить данные"
-        >
-          <RefreshIcon />
-        </IconButton>
+        <Tooltip title="Обновить данные">
+          <IconButton
+            onClick={handleRefresh}
+            disabled={loading}
+            sx={{
+              color: "text.secondary",
+              bgcolor: "rgba(255,255,255,0.05)",
+              "&:hover": {
+                bgcolor: "rgba(255,255,255,0.1)",
+              },
+            }}
+          >
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
       </Box>
 
       {error && (
@@ -307,27 +324,33 @@ const Dashboard = () => {
       </Grid>
 
       {/* Charts Row 2 */}
-      <Grid container spacing={3}>
+      <Grid container spacing={3} sx={{ "& > .MuiGrid-item": { display: "flex" } }}>
         <Grid item xs={12} md={4}>
-          <StatusBarChart
-            data={statusData}
-            title="По статусу"
-            loading={loading}
-          />
+          <Box sx={{ width: "100%", minHeight: 320 }}>
+            <StatusBarChart
+              data={statusData}
+              title="По статусу"
+              loading={loading}
+            />
+          </Box>
         </Grid>
         <Grid item xs={12} md={4}>
-          <TopProductsChart
-            data={topProductsData}
-            title="Продукты по риску"
-            loading={loading}
-          />
+          <Box sx={{ width: "100%", minHeight: 320 }}>
+            <TopProductsChart
+              data={topProductsData}
+              title="Продукты по риску"
+              loading={loading}
+            />
+          </Box>
         </Grid>
         <Grid item xs={12} md={4}>
-          <RecentActivity
-            data={activityData}
-            title="Последняя активность"
-            loading={loading}
-          />
+          <Box sx={{ width: "100%", minHeight: 320 }}>
+            <RecentActivity
+              data={activityData}
+              title="Последняя активность"
+              loading={loading}
+            />
+          </Box>
         </Grid>
       </Grid>
 
@@ -343,8 +366,16 @@ const Dashboard = () => {
           </Stack>
         </Stack>
 
-        <Paper sx={{ p: 2.5, mb: 3 }}>
-          <Grid container spacing={2}>
+        <Paper
+          sx={{
+            p: 2.5,
+            mb: 3,
+            background: "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)",
+            backdropFilter: "blur(10px)",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={4}>
               <ProductAutocomplete value={riskProductId} onChange={setRiskProductId} />
             </Grid>
@@ -399,9 +430,18 @@ const Dashboard = () => {
           </Alert>
         )}
 
-        <Grid container spacing={3}>
+        <Grid container spacing={3} sx={{ "& > .MuiGrid-item": { display: "flex" } }}>
           <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 3, height: "100%" }}>
+            <Paper
+              sx={{
+                p: 3,
+                width: "100%",
+                minHeight: 280,
+                background: "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)",
+                backdropFilter: "blur(10px)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Risk distribution
               </Typography>
@@ -459,7 +499,16 @@ const Dashboard = () => {
           </Grid>
 
           <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 3, height: "100%" }}>
+            <Paper
+              sx={{
+                p: 3,
+                width: "100%",
+                minHeight: 280,
+                background: "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)",
+                backdropFilter: "blur(10px)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Top 10 risky findings
               </Typography>
