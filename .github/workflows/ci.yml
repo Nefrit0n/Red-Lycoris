@@ -104,8 +104,8 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
-        command: server /data --console-address ":9001"
-
+      command: server /data --console-address ":9001"
+        
     env:
       DB_HOST: localhost
       DB_PORT: 5432
