@@ -49,6 +49,9 @@ export interface FindingListItemDTO {
   riskUpdatedAt?: string | null;
   modelVersion?: string | null;
   intel_summary?: IntelSummary | null;
+  // SAST-specific fields (populated from evidence for SAST category)
+  cwe?: string[] | null;
+  owasp?: string[] | null;
 }
 
 export interface ApiResponse {
