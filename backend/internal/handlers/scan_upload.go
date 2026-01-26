@@ -31,7 +31,7 @@ const (
 )
 
 type ScanUploadRequest struct {
-	ScannerType       string `json:"scanner_type" validate:"required"`
+	ScannerType       string `json:"scanner_type" validate:"required,oneof=trivy zap semgrep sarif bandit codeql gosec snyk npm-audit pip-audit nuclei gitleaks trufflehog detect-secrets grype checkov kics tfsec terrascan"`
 	Report            json.RawMessage
 	ReportBytes       []byte
 	EngagementID      *uuid.UUID `json:"engagement_id,omitempty"`
@@ -268,7 +268,7 @@ func ScanUploadScope() string {
 }
 
 type scanUploadJSONPayload struct {
-	ScannerType       string          `json:"scanner_type" validate:"required"`
+	ScannerType       string          `json:"scanner_type" validate:"required,oneof=trivy zap semgrep sarif bandit codeql gosec snyk npm-audit pip-audit nuclei gitleaks trufflehog detect-secrets grype checkov kics tfsec terrascan"`
 	Report            json.RawMessage `json:"report"`
 	EngagementID      *uuid.UUID      `json:"engagement_id,omitempty"`
 	ProductName       string          `json:"product_name,omitempty"`
