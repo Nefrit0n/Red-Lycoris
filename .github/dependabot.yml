@@ -1,0 +1,146 @@
+version: 2
+updates:
+  # Обновления для Go модулей
+  - package-ecosystem: "gomod"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Moscow"
+    labels:
+      - "dependencies"
+      - "go"
+      - "backend"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "Nefrit0n"  # Замените на ваш username
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+      include: "scope"
+
+  # Обновления для Node.js (npm)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "Europe/Moscow"
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "frontend"
+    open-pull-requests-limit: 10
+    versioning-strategy: "increase"
+    ignore:
+      # Игнорировать мажорные обновления для определенных пакетов
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+  # Обновления для Python (pip)
+  - package-ecosystem: "pip"
+    directory: "/python_api"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+      timezone: "Europe/Moscow"
+    labels:
+      - "dependencies"
+      - "python"
+      - "api"
+    open-pull-requests-limit: 10
+    allow:
+      # Разрешить обновления только для определенных зависимостей
+      - dependency-type: "direct"
+    ignore:
+      # Игнорировать мажорные обновления для критических зависимостей
+      - dependency-name: "fastapi"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pydantic"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "celery"
+        update-types: ["version-update:semver-major"]
+
+  # Обновления для GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "09:00"
+      timezone: "Europe/Moscow"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "ci/cd"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  # Обновления для Docker (если есть Dockerfile)
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "monthly"
+      day: "friday"
+      time: "09:00"
+      timezone: "Europe/Moscow"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "backend"
+    open-pull-requests-limit: 5
+    ignore:
+      # Игнорировать обновления базовых образов
+      - dependency-name: "golang"
+        versions: ["> 1.24"]
+
+  # Docker для frontend
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"
+      day: "friday"
+      time: "10:00"
+      timezone: "Europe/Moscow"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "frontend"
+    open-pull-requests-limit: 5
+
+  # Docker для python_api
+  - package-ecosystem: "docker"
+    directory: "/python_api"
+    schedule:
+      interval: "monthly"
+      day: "friday"
+      time: "11:00"
+      timezone: "Europe/Moscow"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "python-api"
+    open-pull-requests-limit: 5
+
+  # Docker для nginx
+  - package-ecosystem: "docker"
+    directory: "/nginx"
+    schedule:
+      interval: "monthly"
+      day: "friday"
+      time: "12:00"
+      timezone: "Europe/Moscow"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "nginx"
+    open-pull-requests-limit: 3
