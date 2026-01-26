@@ -167,9 +167,9 @@ export interface FindingDetailConfigDTO extends FindingDetailBaseDTO {
   details?: FindingDetailsConfig | null;
 }
 
-export interface FindingDetailUnknownDTO extends FindingDetailBaseDTO {
+export interface FindingDetailUnknownDTO extends Omit<FindingDetailBaseDTO, 'details' | 'category'> {
   category: string;
-  details?: unknown | null;
+  details?: Record<string, unknown> | null;
 }
 
 export type FindingDetailDTO =

@@ -180,7 +180,7 @@ function calculateTrend(findings: FindingListItemDTO[]): TrendPoint[] {
  */
 function calculateTopProducts(
   findings: FindingListItemDTO[],
-  products: Array<{ id: string; name: string; identifier?: string }>
+  products: Array<{ id: string; name: string; identifier?: string | null }>
 ): ProductRisk[] {
   const productMap = new Map<string, ProductRisk>();
 
@@ -189,7 +189,7 @@ function calculateTopProducts(
     productMap.set(p.id, {
       id: p.id,
       name: p.name,
-      identifier: p.identifier,
+      identifier: p.identifier ?? undefined,
       findingsCount: 0,
       criticalCount: 0,
       highCount: 0,
