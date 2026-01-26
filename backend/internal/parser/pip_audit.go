@@ -173,9 +173,9 @@ func buildPipAuditEvidence(result pipAuditResult, vuln pipAuditVuln) map[string]
 // pip-audit report structures
 
 type pipAuditResult struct {
-	Name    string          `json:"name"`
-	Version string          `json:"version"`
-	Vulns   []pipAuditVuln  `json:"vulns"`
+	Name    string         `json:"name"`
+	Version string         `json:"version"`
+	Vulns   []pipAuditVuln `json:"vulns"`
 }
 
 type pipAuditVuln struct {

@@ -313,9 +313,9 @@ func mapGrypeSeverity(raw string) string {
 // Grype report structures
 
 type grypeReport struct {
-	Matches    []grypeMatch   `json:"matches"`
-	Source     grypeSource    `json:"source"`
-	Distro     grypeDistro    `json:"distro"`
+	Matches    []grypeMatch    `json:"matches"`
+	Source     grypeSource     `json:"source"`
+	Distro     grypeDistro     `json:"distro"`
 	Descriptor grypeDescriptor `json:"descriptor"`
 }
 
@@ -327,14 +327,14 @@ type grypeMatch struct {
 }
 
 type grypeVulnerability struct {
-	ID          string    `json:"id"`
-	DataSource  string    `json:"dataSource"`
-	Namespace   string    `json:"namespace"`
-	Severity    string    `json:"severity"`
-	URLs        []string  `json:"urls"`
-	Description string    `json:"description"`
-	CVSS        []grypeCVSS `json:"cvss"`
-	Fix         grypeFix    `json:"fix"`
+	ID          string          `json:"id"`
+	DataSource  string          `json:"dataSource"`
+	Namespace   string          `json:"namespace"`
+	Severity    string          `json:"severity"`
+	URLs        []string        `json:"urls"`
+	Description string          `json:"description"`
+	CVSS        []grypeCVSS     `json:"cvss"`
+	Fix         grypeFix        `json:"fix"`
 	Advisories  []grypeAdvisory `json:"advisories"`
 }
 
@@ -368,16 +368,16 @@ type grypeMatchDetail struct {
 }
 
 type grypeArtifact struct {
-	ID        string           `json:"id"`
-	Name      string           `json:"name"`
-	Version   string           `json:"version"`
-	Type      string           `json:"type"`
-	Locations []grypeLocation  `json:"locations"`
-	Language  string           `json:"language"`
-	Licenses  []string         `json:"licenses"`
-	CPEs      []string         `json:"cpes"`
-	PURL      string           `json:"purl"`
-	Upstreams []grypeUpstream  `json:"upstreams"`
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Version   string          `json:"version"`
+	Type      string          `json:"type"`
+	Locations []grypeLocation `json:"locations"`
+	Language  string          `json:"language"`
+	Licenses  []string        `json:"licenses"`
+	CPEs      []string        `json:"cpes"`
+	PURL      string          `json:"purl"`
+	Upstreams []grypeUpstream `json:"upstreams"`
 }
 
 type grypeLocation struct {
@@ -396,8 +396,8 @@ type grypeSource struct {
 }
 
 type grypeDistro struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name    string   `json:"name"`
+	Version string   `json:"version"`
 	IDLike  []string `json:"idLike"`
 }
 
