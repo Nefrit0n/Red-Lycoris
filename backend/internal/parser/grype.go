@@ -94,7 +94,7 @@ func (p *GrypeParser) buildFinding(match grypeMatch, report grypeReport) Finding
 	}
 
 	rawData := buildGrypeRawData(match, report)
-	evidence := buildGrypeEvidence(match, report)
+	evidence := buildGrypeEvidence(match)
 
 	return Finding{
 		Category:    models.CategoryContainer,
@@ -225,7 +225,7 @@ func buildGrypeRawData(match grypeMatch, report grypeReport) map[string]any {
 	return rawData
 }
 
-func buildGrypeEvidence(match grypeMatch, report grypeReport) map[string]any {
+func buildGrypeEvidence(match grypeMatch) map[string]any {
 	evidence := map[string]any{
 		"scannerType": "grype",
 		"findingType": "vulnerability",
