@@ -17,13 +17,15 @@ const (
 )
 
 const (
-	CategorySAST    = "SAST"
-	CategorySCA     = "SCA"
-	CategorySecrets = "SECRETS"
-	CategoryConfig  = "CONFIG"
-	CategoryDAST    = "DAST"
-	CategoryLicense = "LICENSE"
-	CategoryUnknown = "UNKNOWN"
+	CategorySAST      = "SAST"
+	CategorySCA       = "SCA"
+	CategorySecrets   = "SECRETS"
+	CategoryConfig    = "CONFIG"
+	CategoryDAST      = "DAST"
+	CategoryLicense   = "LICENSE"
+	CategoryIAC       = "IAC"
+	CategoryContainer = "CONTAINER"
+	CategoryUnknown   = "UNKNOWN"
 )
 
 const (
@@ -115,10 +117,10 @@ func (f *Finding) Validate() error {
 	}
 
 	switch f.Category {
-	case CategorySAST, CategorySCA, CategorySecrets, CategoryConfig, CategoryDAST, CategoryLicense, CategoryUnknown:
+	case CategorySAST, CategorySCA, CategorySecrets, CategoryConfig, CategoryDAST, CategoryLicense, CategoryIAC, CategoryContainer, CategoryUnknown:
 		// ok
 	default:
-		return fmt.Errorf("category must be one of SAST, SCA, SECRETS, CONFIG, DAST, LICENSE, UNKNOWN")
+		return fmt.Errorf("category must be one of SAST, SCA, SECRETS, CONFIG, DAST, LICENSE, IAC, CONTAINER, UNKNOWN")
 	}
 
 	switch f.Severity {
