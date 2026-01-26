@@ -292,7 +292,6 @@ func convertSeverityCounts(counts map[string]int) storage.SeverityCounts {
 	return out
 }
 
-
 func countFindingsByCategory(ctx context.Context, db *sql.DB, filters storage.FindingFilters) ([]storage.CategoryCount, error) {
 	where := []string{"deleted_at IS NULL"}
 	args := []interface{}{}
@@ -332,7 +331,6 @@ func countFindingsByCategory(ctx context.Context, db *sql.DB, filters storage.Fi
 	}
 	return res, nil
 }
-
 
 func buildPolicySeverityCounts(counts storage.SeverityCounts) []policies.SeverityCount {
 	results := []policies.SeverityCount{}

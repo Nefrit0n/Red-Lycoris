@@ -13,10 +13,10 @@ import (
 // ComputeFingerprint returns a stable fingerprint used for deduplication.
 //
 // Important:
-// - For SCA we use (vulnID + pkg + version + target + ecosystem + class + scanner).
-// - For SAST we MUST NOT rely on Title (UI-only) because Title is allowed to change.
-//   For SAST we use (scanner + category + ruleID + path + start/end range).
-// - For other categories we keep legacy behavior for now to avoid changing semantics abruptly.
+//   - For SCA we use (vulnID + pkg + version + target + ecosystem + class + scanner).
+//   - For SAST we MUST NOT rely on Title (UI-only) because Title is allowed to change.
+//     For SAST we use (scanner + category + ruleID + path + start/end range).
+//   - For other categories we keep legacy behavior for now to avoid changing semantics abruptly.
 func ComputeFingerprint(scannerType string, finding parser.Finding) string {
 	category := strings.ToLower(strings.TrimSpace(finding.Category))
 	scanner := strings.ToLower(strings.TrimSpace(scannerType))

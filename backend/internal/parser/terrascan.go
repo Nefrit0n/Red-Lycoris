@@ -214,15 +214,15 @@ func mapTerrascanSeverity(raw string) string {
 // Terrascan report structures
 
 type terrascanReport struct {
-	Results terrascanResults `json:"results"`
-	ScanSummary json.RawMessage `json:"scan_summary"`
+	Results     terrascanResults `json:"results"`
+	ScanSummary json.RawMessage  `json:"scan_summary"`
 }
 
 type terrascanResults struct {
-	Violations    []terrascanViolation `json:"violations"`
-	PassedRules   []json.RawMessage    `json:"passed_rules"`
-	SkippedRules  []json.RawMessage    `json:"skipped_rules"`
-	ScanErrors    []json.RawMessage    `json:"scan_errors"`
+	Violations   []terrascanViolation `json:"violations"`
+	PassedRules  []json.RawMessage    `json:"passed_rules"`
+	SkippedRules []json.RawMessage    `json:"skipped_rules"`
+	ScanErrors   []json.RawMessage    `json:"scan_errors"`
 }
 
 type terrascanViolation struct {

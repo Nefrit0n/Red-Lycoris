@@ -261,8 +261,8 @@ func mapCheckovSeverity(raw string) string {
 // Checkov report structures
 
 type checkovReport struct {
-	CheckType string         `json:"check_type"`
-	Results   checkovResults `json:"results"`
+	CheckType string          `json:"check_type"`
+	Results   checkovResults  `json:"results"`
 	Summary   json.RawMessage `json:"summary"`
 }
 
@@ -273,10 +273,10 @@ type checkovResults struct {
 }
 
 type checkovCheck struct {
-	CheckID         string `json:"check_id"`
-	BCCheckID       string `json:"bc_check_id"`
-	CheckName       string `json:"check_name"`
-	CheckResult     struct {
+	CheckID     string `json:"check_id"`
+	BCCheckID   string `json:"bc_check_id"`
+	CheckName   string `json:"check_name"`
+	CheckResult struct {
 		Result string `json:"result"`
 	} `json:"check_result"`
 	CodeBlock       json.RawMessage `json:"code_block"`
