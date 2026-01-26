@@ -58,7 +58,7 @@ func (p *PipAuditParser) buildFinding(result pipAuditResult, vuln pipAuditVuln) 
 	}
 
 	// Description from aliases or fix info
-	desc := buildPipAuditDescription(result, vuln)
+	desc := buildPipAuditDescription(vuln)
 	var descPtr *string
 	if desc != "" {
 		descPtr = &desc
@@ -81,14 +81,14 @@ func (p *PipAuditParser) buildFinding(result pipAuditResult, vuln pipAuditVuln) 
 	}
 }
 
-func buildPipAuditDescription(result pipAuditResult, vuln pipAuditVuln) string {
+func buildPipAuditDescription(vuln pipAuditVuln) string {
 	parts := []string{}
 
 	if vuln.Description != "" {
 		parts = append(parts, vuln.Description)
 	}
 
-	if vuln.FixVersions != nil && len(vuln.FixVersions) > 0 {
+	if len(vuln.FixVersions) > 0 {
 		parts = append(parts, fmt.Sprintf("Fix available in: %s", strings.Join(vuln.FixVersions, ", ")))
 	}
 

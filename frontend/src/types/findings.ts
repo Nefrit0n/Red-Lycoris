@@ -10,7 +10,7 @@ export type FindingStatus =
   | "mitigated"
   | "duplicate";
 export type FindingOccurrenceStatus = "NEW" | "REPEAT";
-export type FindingCategory = "SAST" | "SCA" | "SECRETS" | "CONFIG";
+export type FindingCategory = "SAST" | "SCA" | "SECRETS" | "CONFIG" | "IAC" | "CONTAINER" | "DAST";
 export type PolicyDecision = "pass" | "fail" | "warn";
 
 export interface FindingOwnerDTO {
@@ -125,11 +125,48 @@ export interface FindingDetailsConfig {
   message?: string | null;
 }
 
+export interface FindingDetailsIAC {
+  ruleId?: string | null;
+  filePath?: string | null;
+  startLine?: number | null;
+  endLine?: number | null;
+  message?: string | null;
+  resource?: string | null;
+  checkType?: string | null;
+  framework?: string | null;
+}
+
+export interface FindingDetailsContainer {
+  pkgName?: string | null;
+  installedVersion?: string | null;
+  fixedVersion?: string | null;
+  vulnerabilityId?: string | null;
+  imageRef?: string | null;
+  ecosystem?: string | null;
+  purl?: string | null;
+  primaryUrl?: string | null;
+  references?: string[] | null;
+  fixState?: string | null;
+}
+
+export interface FindingDetailsDAST {
+  ruleId?: string | null;
+  url?: string | null;
+  method?: string | null;
+  parameter?: string | null;
+  evidence?: string | null;
+  message?: string | null;
+  templateId?: string | null;
+}
+
 export type FindingDetails =
   | FindingDetailsSAST
   | FindingDetailsSCA
   | FindingDetailsSecrets
-  | FindingDetailsConfig;
+  | FindingDetailsConfig
+  | FindingDetailsIAC
+  | FindingDetailsContainer
+  | FindingDetailsDAST;
 
 export interface FindingDetailBaseDTO extends FindingListItemDTO {
   description?: string | null;
@@ -170,6 +207,21 @@ export interface FindingDetailConfigDTO extends FindingDetailBaseDTO {
   details?: FindingDetailsConfig | null;
 }
 
+export interface FindingDetailIACDTO extends FindingDetailBaseDTO {
+  category: "IAC";
+  details?: FindingDetailsIAC | null;
+}
+
+export interface FindingDetailContainerDTO extends FindingDetailBaseDTO {
+  category: "CONTAINER";
+  details?: FindingDetailsContainer | null;
+}
+
+export interface FindingDetailDASTDTO extends FindingDetailBaseDTO {
+  category: "DAST";
+  details?: FindingDetailsDAST | null;
+}
+
 export interface FindingDetailUnknownDTO extends Omit<FindingDetailBaseDTO, 'details' | 'category'> {
   category: string;
   details?: Record<string, unknown> | null;
@@ -180,6 +232,9 @@ export type FindingDetailDTO =
   | FindingDetailSCADTO
   | FindingDetailSecretsDTO
   | FindingDetailConfigDTO
+  | FindingDetailIACDTO
+  | FindingDetailContainerDTO
+  | FindingDetailDASTDTO
   | FindingDetailUnknownDTO;
 
 export interface ScaDetails {
