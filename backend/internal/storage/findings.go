@@ -458,6 +458,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			f.assignee_id, u.username,
 			pr_latest.decision,
 			fr.risk_score, fr.risk_band,
+			fr.computed_at, fr.model_version,
 			f.created_at, f.updated_at, f.source_type`
 
 	query := fmt.Sprintf(`%s %s WHERE %s %s LIMIT $17 OFFSET $18`,
