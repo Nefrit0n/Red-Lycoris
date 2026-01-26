@@ -43,7 +43,10 @@ jobs:
       DB_NAME: lotus_warden
       DB_SSLMODE: disable
       MIGRATIONS_PATH: migrations 
-
+      ROOT_EMAIL: root@localhost
+      ROOT_PASSWORD: root
+      JWT_SECRET: contract-test-secret
+      
     steps:
       - uses: actions/checkout@v4
 
@@ -112,6 +115,7 @@ jobs:
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
+      MIGRATIONS_PATH: migrations 
       DB_NAME: lotus_warden
       DB_SSLMODE: disable
       NATS_URL: nats://localhost:4222
