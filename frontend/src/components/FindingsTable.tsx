@@ -839,6 +839,9 @@ export default function FindingsTable({
               const isSast = f.category === "SAST";
               const isSecrets = f.category === "SECRETS";
               const isConfig = f.category === "CONFIG";
+              // SAST-specific: CWE and OWASP arrays
+              const cweList = isSast && f.cwe?.length ? f.cwe.slice(0, 3) : []; // Limit to 3 for display
+              const owaspList = isSast && f.owasp?.length ? f.owasp.slice(0, 2) : []; // Limit to 2
               const slaDisplay = resolveSlaDisplay(f, now);
               const policyDecisionKey = f.policyDecision ? f.policyDecision.toLowerCase() : null;
               const policyDecisionMeta =
@@ -1146,7 +1149,7 @@ export default function FindingsTable({
                         </Typography>
                       )}
 
-                      {(cvssScore !== null || epssScore !== null || isKev || isSca || isSast || isSecrets || isConfig) && (
+                      {(cvssScore !== null || epssScore !== null || isKev || isSca || isSast || isSecrets || isConfig || cweList.length > 0 || owaspList.length > 0) && (
                         <Stack
                           direction="row"
                           spacing={0.75}
@@ -1202,6 +1205,56 @@ export default function FindingsTable({
                               </Box>
                             </Tooltip>
                           )}
+                          {/* CWE Badges for SAST - Orange/Red theme */}
+                          {cweList.map((cwe) => (
+                            <Tooltip key={cwe} title={`Common Weakness Enumeration: ${cwe}`}>
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  px: 0.75,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 600,
+                                  fontSize: "0.65rem",
+                                  bgcolor: "rgba(255, 87, 34, 0.12)",
+                                  color: "#ff8a65",
+                                  border: "1px solid rgba(255, 87, 34, 0.35)",
+                                  transition: "all 0.2s ease",
+                                  "&:hover": {
+                                    bgcolor: "rgba(255, 87, 34, 0.22)",
+                                  },
+                                }}
+                              >
+                                {cwe}
+                              </Box>
+                            </Tooltip>
+                          ))}
+                          {/* OWASP Badges for SAST - Indigo/Blue theme */}
+                          {owaspList.map((owasp) => (
+                            <Tooltip key={owasp} title={`OWASP Top 10: ${owasp}`}>
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  px: 0.75,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 600,
+                                  fontSize: "0.65rem",
+                                  bgcolor: "rgba(63, 81, 181, 0.12)",
+                                  color: "#7986cb",
+                                  border: "1px solid rgba(63, 81, 181, 0.35)",
+                                  transition: "all 0.2s ease",
+                                  "&:hover": {
+                                    bgcolor: "rgba(63, 81, 181, 0.22)",
+                                  },
+                                }}
+                              >
+                                {owasp}
+                              </Box>
+                            </Tooltip>
+                          ))}
                           {/* SECRETS Badge - Amber/Gold for secrets */}
                           {isSecrets && (
                             <Tooltip title="Secrets Detection (API keys, passwords, tokens)">
