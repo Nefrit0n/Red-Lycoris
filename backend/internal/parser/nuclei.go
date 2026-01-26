@@ -290,19 +290,19 @@ func mapNucleiSeverity(raw string) string {
 // Nuclei result structures
 
 type nucleiResult struct {
-	TemplateID       string             `json:"template-id"`
-	Info             nucleiInfo         `json:"info"`
-	Type             string             `json:"type"`
-	Host             string             `json:"host"`
-	Matched          string             `json:"matched"`
-	MatchedURL       string             `json:"matched-at"`
-	IP               string             `json:"ip"`
-	Timestamp        string             `json:"timestamp"`
-	CurlCommand      string             `json:"curl-command"`
-	MatcherName      string             `json:"matcher-name"`
-	ExtractedResults []string           `json:"extracted-results"`
-	Request          string             `json:"request"`
-	Response         string             `json:"response"`
+	TemplateID       string     `json:"template-id"`
+	Info             nucleiInfo `json:"info"`
+	Type             string     `json:"type"`
+	Host             string     `json:"host"`
+	Matched          string     `json:"matched"`
+	MatchedURL       string     `json:"matched-at"`
+	IP               string     `json:"ip"`
+	Timestamp        string     `json:"timestamp"`
+	CurlCommand      string     `json:"curl-command"`
+	MatcherName      string     `json:"matcher-name"`
+	ExtractedResults []string   `json:"extracted-results"`
+	Request          string     `json:"request"`
+	Response         string     `json:"response"`
 }
 
 type nucleiInfo struct {

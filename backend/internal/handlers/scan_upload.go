@@ -31,7 +31,7 @@ const (
 )
 
 type ScanUploadRequest struct {
-	ScannerType       string `json:"scanner_type" validate:"required,oneof=trivy zap semgrep sarif"`
+	ScannerType       string `json:"scanner_type" validate:"required"`
 	Report            json.RawMessage
 	ReportBytes       []byte
 	EngagementID      *uuid.UUID `json:"engagement_id,omitempty"`
@@ -268,7 +268,7 @@ func ScanUploadScope() string {
 }
 
 type scanUploadJSONPayload struct {
-	ScannerType       string          `json:"scanner_type" validate:"required,oneof=trivy zap semgrep sarif"`
+	ScannerType       string          `json:"scanner_type" validate:"required"`
 	Report            json.RawMessage `json:"report"`
 	EngagementID      *uuid.UUID      `json:"engagement_id,omitempty"`
 	ProductName       string          `json:"product_name,omitempty"`
@@ -296,12 +296,9 @@ func (h *ScanUploadHandler) parseRequest(c *fiber.Ctx) (ScanUploadRequest, error
 	if len(raw) > maxScanReportBytes {
 		return ScanUploadRequest{}, fmt.Errorf("report exceeds maximum size of %d bytes", maxScanReportBytes)
 	}
-	if !json.Valid(raw) {
-		return ScanUploadRequest{}, fmt.Errorf("report must be valid json")
-	}
 
 	return ScanUploadRequest{
-		ScannerType:       strings.ToLower(strings.TrimSpace(payload.ScannerType)),
+		ScannerType:       strings.TrimSpace(payload.ScannerType),
 		Report:            raw,
 		ReportBytes:       []byte(raw),
 		EngagementID:      payload.EngagementID,
@@ -312,7 +309,7 @@ func (h *ScanUploadHandler) parseRequest(c *fiber.Ctx) (ScanUploadRequest, error
 }
 
 func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadRequest, error) {
-	scannerType := strings.ToLower(strings.TrimSpace(c.FormValue("scanner_type")))
+	scannerType := strings.TrimSpace(c.FormValue("scanner_type"))
 	if scannerType == "" {
 		return ScanUploadRequest{}, fmt.Errorf("scanner_type is required")
 	}
@@ -346,9 +343,6 @@ func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadReque
 	}
 	if len(reportData) > maxScanReportBytes {
 		return ScanUploadRequest{}, fmt.Errorf("report exceeds maximum size of %d bytes", maxScanReportBytes)
-	}
-	if !json.Valid(reportData) {
-		return ScanUploadRequest{}, fmt.Errorf("report must be valid json")
 	}
 
 	return ScanUploadRequest{

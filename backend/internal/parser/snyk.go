@@ -296,25 +296,25 @@ type snykReport struct {
 }
 
 type snykVulnerability struct {
-	ID              string           `json:"id"`
-	Title           string           `json:"title"`
-	Description     string           `json:"description"`
-	Severity        string           `json:"severity"`
-	PackageName     string           `json:"packageName"`
-	Version         string           `json:"version"`
-	From            []string         `json:"from"`
-	UpgradePath     []any            `json:"upgradePath"`
-	IsUpgradable    bool             `json:"isUpgradable"`
-	IsPatchable     bool             `json:"isPatchable"`
-	Identifiers     snykIdentifiers  `json:"identifiers"`
-	CVSSv3          string           `json:"CVSSv3"`
-	CvssScore       float64          `json:"cvssScore"`
-	Exploit         string           `json:"exploit"`
-	PublicationTime string           `json:"publicationTime"`
-	DisclosureTime  string           `json:"disclosureTime"`
-	References      []snykReference  `json:"references"`
-	Semver          json.RawMessage  `json:"semver"`
-	Credit          json.RawMessage  `json:"credit"`
+	ID              string          `json:"id"`
+	Title           string          `json:"title"`
+	Description     string          `json:"description"`
+	Severity        string          `json:"severity"`
+	PackageName     string          `json:"packageName"`
+	Version         string          `json:"version"`
+	From            []string        `json:"from"`
+	UpgradePath     []any           `json:"upgradePath"`
+	IsUpgradable    bool            `json:"isUpgradable"`
+	IsPatchable     bool            `json:"isPatchable"`
+	Identifiers     snykIdentifiers `json:"identifiers"`
+	CVSSv3          string          `json:"CVSSv3"`
+	CvssScore       float64         `json:"cvssScore"`
+	Exploit         string          `json:"exploit"`
+	PublicationTime string          `json:"publicationTime"`
+	DisclosureTime  string          `json:"disclosureTime"`
+	References      []snykReference `json:"references"`
+	Semver          json.RawMessage `json:"semver"`
+	Credit          json.RawMessage `json:"credit"`
 }
 
 type snykIdentifiers struct {
