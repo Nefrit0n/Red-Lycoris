@@ -177,3 +177,113 @@ func firstNonEmptyString(values ...string) string {
 	}
 	return ""
 }
+
+// Generic SAST normalizer for Bandit, CodeQL, Gosec, etc.
+func normalizeSASTFindings(findings []parser.Finding, reportVersion string) ([]CanonicalFinding, error) {
+	canonical := make([]CanonicalFinding, 0, len(findings))
+	for _, finding := range findings {
+		base, err := baseCanonicalFinding(finding)
+		if err != nil {
+			return nil, err
+		}
+		identifiers := intel.ExtractIdentifiersFromFinding(finding)
+		base.Category = models.CategorySAST
+		base.Kind = "sast"
+		base.Identifiers = identifiers
+		base.RawData = applyCanonical(base.RawData, base.Category, base.Kind, nil, identifiers)
+		canonical = append(canonical, base)
+	}
+	return canonical, nil
+}
+
+// Generic SCA normalizer for Snyk, npm-audit, pip-audit, etc.
+func normalizeSCAFindings(findings []parser.Finding, reportVersion string) ([]CanonicalFinding, error) {
+	canonical := make([]CanonicalFinding, 0, len(findings))
+	for _, finding := range findings {
+		base, err := baseCanonicalFinding(finding)
+		if err != nil {
+			return nil, err
+		}
+		identifiers := intel.ExtractIdentifiersFromFinding(finding)
+		component := buildScaComponent(finding)
+		base.Category = models.CategorySCA
+		base.Kind = "vulnerability"
+		base.Identifiers = identifiers
+		base.RawData = applyCanonical(base.RawData, base.Category, base.Kind, component, identifiers)
+		canonical = append(canonical, base)
+	}
+	return canonical, nil
+}
+
+// Generic DAST normalizer for Nuclei, etc.
+func normalizeDASTFindings(findings []parser.Finding, reportVersion string) ([]CanonicalFinding, error) {
+	canonical := make([]CanonicalFinding, 0, len(findings))
+	for _, finding := range findings {
+		base, err := baseCanonicalFinding(finding)
+		if err != nil {
+			return nil, err
+		}
+		identifiers := intel.ExtractIdentifiersFromFinding(finding)
+		base.Category = models.CategoryDAST
+		base.Kind = "dast"
+		base.Identifiers = identifiers
+		base.RawData = applyCanonical(base.RawData, base.Category, base.Kind, nil, identifiers)
+		canonical = append(canonical, base)
+	}
+	return canonical, nil
+}
+
+// Generic Secrets normalizer for Gitleaks, TruffleHog, detect-secrets, etc.
+func normalizeSecretsFindings(findings []parser.Finding, reportVersion string) ([]CanonicalFinding, error) {
+	canonical := make([]CanonicalFinding, 0, len(findings))
+	for _, finding := range findings {
+		base, err := baseCanonicalFinding(finding)
+		if err != nil {
+			return nil, err
+		}
+		identifiers := intel.ExtractIdentifiersFromFinding(finding)
+		base.Category = models.CategorySecrets
+		base.Kind = "secret"
+		base.Identifiers = identifiers
+		base.RawData = applyCanonical(base.RawData, base.Category, base.Kind, nil, identifiers)
+		canonical = append(canonical, base)
+	}
+	return canonical, nil
+}
+
+// Generic Container normalizer for Grype, etc.
+func normalizeContainerFindings(findings []parser.Finding, reportVersion string) ([]CanonicalFinding, error) {
+	canonical := make([]CanonicalFinding, 0, len(findings))
+	for _, finding := range findings {
+		base, err := baseCanonicalFinding(finding)
+		if err != nil {
+			return nil, err
+		}
+		identifiers := intel.ExtractIdentifiersFromFinding(finding)
+		component := buildScaComponent(finding)
+		base.Category = models.CategoryContainer
+		base.Kind = "vulnerability"
+		base.Identifiers = identifiers
+		base.RawData = applyCanonical(base.RawData, base.Category, base.Kind, component, identifiers)
+		canonical = append(canonical, base)
+	}
+	return canonical, nil
+}
+
+// Generic IaC normalizer for Checkov, KICS, tfsec, Terrascan, etc.
+func normalizeIACFindings(findings []parser.Finding, reportVersion string) ([]CanonicalFinding, error) {
+	canonical := make([]CanonicalFinding, 0, len(findings))
+	for _, finding := range findings {
+		base, err := baseCanonicalFinding(finding)
+		if err != nil {
+			return nil, err
+		}
+		identifiers := intel.ExtractIdentifiersFromFinding(finding)
+		base.Category = models.CategoryIAC
+		base.Kind = "iac"
+		base.Identifiers = identifiers
+		base.RawData = applyCanonical(base.RawData, base.Category, base.Kind, nil, identifiers)
+		canonical = append(canonical, base)
+	}
+	return canonical, nil
+}

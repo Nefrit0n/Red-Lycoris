@@ -47,13 +47,60 @@ func (r *Registry) Find(scannerType string, data []byte) (Parser, error) {
 
 var defaultRegistry = func() *Registry {
 	registry := NewRegistry()
+
+	// Existing parsers
 	registry.Register(&TrivyParser{})
 	registry.Register(&ZapParser{})
 	registry.Register(&SemgrepParser{})
 	registry.Register(&SarifParser{})
+
+	// SAST parsers
+	registry.Register(&BanditParser{})
+	registry.Register(&CodeQLParser{})
+	registry.Register(&GosecParser{})
+
+	// SCA parsers
+	registry.Register(&SnykParser{})
+	registry.Register(&NpmAuditParser{})
+	registry.Register(&PipAuditParser{})
+
+	// DAST parsers
+	registry.Register(&NucleiParser{})
+
+	// Secrets parsers
+	registry.Register(&GitleaksParser{})
+	registry.Register(&TruffleHogParser{})
+	registry.Register(&DetectSecretsParser{})
+
+	// Container parsers
+	registry.Register(&GrypeParser{})
+
+	// IaC parsers
+	registry.Register(&CheckovParser{})
+	registry.Register(&KICSParser{})
+	registry.Register(&TfsecParser{})
+	registry.Register(&TerrascanParser{})
+
+	// Text fallback parsers
 	registry.Register(&TextParser{scannerType: "trivy"})
 	registry.Register(&TextParser{scannerType: "zap"})
 	registry.Register(&TextParser{scannerType: "semgrep"})
+	registry.Register(&TextParser{scannerType: "bandit"})
+	registry.Register(&TextParser{scannerType: "codeql"})
+	registry.Register(&TextParser{scannerType: "gosec"})
+	registry.Register(&TextParser{scannerType: "snyk"})
+	registry.Register(&TextParser{scannerType: "npm-audit"})
+	registry.Register(&TextParser{scannerType: "pip-audit"})
+	registry.Register(&TextParser{scannerType: "nuclei"})
+	registry.Register(&TextParser{scannerType: "gitleaks"})
+	registry.Register(&TextParser{scannerType: "trufflehog"})
+	registry.Register(&TextParser{scannerType: "detect-secrets"})
+	registry.Register(&TextParser{scannerType: "grype"})
+	registry.Register(&TextParser{scannerType: "checkov"})
+	registry.Register(&TextParser{scannerType: "kics"})
+	registry.Register(&TextParser{scannerType: "tfsec"})
+	registry.Register(&TextParser{scannerType: "terrascan"})
+
 	return registry
 }()
 
