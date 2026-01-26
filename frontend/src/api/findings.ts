@@ -59,7 +59,7 @@ export const fetchFindingDetail = async (
   id: string,
   signal?: AbortSignal,
   options?: { includeRiskFactors?: boolean }
-): Promise<FindingDetail> => {
+): Promise<FindingDetailDTO> => {
   const searchParams = new URLSearchParams();
   if (options?.includeRiskFactors) {
     searchParams.set("includeRiskFactors", "true");
@@ -74,7 +74,7 @@ export const updateFindingStatus = async (
   id: string,
   status: FindingStatus,
   signal?: AbortSignal
-): Promise<FindingDetail> => {
+): Promise<FindingDetailDTO> => {
   return request<FindingDetailDTO>(`/api/v1/findings/${id}`, {
     method: "PATCH",
     signal,
@@ -116,6 +116,7 @@ export const bulkUpdateFindings = async (payload: {
     status?: string;
     occurrenceStatus?: string;
     scannerType?: string;
+    policyDecision?: string;
     q?: string;
     import_job_id?: string;
     dateFrom?: string;
