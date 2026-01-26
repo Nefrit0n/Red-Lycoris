@@ -529,16 +529,16 @@ func extractTenantIDFromContext(c *fiber.Ctx) *uuid.UUID {
 	if v := c.Locals("tenant_id"); v != nil {
 		switch t := v.(type) {
 		case uuid.UUID:
-			if t != uuid.Nil {
-				id := t
-				return &id
-			}
+			// NOTE: uuid.Nil (0000...) is used as the default tenant in DB migrations.
+			// For MVP single-tenant mode we treat it as a valid tenant ID.
+			id := t
+			return &id
 		case *uuid.UUID:
-			if t != nil && *t != uuid.Nil {
+			if t != nil {
 				return t
 			}
 		case string:
-			if id, err := uuid.Parse(t); err == nil && id != uuid.Nil {
+			if id, err := uuid.Parse(t); err == nil {
 				return &id
 			}
 		}
@@ -546,14 +546,14 @@ func extractTenantIDFromContext(c *fiber.Ctx) *uuid.UUID {
 
 	// 2) опционально из заголовка (удобно для dev/тестов)
 	if hdr := strings.TrimSpace(c.Get("X-Tenant-ID")); hdr != "" {
-		if id, err := uuid.Parse(hdr); err == nil && id != uuid.Nil {
+		if id, err := uuid.Parse(hdr); err == nil {
 			return &id
 		}
 	}
 
 	// 3) dev fallback (чтобы не блокироваться, если tenant middleware ещё не подключён)
 	if s := strings.TrimSpace(os.Getenv("DEFAULT_TENANT_ID")); s != "" {
-		if id, err := uuid.Parse(s); err == nil && id != uuid.Nil {
+		if id, err := uuid.Parse(s); err == nil {
 			return &id
 		}
 	}

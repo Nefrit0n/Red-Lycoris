@@ -61,6 +61,19 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 		params.TenantID = &parsed
 	}
 
+	// Default tenant scoping:
+	// - prefer explicit tenantId query param
+	// - fallback to tenant from JWT middleware context
+	// - as a last resort (single-tenant MVP) use uuid.Nil
+	if params.TenantID == nil {
+		if tid := tenantIDFromContext(c); tid != nil {
+			params.TenantID = tid
+		} else {
+			zero := uuid.Nil
+			params.TenantID = &zero
+		}
+	}
+
 	// Resolve product filter
 	productID, err := resolveProductFilter(
 		c.Context(),
@@ -181,6 +194,15 @@ func parseBulkFilters(c *fiber.Ctx, db *sql.DB, filterInput *BulkActionFilters) 
 	filters := storage.FindingFilters{
 		CanonicalOnly:  true,
 		IncludeRepeats: false,
+	}
+
+	// Bulk actions must always be tenant-scoped.
+	// We intentionally do NOT allow running bulk actions without an effective tenant.
+	if tid := tenantIDFromContext(c); tid != nil {
+		filters.TenantID = tid
+	} else {
+		zero := uuid.Nil
+		filters.TenantID = &zero
 	}
 
 	if filterInput == nil {
