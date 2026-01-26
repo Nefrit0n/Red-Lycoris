@@ -55,6 +55,9 @@ type FindingListItem struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	SourceType sql.NullString
+
+	// Evidence JSONB for SAST CWE/OWASP extraction
+	Evidence json.RawMessage
 }
 
 type FindingNeighborsResult struct {
@@ -459,7 +462,8 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			pr_latest.decision,
 			fr.risk_score, fr.risk_band,
 			fr.computed_at, fr.model_version,
-			f.created_at, f.updated_at, f.source_type`
+			f.created_at, f.updated_at, f.source_type,
+			f.evidence`
 
 	query := fmt.Sprintf(`%s %s WHERE %s %s LIMIT $17 OFFSET $18`,
 		selectFields,
@@ -518,6 +522,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.CreatedAt,
 			&item.UpdatedAt,
 			&item.SourceType,
+			&item.Evidence,
 		); err != nil {
 			return nil, 0, err
 		}
