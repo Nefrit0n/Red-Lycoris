@@ -683,7 +683,7 @@ export const FindingDetailContent = ({
                 Due at
               </Typography>
               <Typography variant="body2">
-                {slaDueAt ? formatDateRu(data.slaDueAt) : "—"}
+                {data.slaDueAt ? formatDateRu(data.slaDueAt) : "—"}
               </Typography>
             </Stack>
             <Stack direction="row" alignItems="center" gap={1}>
@@ -1006,14 +1006,17 @@ export const FindingDetailContent = ({
                   language={semgrepEvidence.path?.split('.').pop() || undefined}
                   filename={semgrepEvidence.path || undefined}
                   startLine={semgrepEvidence.start?.line}
-                  highlightLines={
-                    semgrepEvidence.start?.line && semgrepEvidence.end?.line
-                      ? Array.from(
-                        { length: semgrepEvidence.end.line - semgrepEvidence.start.line + 1 },
-                        (_, i) => semgrepEvidence.start!.line + i
-                      )
-                      : undefined
-                  }
+                  highlightLines={(() => {
+                    const startLine = semgrepEvidence.start?.line;
+                    const endLine = semgrepEvidence.end?.line;
+                    if (startLine && endLine) {
+                      return Array.from(
+                        { length: endLine - startLine + 1 },
+                        (_, i) => startLine + i
+                      );
+                    }
+                    return undefined;
+                  })()}
                 />
               )}
 

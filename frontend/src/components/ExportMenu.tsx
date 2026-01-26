@@ -35,7 +35,7 @@ const ExportMenu = ({ data, filename = "findings", disabled = false }: ExportMen
     setAnchorEl(null);
   };
 
-  const exportToCSV = (findings: Finding[]): string => {
+  const exportToCSV = (findings: FindingListItemDTO[]): string => {
     const headers = [
       "ID",
       "Title",
@@ -63,7 +63,7 @@ const ExportMenu = ({ data, filename = "findings", disabled = false }: ExportMen
     return [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
   };
 
-  const exportToJSON = (findings: Finding[]): string => {
+  const exportToJSON = (findings: FindingListItemDTO[]): string => {
     const exportData = findings.map((f) => ({
       id: f.id,
       title: f.title,

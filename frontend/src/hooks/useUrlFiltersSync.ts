@@ -186,7 +186,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
 
     const selectedFindingId = getUrlParam(search, 'selected') || null;
 
-    const nextFilters = {
+    const nextFilters: FiltersState = {
       page,
       pageSize,
       productId: productIdParam,

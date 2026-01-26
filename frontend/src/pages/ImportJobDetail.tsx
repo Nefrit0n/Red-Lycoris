@@ -164,7 +164,7 @@ const ImportJobDetail = () => {
   const [error, setError] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal, silent = false) => {
