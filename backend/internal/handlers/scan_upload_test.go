@@ -80,12 +80,14 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WithArgs(sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
-	mock.ExpectQuery("SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE identifier = \\$1 LIMIT 1").
-		WithArgs("billing-api").
+	// FindProductByIdentifier with tenantID adds "AND tenant_id = $2"
+	mock.ExpectQuery("SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE identifier = \\$1 AND tenant_id = \\$2 LIMIT 1").
+		WithArgs("billing-api", tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "name", "slug", "description", "identifier", "version", "asset_criticality", "created_at", "updated_at"}))
 
-	mock.ExpectQuery("SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE slug = \\$1 LIMIT 1").
-		WithArgs("billing-api-1-0-0").
+	// FindProductBySlug with tenantID adds "AND tenant_id = $2"
+	mock.ExpectQuery("SELECT id, tenant_id, name, slug, description, identifier, version, asset_criticality, created_at, updated_at FROM products WHERE slug = \\$1 AND tenant_id = \\$2 LIMIT 1").
+		WithArgs("billing-api-1-0-0", tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "name", "slug", "description", "identifier", "version", "asset_criticality", "created_at", "updated_at"}))
 
 	mock.ExpectExec("INSERT INTO products").
