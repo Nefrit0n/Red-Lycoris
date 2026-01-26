@@ -11,7 +11,7 @@ import type { GlassVariant } from '../design-system/components/GlassCard';
 
 interface SectionProps {
   /** Section title */
-  title: string;
+  title: React.ReactNode;
   /** Optional subtitle */
   subtitle?: string;
   /** Content for the right side of the header */
