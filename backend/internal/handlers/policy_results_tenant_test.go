@@ -26,12 +26,14 @@ func TestPolicyResultsListFiltersByTenant(t *testing.T) {
 
 	tenantID := uuid.New()
 
-	mock.ExpectQuery("(?s)SELECT COUNT\\(\\*\\) FROM policy_results pr WHERE 1=1 AND .*tenant_id = \\$1").
-		WithArgs(tenantID).
+	// ListPolicyResults COUNT query pattern: args ($1 decision, $2 policyID, $3 from, $4 to, $5 productID, $6 importJobID, $7 tenantID)
+	mock.ExpectQuery("(?s)SELECT COUNT\\(\\*\\)\\s+FROM policy_results pr\\s+WHERE").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-	mock.ExpectQuery("(?s)SELECT\\s+pr\\.id.*FROM policy_results pr.*WHERE 1=1 AND .*tenant_id = \\$1.*LIMIT \\$2 OFFSET \\$3").
-		WithArgs(tenantID, 50, 0).
+	// ListPolicyResults SELECT query pattern: args (+ $8 limit, $9 offset)
+	mock.ExpectQuery("(?s)SELECT\\s+pr\\.id.*FROM policy_results pr.*WHERE").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), tenantID, 50, 0).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id",
 			"policy_id",

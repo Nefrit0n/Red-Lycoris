@@ -29,8 +29,10 @@ func TestScanUploadEndpoint(t *testing.T) {
 
 	app := fiber.New(fiber.Config{BodyLimit: 12 << 20})
 	userID := uuid.New()
+	tenantID := uuid.New()
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals("user_id", userID)
+		c.Locals("tenant_id", tenantID)
 		c.Locals("roles", []string{"analyst"})
 		return c.Next()
 	})
@@ -287,6 +289,7 @@ func TestScanUploadRejectsOversizedReport(t *testing.T) {
 	app := fiber.New(fiber.Config{BodyLimit: 12 << 20})
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals("user_id", uuid.New())
+		c.Locals("tenant_id", uuid.New())
 		c.Locals("roles", []string{"analyst"})
 		return c.Next()
 	})
