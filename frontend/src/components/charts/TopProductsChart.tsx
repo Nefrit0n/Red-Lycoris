@@ -1,4 +1,17 @@
-import { Box, Paper, Typography, Skeleton, LinearProgress, Stack } from "@mui/material";
+/**
+ * TopProductsChart - Displays top products by risk score
+ *
+ * Uses design system tokens for consistent styling.
+ */
+
+import { Box, Typography, LinearProgress, Stack } from '@mui/material';
+import { ChartContainer } from '../../design-system/components';
+import { chartColors, progressBarConfig } from '../../design-system/tokens';
+import { primitives, alpha } from '../../design-system/tokens/colors';
+
+// ============================================================
+// TYPES
+// ============================================================
 
 export type ProductRiskData = {
   id: string;
@@ -15,9 +28,13 @@ type TopProductsChartProps = {
   maxItems?: number;
 };
 
+// ============================================================
+// COMPONENT
+// ============================================================
+
 const TopProductsChart = ({
   data,
-  title = "Top Products by Risk",
+  title = 'Top Products by Risk',
   loading = false,
   maxItems = 5,
 }: TopProductsChartProps) => {
@@ -32,94 +49,74 @@ const TopProductsChart = ({
   const maxCount = Math.max(...sortedData.map((d) => d.findingsCount), 1);
   const hasData = sortedData.length > 0;
 
-  if (loading) {
-    return (
-      <Paper sx={{ p: 3, height: "100%" }}>
-        <Skeleton variant="text" width="50%" height={28} />
-        <Stack spacing={2} sx={{ mt: 2 }}>
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Box key={i}>
-              <Skeleton variant="text" width="40%" height={20} />
-              <Skeleton variant="rectangular" height={8} sx={{ borderRadius: 1 }} />
-            </Box>
-          ))}
-        </Stack>
-      </Paper>
-    );
-  }
-
   return (
-    <Paper sx={{ p: 3, height: "100%" }}>
-      <Typography variant="h6" fontWeight={600} gutterBottom>
-        {title}
-      </Typography>
+    <ChartContainer
+      title={title}
+      loading={loading}
+      hasData={hasData}
+      loadingVariant="bar"
+      emptyMessage="No products with findings"
+      height={200}
+    >
+      <Stack spacing={2.5} sx={{ mt: 1 }}>
+        {sortedData.map((product) => {
+          const progress = (product.findingsCount / maxCount) * 100;
+          const barColor = progressBarConfig.getSeverityColor(
+            product.criticalCount,
+            product.highCount
+          );
 
-      {!hasData ? (
-        <Box
-          sx={{
-            height: 200,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Typography color="text.secondary">No products with findings</Typography>
-        </Box>
-      ) : (
-        <Stack spacing={2.5} sx={{ mt: 2 }}>
-          {sortedData.map((product) => {
-            const progress = (product.findingsCount / maxCount) * 100;
-            const hasCritical = product.criticalCount > 0;
-            const hasHigh = product.highCount > 0;
-
-            let barColor = "#7aa2f7";
-            if (hasCritical) {
-              barColor = "#7b1fa2";
-            } else if (hasHigh) {
-              barColor = "#d32f2f";
-            }
-
-            return (
-              <Box key={product.id}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight={500} noWrap sx={{ maxWidth: "60%" }}>
-                    {product.name}
-                  </Typography>
-                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                    {hasCritical && (
-                      <Typography variant="caption" sx={{ color: "#7b1fa2", fontWeight: 600 }}>
-                        {product.criticalCount}C
-                      </Typography>
-                    )}
-                    {hasHigh && (
-                      <Typography variant="caption" sx={{ color: "#d32f2f", fontWeight: 600 }}>
-                        {product.highCount}H
-                      </Typography>
-                    )}
-                    <Typography variant="body2" color="text.secondary">
-                      {product.findingsCount}
+          return (
+            <Box key={product.id}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography
+                  variant="body2"
+                  fontWeight={500}
+                  noWrap
+                  sx={{ maxWidth: '60%', color: primitives.night[100] }}
+                >
+                  {product.name}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  {product.criticalCount > 0 && (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: chartColors.severity.critical, fontWeight: 600 }}
+                    >
+                      {product.criticalCount}C
                     </Typography>
-                  </Box>
+                  )}
+                  {product.highCount > 0 && (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: chartColors.severity.high, fontWeight: 600 }}
+                    >
+                      {product.highCount}H
+                    </Typography>
+                  )}
+                  <Typography variant="body2" sx={{ color: primitives.night[300] }}>
+                    {product.findingsCount}
+                  </Typography>
                 </Box>
-                <LinearProgress
-                  variant="determinate"
-                  value={progress}
-                  sx={{
-                    height: 8,
-                    borderRadius: 1,
-                    bgcolor: "rgba(255,255,255,0.08)",
-                    "& .MuiLinearProgress-bar": {
-                      bgcolor: barColor,
-                      borderRadius: 1,
-                    },
-                  }}
-                />
               </Box>
-            );
-          })}
-        </Stack>
-      )}
-    </Paper>
+              <LinearProgress
+                variant="determinate"
+                value={progress}
+                sx={{
+                  height: progressBarConfig.height,
+                  borderRadius: progressBarConfig.borderRadius,
+                  bgcolor: progressBarConfig.backgroundColor,
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: barColor,
+                    borderRadius: progressBarConfig.borderRadius,
+                  },
+                }}
+              />
+            </Box>
+          );
+        })}
+      </Stack>
+    </ChartContainer>
   );
 };
 

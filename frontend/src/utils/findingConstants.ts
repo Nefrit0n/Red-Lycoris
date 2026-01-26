@@ -1,15 +1,18 @@
 /**
  * Shared constants for findings
+ *
+ * Uses design system colors for consistency.
  */
 
 import { FindingSeverity, FindingStatus, FindingOccurrenceStatus, RiskBand } from "../types/findings";
+import { semantic } from "../design-system/tokens/colors";
 
-// Severity styles
+// Severity styles using design system
 export const SEVERITY_STYLES: Record<FindingSeverity, { label: string; color: string }> = {
-  low: { label: "Low", color: "#2e7d32" },
-  medium: { label: "Medium", color: "#ed6c02" },
-  high: { label: "High", color: "#d32f2f" },
-  critical: { label: "Critical", color: "#7b1fa2" },
+  low: { label: "Low", color: semantic.severity.low.base },
+  medium: { label: "Medium", color: semantic.severity.medium.base },
+  high: { label: "High", color: semantic.severity.high.base },
+  critical: { label: "Critical", color: semantic.severity.critical.base },
 };
 
 // Severity chip styles for MUI Chip component
@@ -81,9 +84,10 @@ export const RISK_BAND_LABELS: Record<RiskBand, string> = {
   critical: "Critical",
 };
 
+// Risk band colors using design system
 export const RISK_BAND_COLORS: Record<RiskBand, string> = {
-  low: "#2e7d32",
-  medium: "#ed6c02",
-  high: "#d32f2f",
-  critical: "#7b1fa2",
+  low: semantic.risk.low,
+  medium: semantic.risk.medium,
+  high: semantic.risk.high,
+  critical: semantic.risk.critical,
 };

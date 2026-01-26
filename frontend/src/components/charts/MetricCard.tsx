@@ -1,5 +1,14 @@
-import { Box, Paper, Typography, Skeleton } from "@mui/material";
-import { ReactNode } from "react";
+/**
+ * MetricCard Component
+ *
+ * Dashboard metric card built on the Lotus design system.
+ * Displays a value with optional trend, icon, and color accent.
+ */
+
+import { ReactNode } from 'react';
+import { MetricDisplay, GlassCard } from '../../design-system/components';
+import { primitives } from '../../design-system/tokens';
+import type { TrendInfo, MetricColor } from '../../design-system/components/MetricDisplay';
 
 export type MetricCardProps = {
   title: string;
@@ -14,92 +23,59 @@ export type MetricCardProps = {
   loading?: boolean;
 };
 
+// Map legacy color strings to design system colors
+const mapColor = (color?: string): MetricColor => {
+  if (!color) return 'default';
+
+  // Check for design system color names
+  if (color === primitives.lotus[500] || color.includes('lotus')) return 'lotus';
+  if (color === primitives.petal[500] || color.includes('petal')) return 'petal';
+  if (color === primitives.jade[500] || color.includes('jade')) return 'jade';
+  if (color === primitives.gold[500] || color.includes('gold')) return 'gold';
+
+  // Check for semantic colors
+  if (color.includes('22c55e') || color.includes('10b981') || color.includes('16a34a')) return 'success';
+  if (color.includes('f59e0b') || color.includes('eab308') || color.includes('fbbf24')) return 'warning';
+  if (color.includes('ef4444') || color.includes('dc2626') || color.includes('f87171')) return 'error';
+
+  // Default to lotus for the old blue color
+  if (color === '#7aa2f7') return 'lotus';
+
+  return 'default';
+};
+
 const MetricCard = ({
   title,
   value,
   subtitle,
   icon,
   trend,
-  color = "#7aa2f7",
+  color = '#7aa2f7',
   loading = false,
 }: MetricCardProps) => {
-  if (loading) {
-    return (
-      <Paper
-        sx={{
-          p: 3,
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          gap: 1,
-        }}
-      >
-        <Skeleton variant="text" width="60%" height={24} />
-        <Skeleton variant="text" width="40%" height={48} />
-        <Skeleton variant="text" width="50%" height={20} />
-      </Paper>
-    );
-  }
+  // Convert legacy trend format to new format
+  const trendInfo: TrendInfo | undefined = trend
+    ? {
+        value: trend.value,
+        direction: trend.value > 0 ? 'up' : trend.value < 0 ? 'down' : 'flat',
+        isPositive: trend.isPositive,
+      }
+    : undefined;
 
   return (
-    <Paper
-      sx={{
-        p: 3,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        position: "relative",
-        overflow: "hidden",
-        "&::before": {
-          content: '""',
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: 4,
-          height: "100%",
-          bgcolor: color,
-          borderRadius: "4px 0 0 4px",
-        },
-      }}
-    >
-      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-        <Typography variant="body2" color="text.secondary" fontWeight={500}>
-          {title}
-        </Typography>
-        {icon && (
-          <Box sx={{ color, opacity: 0.8 }}>
-            {icon}
-          </Box>
-        )}
-      </Box>
-
-      <Typography
-        variant="h3"
-        fontWeight={700}
-        sx={{ mt: 1, color }}
-      >
-        {value}
-      </Typography>
-
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: "auto" }}>
-        {trend && (
-          <Typography
-            variant="body2"
-            sx={{
-              color: trend.isPositive ? "success.main" : "error.main",
-              fontWeight: 600,
-            }}
-          >
-            {trend.isPositive ? "+" : ""}{trend.value}%
-          </Typography>
-        )}
-        {subtitle && (
-          <Typography variant="body2" color="text.secondary">
-            {subtitle}
-          </Typography>
-        )}
-      </Box>
-    </Paper>
+    <MetricDisplay
+      value={value}
+      title={title}
+      subtitle={subtitle}
+      icon={icon}
+      trend={trendInfo}
+      color={mapColor(color)}
+      loading={loading}
+      colorBar
+      variant="solid"
+      formatted={typeof value === 'number'}
+      sx={{ height: '100%' }}
+    />
   );
 };
 
