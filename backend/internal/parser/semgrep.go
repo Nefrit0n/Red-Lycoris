@@ -60,7 +60,7 @@ func (p *SemgrepParser) buildFinding(r semgrepResult) Finding {
 	}
 
 	// Location = path:line:col
-	location := buildSemgrepLocation(r.Path, r.Start.Line, r.Start.Col)
+	location := buildSemgrepLocation(r.Path, r.Start.Line)
 	if location == "" {
 		// fallback, чтобы не было пусто
 		location = strings.TrimSpace(r.Path)
@@ -128,7 +128,7 @@ func buildSemgrepTitle(checkID string) string {
 	return fmt.Sprintf("%s: %s", uniq[0], uniq[1])
 }
 
-func buildSemgrepLocation(path string, line int, col int) string {
+func buildSemgrepLocation(path string, line int) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return ""

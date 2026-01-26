@@ -46,7 +46,7 @@ import {
   RISK_BAND_LABELS,
 } from "../utils/findingConstants";
 import { formatDateRu, EventCategory, formatPercent01 } from "../utils/findingFormatters";
-import { FindingComment, SemgrepEvidence } from "../types/findings";
+import { FindingComment, SemgrepEvidence, FindingDetailsSecrets, FindingDetailsIAC, FindingDetailsContainer, FindingDetailsDAST } from "../types/findings";
 
 type FindingDetailContentProps = {
   id: string;
@@ -223,8 +223,16 @@ export const FindingDetailContent = ({
   const resolvedDetails = data ? resolveFindingDetails(data) : { category: "UNKNOWN", details: null };
   const scaDetails = resolvedDetails.category === "SCA" ? resolvedDetails.details : null;
   const sastDetails = resolvedDetails.category === "SAST" ? resolvedDetails.details : null;
+  const secretsDetails = resolvedDetails.category === "SECRETS" ? resolvedDetails.details : null;
+  const iacDetails = resolvedDetails.category === "IAC" ? resolvedDetails.details : null;
+  const containerDetails = resolvedDetails.category === "CONTAINER" ? resolvedDetails.details : null;
+  const dastDetails = resolvedDetails.category === "DAST" ? resolvedDetails.details : null;
   const showScaTab = resolvedDetails.category === "SCA";
   const showSastTab = resolvedDetails.category === "SAST";
+  const showSecretsTab = resolvedDetails.category === "SECRETS";
+  const showIacTab = resolvedDetails.category === "IAC";
+  const showContainerTab = resolvedDetails.category === "CONTAINER";
+  const showDastTab = resolvedDetails.category === "DAST";
   // NOTE: `data` is null until the detail request resolves.
   // Avoid crashing the render during the initial (loading) pass.
   const riskScore =
@@ -237,6 +245,10 @@ export const FindingDetailContent = ({
   const descriptionIndex = tabIndex++;
   const scaIndex = showScaTab ? tabIndex++ : null;
   const sastIndex = showSastTab ? tabIndex++ : null;
+  const secretsIndex = showSecretsTab ? tabIndex++ : null;
+  const iacIndex = showIacTab ? tabIndex++ : null;
+  const containerIndex = showContainerTab ? tabIndex++ : null;
+  const dastIndex = showDastTab ? tabIndex++ : null;
   const semgrepIndex = semgrepEvidence ? tabIndex++ : null;
   const occurrencesIndex = tabIndex++;
   const commentsIndex = tabIndex++;
@@ -436,6 +448,10 @@ export const FindingDetailContent = ({
         <Tab label="Описание" />
         {showScaTab ? <Tab label="SCA" /> : null}
         {showSastTab ? <Tab label="SAST" /> : null}
+        {showSecretsTab ? <Tab label="Secrets" /> : null}
+        {showIacTab ? <Tab label="IaC" /> : null}
+        {showContainerTab ? <Tab label="Container" /> : null}
+        {showDastTab ? <Tab label="DAST" /> : null}
         {semgrepEvidence ? <Tab label="Источник (Semgrep)" /> : null}
         <Tab label={`Occurrences${hasOccurrences ? ` (${occurrences.length})` : ""}`} />
         <Tab label={`Комментарии (${data.comments?.length ?? 0})`} />
@@ -949,6 +965,315 @@ export const FindingDetailContent = ({
               </Stack>
             ) : (
               <Alert severity="warning">SAST details недоступны для этой находки.</Alert>
+            )}
+          </Section>
+        </TabPanel>
+      )}
+
+      {/* Tab: Secrets */}
+      {showSecretsTab && secretsIndex !== null && (
+        <TabPanel value={tab} index={secretsIndex}>
+          <Section title="Secrets" dense={compact}>
+            {secretsDetails ? (
+              <Stack spacing={1.2}>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Secret Type
+                  </Typography>
+                  <Typography variant="body2">{secretsDetails.ruleId || "—"}</Typography>
+                </Stack>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    File
+                  </Typography>
+                  <Typography variant="body2">{secretsDetails.filePath || "—"}</Typography>
+                </Stack>
+                {secretsDetails.message && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Message
+                    </Typography>
+                    <Typography variant="body2">{secretsDetails.message}</Typography>
+                  </Stack>
+                )}
+                {secretsDetails.snippet && (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Snippet (redacted)
+                    </Typography>
+                    <CodeBlock
+                      code={secretsDetails.snippet}
+                      language={secretsDetails.filePath?.split('.').pop() || undefined}
+                      filename={secretsDetails.filePath || undefined}
+                    />
+                  </Stack>
+                )}
+              </Stack>
+            ) : (
+              <Alert severity="warning">Secrets details недоступны для этой находки.</Alert>
+            )}
+          </Section>
+        </TabPanel>
+      )}
+
+      {/* Tab: IaC */}
+      {showIacTab && iacIndex !== null && (
+        <TabPanel value={tab} index={iacIndex}>
+          <Section title="Infrastructure as Code" dense={compact}>
+            {iacDetails ? (
+              <Stack spacing={1.2}>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Rule / Check
+                  </Typography>
+                  <Typography variant="body2">{iacDetails.ruleId || "—"}</Typography>
+                </Stack>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    File
+                  </Typography>
+                  <Typography variant="body2">{iacDetails.filePath || "—"}</Typography>
+                </Stack>
+                {(iacDetails.startLine || iacDetails.endLine) && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Lines
+                    </Typography>
+                    <Typography variant="body2">
+                      {iacDetails.startLine && iacDetails.endLine
+                        ? `${iacDetails.startLine}–${iacDetails.endLine}`
+                        : iacDetails.startLine || iacDetails.endLine || "—"}
+                    </Typography>
+                  </Stack>
+                )}
+                {iacDetails.resource && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Resource
+                    </Typography>
+                    <Typography variant="body2">{iacDetails.resource}</Typography>
+                  </Stack>
+                )}
+                {iacDetails.checkType && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Check Type
+                    </Typography>
+                    <Typography variant="body2">{iacDetails.checkType}</Typography>
+                  </Stack>
+                )}
+                {iacDetails.framework && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Framework
+                    </Typography>
+                    <Typography variant="body2">{iacDetails.framework}</Typography>
+                  </Stack>
+                )}
+                {iacDetails.message && (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Message
+                    </Typography>
+                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                      {iacDetails.message}
+                    </Typography>
+                  </Stack>
+                )}
+              </Stack>
+            ) : (
+              <Alert severity="warning">IaC details недоступны для этой находки.</Alert>
+            )}
+          </Section>
+        </TabPanel>
+      )}
+
+      {/* Tab: Container */}
+      {showContainerTab && containerIndex !== null && (
+        <TabPanel value={tab} index={containerIndex}>
+          <Section title="Container Vulnerability" dense={compact}>
+            {containerDetails ? (
+              <Stack spacing={1.2}>
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Package
+                  </Typography>
+                  <Typography variant="body2">{containerDetails.pkgName || "—"}</Typography>
+                  {containerDetails.purl && (
+                    <Tooltip title="Скопировать PURL">
+                      <IconButton size="small" onClick={() => handleCopyValue(containerDetails.purl ?? "")}>
+                        <ContentCopyIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Stack>
+                <Stack direction="row" gap={1}>
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Installed version
+                  </Typography>
+                  <Typography variant="body2">{containerDetails.installedVersion || "—"}</Typography>
+                </Stack>
+                <Stack direction="row" gap={1}>
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Fixed version
+                  </Typography>
+                  <Typography variant="body2">{containerDetails.fixedVersion || "—"}</Typography>
+                </Stack>
+                {containerDetails.fixState && (
+                  <Stack direction="row" gap={1}>
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Fix state
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={containerDetails.fixState}
+                      color={containerDetails.fixState === "fixed" ? "success" : "warning"}
+                      variant="outlined"
+                    />
+                  </Stack>
+                )}
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Vulnerability ID
+                  </Typography>
+                  <Typography variant="body2">{containerDetails.vulnerabilityId || "—"}</Typography>
+                  {containerDetails.vulnerabilityId && (
+                    <Tooltip title="Скопировать">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleCopyValue(containerDetails.vulnerabilityId ?? "")}
+                      >
+                        <ContentCopyIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Stack>
+                {containerDetails.imageRef && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Image
+                    </Typography>
+                    <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+                      {containerDetails.imageRef}
+                    </Typography>
+                  </Stack>
+                )}
+                {containerDetails.ecosystem && (
+                  <Stack direction="row" gap={1}>
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Ecosystem
+                    </Typography>
+                    <Typography variant="body2">{containerDetails.ecosystem}</Typography>
+                  </Stack>
+                )}
+                <Stack direction="row" gap={1} alignItems="center">
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                    Primary URL
+                  </Typography>
+                  {containerDetails.primaryUrl ? (
+                    <MuiLink href={containerDetails.primaryUrl} target="_blank" rel="noreferrer">
+                      {containerDetails.primaryUrl}
+                    </MuiLink>
+                  ) : (
+                    <Typography variant="body2">—</Typography>
+                  )}
+                </Stack>
+                {containerDetails.references && containerDetails.references.length > 0 && (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      References
+                    </Typography>
+                    <Stack spacing={0.5}>
+                      {containerDetails.references.map((ref) => (
+                        <Stack key={ref} direction="row" alignItems="center" spacing={1}>
+                          <MuiLink href={ref} target="_blank" rel="noreferrer">
+                            {ref}
+                          </MuiLink>
+                          <IconButton size="small" onClick={() => handleCopyValue(ref)}>
+                            <ContentCopyIcon fontSize="inherit" />
+                          </IconButton>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </Stack>
+                )}
+              </Stack>
+            ) : (
+              <Alert severity="warning">Container details недоступны для этой находки.</Alert>
+            )}
+          </Section>
+        </TabPanel>
+      )}
+
+      {/* Tab: DAST */}
+      {showDastTab && dastIndex !== null && (
+        <TabPanel value={tab} index={dastIndex}>
+          <Section title="DAST" dense={compact}>
+            {dastDetails ? (
+              <Stack spacing={1.2}>
+                {dastDetails.ruleId && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Rule / Template
+                    </Typography>
+                    <Typography variant="body2">{dastDetails.ruleId}</Typography>
+                  </Stack>
+                )}
+                {dastDetails.templateId && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Template ID
+                    </Typography>
+                    <Typography variant="body2">{dastDetails.templateId}</Typography>
+                  </Stack>
+                )}
+                {dastDetails.url && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      URL
+                    </Typography>
+                    <MuiLink href={dastDetails.url} target="_blank" rel="noreferrer" sx={{ wordBreak: "break-all" }}>
+                      {dastDetails.url}
+                    </MuiLink>
+                  </Stack>
+                )}
+                {dastDetails.method && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Method
+                    </Typography>
+                    <Chip size="small" label={dastDetails.method} variant="outlined" />
+                  </Stack>
+                )}
+                {dastDetails.parameter && (
+                  <Stack direction="row" gap={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
+                      Parameter
+                    </Typography>
+                    <Typography variant="body2">{dastDetails.parameter}</Typography>
+                  </Stack>
+                )}
+                {dastDetails.message && (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Message
+                    </Typography>
+                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                      {dastDetails.message}
+                    </Typography>
+                  </Stack>
+                )}
+                {dastDetails.evidence && (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Evidence
+                    </Typography>
+                    <CodeBlock code={dastDetails.evidence} language="text" />
+                  </Stack>
+                )}
+              </Stack>
+            ) : (
+              <Alert severity="warning">DAST details недоступны для этой находки.</Alert>
             )}
           </Section>
         </TabPanel>
