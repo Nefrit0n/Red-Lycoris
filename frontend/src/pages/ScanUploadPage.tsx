@@ -295,7 +295,7 @@ const ScanUploadPage = () => {
                 <Typography color="text.secondary">Пока нет загрузок</Typography>
               ) : (
                 <Stack spacing={1}>
-                  {history.slice(0, 5).map((entry, index) => (
+                  {history.slice(0, 5).map((entry) => (
                     <Paper
                       key={`${entry.scanId}-${entry.uploadedAt}`}
                       sx={{

@@ -212,7 +212,7 @@ const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans
 
   return (
     <Stack spacing={1.5}>
-      {scans.map((scan, index) => (
+      {scans.map((scan) => (
         <Box
           key={scan.id}
           sx={{
