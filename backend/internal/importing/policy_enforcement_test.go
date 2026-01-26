@@ -59,39 +59,40 @@ func TestApplyFindingPoliciesAutoStatusCreatesEvents(t *testing.T) {
 		WithArgs(sqlmock.AnyArg(), findingID, sqlmock.AnyArg(), "policy_evaluated", sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
+	// UpdateFinding RETURNING clause has 24 columns:
+	// id, scan_result_id, product_id, import_job_id, fingerprint, title, description, severity, status,
+	// duplicate_id, repeat_count, first_seen_at, last_seen_at, created_at, updated_at, evidence,
+	// source_type, category, sla_due_at, sla_breached, sla_breached_at, sla_profile, sla_source, assignee_id
 	rows := sqlmock.NewRows([]string{
-		"id", "tenant_id", "scan_result_id", "product_id", "fingerprint", "category", "title", "description", "severity", "status", "duplicate_id", "assignee_id", "import_job_id", "first_seen_at", "last_seen_at", "repeat_count", "sla_due_at", "sla_breached", "sla_breached_at", "sla_profile", "sla_source", "source_type", "source_version", "endpoint_method", "endpoint_path", "evidence", "raw_data", "created_at", "updated_at", "deleted_at",
+		"id", "scan_result_id", "product_id", "import_job_id", "fingerprint", "title", "description",
+		"severity", "status", "duplicate_id", "repeat_count", "first_seen_at", "last_seen_at",
+		"created_at", "updated_at", "evidence", "source_type", "category",
+		"sla_due_at", "sla_breached", "sla_breached_at", "sla_profile", "sla_source", "assignee_id",
 	}).AddRow(
-		findingID,
-		nil,
-		nil,
-		nil,
-		"fp",
-		models.CategorySAST,
-		"Test",
-		nil,
-		"high",
-		autoStatus,
-		nil,
-		nil,
-		nil,
-		now,
-		now,
-		0,
-		nil,
-		false,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		json.RawMessage("{}"),
-		json.RawMessage("{}"),
-		now,
-		now,
-		nil,
+		findingID,             // id
+		nil,                   // scan_result_id
+		nil,                   // product_id
+		nil,                   // import_job_id
+		"fp",                  // fingerprint
+		"Test",                // title
+		nil,                   // description
+		"high",                // severity
+		autoStatus,            // status
+		nil,                   // duplicate_id
+		0,                     // repeat_count
+		now,                   // first_seen_at
+		now,                   // last_seen_at
+		now,                   // created_at
+		now,                   // updated_at
+		json.RawMessage("{}"), // evidence
+		nil,                   // source_type
+		models.CategorySAST,   // category
+		nil,                   // sla_due_at
+		false,                 // sla_breached
+		nil,                   // sla_breached_at
+		nil,                   // sla_profile
+		nil,                   // sla_source
+		nil,                   // assignee_id
 	)
 
 	mock.ExpectQuery("UPDATE findings").
