@@ -64,7 +64,7 @@ export const ProductAutocomplete = ({ value, onChange }: ProductAutocompleteProp
   }, [productLabel]);
 
   return (
-    <Autocomplete<ProductListItemDTO, false, true, true>
+    <Autocomplete<ProductListItemDTO, false, false, true>
       options={products}
       value={selectedProduct}
       inputValue={productInput}

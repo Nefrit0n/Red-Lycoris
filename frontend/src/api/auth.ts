@@ -2,6 +2,7 @@ import {
   ChangePasswordRequest,
   LoginRequest,
   LoginResponse,
+  UserProfile,
 } from "../types/auth";
 import {
   clearToken,

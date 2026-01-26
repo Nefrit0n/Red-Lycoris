@@ -13,7 +13,7 @@ export type RequestConfig<T> = {
   method?: string;
   signal?: AbortSignal;
   headers?: HeadersInit;
-  body?: BodyInit | Record<string, unknown>;
+  body?: BodyInit | object;
   query?: URLSearchParams | Record<string, QueryValue>;
   parse?: (response: Response) => Promise<T>;
   json?: boolean;
@@ -34,7 +34,7 @@ const buildQueryString = (query?: URLSearchParams | Record<string, QueryValue>):
   return value ? `?${value}` : "";
 };
 
-const isFormData = (body: BodyInit | Record<string, unknown>): body is FormData =>
+const isFormData = (body: BodyInit | object): body is FormData =>
   typeof FormData !== "undefined" && body instanceof FormData;
 
 const shouldUseJson = (config: RequestConfig<unknown>): boolean => {
