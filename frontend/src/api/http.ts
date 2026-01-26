@@ -1,5 +1,18 @@
 const TOKEN_KEY = "lotus_warden_token";
 
+// A tiny, explicit signal to the app shell that auth was invalidated.
+// We use an event because localStorage changes do NOT trigger rerenders in the same tab.
+export const AUTH_INVALIDATED_EVENT = "lotus_warden:auth_invalidated";
+
+const notifyAuthInvalidated = (): void => {
+  try {
+    // CustomEvent isn't strictly required, but it keeps the door open for payloads later.
+    window.dispatchEvent(new CustomEvent(AUTH_INVALIDATED_EVENT));
+  } catch {
+    // ignore
+  }
+};
+
 /** =========================
  *  Token helpers
  *  ========================= */
@@ -152,6 +165,10 @@ const readPayloadOrThrow = async (response: Response): Promise<unknown> => {
       } catch {
         // ignore
       }
+
+      // Also force app navigation to /login in the current tab.
+      // (ProtectedLayout won't rerender just because localStorage changed.)
+      notifyAuthInvalidated();
     }
     // <<< CHANGE
 
