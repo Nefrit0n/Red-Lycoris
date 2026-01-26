@@ -230,7 +230,7 @@ func buildGitleaksEvidence(r gitleaksResult) map[string]any {
 
 	// Redact the actual secret but show match context
 	if r.Match != "" {
-		evidence["matchContext"] = redactSecret(r.Match, r.Secret)
+		evidence["matchContext"] = redactSecretInMatch(r.Match, r.Secret)
 	}
 
 	// Git metadata
@@ -265,17 +265,17 @@ func buildGitleaksEvidence(r gitleaksResult) map[string]any {
 	return evidence
 }
 
-// redactSecret replaces the secret in the match string with asterisks
-func redactSecret(match, secret string) string {
+// redactSecretInMatch replaces the secret in the match string with asterisks
+func redactSecretInMatch(match, secret string) string {
 	if secret == "" || match == "" {
 		return match
 	}
 	// Replace the secret with redacted version
-	redacted := strings.Repeat("*", min(len(secret), 8)) + "..."
+	redacted := strings.Repeat("*", minInt(len(secret), 8)) + "..."
 	return strings.Replace(match, secret, redacted, 1)
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}
