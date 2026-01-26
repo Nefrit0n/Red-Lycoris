@@ -3,7 +3,6 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"lotus-warden/backend/internal/models"
 )
