@@ -232,15 +232,15 @@ func mapKICSSeverity(raw string) string {
 // KICS report structures
 
 type kicsReport struct {
-	KICSVersion      string       `json:"kics_version"`
-	ScanID           string       `json:"scan_id"`
+	KICSVersion      string          `json:"kics_version"`
+	ScanID           string          `json:"scan_id"`
 	SeverityCounters json.RawMessage `json:"severity_counters"`
-	FilesScanned     int          `json:"files_scanned"`
-	LinesScanned     int          `json:"lines_scanned"`
-	FilesFailedScan  int          `json:"files_failed_to_scan"`
-	Queries          []kicsQuery  `json:"queries"`
-	Start            string       `json:"start"`
-	End              string       `json:"end"`
+	FilesScanned     int             `json:"files_scanned"`
+	LinesScanned     int             `json:"lines_scanned"`
+	FilesFailedScan  int             `json:"files_failed_to_scan"`
+	Queries          []kicsQuery     `json:"queries"`
+	Start            string          `json:"start"`
+	End              string          `json:"end"`
 }
 
 type kicsQuery struct {

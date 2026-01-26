@@ -36,39 +36,56 @@ func TestStatusChangeBlockedByPolicy(t *testing.T) {
 	findingID := uuid.New()
 	now := time.Now().UTC()
 
+	// GetFindingDetailByID returns 38 columns
 	rows := sqlmock.NewRows([]string{
-		"id", "tenant_id", "title", "description", "fingerprint", "severity", "status", "category", "product_id", "name", "assignee_id", "import_job_id", "first_seen_at", "last_seen_at", "repeat_count", "duplicate_id", "sla_due_at", "sla_breached", "sla_breached_at", "sla_profile", "sla_source", "source_type", "source_version", "endpoint_method", "endpoint_path", "evidence", "raw_data", "created_at", "updated_at", "deleted_at",
+		"id", "tenant_id", "scan_result_id", "product_id", "import_job_id", "fingerprint",
+		"category", "title", "description", "severity", "status", "duplicate_id", "assignee_id",
+		"first_seen_at", "last_seen_at", "repeat_count", "created_at", "updated_at", "deleted_at", "last_activity",
+		"sla_due_at", "sla_breached", "sla_breached_at", "sla_profile", "sla_source",
+		"evidence", "raw_data",
+		"source_type", "source_version", "endpoint_method", "endpoint_path",
+		"risk_score", "risk_band", "factors", "computed_at", "model_version",
+		"product_name", "scanner", "scan_created_at",
 	}).AddRow(
-		findingID,
-		nil,
-		"Test",
-		nil,
-		"fp",
-		"high",
-		models.StatusNew,
-		models.CategorySAST,
-		nil,
-		"Product",
-		nil,
-		nil,
-		now,
-		now,
-		0,
-		nil,
-		nil,
-		false,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		json.RawMessage("{}"),
-		json.RawMessage("{}"),
-		now,
-		now,
-		nil,
+		findingID,             // id
+		nil,                   // tenant_id
+		nil,                   // scan_result_id
+		nil,                   // product_id
+		nil,                   // import_job_id
+		"fp",                  // fingerprint
+		models.CategorySAST,   // category
+		"Test",                // title
+		nil,                   // description
+		"high",                // severity
+		models.StatusNew,      // status
+		nil,                   // duplicate_id
+		nil,                   // assignee_id
+		now,                   // first_seen_at
+		now,                   // last_seen_at
+		0,                     // repeat_count
+		now,                   // created_at
+		now,                   // updated_at
+		nil,                   // deleted_at
+		now,                   // last_activity
+		nil,                   // sla_due_at
+		false,                 // sla_breached
+		nil,                   // sla_breached_at
+		nil,                   // sla_profile
+		nil,                   // sla_source
+		json.RawMessage("{}"), // evidence
+		json.RawMessage("{}"), // raw_data
+		nil,                   // source_type
+		nil,                   // source_version
+		nil,                   // endpoint_method
+		nil,                   // endpoint_path
+		nil,                   // risk_score
+		nil,                   // risk_band
+		nil,                   // factors
+		nil,                   // computed_at
+		nil,                   // model_version
+		"Product",             // product_name
+		nil,                   // scanner
+		nil,                   // scan_created_at
 	)
 
 	mock.ExpectQuery("SELECT\\s+f.id").
