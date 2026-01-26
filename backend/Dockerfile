@@ -17,7 +17,7 @@ RUN go build -ldflags="-s -w" -trimpath -o /app/server ./cmd/server && \
     go build -ldflags="-s -w" -trimpath -o /app/intel_worker ./cmd/intel_worker && \
     go build -ldflags="-s -w" -trimpath -o /app/sbom_worker ./cmd/sbom_worker
 
-FROM alpine:3.20 AS runtime
+FROM alpine:3.23 AS runtime
 WORKDIR /app
 
 # Install ca-certificates and wget for healthcheck
@@ -43,7 +43,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 CMD ["/app/server"]
 
 # Analysis worker target
-FROM alpine:3.20 AS analysis-worker
+FROM alpine:3.23 AS analysis-worker
 WORKDIR /app
 
 RUN apk add --no-cache ca-certificates wget && \
@@ -57,7 +57,7 @@ USER appuser
 CMD ["/app/analysis_worker"]
 
 # Intel worker target
-FROM alpine:3.20 AS intel-worker
+FROM alpine:3.23 AS intel-worker
 WORKDIR /app
 
 RUN apk add --no-cache ca-certificates wget && \
@@ -71,7 +71,7 @@ USER appuser
 CMD ["/app/intel_worker"]
 
 # SBOM worker target
-FROM alpine:3.20 AS sbom-worker
+FROM alpine:3.23 AS sbom-worker
 WORKDIR /app
 
 RUN apk add --no-cache ca-certificates wget && \
