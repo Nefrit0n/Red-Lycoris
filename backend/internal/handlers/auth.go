@@ -95,6 +95,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	claims := middleware.JWTClaims{
 		UserID:             user.ID.String(),
+		TenantID:           user.TenantID.String(),
 		Roles:              roles,
 		MustChangePassword: needsPasswordChange,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -166,6 +167,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 
 	claims := middleware.JWTClaims{
 		UserID:             user.ID.String(),
+		TenantID:           user.TenantID.String(),
 		Roles:              roles,
 		MustChangePassword: false,
 		RegisteredClaims: jwt.RegisteredClaims{

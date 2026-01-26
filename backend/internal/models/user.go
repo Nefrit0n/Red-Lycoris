@@ -8,6 +8,7 @@ import (
 
 type User struct {
 	ID                 uuid.UUID `db:"id"`
+	TenantID           uuid.UUID `db:"tenant_id"`
 	Username           string    `db:"username"`
 	Email              string    `db:"email"`
 	HashedPassword     string    `db:"hashed_password"`
