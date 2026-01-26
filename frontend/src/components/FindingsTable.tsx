@@ -839,9 +839,26 @@ export default function FindingsTable({
               const isSast = f.category === "SAST";
               const isSecrets = f.category === "SECRETS";
               const isConfig = f.category === "CONFIG";
-              // SAST-specific: CWE and OWASP arrays
-              const cweList = isSast && f.cwe?.length ? f.cwe.slice(0, 3) : []; // Limit to 3 for display
-              const owaspList = isSast && f.owasp?.length ? f.owasp.slice(0, 2) : []; // Limit to 2
+
+              // SAST-specific: Parse CWE/OWASP - extract just IDs from full strings
+              // "CWE-79: Improper Neutralization..." → { id: "CWE-79", full: "..." }
+              const parseCweOwasp = (items: string[] | null | undefined, maxShow: number) => {
+                if (!items?.length) return { display: [], extra: 0, all: [] };
+                const parsed = items.map((item) => {
+                  // Extract ID: "CWE-79: Description" → "CWE-79" or "A07:2017 - Desc" → "A07:2017"
+                  const match = item.match(/^(CWE-\d+|A\d{2}:\d{4})/i);
+                  return { id: match ? match[1].toUpperCase() : item.split(/[:\-]/)[0].trim(), full: item };
+                });
+                return {
+                  display: parsed.slice(0, maxShow),
+                  extra: Math.max(0, parsed.length - maxShow),
+                  all: parsed,
+                };
+              };
+
+              const cweData = isSast ? parseCweOwasp(f.cwe, 2) : { display: [], extra: 0, all: [] };
+              const owaspData = isSast ? parseCweOwasp(f.owasp, 1) : { display: [], extra: 0, all: [] };
+
               const slaDisplay = resolveSlaDisplay(f, now);
               const policyDecisionKey = f.policyDecision ? f.policyDecision.toLowerCase() : null;
               const policyDecisionMeta =
@@ -1149,7 +1166,7 @@ export default function FindingsTable({
                         </Typography>
                       )}
 
-                      {(cvssScore !== null || epssScore !== null || isKev || isSca || isSast || isSecrets || isConfig || cweList.length > 0 || owaspList.length > 0) && (
+                      {(cvssScore !== null || epssScore !== null || isKev || isSca || isSast || isSecrets || isConfig || cweData.display.length > 0 || owaspData.display.length > 0) && (
                         <Stack
                           direction="row"
                           spacing={0.75}
@@ -1205,56 +1222,86 @@ export default function FindingsTable({
                               </Box>
                             </Tooltip>
                           )}
-                          {/* CWE Badges for SAST - Orange/Red theme */}
-                          {cweList.map((cwe) => (
-                            <Tooltip key={cwe} title={`Common Weakness Enumeration: ${cwe}`}>
+                          {/* CWE Badges - Compact with just ID */}
+                          {cweData.display.map((cwe) => (
+                            <Tooltip key={cwe.id} title={cwe.full}>
                               <Box
                                 sx={{
                                   display: "inline-flex",
                                   alignItems: "center",
-                                  px: 0.75,
-                                  py: 0.2,
-                                  borderRadius: "12px",
+                                  px: 0.6,
+                                  py: 0.15,
+                                  borderRadius: "10px",
                                   fontWeight: 600,
-                                  fontSize: "0.65rem",
-                                  bgcolor: "rgba(255, 87, 34, 0.12)",
+                                  fontSize: "0.6rem",
+                                  bgcolor: "rgba(255, 87, 34, 0.1)",
                                   color: "#ff8a65",
-                                  border: "1px solid rgba(255, 87, 34, 0.35)",
-                                  transition: "all 0.2s ease",
-                                  "&:hover": {
-                                    bgcolor: "rgba(255, 87, 34, 0.22)",
-                                  },
+                                  border: "1px solid rgba(255, 87, 34, 0.3)",
                                 }}
                               >
-                                {cwe}
+                                {cwe.id}
                               </Box>
                             </Tooltip>
                           ))}
-                          {/* OWASP Badges for SAST - Indigo/Blue theme */}
-                          {owaspList.map((owasp) => (
-                            <Tooltip key={owasp} title={`OWASP Top 10: ${owasp}`}>
+                          {cweData.extra > 0 && (
+                            <Tooltip title={cweData.all.map((c) => c.full).join("\n")}>
                               <Box
                                 sx={{
                                   display: "inline-flex",
                                   alignItems: "center",
-                                  px: 0.75,
-                                  py: 0.2,
-                                  borderRadius: "12px",
+                                  px: 0.5,
+                                  py: 0.15,
+                                  borderRadius: "10px",
                                   fontWeight: 600,
-                                  fontSize: "0.65rem",
-                                  bgcolor: "rgba(63, 81, 181, 0.12)",
-                                  color: "#7986cb",
-                                  border: "1px solid rgba(63, 81, 181, 0.35)",
-                                  transition: "all 0.2s ease",
-                                  "&:hover": {
-                                    bgcolor: "rgba(63, 81, 181, 0.22)",
-                                  },
+                                  fontSize: "0.55rem",
+                                  bgcolor: "rgba(255, 87, 34, 0.08)",
+                                  color: "#ff8a65",
                                 }}
                               >
-                                {owasp}
+                                +{cweData.extra}
+                              </Box>
+                            </Tooltip>
+                          )}
+                          {/* OWASP Badges - Compact */}
+                          {owaspData.display.map((owasp) => (
+                            <Tooltip key={owasp.id} title={owasp.full}>
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  px: 0.6,
+                                  py: 0.15,
+                                  borderRadius: "10px",
+                                  fontWeight: 600,
+                                  fontSize: "0.6rem",
+                                  bgcolor: "rgba(63, 81, 181, 0.1)",
+                                  color: "#7986cb",
+                                  border: "1px solid rgba(63, 81, 181, 0.3)",
+                                }}
+                              >
+                                {owasp.id}
                               </Box>
                             </Tooltip>
                           ))}
+                          {owaspData.extra > 0 && (
+                            <Tooltip title={owaspData.all.map((o) => o.full).join("\n")}>
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  px: 0.5,
+                                  py: 0.15,
+                                  borderRadius: "10px",
+                                  fontWeight: 600,
+                                  fontSize: "0.55rem",
+                                  bgcolor: "rgba(63, 81, 181, 0.08)",
+                                  color: "#7986cb",
+                                }}
+                              >
+                                +{owaspData.extra}
+                              </Box>
+                            </Tooltip>
+                          )}
                           {/* SECRETS Badge - Amber/Gold for secrets */}
                           {isSecrets && (
                             <Tooltip title="Secrets Detection (API keys, passwords, tokens)">
