@@ -25,7 +25,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
-import BulkActionsBar from "../components/BulkActionsBar";
+import InlineActionsBar from "../components/InlineActionsBar";
 import ExportMenu from "../components/ExportMenu";
 import FiltersPanel from "../components/FiltersPanel";
 import { FilterChips } from "../components/FilterChips";
@@ -204,7 +204,15 @@ const FindingsList = () => {
           />
 
           {/* Export */}
-          <ExportMenu data={data} filename="findings" disabled={loading} />
+          <ExportMenu
+            data={data}
+            filename="findings"
+            disabled={loading}
+            totalCount={total}
+            selectAllMatching={bulk.selectAllMatching}
+            filters={filters}
+            debouncedSearch={debouncedSearch}
+          />
 
           <Tooltip title="Переключить режим отображения">
             <ToggleButtonGroup
@@ -270,11 +278,16 @@ const FindingsList = () => {
         </Box>
       ) : null}
 
-      {canBulk && bulk.selectionCount > 0 && (
-        <BulkActionsBar
-          selectedCount={bulk.selectionCount}
+      {canBulk && (
+        <InlineActionsBar
+          selectedCount={bulk.selectedIds.length}
+          totalCount={total}
+          selectAllMatching={bulk.selectAllMatching}
+          showSelectAllPrompt={bulk.showSelectAllPrompt}
           onApply={bulk.handleBulkApply}
           onClearSelection={bulk.handleClearSelection}
+          onSelectAllResults={bulk.handleSelectAllResults}
+          loading={bulk.loading}
         />
       )}
 
@@ -308,35 +321,6 @@ const FindingsList = () => {
           compactMode={compactMode}
         />
 
-        {bulk.showSelectAllPrompt && (
-          <Box px={3} pb={3}>
-            <Alert
-              severity="info"
-              action={
-                <Button color="inherit" size="small" onClick={bulk.handleSelectAllResults}>
-                  Выбрать все {total} результатов
-                </Button>
-              }
-            >
-              Выбрано {bulk.selectedIds.length} на странице.
-            </Alert>
-          </Box>
-        )}
-
-        {bulk.selectAllMatching && (
-          <Box px={3} pb={3}>
-            <Alert
-              severity="info"
-              action={
-                <Button color="inherit" size="small" onClick={bulk.handleClearSelection}>
-                  Снять выбор
-                </Button>
-              }
-            >
-              Выбраны все {total} результатов по фильтрам.
-            </Alert>
-          </Box>
-        )}
       </Paper>
 
       <PaginationControl

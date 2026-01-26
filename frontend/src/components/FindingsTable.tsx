@@ -35,6 +35,9 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import RadarIcon from "@mui/icons-material/Radar";
 import { ReactNode, useCallback, useMemo, useState } from "react";
 import SecurityIcon from "@mui/icons-material/Security";
+import CodeIcon from "@mui/icons-material/Code";
+import VpnKeyIcon from "@mui/icons-material/VpnKey";
+import SettingsIcon from "@mui/icons-material/Settings";
 import { Link } from "react-router-dom";
 import {
   FindingListItemDTO,
@@ -833,6 +836,9 @@ export default function FindingsTable({
                   : null;
               const isKev = Boolean(intelSummary?.kev);
               const isSca = f.category === "SCA";
+              const isSast = f.category === "SAST";
+              const isSecrets = f.category === "SECRETS";
+              const isConfig = f.category === "CONFIG";
               const slaDisplay = resolveSlaDisplay(f, now);
               const policyDecisionKey = f.policyDecision ? f.policyDecision.toLowerCase() : null;
               const policyDecisionMeta =
@@ -1140,12 +1146,13 @@ export default function FindingsTable({
                         </Typography>
                       )}
 
-                      {(cvssScore !== null || epssScore !== null || isKev || isSca) && (
+                      {(cvssScore !== null || epssScore !== null || isKev || isSca || isSast || isSecrets || isConfig) && (
                         <Stack
                           direction="row"
                           spacing={0.75}
                           sx={{ alignItems: "center", flexWrap: "wrap", mt: 0.25 }}
                         >
+                          {/* SCA Badge - Gray/neutral */}
                           {isSca && (
                             <Tooltip title="Software Composition Analysis (dependencies)">
                               <Box
@@ -1165,6 +1172,87 @@ export default function FindingsTable({
                               >
                                 <SecurityIcon sx={{ fontSize: 14 }} />
                                 SCA
+                              </Box>
+                            </Tooltip>
+                          )}
+                          {/* SAST Badge - Purple/Violet for code analysis */}
+                          {isSast && (
+                            <Tooltip title="Static Application Security Testing (code analysis)">
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                  px: 1,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 700,
+                                  fontSize: "0.7rem",
+                                  bgcolor: "rgba(156, 39, 176, 0.15)",
+                                  color: "#ce93d8",
+                                  border: "1px solid rgba(156, 39, 176, 0.4)",
+                                  transition: "all 0.2s ease",
+                                  "&:hover": {
+                                    bgcolor: "rgba(156, 39, 176, 0.25)",
+                                  },
+                                }}
+                              >
+                                <CodeIcon sx={{ fontSize: 14 }} />
+                                SAST
+                              </Box>
+                            </Tooltip>
+                          )}
+                          {/* SECRETS Badge - Amber/Gold for secrets */}
+                          {isSecrets && (
+                            <Tooltip title="Secrets Detection (API keys, passwords, tokens)">
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                  px: 1,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 700,
+                                  fontSize: "0.7rem",
+                                  bgcolor: "rgba(255, 193, 7, 0.15)",
+                                  color: "#ffd54f",
+                                  border: "1px solid rgba(255, 193, 7, 0.4)",
+                                  transition: "all 0.2s ease",
+                                  "&:hover": {
+                                    bgcolor: "rgba(255, 193, 7, 0.25)",
+                                  },
+                                }}
+                              >
+                                <VpnKeyIcon sx={{ fontSize: 14 }} />
+                                SECRETS
+                              </Box>
+                            </Tooltip>
+                          )}
+                          {/* CONFIG Badge - Cyan/Teal for configuration */}
+                          {isConfig && (
+                            <Tooltip title="Configuration Analysis (misconfigurations)">
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                  px: 1,
+                                  py: 0.2,
+                                  borderRadius: "12px",
+                                  fontWeight: 700,
+                                  fontSize: "0.7rem",
+                                  bgcolor: "rgba(0, 188, 212, 0.15)",
+                                  color: "#4dd0e1",
+                                  border: "1px solid rgba(0, 188, 212, 0.4)",
+                                  transition: "all 0.2s ease",
+                                  "&:hover": {
+                                    bgcolor: "rgba(0, 188, 212, 0.25)",
+                                  },
+                                }}
+                              >
+                                <SettingsIcon sx={{ fontSize: 14 }} />
+                                CONFIG
                               </Box>
                             </Tooltip>
                           )}
