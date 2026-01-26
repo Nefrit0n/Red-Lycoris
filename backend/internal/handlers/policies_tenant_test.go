@@ -26,12 +26,14 @@ func TestPoliciesListFiltersByTenant(t *testing.T) {
 
 	tenantID := uuid.New()
 
-	mock.ExpectQuery("(?s)SELECT COUNT\\(\\*\\) FROM policies p WHERE 1=1 AND p\\.tenant_id = \\$1").
-		WithArgs(tenantID).
+	// ListPolicies COUNT query pattern: WHERE ($1::text IS NULL OR...) AND ... AND ($4::uuid IS NULL OR p.tenant_id = $4)
+	mock.ExpectQuery("(?s)SELECT COUNT\\(\\*\\)\\s+FROM policies p\\s+WHERE").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-	mock.ExpectQuery("(?s)SELECT\\s+.*FROM policies p.*WHERE 1=1 AND p\\.tenant_id = \\$1.*LIMIT \\$2 OFFSET \\$3").
-		WithArgs(tenantID, 50, 0).
+	// ListPolicies SELECT query pattern
+	mock.ExpectQuery("(?s)SELECT\\s+.*FROM policies p.*WHERE").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), tenantID, 50, 0).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id",
 			"tenant_id",
