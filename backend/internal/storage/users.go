@@ -12,7 +12,7 @@ import (
 func GetUserByEmail(ctx context.Context, db *sql.DB, email string) (*models.User, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, username, email, hashed_password, password_changed, must_change_password, created_at
+		`SELECT id, tenant_id, username, email, hashed_password, password_changed, must_change_password, created_at
 		 FROM users
 		 WHERE email = $1`,
 		email,
@@ -21,6 +21,7 @@ func GetUserByEmail(ctx context.Context, db *sql.DB, email string) (*models.User
 	var user models.User
 	if err := row.Scan(
 		&user.ID,
+		&user.TenantID,
 		&user.Username,
 		&user.Email,
 		&user.HashedPassword,
@@ -39,7 +40,7 @@ func GetUserByEmail(ctx context.Context, db *sql.DB, email string) (*models.User
 func GetUserByLogin(ctx context.Context, db *sql.DB, email string, username string) (*models.User, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, username, email, hashed_password, password_changed, must_change_password, created_at
+		`SELECT id, tenant_id, username, email, hashed_password, password_changed, must_change_password, created_at
 		 FROM users
 		 WHERE email = $1 OR username = $2`,
 		email,
@@ -49,6 +50,7 @@ func GetUserByLogin(ctx context.Context, db *sql.DB, email string, username stri
 	var user models.User
 	if err := row.Scan(
 		&user.ID,
+		&user.TenantID,
 		&user.Username,
 		&user.Email,
 		&user.HashedPassword,
@@ -67,7 +69,7 @@ func GetUserByLogin(ctx context.Context, db *sql.DB, email string, username stri
 func GetUserByID(ctx context.Context, db *sql.DB, userID uuid.UUID) (*models.User, error) {
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT id, username, email, hashed_password, password_changed, must_change_password, created_at
+		`SELECT id, tenant_id, username, email, hashed_password, password_changed, must_change_password, created_at
 		 FROM users
 		 WHERE id = $1`,
 		userID,
@@ -76,6 +78,7 @@ func GetUserByID(ctx context.Context, db *sql.DB, userID uuid.UUID) (*models.Use
 	var user models.User
 	if err := row.Scan(
 		&user.ID,
+		&user.TenantID,
 		&user.Username,
 		&user.Email,
 		&user.HashedPassword,
