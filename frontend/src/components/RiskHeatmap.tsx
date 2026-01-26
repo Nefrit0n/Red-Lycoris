@@ -1,6 +1,7 @@
 import { Box, Paper, Tooltip, Typography, useTheme } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { ProductWithStats } from "../types/products";
+import { semantic } from "../design-system/tokens/colors";
 
 interface RiskHeatmapProps {
   products: ProductWithStats[];
@@ -32,12 +33,12 @@ const calculateRiskScore = (product: ProductWithStats): number => {
 };
 
 const getRiskColor = (score: number): string => {
-  if (score === 0) return "#4caf50"; // Green - no risk
-  if (score <= 20) return "#8bc34a"; // Light green
-  if (score <= 40) return "#cddc39"; // Lime
-  if (score <= 60) return "#ffeb3b"; // Yellow
-  if (score <= 80) return "#ff9800"; // Orange
-  return "#f44336"; // Red - high risk
+  if (score === 0) return semantic.severity.low.base;     // Green - no risk
+  if (score <= 20) return semantic.severity.low.light;    // Light green
+  if (score <= 40) return "#cddc39";                       // Lime (transitional)
+  if (score <= 60) return semantic.severity.medium.light; // Yellow
+  if (score <= 80) return semantic.severity.medium.base;  // Orange
+  return semantic.severity.high.base;                      // Red - high risk
 };
 
 const getRiskLabel = (score: number): string => {
@@ -77,16 +78,16 @@ const HeatmapCell = ({ product, riskScore, onClick }: HeatmapCellProps) => {
       </Box>
       {product.severityBreakdown && (
         <Box sx={{ mt: 0.5, display: "flex", gap: 1 }}>
-          <Typography variant="caption" sx={{ color: "#f44336" }}>
+          <Typography variant="caption" sx={{ color: semantic.severity.critical.base }}>
             C:{product.severityBreakdown.critical}
           </Typography>
-          <Typography variant="caption" sx={{ color: "#ff9800" }}>
+          <Typography variant="caption" sx={{ color: semantic.severity.high.base }}>
             H:{product.severityBreakdown.high}
           </Typography>
-          <Typography variant="caption" sx={{ color: "#ffeb3b" }}>
+          <Typography variant="caption" sx={{ color: semantic.severity.medium.light }}>
             M:{product.severityBreakdown.medium}
           </Typography>
-          <Typography variant="caption" sx={{ color: "#4caf50" }}>
+          <Typography variant="caption" sx={{ color: semantic.severity.low.base }}>
             L:{product.severityBreakdown.low}
           </Typography>
         </Box>
