@@ -409,7 +409,7 @@ const ScanUploadPage = () => {
         {/* Main Content */}
         <Grid container spacing={3}>
           {/* Scanner Selection */}
-          <Grid item xs={12} md={7}>
+          <Grid size={{ xs: 12, md: 7 }}>
             <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
               <CardContent>
                 <Stack spacing={2}>
@@ -477,7 +477,7 @@ const ScanUploadPage = () => {
                     {/* Scanner Grid */}
                     <Grid container spacing={1.5}>
                       {filteredScanners.map((scanner) => (
-                        <Grid item xs={6} sm={4} key={scanner.id}>
+                        <Grid size={{ xs: 6, sm: 4 }} key={scanner.id}>
                           <Paper
                             onClick={() => !loading && handleScannerSelect(scanner)}
                             sx={{
@@ -552,7 +552,7 @@ const ScanUploadPage = () => {
           </Grid>
 
           {/* File Upload and Actions */}
-          <Grid item xs={12} md={5}>
+          <Grid size={{ xs: 12, md: 5 }}>
             <Stack spacing={2}>
               {/* Selected Scanner Info */}
               {selectedScanner && (
