@@ -262,7 +262,7 @@ const Dashboard = () => {
 
       {/* Metric Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Открытые находки"
             value={data?.metrics.totalOpenFindings ?? 0}
@@ -272,7 +272,7 @@ const Dashboard = () => {
             loading={loading}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Critical / High"
             value={data?.metrics.criticalHighFindings ?? 0}
@@ -282,7 +282,7 @@ const Dashboard = () => {
             loading={loading}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Исправлено за неделю"
             value={data?.metrics.fixedThisWeek ?? 0}
@@ -292,7 +292,7 @@ const Dashboard = () => {
             loading={loading}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Продуктов под угрозой"
             value={data?.metrics.productsAtRisk ?? 0}
@@ -306,7 +306,7 @@ const Dashboard = () => {
 
       {/* Charts Row 1 */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={8}>
+        <Grid size={{ xs: 12, md: 8 }}>
           <TrendLineChart
             data={trendData}
             title="Динамика находок (30 дней)"
@@ -314,7 +314,7 @@ const Dashboard = () => {
             showBreakdown={false}
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <SeverityPieChart
             data={severityData}
             title="По критичности"
@@ -324,8 +324,8 @@ const Dashboard = () => {
       </Grid>
 
       {/* Charts Row 2 */}
-      <Grid container spacing={3} sx={{ "& > .MuiGrid-item": { display: "flex" } }}>
-        <Grid item xs={12} md={4}>
+      <Grid container spacing={3} sx={{ "& > .MuiGrid2-root": { display: "flex" } }}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Box sx={{ width: "100%", minHeight: 320 }}>
             <StatusBarChart
               data={statusData}
@@ -334,7 +334,7 @@ const Dashboard = () => {
             />
           </Box>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Box sx={{ width: "100%", minHeight: 320 }}>
             <TopProductsChart
               data={topProductsData}
@@ -343,7 +343,7 @@ const Dashboard = () => {
             />
           </Box>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Box sx={{ width: "100%", minHeight: 320 }}>
             <RecentActivity
               data={activityData}
@@ -376,10 +376,10 @@ const Dashboard = () => {
           }}
         >
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <ProductAutocomplete value={riskProductId} onChange={setRiskProductId} />
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <FormControl size="small" fullWidth>
                 <InputLabel id="risk-status-label">Статус</InputLabel>
                 <Select
@@ -399,7 +399,7 @@ const Dashboard = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid size={{ xs: 6, md: 2 }}>
               <TextField
                 label="From"
                 type="date"
@@ -410,7 +410,7 @@ const Dashboard = () => {
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid size={{ xs: 6, md: 2 }}>
               <TextField
                 label="To"
                 type="date"
@@ -430,8 +430,8 @@ const Dashboard = () => {
           </Alert>
         )}
 
-        <Grid container spacing={3} sx={{ "& > .MuiGrid-item": { display: "flex" } }}>
-          <Grid item xs={12} md={4}>
+        <Grid container spacing={3} sx={{ "& > .MuiGrid2-root": { display: "flex" } }}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Paper
               sx={{
                 p: 3,
@@ -498,7 +498,7 @@ const Dashboard = () => {
             </Paper>
           </Grid>
 
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Paper
               sx={{
                 p: 3,
@@ -570,7 +570,7 @@ const Dashboard = () => {
             </Paper>
           </Grid>
 
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <RiskTrendChart
               data={riskTrendData}
               title="Risk trend"
