@@ -44,7 +44,21 @@ func (p *GitleaksParser) CanParse(data []byte) bool {
 func (p *GitleaksParser) Parse(data []byte) ([]Finding, error) {
 	// Try SARIF first
 	if canParseSarif(data) {
-		return parseSarif(data, "gitleaks")
+		findings, err := parseSarif(data, "gitleaks")
+		if err != nil {
+			return nil, err
+		}
+		// Post-process for gitleaks secrets
+		for i := range findings {
+			findings[i].Category = models.CategorySecrets
+			if findings[i].Evidence == nil {
+				findings[i].Evidence = map[string]any{}
+			}
+			findings[i].Evidence["scannerType"] = "gitleaks"
+			findings[i].Evidence["findingType"] = "secret"
+			findings[i].Evidence["category"] = models.CategorySecrets
+		}
+		return findings, nil
 	}
 
 	var results []gitleaksResult
