@@ -17,27 +17,12 @@ import {
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import RepeatIcon from "@mui/icons-material/Repeat";
 import ScheduleIcon from "@mui/icons-material/Schedule";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import FiberNewIcon from "@mui/icons-material/FiberNew";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import BlockIcon from "@mui/icons-material/Block";
-import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
-import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined";
-import VerifiedIcon from "@mui/icons-material/Verified";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import RadarIcon from "@mui/icons-material/Radar";
-import { ReactNode, useCallback, useMemo, useState } from "react";
 import SecurityIcon from "@mui/icons-material/Security";
-import CodeIcon from "@mui/icons-material/Code";
-import VpnKeyIcon from "@mui/icons-material/VpnKey";
-import SettingsIcon from "@mui/icons-material/Settings";
+import { ReactNode, useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   FindingListItemDTO,
@@ -79,36 +64,29 @@ const riskBandShortLabels: Record<RiskBand, string> = {
   critical: "CRIT",
 };
 
-// Severity configuration using design system
+// Severity configuration using design system - COMPACT (no icons)
 const severityConfig: Record<FindingSeverity, {
   bgcolor: string;
   color: string;
   borderColor?: string;
-  icon: React.ReactNode;
-  glow?: string;
 }> = {
   critical: {
-    bgcolor: `linear-gradient(135deg, ${semantic.severity.high.base} 0%, ${semantic.severity.critical.base} 100%)`,
+    bgcolor: semantic.severity.critical.base,
     color: primitives.white,
-    icon: <ErrorOutlineIcon sx={{ fontSize: 14 }} />,
-    glow: `0 0 12px ${semantic.severity.high.subtle}`,
   },
   high: {
     bgcolor: semantic.severity.high.base,
     color: primitives.white,
-    icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
   },
   medium: {
     bgcolor: semantic.severity.medium.subtle,
     color: semantic.severity.medium.text,
-    borderColor: `rgba(234, 88, 12, 0.5)`,
-    icon: <ReportProblemOutlinedIcon sx={{ fontSize: 14 }} />,
+    borderColor: `rgba(234, 88, 12, 0.4)`,
   },
   low: {
     bgcolor: semantic.severity.low.subtle,
     color: semantic.severity.low.text,
     borderColor: `rgba(22, 163, 74, 0.3)`,
-    icon: <InfoOutlinedIcon sx={{ fontSize: 14 }} />,
   },
 };
 
@@ -146,65 +124,51 @@ const statusLabels: Record<FindingStatus, string> = {
   duplicate: "Duplicate",
 };
 
-// Status configuration using design system
+// Status configuration using design system - COMPACT (no icons)
 const statusConfig: Record<FindingStatus, {
-  icon: React.ReactNode;
   bgcolor: string;
   color: string;
   borderColor?: string;
-  pulse?: boolean;
 }> = {
-  // Action Required
   new: {
-    icon: <FiberNewIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.new.subtle,
     color: semantic.status.new.text,
-    borderColor: `rgba(59, 130, 246, 0.5)`,
-    pulse: true,
+    borderColor: `rgba(59, 130, 246, 0.4)`,
   },
   under_review: {
-    icon: <VisibilityIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.inProgress.subtle,
     color: semantic.status.inProgress.text,
-    borderColor: `rgba(245, 158, 11, 0.4)`,
+    borderColor: `rgba(245, 158, 11, 0.35)`,
   },
   confirmed: {
-    icon: <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.feedback.error.subtle,
     color: semantic.feedback.error.light,
-    borderColor: `rgba(244, 67, 54, 0.4)`,
+    borderColor: `rgba(244, 67, 54, 0.35)`,
   },
-
-  // Resolved
   mitigated: {
-    icon: <VerifiedIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.resolved.subtle,
     color: semantic.status.resolved.text,
-    borderColor: `rgba(16, 185, 129, 0.4)`,
+    borderColor: `rgba(16, 185, 129, 0.35)`,
   },
   false_positive: {
-    icon: <BlockIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.dismissed.subtle,
     color: semantic.status.dismissed.text,
-    borderColor: `rgba(107, 114, 128, 0.3)`,
+    borderColor: `rgba(107, 114, 128, 0.25)`,
   },
   out_of_scope: {
-    icon: <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.dismissed.subtle,
     color: semantic.status.dismissed.text,
-    borderColor: `rgba(107, 114, 128, 0.3)`,
+    borderColor: `rgba(107, 114, 128, 0.25)`,
   },
   risk_accepted: {
-    icon: <ThumbUpAltOutlinedIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.feedback.warning.subtle,
     color: primitives.gold[300],
-    borderColor: `rgba(255, 193, 7, 0.3)`,
+    borderColor: `rgba(255, 193, 7, 0.25)`,
   },
   duplicate: {
-    icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.dismissed.subtle,
     color: semantic.status.dismissed.text,
-    borderColor: `rgba(107, 114, 128, 0.3)`,
+    borderColor: `rgba(107, 114, 128, 0.25)`,
   },
 };
 
@@ -569,8 +533,8 @@ export default function FindingsTable({
         size="small"
         sx={{
           width: "100%",
-          minWidth: 1230,
-          tableLayout: "fixed", // чтобы ширины колонок не прыгали
+          minWidth: 900,
+          tableLayout: "fixed",
         }}
       >
         {/* ВАЖНО: colgroup должен быть первым ребёнком table */}
@@ -995,134 +959,21 @@ export default function FindingsTable({
                           </Typography>
                         </Tooltip>
 
-                        {/* повторяемость - улучшенный badge */}
+                        {/* Repeat count - minimal */}
                         {occurrence === "REPEAT" && repeats > 0 && (
-                          <Tooltip
-                            title={
-                              <Box>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  Repeated {repeats} times
-                                </Typography>
-                                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                                  This finding was detected in multiple scans
-                                </Typography>
-                              </Box>
-                            }
-                            placement="top"
-                          >
-                            <Box
+                          <Tooltip title={`Detected ${repeats} times`}>
+                            <Typography
+                              component="span"
                               sx={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 0.5,
-                                px: 1,
-                                py: 0.25,
-                                borderRadius: "12px",
-                                fontWeight: 700,
-                                fontSize: "0.7rem",
-                                bgcolor: "rgba(255, 152, 0, 0.15)",
-                                color: "#ffb74d",
-                                border: "1px solid rgba(255, 152, 0, 0.4)",
-                                flexShrink: 0,
-                                transition: "all 0.2s ease",
-                                "&:hover": {
-                                  bgcolor: "rgba(255, 152, 0, 0.25)",
-                                },
-                              }}
-                            >
-                              <RepeatIcon sx={{ fontSize: 12 }} />
-                              {repeats}x
-                            </Box>
-                          </Tooltip>
-                        )}
-
-                        {occurrence === "REPEAT" && !repeats && (
-                          <Box
-                            sx={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 0.5,
-                              px: 1,
-                              py: 0.25,
-                              borderRadius: "12px",
-                              fontWeight: 600,
-                              fontSize: "0.7rem",
-                              bgcolor: "rgba(255, 152, 0, 0.1)",
-                              color: "#ffb74d",
-                              border: "1px solid rgba(255, 152, 0, 0.3)",
-                              flexShrink: 0,
-                            }}
-                          >
-                            <RepeatIcon sx={{ fontSize: 12 }} />
-                            Repeat
-                          </Box>
-                        )}
-
-                        {/* возраст - улучшенный badge */}
-                        {showAgeWarning && (
-                          <Tooltip
-                            title={
-                              <Box>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {ageDays >= 90 ? "Old finding" : "Aging finding"}
-                                </Typography>
-                                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                                  First detected {ageDays} days ago
-                                </Typography>
-                              </Box>
-                            }
-                            placement="top"
-                          >
-                            <Box
-                              sx={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 0.5,
-                                px: 1,
-                                py: 0.25,
-                                borderRadius: "12px",
+                                fontSize: "0.65rem",
                                 fontWeight: 600,
-                                fontSize: "0.7rem",
+                                color: "#ffb74d",
                                 flexShrink: 0,
-                                transition: "all 0.2s ease",
-                                // Красный для старых (90+ дней), серый для остальных
-                                ...(ageDays >= 90
-                                  ? {
-                                    bgcolor: "rgba(244, 67, 54, 0.15)",
-                                    color: "#ef5350",
-                                    border: "1px solid rgba(244, 67, 54, 0.4)",
-                                  }
-                                  : {
-                                    bgcolor: "rgba(158, 158, 158, 0.1)",
-                                    color: "#9e9e9e",
-                                    border: "1px solid rgba(158, 158, 158, 0.3)",
-                                  }),
-                                "&:hover": {
-                                  transform: "scale(1.02)",
-                                },
                               }}
                             >
-                              <ScheduleIcon sx={{ fontSize: 12 }} />
-                              {getAgeLabel(ageDays)}
-                            </Box>
+                              ×{repeats}
+                            </Typography>
                           </Tooltip>
-                        )}
-
-                        {policyDecisionMeta && (
-                          <Chip
-                            size="small"
-                            label={`Gate: ${policyDecisionMeta.label}`}
-                            variant="outlined"
-                            sx={{
-                              height: 22,
-                              fontSize: "0.65rem",
-                              fontWeight: 700,
-                              borderColor: policyDecisionMeta.border,
-                              color: policyDecisionMeta.color,
-                              bgcolor: "rgba(255, 255, 255, 0.04)",
-                              "& .MuiChip-label": { px: 0.75 },
-                            }}
-                          />
                         )}
                       </Stack>
 
@@ -1166,280 +1017,47 @@ export default function FindingsTable({
                         </Typography>
                       )}
 
-                      {(cvssScore !== null || epssScore !== null || isKev || isSca || isSast || isSecrets || isConfig || cweData.display.length > 0 || owaspData.display.length > 0) && (
-                        <Stack
-                          direction="row"
-                          spacing={0.75}
-                          sx={{ alignItems: "center", flexWrap: "wrap", mt: 0.25 }}
+                      {/* Category badge only - compact, no icons */}
+                      {(isSca || isSast || isSecrets || isConfig) && (
+                        <Box
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            px: 0.6,
+                            py: 0.15,
+                            mt: 0.25,
+                            borderRadius: "8px",
+                            fontWeight: 600,
+                            fontSize: "0.6rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.02em",
+                            ...(isSast && {
+                              bgcolor: "rgba(156, 39, 176, 0.12)",
+                              color: "#ce93d8",
+                              border: "1px solid rgba(156, 39, 176, 0.3)",
+                            }),
+                            ...(isSca && {
+                              bgcolor: "rgba(100, 181, 246, 0.12)",
+                              color: "#90caf9",
+                              border: "1px solid rgba(100, 181, 246, 0.3)",
+                            }),
+                            ...(isSecrets && {
+                              bgcolor: "rgba(255, 193, 7, 0.12)",
+                              color: "#ffd54f",
+                              border: "1px solid rgba(255, 193, 7, 0.3)",
+                            }),
+                            ...(isConfig && {
+                              bgcolor: "rgba(0, 188, 212, 0.12)",
+                              color: "#4dd0e1",
+                              border: "1px solid rgba(0, 188, 212, 0.3)",
+                            }),
+                          }}
                         >
-                          {/* SCA Badge - Gray/neutral */}
-                          {isSca && (
-                            <Tooltip title="Software Composition Analysis (dependencies)">
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(158, 158, 158, 0.16)",
-                                  color: "rgba(255, 255, 255, 0.78)",
-                                  border: "1px solid rgba(255, 255, 255, 0.14)",
-                                }}
-                              >
-                                <SecurityIcon sx={{ fontSize: 14 }} />
-                                SCA
-                              </Box>
-                            </Tooltip>
-                          )}
-                          {/* SAST Badge - Purple/Violet for code analysis */}
-                          {isSast && (
-                            <Tooltip title="Static Application Security Testing (code analysis)">
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(156, 39, 176, 0.15)",
-                                  color: "#ce93d8",
-                                  border: "1px solid rgba(156, 39, 176, 0.4)",
-                                  transition: "all 0.2s ease",
-                                  "&:hover": {
-                                    bgcolor: "rgba(156, 39, 176, 0.25)",
-                                  },
-                                }}
-                              >
-                                <CodeIcon sx={{ fontSize: 14 }} />
-                                SAST
-                              </Box>
-                            </Tooltip>
-                          )}
-                          {/* CWE Badges - Compact with just ID */}
-                          {cweData.display.map((cwe) => (
-                            <Tooltip key={cwe.id} title={cwe.full}>
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  px: 0.6,
-                                  py: 0.15,
-                                  borderRadius: "10px",
-                                  fontWeight: 600,
-                                  fontSize: "0.6rem",
-                                  bgcolor: "rgba(255, 87, 34, 0.1)",
-                                  color: "#ff8a65",
-                                  border: "1px solid rgba(255, 87, 34, 0.3)",
-                                }}
-                              >
-                                {cwe.id}
-                              </Box>
-                            </Tooltip>
-                          ))}
-                          {cweData.extra > 0 && (
-                            <Tooltip title={cweData.all.map((c) => c.full).join("\n")}>
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  px: 0.5,
-                                  py: 0.15,
-                                  borderRadius: "10px",
-                                  fontWeight: 600,
-                                  fontSize: "0.55rem",
-                                  bgcolor: "rgba(255, 87, 34, 0.08)",
-                                  color: "#ff8a65",
-                                }}
-                              >
-                                +{cweData.extra}
-                              </Box>
-                            </Tooltip>
-                          )}
-                          {/* OWASP Badges - Compact */}
-                          {owaspData.display.map((owasp) => (
-                            <Tooltip key={owasp.id} title={owasp.full}>
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  px: 0.6,
-                                  py: 0.15,
-                                  borderRadius: "10px",
-                                  fontWeight: 600,
-                                  fontSize: "0.6rem",
-                                  bgcolor: "rgba(63, 81, 181, 0.1)",
-                                  color: "#7986cb",
-                                  border: "1px solid rgba(63, 81, 181, 0.3)",
-                                }}
-                              >
-                                {owasp.id}
-                              </Box>
-                            </Tooltip>
-                          ))}
-                          {owaspData.extra > 0 && (
-                            <Tooltip title={owaspData.all.map((o) => o.full).join("\n")}>
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  px: 0.5,
-                                  py: 0.15,
-                                  borderRadius: "10px",
-                                  fontWeight: 600,
-                                  fontSize: "0.55rem",
-                                  bgcolor: "rgba(63, 81, 181, 0.08)",
-                                  color: "#7986cb",
-                                }}
-                              >
-                                +{owaspData.extra}
-                              </Box>
-                            </Tooltip>
-                          )}
-                          {/* SECRETS Badge - Amber/Gold for secrets */}
-                          {isSecrets && (
-                            <Tooltip title="Secrets Detection (API keys, passwords, tokens)">
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(255, 193, 7, 0.15)",
-                                  color: "#ffd54f",
-                                  border: "1px solid rgba(255, 193, 7, 0.4)",
-                                  transition: "all 0.2s ease",
-                                  "&:hover": {
-                                    bgcolor: "rgba(255, 193, 7, 0.25)",
-                                  },
-                                }}
-                              >
-                                <VpnKeyIcon sx={{ fontSize: 14 }} />
-                                SECRETS
-                              </Box>
-                            </Tooltip>
-                          )}
-                          {/* CONFIG Badge - Cyan/Teal for configuration */}
-                          {isConfig && (
-                            <Tooltip title="Configuration Analysis (misconfigurations)">
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(0, 188, 212, 0.15)",
-                                  color: "#4dd0e1",
-                                  border: "1px solid rgba(0, 188, 212, 0.4)",
-                                  transition: "all 0.2s ease",
-                                  "&:hover": {
-                                    bgcolor: "rgba(0, 188, 212, 0.25)",
-                                  },
-                                }}
-                              >
-                                <SettingsIcon sx={{ fontSize: 14 }} />
-                                CONFIG
-                              </Box>
-                            </Tooltip>
-                          )}
-                          {cvssScore !== null && (
-                            <Tooltip
-                              title={`CVSS${cvssVersion ? ` v${cvssVersion}` : ""}: ${cvssScore.toFixed(
-                                1
-                              )}`}
-                            >
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor:
-                                    cvssScore >= 9
-                                      ? "rgba(244, 67, 54, 0.2)"
-                                      : cvssScore >= 7
-                                        ? "rgba(255, 152, 0, 0.2)"
-                                        : "rgba(76, 175, 80, 0.2)",
-                                  color:
-                                    cvssScore >= 9
-                                      ? "#ef5350"
-                                      : cvssScore >= 7
-                                        ? "#ffb74d"
-                                        : "#81c784",
-                                  border: "1px solid rgba(255, 255, 255, 0.2)",
-                                }}
-                              >
-                                CVSS {cvssScore.toFixed(1)}
-                              </Box>
-                            </Tooltip>
-                          )}
-                          {epssScore !== null && (
-                            <Tooltip
-                              title={`EPSS: ${(epssScore * 100).toFixed(2)}%${
-                                epssPercentile !== null
-                                  ? ` (p${(epssPercentile * 100).toFixed(1)})`
-                                  : ""
-                              }`}
-                            >
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(33, 150, 243, 0.15)",
-                                  color: "#64b5f6",
-                                  border: "1px solid rgba(100, 181, 246, 0.4)",
-                                }}
-                              >
-                                EPSS {(epssScore * 100).toFixed(1)}%
-                              </Box>
-                            </Tooltip>
-                          )}
-                          {isKev && (
-                            <Tooltip title="Known Exploited Vulnerability">
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(255, 82, 82, 0.2)",
-                                  color: "#ff8a80",
-                                  border: "1px solid rgba(255, 82, 82, 0.5)",
-                                }}
-                              >
-                                KEV
-                              </Box>
-                            </Tooltip>
-                          )}
-                        </Stack>
+                          {isSast && "SAST"}
+                          {isSca && "SCA"}
+                          {isSecrets && "SECRETS"}
+                          {isConfig && "CONFIG"}
+                        </Box>
                       )}
 
                       {/* метаданные (только НЕ compact) — FIX: не рисуем пустое и не делаем “серую полосу” */}
@@ -1541,7 +1159,7 @@ export default function FindingsTable({
                     </Stack>
                   </TableCell>
 
-                  {/* Severity */}
+                  {/* Severity - Compact */}
                   <TableCell
                     align="center"
                     sx={{
@@ -1552,34 +1170,25 @@ export default function FindingsTable({
                   >
                     {(() => {
                       const config = severityConfig[f.severity];
-                      const isGradient = config.bgcolor.includes("gradient");
                       return (
                         <Box
                           sx={{
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: 0.5,
-                            px: 1.25,
-                            py: 0.5,
-                            borderRadius: "16px",
+                            justifyContent: "center",
+                            px: 1,
+                            py: 0.25,
+                            minWidth: 56,
+                            borderRadius: "10px",
                             fontWeight: 600,
-                            fontSize: "0.75rem",
+                            fontSize: "0.7rem",
                             textTransform: "uppercase",
-                            letterSpacing: "0.025em",
+                            letterSpacing: "0.02em",
                             color: config.color,
-                            background: config.bgcolor,
+                            bgcolor: config.bgcolor,
                             border: config.borderColor ? `1px solid ${config.borderColor}` : "none",
-                            boxShadow: config.glow ?? "none",
-                            transition: "all 0.2s ease",
-                            "&:hover": {
-                              transform: "scale(1.02)",
-                            },
-                            "& .MuiSvgIcon-root": {
-                              color: config.color,
-                            },
                           }}
                         >
-                          {config.icon}
                           {severityLabels[f.severity]}
                         </Box>
                       );
@@ -1629,7 +1238,7 @@ export default function FindingsTable({
                     })()}
                   </TableCell>
 
-                  {/* Status */}
+                  {/* Status - Compact */}
                   <TableCell
                     align="center"
                     sx={{
@@ -1645,41 +1254,24 @@ export default function FindingsTable({
                           sx={{
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: 0.5,
-                            px: 1.25,
-                            py: 0.5,
-                            borderRadius: "16px",
+                            justifyContent: "center",
+                            px: 0.75,
+                            py: 0.25,
+                            borderRadius: "10px",
                             fontWeight: 500,
-                            fontSize: "0.75rem",
+                            fontSize: "0.65rem",
                             color: config.color,
                             bgcolor: config.bgcolor,
                             border: config.borderColor ? `1px solid ${config.borderColor}` : "none",
-                            transition: "all 0.2s ease",
-                            // Пульсация для "New" статуса
-                            ...(config.pulse && {
-                              animation: "statusPulse 2s ease-in-out infinite",
-                              "@keyframes statusPulse": {
-                                "0%, 100%": {
-                                  boxShadow: `0 0 0 0 ${config.borderColor}`,
-                                },
-                                "50%": {
-                                  boxShadow: `0 0 0 4px transparent`,
-                                },
-                              },
-                            }),
-                            "& .MuiSvgIcon-root": {
-                              color: config.color,
-                            },
                           }}
                         >
-                          {config.icon}
                           {statusLabels[f.status] ?? f.status}
                         </Box>
                       );
                     })()}
                   </TableCell>
 
-                  {/* SLA */}
+                  {/* SLA - Compact */}
                   <TableCell
                     align="center"
                     sx={{
@@ -1700,12 +1292,12 @@ export default function FindingsTable({
                           display: "inline-flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          px: 1,
-                          py: 0.4,
-                          minWidth: 80,
-                          borderRadius: "14px",
+                          px: 0.75,
+                          py: 0.2,
+                          minWidth: 60,
+                          borderRadius: "10px",
                           fontWeight: 600,
-                          fontSize: "0.7rem",
+                          fontSize: "0.6rem",
                           color: slaDisplay.color,
                           bgcolor: slaDisplay.bgcolor,
                           border: `1px solid ${slaDisplay.borderColor}`,
