@@ -33,7 +33,7 @@ import { useThemeMode } from "../contexts/ThemeContext";
 type NavItem = {
   label: string;
   path: string;
-  icon: JSX.Element;
+  icon: React.ReactNode;
 };
 
 const COLLAPSED_KEY = "lotus_warden_sidebar_collapsed";
