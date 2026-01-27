@@ -335,7 +335,7 @@ const ImportJobDetail = () => {
         )}
 
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Сканер
             </Typography>
@@ -343,7 +343,7 @@ const ImportJobDetail = () => {
               {data.scanner}
             </Typography>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Продукт
             </Typography>
@@ -352,7 +352,7 @@ const ImportJobDetail = () => {
               {data.productVersion && ` v${data.productVersion}`}
             </Typography>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Создан
             </Typography>
@@ -360,7 +360,7 @@ const ImportJobDetail = () => {
               {new Date(data.createdAt).toLocaleString("ru-RU")}
             </Typography>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Завершён
             </Typography>
@@ -387,7 +387,7 @@ const ImportJobDetail = () => {
         </Typography>
 
         <Grid container spacing={3}>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper
               sx={{
                 p: 2,
@@ -404,7 +404,7 @@ const ImportJobDetail = () => {
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper
               sx={{
                 p: 2,
@@ -421,7 +421,7 @@ const ImportJobDetail = () => {
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper
               sx={{
                 p: 2,
@@ -438,7 +438,7 @@ const ImportJobDetail = () => {
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper
               sx={{
                 p: 2,

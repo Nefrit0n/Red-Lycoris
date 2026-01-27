@@ -486,7 +486,7 @@ const ProductDetailPage = () => {
 
       {/* Metrics Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Открытые находки"
             value={totalOpenFindings}
@@ -494,7 +494,7 @@ const ProductDetailPage = () => {
             color={totalOpenFindings > 0 ? "#ff9800" : "#4caf50"}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Critical/High"
             value={
@@ -504,7 +504,7 @@ const ProductDetailPage = () => {
             color="#f44336"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Исправлено"
             value={data.findingsFixedCount || 0}
@@ -512,7 +512,7 @@ const ProductDetailPage = () => {
             color="#4caf50"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="False Positives"
             value={data.findingsFalsePositiveCount || 0}
@@ -524,12 +524,12 @@ const ProductDetailPage = () => {
 
       {/* Charts Section */}
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Section title="Распределение по Severity">
             <SeverityPieChart breakdown={data.severityBreakdown} />
           </Section>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Section title="Breakdown по Severity">
             <SeverityBarChart breakdown={data.severityBreakdown} />
           </Section>
@@ -538,12 +538,12 @@ const ProductDetailPage = () => {
 
       {/* Recent Scans and Actions */}
       <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Section title="Последние сканы">
             <RecentScansTimeline scans={data.recentScans} />
           </Section>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Section title="Действия">
             <Stack spacing={2}>
               <Button
@@ -587,7 +587,7 @@ const ProductDetailPage = () => {
       </Grid>
 
       <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Section title="SBOM & Components">
             <Tabs
               value={tabIndex}

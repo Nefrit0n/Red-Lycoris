@@ -299,7 +299,7 @@ const FiltersPanel = ({
             Даты
           </Typography>
           <Grid container spacing={1.5}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <TextField
                 label="Last seen от"
                 type="date"
@@ -310,7 +310,7 @@ const FiltersPanel = ({
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <TextField
                 label="Last seen до"
                 type="date"
