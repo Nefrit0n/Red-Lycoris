@@ -100,7 +100,7 @@ const AdminOverview = () => {
     >
       <Grid container spacing={3}>
         {sections.map((section) => (
-          <Grid item xs={12} md={6} key={section.title}>
+          <Grid size={{ xs: 12, md: 6 }} key={section.title}>
             <Card variant="outlined" sx={{ height: "100%" }}>
               <CardContent>
                 <Stack spacing={1}>

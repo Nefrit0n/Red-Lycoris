@@ -568,7 +568,7 @@ const AdminPoliciesPage = () => {
 
               {dialogTab === 0 && (
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <TextField
                       label="Name"
                       value={formState.name}
@@ -576,7 +576,7 @@ const AdminPoliciesPage = () => {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <FormControl fullWidth>
                       <InputLabel id="policy-kind">Kind</InputLabel>
                       <Select
@@ -594,7 +594,7 @@ const AdminPoliciesPage = () => {
                       </Select>
                     </FormControl>
                   </Grid>
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <FormControl fullWidth>
                       <InputLabel id="policy-status">Status</InputLabel>
                       <Select
@@ -610,7 +610,7 @@ const AdminPoliciesPage = () => {
                       </Select>
                     </FormControl>
                   </Grid>
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <TextField
                       label="Description"
                       value={formState.description}
@@ -621,13 +621,13 @@ const AdminPoliciesPage = () => {
                     />
                   </Grid>
                   {dialogMode === "create" && (
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Divider sx={{ my: 2 }} />
                       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
                         Initial rule
                       </Typography>
                       <Grid container spacing={2}>
-                        <Grid item xs={12} md={4}>
+                        <Grid size={{ xs: 12, md: 4 }}>
                           <TextField
                             label="Version"
                             value={initialRule.version}
@@ -637,7 +637,7 @@ const AdminPoliciesPage = () => {
                             fullWidth
                           />
                         </Grid>
-                        <Grid item xs={12} md={4}>
+                        <Grid size={{ xs: 12, md: 4 }}>
                           <TextField
                             label="Entrypoint"
                             value={initialRule.entrypoint}
@@ -647,10 +647,10 @@ const AdminPoliciesPage = () => {
                             fullWidth
                           />
                         </Grid>
-                        <Grid item xs={12} md={4}>
+                        <Grid size={{ xs: 12, md: 4 }}>
                           <TextField label="Format" value="rego" fullWidth disabled />
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid size={12}>
                           <TextField
                             label="Rego content"
                             value={initialRule.content}
@@ -710,7 +710,7 @@ const AdminPoliciesPage = () => {
                         Add version
                       </Typography>
                       <Grid container spacing={2}>
-                        <Grid item xs={12} md={4}>
+                        <Grid size={{ xs: 12, md: 4 }}>
                           <TextField
                             label="Version"
                             value={newVersion.version}
@@ -720,7 +720,7 @@ const AdminPoliciesPage = () => {
                             fullWidth
                           />
                         </Grid>
-                        <Grid item xs={12} md={4}>
+                        <Grid size={{ xs: 12, md: 4 }}>
                           <TextField
                             label="Entrypoint"
                             value={newVersion.entrypoint}
@@ -730,10 +730,10 @@ const AdminPoliciesPage = () => {
                             fullWidth
                           />
                         </Grid>
-                        <Grid item xs={12} md={4}>
+                        <Grid size={{ xs: 12, md: 4 }}>
                           <TextField label="Format" value="rego" fullWidth disabled />
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid size={12}>
                           <TextField
                             label="Rego content"
                             value={newVersion.content}
@@ -747,7 +747,7 @@ const AdminPoliciesPage = () => {
                             error={Boolean(ruleValidation)}
                           />
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid size={12}>
                           <Button variant="contained" onClick={handleAddVersion}>
                             Добавить версию
                           </Button>
@@ -858,7 +858,7 @@ const AdminPoliciesPage = () => {
                     Recent decisions
                   </Typography>
                   <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={12} md={4}>
+                    <Grid size={{ xs: 12, md: 4 }}>
                       <ProductAutocomplete
                         value={policyResultsFilters.productId}
                         onChange={(value) =>
@@ -866,7 +866,7 @@ const AdminPoliciesPage = () => {
                         }
                       />
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid size={{ xs: 12, md: 4 }}>
                       <TextField
                         label="Import job ID"
                         value={policyResultsFilters.importJobId}
@@ -876,7 +876,7 @@ const AdminPoliciesPage = () => {
                         fullWidth
                       />
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid size={{ xs: 12, md: 4 }}>
                       <FormControl fullWidth>
                         <InputLabel id="policy-decision-filter">Decision</InputLabel>
                         <Select
@@ -896,7 +896,7 @@ const AdminPoliciesPage = () => {
                         </Select>
                       </FormControl>
                     </Grid>
-                    <Grid item xs={12} md={3}>
+                    <Grid size={{ xs: 12, md: 3 }}>
                       <TextField
                         label="From"
                         type="datetime-local"
@@ -908,7 +908,7 @@ const AdminPoliciesPage = () => {
                         fullWidth
                       />
                     </Grid>
-                    <Grid item xs={12} md={3}>
+                    <Grid size={{ xs: 12, md: 3 }}>
                       <TextField
                         label="To"
                         type="datetime-local"
