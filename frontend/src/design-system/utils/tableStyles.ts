@@ -209,12 +209,12 @@ export const slaStyles = {
 // ============================================================
 
 export const tableColumnWidths = {
-  checkbox: 44,
-  severity: 140,
-  risk: 120,
-  status: 160,
-  sla: 130,
-  actions: 56,
+  checkbox: 40,
+  severity: 90,
+  risk: 80,
+  status: 100,
+  sla: 90,
+  actions: 44,
 } as const;
 
 // ============================================================
