@@ -9,7 +9,7 @@ var defaultRegistry = func() *Registry {
 	registry.Register(newParserPlugin(&parser.TrivyParser{}, detectSarifVersion, 100, normalizeTrivyFindings))
 	registry.Register(newParserPlugin(&parser.SemgrepParser{}, detectSemgrepVersion, 100, normalizeSemgrepFindings))
 	registry.Register(newParserPlugin(&parser.ZapParser{}, detectSarifVersion, 100, normalizeZapFindings))
-	registry.Register(newParserPlugin(&parser.SarifParser{}, detectSarifVersion, 90, nil))
+	registry.Register(newParserPlugin(&parser.SarifParser{}, detectSarifVersion, 90, normalizeSASTFindings))
 
 	// SAST parsers
 	registry.Register(newParserPlugin(&parser.BanditParser{}, detectSarifVersion, 100, normalizeSASTFindings))

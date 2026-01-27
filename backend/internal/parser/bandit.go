@@ -43,7 +43,21 @@ func (p *BanditParser) CanParse(data []byte) bool {
 func (p *BanditParser) Parse(data []byte) ([]Finding, error) {
 	// Try SARIF first
 	if canParseSarif(data) {
-		return parseSarif(data, "bandit")
+		findings, err := parseSarif(data, "bandit")
+		if err != nil {
+			return nil, err
+		}
+		// Post-process for bandit SAST
+		for i := range findings {
+			findings[i].Category = models.CategorySAST
+			if findings[i].Evidence == nil {
+				findings[i].Evidence = map[string]any{}
+			}
+			findings[i].Evidence["scannerType"] = "bandit"
+			findings[i].Evidence["findingType"] = "sast"
+			findings[i].Evidence["category"] = models.CategorySAST
+		}
+		return findings, nil
 	}
 
 	var report banditReport
