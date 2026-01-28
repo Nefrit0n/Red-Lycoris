@@ -139,6 +139,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	sbomHandler := handlers.NewSbomHandler(db, store, publisher)
 	secured.Post("/sbom/upload", middleware.AuthorizeRole("analyst", "admin"), sbomHandler.Upload)
 	secured.Get("/sbom", sbomHandler.List)
+	secured.Get("/sbom/diff", sbomHandler.DiffByVersion)
 	secured.Get("/sbom/:id/download", sbomHandler.Download)
 
 	sbomComponentsHandler := handlers.NewSbomComponentsHandler(db)
