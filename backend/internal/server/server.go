@@ -143,8 +143,11 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured.Get("/sbom/:id/download", sbomHandler.Download)
 
 	sbomComponentsHandler := handlers.NewSbomComponentsHandler(db)
+	sbomTransitiveHandler := handlers.NewSbomTransitiveHandler(db)
 	secured.Get("/sbom/:id/components", sbomComponentsHandler.ListBySbom)
 	secured.Get("/sbom/:id/status", sbomComponentsHandler.Status)
+	secured.Get("/sbom/:id/transitive", sbomTransitiveHandler.ListVulnerable)
+	secured.Get("/sbom/:id/path", sbomTransitiveHandler.Path)
 	secured.Get("/products/:id/components", sbomComponentsHandler.ListByProduct)
 
 	intelHandler := handlers.NewIntelHandler(db, publisher)
