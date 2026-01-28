@@ -181,6 +181,7 @@ func (h *SbomHandler) List(c *fiber.Ctx) error {
 		}
 		response = append(response, map[string]interface{}{
 			"id":               item.ID.String(),
+			"version":          item.Version,
 			"format":           item.Format,
 			"sha256":           item.SHA256,
 			"originalFilename": item.OriginalFilename,

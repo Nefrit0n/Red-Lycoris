@@ -26,6 +26,7 @@ type SbomItem struct {
 	IndexError       sql.NullString
 	ComponentCount   int
 	EdgeCount        int
+	Version          int
 	CreatedAt        sql.NullTime
 }
 
@@ -65,10 +66,11 @@ func ListSbomsByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) ([
 	rows, err := db.QueryContext(
 		ctx,
 		`SELECT id, product_id, format, object_key, sha256, original_filename, size_bytes, metadata,
-		        index_status, indexed_at, index_error, component_count, edge_count, created_at
+		        index_status, indexed_at, index_error, component_count, edge_count, created_at,
+		        row_number() OVER (PARTITION BY product_id ORDER BY created_at ASC, id ASC) AS version
 		 FROM sboms
 		 WHERE product_id = $1
-		 ORDER BY created_at DESC`,
+		 ORDER BY created_at DESC, id DESC`,
 		productID,
 	)
 	if err != nil {
@@ -89,13 +91,14 @@ func ListSbomsByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) ([
 			&item.SHA256,
 			&item.OriginalFilename,
 			&item.SizeBytes,
-			&meta, // <-- вместо &item.Metadata
+			&meta,
 			&item.IndexStatus,
 			&item.IndexedAt,
 			&item.IndexError,
 			&item.ComponentCount,
 			&item.EdgeCount,
 			&item.CreatedAt,
+			&item.Version,
 		); err != nil {
 			return nil, fmt.Errorf("list sboms scan failed: %w", err)
 		}
@@ -114,6 +117,30 @@ func ListSbomsByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) ([
 	}
 
 	return items, nil
+}
+
+func GetSbomIDByProductVersion(ctx context.Context, db *sql.DB, productID uuid.UUID, version int) (*uuid.UUID, error) {
+	if version <= 0 {
+		return nil, nil
+	}
+	row := db.QueryRowContext(ctx, `
+		SELECT id
+		FROM (
+			SELECT id, row_number() OVER (PARTITION BY product_id ORDER BY created_at ASC, id ASC) AS v
+			FROM sboms
+			WHERE product_id = $1
+		) t
+		WHERE t.v = $2
+	`, productID, version)
+
+	var id uuid.UUID
+	if err := row.Scan(&id); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get sbom by product version failed: %w", err)
+	}
+	return &id, nil
 }
 
 func GetSbomByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*SbomItem, error) {
