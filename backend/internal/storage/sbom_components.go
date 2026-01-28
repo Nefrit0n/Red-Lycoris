@@ -65,15 +65,18 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 
 	listQuery := fmt.Sprintf(`WITH vuln AS (
 		SELECT sco.component_id,
-			COUNT(*) AS total,
-			COUNT(*) FILTER (WHERE f.severity = 'critical') AS critical,
-			COUNT(*) FILTER (WHERE f.severity = 'high') AS high,
-			COUNT(*) FILTER (WHERE f.severity = 'medium') AS medium,
-			COUNT(*) FILTER (WHERE f.severity = 'low') AS low
+			COUNT(DISTINCT sf.vulnerability_id) AS total,
+			COUNT(DISTINCT sf.vulnerability_id) FILTER (WHERE f.severity = 'critical') AS critical,
+			COUNT(DISTINCT sf.vulnerability_id) FILTER (WHERE f.severity = 'high') AS high,
+			COUNT(DISTINCT sf.vulnerability_id) FILTER (WHERE f.severity = 'medium') AS medium,
+			COUNT(DISTINCT sf.vulnerability_id) FILTER (WHERE f.severity = 'low') AS low
 		FROM sbom_component_occurrences sco
 		JOIN sboms s ON s.id = sco.sbom_id
 		JOIN sca_findings sf ON sf.component_id = sco.component_id
-		JOIN findings f ON f.id = sf.finding_id AND f.product_id = s.product_id
+		JOIN findings f ON f.id = sf.finding_id
+			AND f.product_id = s.product_id
+			AND f.deleted_at IS NULL
+			AND f.duplicate_id IS NULL
 		WHERE sco.sbom_id = $1
 		GROUP BY sco.component_id
 	)
