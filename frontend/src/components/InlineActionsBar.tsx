@@ -29,6 +29,8 @@ interface InlineActionsBarProps {
   selectedCount: number;
   /** Total count of items matching current filters */
   totalCount: number;
+  /** Whether total count is known */
+  totalKnown: boolean;
   /** Whether "select all matching" mode is active */
   selectAllMatching: boolean;
   /** Whether to show "select all results" prompt (all on page selected but more exist) */
@@ -46,6 +48,7 @@ interface InlineActionsBarProps {
 const InlineActionsBar = ({
   selectedCount,
   totalCount,
+  totalKnown,
   selectAllMatching,
   showSelectAllPrompt,
   onApply,
@@ -57,7 +60,7 @@ const InlineActionsBar = ({
   const [status, setStatus] = useState<FindingStatus>("under_review");
   const [assigneeId, setAssigneeId] = useState("");
 
-  const effectiveCount = selectAllMatching ? totalCount : selectedCount;
+  const effectiveCount = selectAllMatching && totalKnown ? totalCount : selectedCount;
   const isVisible = effectiveCount > 0;
 
   const handleApply = () => {
@@ -90,7 +93,7 @@ const InlineActionsBar = ({
             icon={selectAllMatching ? <CheckBoxIcon /> : <CheckBoxBlankIcon />}
             label={
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {selectAllMatching
+                {selectAllMatching && totalKnown
                   ? `Выбрано все: ${totalCount}`
                   : `Выбрано: ${selectedCount}`}
               </Typography>
@@ -105,7 +108,7 @@ const InlineActionsBar = ({
           />
 
           {/* Select all prompt */}
-          {showSelectAllPrompt && !selectAllMatching && (
+          {showSelectAllPrompt && !selectAllMatching && totalKnown && (
             <Button
               size="small"
               variant="text"

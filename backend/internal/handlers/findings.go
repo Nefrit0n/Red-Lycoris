@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -105,6 +107,8 @@ func NewFindingsHandler(db *sql.DB, policyEngine policies.Evaluator, slaMatrix s
 // @Param severity query string false "Severity"
 // @Param status query string false "Status"
 // @Param productId query string false "Product ID"
+// @Param cursor query string false "Cursor (base64 json)"
+// @Param includeMeta query bool false "Include total and severity counts"
 // @Param sortField query string false "Sort field"
 // @Param sortOrder query string false "Sort order"
 // @Success 200 {object} fiber.Map
@@ -122,8 +126,30 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		return respondWithFilterError(c, err)
 	}
 
+	includeMeta := parseBoolWithDefault(c.Query("includeMeta"), false)
+	cursorParam := strings.TrimSpace(c.Query("cursor"))
+	cursorAllowed := isCursorSortField(filterParams.SortField)
+	legacyPagination := c.Query("offset") != "" || c.Query("page") != "" || c.Query("pageSize") != ""
+
+	var cursor *storage.FindingListCursor
+	if cursorParam != "" {
+		if !cursorAllowed {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "cursor requires lastSeenAt/lastActivity sort"})
+		}
+		parsedCursor, err := decodeFindingCursor(cursorParam)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+		}
+		cursor = parsedCursor
+	}
+
+	useCursor := cursor != nil || (!legacyPagination && cursorAllowed)
+	if useCursor {
+		offset = 0
+	}
+
 	filters := filterParams.toStorageFilters(limit, offset)
-	items, total, err := storage.ListFindings(c.Context(), h.db, filters)
+	items, total, nextCursor, err := storage.ListFindings(c.Context(), h.db, filters, cursor, useCursor, includeMeta)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
 	}
@@ -146,23 +172,37 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		response = append(response, mapped)
 	}
 
-	severityCounts, err := storage.CountFindingsBySeverity(
-		c.Context(),
-		h.db,
-		filterParams.toStorageFilters(1, 0),
-	)
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings stats"})
-	}
-
-	return c.Status(http.StatusOK).JSON(fiber.Map{
+	resp := fiber.Map{
 		"success": true,
 		"data":    response,
-		"total":   total,
-		"meta": fiber.Map{
+	}
+
+	if nextCursor != nil {
+		encoded, err := encodeFindingCursor(*nextCursor)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to encode cursor"})
+		}
+		resp["nextCursor"] = encoded
+	}
+
+	if includeMeta {
+		severityCounts, err := storage.CountFindingsBySeverity(
+			c.Context(),
+			h.db,
+			filterParams.toStorageFilters(1, 0),
+		)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings stats"})
+		}
+		if total != nil {
+			resp["total"] = *total
+		}
+		resp["meta"] = fiber.Map{
 			"severityCounts": severityCounts,
-		},
-	})
+		}
+	}
+
+	return c.Status(http.StatusOK).JSON(resp)
 }
 
 // Get returns a single finding by ID
@@ -402,6 +442,63 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 		"success": true,
 		"data":    v1mapper.FindingFromModel(*finding),
 	})
+}
+
+type findingCursorPayload struct {
+	SortKey string `json:"sortKey"`
+	ID      string `json:"id"`
+}
+
+func isCursorSortField(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "lastseenat", "lastactivity":
+		return true
+	default:
+		return false
+	}
+}
+
+func decodeFindingCursor(raw string) (*storage.FindingListCursor, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		decoded, err = base64.StdEncoding.DecodeString(raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor")
+		}
+	}
+
+	var payload findingCursorPayload
+	if err := json.Unmarshal(decoded, &payload); err != nil {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+
+	if payload.SortKey == "" || payload.ID == "" {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+
+	sortKey, err := time.Parse(time.RFC3339Nano, payload.SortKey)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+
+	return &storage.FindingListCursor{SortKey: sortKey, ID: id}, nil
+}
+
+func encodeFindingCursor(cursor storage.FindingListCursor) (string, error) {
+	payload := findingCursorPayload{
+		SortKey: cursor.SortKey.Format(time.RFC3339Nano),
+		ID:      cursor.ID.String(),
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
 }
 
 // Update updates a finding by ID

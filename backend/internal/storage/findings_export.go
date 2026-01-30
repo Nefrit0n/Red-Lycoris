@@ -50,7 +50,7 @@ func QueryFindingsExport(ctx context.Context, db *sql.DB, filters FindingFilters
 	sortField := normalizeFindingSortField(filters.SortField)
 	sortOrder := normalizeSortOrder(filters.SortOrder)
 
-	args := append(buildFindingFilterArgs(filters), sortField, filters.Limit, filters.Offset)
+	args := append(buildFindingFilterArgs(filters), filters.Limit, filters.Offset)
 
 	selectFields := `
 		SELECT
@@ -81,11 +81,11 @@ func QueryFindingsExport(ctx context.Context, db *sql.DB, filters FindingFilters
 			intel.epss_score,
 			intel.kev`
 
-	query := fmt.Sprintf(`%s %s WHERE %s %s LIMIT $17 OFFSET $18`,
+	query := fmt.Sprintf(`%s %s WHERE %s %s LIMIT $16 OFFSET $17`,
 		selectFields,
 		findingExportJoins,
 		findingFilterWhereClause,
-		buildFindingOrderBy(sortOrder))
+		buildFindingOrderBy(sortField, sortOrder))
 
 	return db.QueryContext(ctx, query, args...)
 }
