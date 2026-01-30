@@ -6,7 +6,6 @@ import {
   Grid,
   IconButton,
   Paper,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -18,11 +17,13 @@ import {
 } from "@mui/material";
 import ViewListIcon from "@mui/icons-material/ViewList";
 import ViewModuleIcon from "@mui/icons-material/ViewModule";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { fetchProducts, fetchProductsWithStats } from "../api/products";
 import PaginationControl from "../components/PaginationControl";
 import ProductCard, { ProductCardData } from "../components/ProductCard";
+import DataTable, { TableEmptyState, TableLoadingRows } from "../components/DataTable";
 import { ProductWithStats } from "../types/products";
 
 type ViewMode = "table" | "cards";
@@ -140,14 +141,14 @@ const ProductsList = () => {
         </Alert>
       )}
 
-      {loading ? (
-        <Box display="flex" justifyContent="center" py={8}>
-          <CircularProgress />
-        </Box>
-      ) : viewMode === "cards" ? (
+      {viewMode === "cards" ? (
         /* Cards View */
         <Box>
-          {data.length === 0 ? (
+          {loading ? (
+            <Box display="flex" justifyContent="center" py={8}>
+              <CircularProgress />
+            </Box>
+          ) : data.length === 0 ? (
             <Paper elevation={0} sx={{ p: 6, textAlign: "center", borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
               <Typography color="text.secondary">Продуктов пока нет.</Typography>
             </Paper>
@@ -166,59 +167,59 @@ const ProductsList = () => {
         </Box>
       ) : (
         /* Table View */
-        <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Название</TableCell>
-                <TableCell>Identifier</TableCell>
-                <TableCell>Последний скан</TableCell>
-                <TableCell>Открытые находки</TableCell>
-                <TableCell>Действия</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                    <Typography color="text.secondary">Продуктов пока нет.</Typography>
+        <DataTable minWidth={860}>
+          <TableHead>
+            <TableRow>
+              <TableCell>Название</TableCell>
+              <TableCell>Identifier</TableCell>
+              <TableCell>Последний скан</TableCell>
+              <TableCell>Открытые находки</TableCell>
+              <TableCell align="right">Действия</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <TableLoadingRows rowCount={6} cellCount={5} />
+            ) : data.length === 0 ? (
+              <TableEmptyState
+                colSpan={5}
+                title="Нет продуктов"
+                description="Загрузите первый продукт или выберите другой проект."
+                hint="Можно начать с загрузки скана или импорта."
+              />
+            ) : (
+              data.map((item) => (
+                <TableRow
+                  key={item.id}
+                  hover
+                  sx={{ cursor: "pointer" }}
+                  onClick={() => handleProductClick(item.id)}
+                >
+                  <TableCell>
+                    {item.name}
+                    {item.version ? ` (${item.version})` : ""}
+                  </TableCell>
+                  <TableCell>{item.identifier || "—"}</TableCell>
+                  <TableCell>
+                    {item.lastScanAt ? new Date(item.lastScanAt).toLocaleString("ru-RU") : "—"}
+                  </TableCell>
+                  <TableCell>{item.findingsOpenCount}</TableCell>
+                  <TableCell align="right" onClick={(event) => event.stopPropagation()}>
+                    <Tooltip title="Открыть findings">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleViewFindings(item.id)}
+                        aria-label="Открыть findings"
+                      >
+                        <OpenInNewIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
-              ) : (
-                data.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    hover
-                    sx={{ cursor: "pointer" }}
-                    onClick={() => handleProductClick(item.id)}
-                  >
-                    <TableCell>
-                      {item.name}
-                      {item.version ? ` (${item.version})` : ""}
-                    </TableCell>
-                    <TableCell>{item.identifier || "—"}</TableCell>
-                    <TableCell>
-                      {item.lastScanAt ? new Date(item.lastScanAt).toLocaleString("ru-RU") : "—"}
-                    </TableCell>
-                    <TableCell>{item.findingsOpenCount}</TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        color="primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleViewFindings(item.id);
-                        }}
-                      >
-                        Открыть findings
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Paper>
+              ))
+            )}
+          </TableBody>
+        </DataTable>
       )}
 
       <PaginationControl

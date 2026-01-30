@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Utilities
+ * RED LYCORIS Design System - Utilities
  */
 
 export * from './security';

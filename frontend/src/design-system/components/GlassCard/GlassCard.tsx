@@ -2,7 +2,7 @@
  * GlassCard Component
  *
  * Premium card component with glassmorphism effects.
- * The signature Lotus Warden UI style.
+ * The signature RED LYCORIS UI style.
  */
 
 import React, { forwardRef } from 'react';

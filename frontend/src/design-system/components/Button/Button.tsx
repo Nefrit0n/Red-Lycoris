@@ -2,7 +2,7 @@
  * Lotus Button Component
  *
  * Enhanced button with brand variants, glow effects, and loading states.
- * Built on MUI Button with Lotus Warden design system integration.
+ * Built on MUI Button with RED LYCORIS design system integration.
  */
 
 import React, { forwardRef } from 'react';
