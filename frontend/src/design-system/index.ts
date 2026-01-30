@@ -1,10 +1,8 @@
 /**
- * Lotus Warden Design System
+ * RED LYCORIS Design System
  *
- * A comprehensive design system inspired by the lotus flower -
- * emerging from darkness into light, symbolizing the journey
- * of security: finding vulnerabilities in the shadows and
- * bringing clarity through illumination.
+ * A comprehensive design system for the RED LYCORIS security platform,
+ * combining bold red energy with graphite neutrals for clarity and focus.
  *
  * @example
  * // Import specific tokens
@@ -78,8 +76,8 @@ export * from './utils';
 export const DESIGN_SYSTEM_VERSION = '1.0.0';
 
 export const DESIGN_SYSTEM_INFO = {
-  name: 'Lotus Warden Design System',
+  name: 'RED LYCORIS Design System',
   version: DESIGN_SYSTEM_VERSION,
-  description: 'Design tokens and components for Lotus Warden security platform',
-  author: 'Lotus Warden Team',
+  description: 'Design tokens and components for RED LYCORIS security platform',
+  author: 'RED LYCORIS Team',
 } as const;

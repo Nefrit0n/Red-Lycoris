@@ -1,20 +1,18 @@
 import {
   Box,
+  Button,
   Checkbox,
-  Chip,
   IconButton,
-  Skeleton,
   Stack,
-  Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TableSortLabel,
   Tooltip,
   Typography,
 } from "@mui/material";
+import { alpha as muiAlpha } from "@mui/material/styles";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RepeatIcon from "@mui/icons-material/Repeat";
@@ -52,7 +50,8 @@ import {
   tableStyles,
   slaStyles,
 } from "../design-system/utils";
-import { semantic, primitives, alpha } from "../design-system/tokens/colors";
+import { semantic, primitives } from "../design-system/tokens/colors";
+import DataTable, { TableChip, TableEmptyState, TableLoadingRows } from "./DataTable";
 
 /**
  * Ширины колонок.
@@ -101,13 +100,13 @@ const severityConfig: Record<FindingSeverity, {
   medium: {
     bgcolor: semantic.severity.medium.subtle,
     color: semantic.severity.medium.text,
-    borderColor: `rgba(234, 88, 12, 0.5)`,
+    borderColor: muiAlpha(semantic.severity.medium.base, 0.5),
     icon: <ReportProblemOutlinedIcon sx={{ fontSize: 14 }} />,
   },
   low: {
     bgcolor: semantic.severity.low.subtle,
     color: semantic.severity.low.text,
-    borderColor: `rgba(22, 163, 74, 0.3)`,
+    borderColor: muiAlpha(semantic.severity.low.base, 0.3),
     icon: <InfoOutlinedIcon sx={{ fontSize: 14 }} />,
   },
 };
@@ -123,16 +122,28 @@ const severityBorderColors: Record<FindingSeverity, string> = {
 // Row backgrounds using design system
 const severityRowBgColors: Record<FindingSeverity, string | null> = {
   critical: semantic.severity.high.subtle,
-  high: `rgba(244, 67, 54, 0.04)`,
+  high: muiAlpha(semantic.severity.high.base, 0.08),
   medium: null,
   low: null,
 };
 
 // Policy decision styles using design system
 const policyDecisionStyles: Record<string, { label: string; color: string; border: string }> = {
-  pass: { label: "PASS", color: semantic.severity.low.text, border: "rgba(129, 199, 132, 0.45)" },
-  warn: { label: "WARN", color: semantic.severity.medium.text, border: "rgba(255, 183, 77, 0.45)" },
-  fail: { label: "FAIL", color: semantic.severity.high.light, border: "rgba(239, 83, 80, 0.5)" },
+  pass: {
+    label: "PASS",
+    color: semantic.severity.low.text,
+    border: muiAlpha(semantic.severity.low.base, 0.45),
+  },
+  warn: {
+    label: "WARN",
+    color: semantic.severity.medium.text,
+    border: muiAlpha(semantic.severity.medium.base, 0.45),
+  },
+  fail: {
+    label: "FAIL",
+    color: semantic.severity.high.light,
+    border: muiAlpha(semantic.severity.high.base, 0.5),
+  },
 };
 
 const statusLabels: Record<FindingStatus, string> = {
@@ -159,20 +170,20 @@ const statusConfig: Record<FindingStatus, {
     icon: <FiberNewIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.new.subtle,
     color: semantic.status.new.text,
-    borderColor: `rgba(59, 130, 246, 0.5)`,
+    borderColor: muiAlpha(semantic.status.new.base, 0.5),
     pulse: true,
   },
   under_review: {
     icon: <VisibilityIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.inProgress.subtle,
     color: semantic.status.inProgress.text,
-    borderColor: `rgba(245, 158, 11, 0.4)`,
+    borderColor: muiAlpha(semantic.status.inProgress.base, 0.4),
   },
   confirmed: {
     icon: <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.feedback.error.subtle,
     color: semantic.feedback.error.light,
-    borderColor: `rgba(244, 67, 54, 0.4)`,
+    borderColor: muiAlpha(semantic.feedback.error.base, 0.4),
   },
 
   // Resolved
@@ -180,31 +191,31 @@ const statusConfig: Record<FindingStatus, {
     icon: <VerifiedIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.resolved.subtle,
     color: semantic.status.resolved.text,
-    borderColor: `rgba(16, 185, 129, 0.4)`,
+    borderColor: muiAlpha(semantic.status.resolved.base, 0.4),
   },
   false_positive: {
     icon: <BlockIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.dismissed.subtle,
     color: semantic.status.dismissed.text,
-    borderColor: `rgba(107, 114, 128, 0.3)`,
+    borderColor: muiAlpha(semantic.status.dismissed.base, 0.3),
   },
   out_of_scope: {
     icon: <RemoveCircleOutlineIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.dismissed.subtle,
     color: semantic.status.dismissed.text,
-    borderColor: `rgba(107, 114, 128, 0.3)`,
+    borderColor: muiAlpha(semantic.status.dismissed.base, 0.3),
   },
   risk_accepted: {
     icon: <ThumbUpAltOutlinedIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.feedback.warning.subtle,
     color: primitives.gold[300],
-    borderColor: `rgba(255, 193, 7, 0.3)`,
+    borderColor: muiAlpha(semantic.feedback.warning.base, 0.3),
   },
   duplicate: {
     icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
     bgcolor: semantic.status.dismissed.subtle,
     color: semantic.status.dismissed.text,
-    borderColor: `rgba(107, 114, 128, 0.3)`,
+    borderColor: muiAlpha(semantic.status.dismissed.base, 0.3),
   },
 };
 
@@ -535,7 +546,7 @@ export default function FindingsTable({
             key={`${title}-${matchIndex}-${startIndex}`}
             component="span"
             sx={{
-              backgroundColor: "rgba(255, 193, 7, 0.22)",
+              backgroundColor: tableStyles.highlightBg,
               fontWeight: 700,
               px: 0.5,
               borderRadius: 0.75,
@@ -557,22 +568,7 @@ export default function FindingsTable({
   const colCount = 7; // checkbox + issue + severity + risk + status + sla + actions
 
   return (
-    <TableContainer
-      sx={{
-        borderRadius: 2,
-        overflowX: "auto",
-        "& .MuiTableCell-head": { fontWeight: 700, whiteSpace: "nowrap" },
-      }}
-    >
-      <Table
-        stickyHeader
-        size="small"
-        sx={{
-          width: "100%",
-          minWidth: 1230,
-          tableLayout: "fixed", // чтобы ширины колонок не прыгали
-        }}
-      >
+    <DataTable minWidth={1230} tableLayout="fixed" zebra>
         {/* ВАЖНО: colgroup должен быть первым ребёнком table */}
         <colgroup>
           <col style={{ width: COL_CHECKBOX }} />
@@ -680,33 +676,13 @@ export default function FindingsTable({
         </TableHead>
 
         <TableBody>
-          {loading &&
-            Array.from({ length: Math.max(rowCount, 8) }).map((_, index) => (
-              <TableRow key={`skeleton-${index}`}>
-                <TableCell padding="checkbox" sx={{ width: COL_CHECKBOX }}>
-                  <Skeleton variant="rectangular" width={18} height={18} />
-                </TableCell>
-                <TableCell>
-                  <Skeleton width="70%" />
-                  {!compactMode && <Skeleton width="45%" />}
-                </TableCell>
-                <TableCell align="center" sx={{ width: COL_SEVERITY }}>
-                  <Skeleton width={90} />
-                </TableCell>
-                <TableCell align="center" sx={{ width: COL_RISK }}>
-                  <Skeleton width={70} />
-                </TableCell>
-                <TableCell align="center" sx={{ width: COL_STATUS }}>
-                  <Skeleton width={110} />
-                </TableCell>
-                <TableCell align="center" sx={{ width: COL_SLA }}>
-                  <Skeleton width={80} />
-                </TableCell>
-                <TableCell align="right" sx={{ width: COL_ACTIONS }}>
-                  <Skeleton width={28} height={28} />
-                </TableCell>
-              </TableRow>
-            ))}
+          {loading && (
+            <TableLoadingRows
+              rowCount={Math.max(rowCount, 8)}
+              cellCount={colCount}
+              checkbox
+            />
+          )}
 
           {!loading && errorMessage && (
             <TableRow>
@@ -722,88 +698,17 @@ export default function FindingsTable({
           )}
 
           {!loading && !errorMessage && safeData.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={colCount} align="center" sx={{ py: 8 }}>
-                <Box
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 2,
-                  }}
-                >
-                  {/* Иконка с анимацией */}
-                  <Box
-                    sx={{
-                      width: 80,
-                      height: 80,
-                      borderRadius: "50%",
-                      bgcolor: "rgba(76, 175, 80, 0.1)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      animation: "emptyPulse 2s ease-in-out infinite",
-                      "@keyframes emptyPulse": {
-                        "0%, 100%": {
-                          transform: "scale(1)",
-                          boxShadow: "0 0 0 0 rgba(76, 175, 80, 0.2)",
-                        },
-                        "50%": {
-                          transform: "scale(1.05)",
-                          boxShadow: "0 0 0 10px rgba(76, 175, 80, 0)",
-                        },
-                      },
-                    }}
-                  >
-                    <SecurityIcon
-                      sx={{
-                        fontSize: 40,
-                        color: "success.main",
-                      }}
-                    />
-                  </Box>
-
-                  {/* Текст */}
-                  <Box sx={{ textAlign: "center" }}>
-                    <Typography
-                      variant="h6"
-                      sx={{ fontWeight: 600, color: "text.primary", mb: 0.5 }}
-                    >
-                      No findings match your filters
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{ color: "text.secondary", maxWidth: 320 }}
-                    >
-                      Try adjusting your search criteria or clear filters to see all findings
-                    </Typography>
-                  </Box>
-
-                  {/* Кнопка */}
-                  <Box
-                    onClick={onResetFilters}
-                    sx={{
-                      mt: 1,
-                      px: 3,
-                      py: 1,
-                      borderRadius: 2,
-                      bgcolor: "primary.main",
-                      color: "primary.contrastText",
-                      fontWeight: 600,
-                      fontSize: "0.875rem",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                      "&:hover": {
-                        bgcolor: "primary.dark",
-                        transform: "translateY(-1px)",
-                      },
-                    }}
-                  >
-                    Clear all filters
-                  </Box>
-                </Box>
-              </TableCell>
-            </TableRow>
+            <TableEmptyState
+              colSpan={colCount}
+              title="Нет находок по текущим фильтрам"
+              description="Попробуйте изменить условия поиска или сбросить фильтры."
+              hint="Если данных нет, загрузите скан или выберите другой продукт."
+              action={
+                <Button variant="contained" size="small" onClick={onResetFilters}>
+                  Сбросить фильтры
+                </Button>
+              }
+            />
           )}
 
           {!loading &&
@@ -895,7 +800,7 @@ export default function FindingsTable({
 
                     // Zebra striping - чередование фона
                     "&:nth-of-type(even)": {
-                      bgcolor: rowBgColor || "rgba(255, 255, 255, 0.015)",
+                      bgcolor: rowBgColor || tableStyles.rowZebra,
                     },
                     "&:nth-of-type(odd)": {
                       bgcolor: rowBgColor || "transparent",
@@ -903,20 +808,20 @@ export default function FindingsTable({
 
                     // Border между строками
                     borderBottom: "1px solid",
-                    borderColor: "rgba(255, 255, 255, 0.06)",
+                    borderColor: tableStyles.cellBorder,
 
                     // Улучшенный hover эффект
                     transition: "all 0.15s ease",
                     "&:hover": {
-                      bgcolor: "rgba(122, 162, 247, 0.08) !important",
+                      bgcolor: `${tableStyles.rowHover} !important`,
                       "& .finding-rowStripe": { width: 5, opacity: 1 },
                     },
 
                     // Active state (открыт в drawer)
                     ...(isActive && !isSelected
                       ? {
-                        bgcolor: "action.selected",
-                        "&:hover": { bgcolor: "action.selected" },
+                        bgcolor: tableStyles.rowActive,
+                        "&:hover": { bgcolor: tableStyles.rowActive },
                         "& .finding-rowStripe": { width: 5, opacity: 1 },
                       }
                       : null),
@@ -1010,52 +915,37 @@ export default function FindingsTable({
                             }
                             placement="top"
                           >
-                            <Box
+                            <TableChip
+                              icon={<RepeatIcon sx={{ fontSize: 12 }} />}
+                              label={`${repeats}x`}
                               sx={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 0.5,
-                                px: 1,
-                                py: 0.25,
-                                borderRadius: "12px",
-                                fontWeight: 700,
-                                fontSize: "0.7rem",
-                                bgcolor: "rgba(255, 152, 0, 0.15)",
-                                color: "#ffb74d",
-                                border: "1px solid rgba(255, 152, 0, 0.4)",
-                                flexShrink: 0,
-                                transition: "all 0.2s ease",
+                                bgcolor: muiAlpha(semantic.feedback.warning.base, 0.15),
+                                color: semantic.feedback.warning.text,
+                                border: `1px solid ${muiAlpha(
+                                  semantic.feedback.warning.base,
+                                  0.4
+                                )}`,
                                 "&:hover": {
-                                  bgcolor: "rgba(255, 152, 0, 0.25)",
+                                  bgcolor: muiAlpha(semantic.feedback.warning.base, 0.25),
                                 },
                               }}
-                            >
-                              <RepeatIcon sx={{ fontSize: 12 }} />
-                              {repeats}x
-                            </Box>
+                            />
                           </Tooltip>
                         )}
 
                         {occurrence === "REPEAT" && !repeats && (
-                          <Box
+                          <TableChip
+                            icon={<RepeatIcon sx={{ fontSize: 12 }} />}
+                            label="Repeat"
                             sx={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 0.5,
-                              px: 1,
-                              py: 0.25,
-                              borderRadius: "12px",
-                              fontWeight: 600,
-                              fontSize: "0.7rem",
-                              bgcolor: "rgba(255, 152, 0, 0.1)",
-                              color: "#ffb74d",
-                              border: "1px solid rgba(255, 152, 0, 0.3)",
-                              flexShrink: 0,
+                              bgcolor: muiAlpha(semantic.feedback.warning.base, 0.1),
+                              color: semantic.feedback.warning.text,
+                              border: `1px solid ${muiAlpha(
+                                semantic.feedback.warning.base,
+                                0.3
+                              )}`,
                             }}
-                          >
-                            <RepeatIcon sx={{ fontSize: 12 }} />
-                            Repeat
-                          </Box>
+                          />
                         )}
 
                         {/* возраст - улучшенный badge */}
@@ -1073,54 +963,40 @@ export default function FindingsTable({
                             }
                             placement="top"
                           >
-                            <Box
+                            <TableChip
+                              icon={<ScheduleIcon sx={{ fontSize: 12 }} />}
+                              label={getAgeLabel(ageDays)}
                               sx={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 0.5,
-                                px: 1,
-                                py: 0.25,
-                                borderRadius: "12px",
-                                fontWeight: 600,
-                                fontSize: "0.7rem",
-                                flexShrink: 0,
-                                transition: "all 0.2s ease",
-                                // Красный для старых (90+ дней), серый для остальных
                                 ...(ageDays >= 90
                                   ? {
-                                    bgcolor: "rgba(244, 67, 54, 0.15)",
-                                    color: "#ef5350",
-                                    border: "1px solid rgba(244, 67, 54, 0.4)",
-                                  }
+                                      bgcolor: muiAlpha(semantic.feedback.error.base, 0.15),
+                                      color: semantic.feedback.error.light,
+                                      border: `1px solid ${muiAlpha(
+                                        semantic.feedback.error.base,
+                                        0.4
+                                      )}`,
+                                    }
                                   : {
-                                    bgcolor: "rgba(158, 158, 158, 0.1)",
-                                    color: "#9e9e9e",
-                                    border: "1px solid rgba(158, 158, 158, 0.3)",
-                                  }),
-                                "&:hover": {
-                                  transform: "scale(1.02)",
-                                },
+                                      bgcolor: muiAlpha(semantic.status.dismissed.base, 0.12),
+                                      color: semantic.status.dismissed.text,
+                                      border: `1px solid ${muiAlpha(
+                                        semantic.status.dismissed.base,
+                                        0.3
+                                      )}`,
+                                    }),
                               }}
-                            >
-                              <ScheduleIcon sx={{ fontSize: 12 }} />
-                              {getAgeLabel(ageDays)}
-                            </Box>
+                            />
                           </Tooltip>
                         )}
 
                         {policyDecisionMeta && (
-                          <Chip
-                            size="small"
+                          <TableChip
                             label={`Gate: ${policyDecisionMeta.label}`}
                             variant="outlined"
                             sx={{
-                              height: 22,
-                              fontSize: "0.65rem",
-                              fontWeight: 700,
                               borderColor: policyDecisionMeta.border,
                               color: policyDecisionMeta.color,
-                              bgcolor: "rgba(255, 255, 255, 0.04)",
-                              "& .MuiChip-label": { px: 0.75 },
+                              bgcolor: muiAlpha(primitives.white, 0.04),
                             }}
                           />
                         )}
@@ -1175,185 +1051,148 @@ export default function FindingsTable({
                           {/* SCA Badge - Gray/neutral */}
                           {isSca && (
                             <Tooltip title="Software Composition Analysis (dependencies)">
-                              <Box
+                              <TableChip
+                                icon={<SecurityIcon sx={{ fontSize: 14 }} />}
+                                label="SCA"
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(158, 158, 158, 0.16)",
-                                  color: "rgba(255, 255, 255, 0.78)",
-                                  border: "1px solid rgba(255, 255, 255, 0.14)",
+                                  bgcolor: muiAlpha(semantic.status.dismissed.base, 0.2),
+                                  color: semantic.status.dismissed.text,
+                                  border: `1px solid ${muiAlpha(
+                                    semantic.status.dismissed.base,
+                                    0.3
+                                  )}`,
                                 }}
-                              >
-                                <SecurityIcon sx={{ fontSize: 14 }} />
-                                SCA
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                           {/* SAST Badge - Purple/Violet for code analysis */}
                           {isSast && (
                             <Tooltip title="Static Application Security Testing (code analysis)">
-                              <Box
+                              <TableChip
+                                icon={<CodeIcon sx={{ fontSize: 14 }} />}
+                                label="SAST"
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(156, 39, 176, 0.15)",
-                                  color: "#ce93d8",
-                                  border: "1px solid rgba(156, 39, 176, 0.4)",
-                                  transition: "all 0.2s ease",
+                                  bgcolor: muiAlpha(semantic.severity.critical.base, 0.15),
+                                  color: semantic.severity.critical.text,
+                                  border: `1px solid ${muiAlpha(
+                                    semantic.severity.critical.base,
+                                    0.4
+                                  )}`,
                                   "&:hover": {
-                                    bgcolor: "rgba(156, 39, 176, 0.25)",
+                                    bgcolor: muiAlpha(semantic.severity.critical.base, 0.25),
                                   },
                                 }}
-                              >
-                                <CodeIcon sx={{ fontSize: 14 }} />
-                                SAST
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                           {/* CWE Badges - Compact with just ID */}
                           {cweData.display.map((cwe) => (
                             <Tooltip key={cwe.id} title={cwe.full}>
-                              <Box
+                              <TableChip
+                                label={cwe.id}
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  px: 0.6,
-                                  py: 0.15,
-                                  borderRadius: "10px",
-                                  fontWeight: 600,
+                                  bgcolor: muiAlpha(semantic.feedback.warning.base, 0.12),
+                                  color: semantic.feedback.warning.text,
+                                  border: `1px solid ${muiAlpha(
+                                    semantic.feedback.warning.base,
+                                    0.3
+                                  )}`,
+                                  height: 20,
                                   fontSize: "0.6rem",
-                                  bgcolor: "rgba(255, 87, 34, 0.1)",
-                                  color: "#ff8a65",
-                                  border: "1px solid rgba(255, 87, 34, 0.3)",
+                                  textTransform: "none",
+                                  "& .MuiChip-label": { px: 0.6 },
                                 }}
-                              >
-                                {cwe.id}
-                              </Box>
+                              />
                             </Tooltip>
                           ))}
                           {cweData.extra > 0 && (
                             <Tooltip title={cweData.all.map((c) => c.full).join("\n")}>
-                              <Box
+                              <TableChip
+                                label={`+${cweData.extra}`}
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  px: 0.5,
-                                  py: 0.15,
-                                  borderRadius: "10px",
-                                  fontWeight: 600,
+                                  bgcolor: muiAlpha(semantic.feedback.warning.base, 0.08),
+                                  color: semantic.feedback.warning.text,
+                                  height: 20,
                                   fontSize: "0.55rem",
-                                  bgcolor: "rgba(255, 87, 34, 0.08)",
-                                  color: "#ff8a65",
+                                  textTransform: "none",
+                                  "& .MuiChip-label": { px: 0.6 },
                                 }}
-                              >
-                                +{cweData.extra}
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                           {/* OWASP Badges - Compact */}
                           {owaspData.display.map((owasp) => (
                             <Tooltip key={owasp.id} title={owasp.full}>
-                              <Box
+                              <TableChip
+                                label={owasp.id}
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  px: 0.6,
-                                  py: 0.15,
-                                  borderRadius: "10px",
-                                  fontWeight: 600,
+                                  bgcolor: muiAlpha(semantic.feedback.info.base, 0.12),
+                                  color: semantic.feedback.info.text,
+                                  border: `1px solid ${muiAlpha(
+                                    semantic.feedback.info.base,
+                                    0.3
+                                  )}`,
+                                  height: 20,
                                   fontSize: "0.6rem",
-                                  bgcolor: "rgba(63, 81, 181, 0.1)",
-                                  color: "#7986cb",
-                                  border: "1px solid rgba(63, 81, 181, 0.3)",
+                                  textTransform: "none",
+                                  "& .MuiChip-label": { px: 0.6 },
                                 }}
-                              >
-                                {owasp.id}
-                              </Box>
+                              />
                             </Tooltip>
                           ))}
                           {owaspData.extra > 0 && (
                             <Tooltip title={owaspData.all.map((o) => o.full).join("\n")}>
-                              <Box
+                              <TableChip
+                                label={`+${owaspData.extra}`}
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  px: 0.5,
-                                  py: 0.15,
-                                  borderRadius: "10px",
-                                  fontWeight: 600,
+                                  bgcolor: muiAlpha(semantic.feedback.info.base, 0.08),
+                                  color: semantic.feedback.info.text,
+                                  height: 20,
                                   fontSize: "0.55rem",
-                                  bgcolor: "rgba(63, 81, 181, 0.08)",
-                                  color: "#7986cb",
+                                  textTransform: "none",
+                                  "& .MuiChip-label": { px: 0.6 },
                                 }}
-                              >
-                                +{owaspData.extra}
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                           {/* SECRETS Badge - Amber/Gold for secrets */}
                           {isSecrets && (
                             <Tooltip title="Secrets Detection (API keys, passwords, tokens)">
-                              <Box
+                              <TableChip
+                                icon={<VpnKeyIcon sx={{ fontSize: 14 }} />}
+                                label="SECRETS"
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(255, 193, 7, 0.15)",
-                                  color: "#ffd54f",
-                                  border: "1px solid rgba(255, 193, 7, 0.4)",
-                                  transition: "all 0.2s ease",
+                                  bgcolor: muiAlpha(semantic.feedback.warning.base, 0.15),
+                                  color: semantic.feedback.warning.text,
+                                  border: `1px solid ${muiAlpha(
+                                    semantic.feedback.warning.base,
+                                    0.4
+                                  )}`,
                                   "&:hover": {
-                                    bgcolor: "rgba(255, 193, 7, 0.25)",
+                                    bgcolor: muiAlpha(semantic.feedback.warning.base, 0.25),
                                   },
                                 }}
-                              >
-                                <VpnKeyIcon sx={{ fontSize: 14 }} />
-                                SECRETS
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                           {/* CONFIG Badge - Cyan/Teal for configuration */}
                           {isConfig && (
                             <Tooltip title="Configuration Analysis (misconfigurations)">
-                              <Box
+                              <TableChip
+                                icon={<SettingsIcon sx={{ fontSize: 14 }} />}
+                                label="CONFIG"
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(0, 188, 212, 0.15)",
-                                  color: "#4dd0e1",
-                                  border: "1px solid rgba(0, 188, 212, 0.4)",
-                                  transition: "all 0.2s ease",
+                                  bgcolor: muiAlpha(semantic.feedback.info.base, 0.15),
+                                  color: semantic.feedback.info.text,
+                                  border: `1px solid ${muiAlpha(
+                                    semantic.feedback.info.base,
+                                    0.4
+                                  )}`,
                                   "&:hover": {
-                                    bgcolor: "rgba(0, 188, 212, 0.25)",
+                                    bgcolor: muiAlpha(semantic.feedback.info.base, 0.25),
                                   },
                                 }}
-                              >
-                                <SettingsIcon sx={{ fontSize: 14 }} />
-                                CONFIG
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                           {cvssScore !== null && (
@@ -1362,33 +1201,25 @@ export default function FindingsTable({
                                 1
                               )}`}
                             >
-                              <Box
+                              <TableChip
+                                label={`CVSS ${cvssScore.toFixed(1)}`}
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
                                   bgcolor:
                                     cvssScore >= 9
-                                      ? "rgba(244, 67, 54, 0.2)"
+                                      ? muiAlpha(semantic.feedback.error.base, 0.2)
                                       : cvssScore >= 7
-                                        ? "rgba(255, 152, 0, 0.2)"
-                                        : "rgba(76, 175, 80, 0.2)",
+                                        ? muiAlpha(semantic.feedback.warning.base, 0.2)
+                                        : muiAlpha(semantic.feedback.success.base, 0.2),
                                   color:
                                     cvssScore >= 9
-                                      ? "#ef5350"
+                                      ? semantic.feedback.error.light
                                       : cvssScore >= 7
-                                        ? "#ffb74d"
-                                        : "#81c784",
-                                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                                        ? semantic.feedback.warning.text
+                                        : semantic.feedback.success.text,
+                                  border: `1px solid ${muiAlpha(primitives.white, 0.2)}`,
+                                  textTransform: "none",
                                 }}
-                              >
-                                CVSS {cvssScore.toFixed(1)}
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                           {epssScore !== null && (
@@ -1399,44 +1230,33 @@ export default function FindingsTable({
                                   : ""
                               }`}
                             >
-                              <Box
+                              <TableChip
+                                label={`EPSS ${(epssScore * 100).toFixed(1)}%`}
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(33, 150, 243, 0.15)",
-                                  color: "#64b5f6",
-                                  border: "1px solid rgba(100, 181, 246, 0.4)",
+                                  bgcolor: muiAlpha(semantic.feedback.info.base, 0.15),
+                                  color: semantic.feedback.info.text,
+                                  border: `1px solid ${muiAlpha(
+                                    semantic.feedback.info.base,
+                                    0.4
+                                  )}`,
+                                  textTransform: "none",
                                 }}
-                              >
-                                EPSS {(epssScore * 100).toFixed(1)}%
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                           {isKev && (
                             <Tooltip title="Known Exploited Vulnerability">
-                              <Box
+                              <TableChip
+                                label="KEV"
                                 sx={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  px: 1,
-                                  py: 0.2,
-                                  borderRadius: "12px",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  bgcolor: "rgba(255, 82, 82, 0.2)",
-                                  color: "#ff8a80",
-                                  border: "1px solid rgba(255, 82, 82, 0.5)",
+                                  bgcolor: muiAlpha(semantic.feedback.error.base, 0.2),
+                                  color: semantic.feedback.error.light,
+                                  border: `1px solid ${muiAlpha(
+                                    semantic.feedback.error.base,
+                                    0.5
+                                  )}`,
                                 }}
-                              >
-                                KEV
-                              </Box>
+                              />
                             </Tooltip>
                           )}
                         </Stack>
@@ -1554,34 +1374,19 @@ export default function FindingsTable({
                       const config = severityConfig[f.severity];
                       const isGradient = config.bgcolor.includes("gradient");
                       return (
-                        <Box
+                        <TableChip
+                          icon={config.icon}
+                          label={severityLabels[f.severity]}
                           sx={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                            px: 1.25,
-                            py: 0.5,
-                            borderRadius: "16px",
-                            fontWeight: 600,
-                            fontSize: "0.75rem",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.025em",
                             color: config.color,
                             background: config.bgcolor,
                             border: config.borderColor ? `1px solid ${config.borderColor}` : "none",
                             boxShadow: config.glow ?? "none",
-                            transition: "all 0.2s ease",
-                            "&:hover": {
-                              transform: "scale(1.02)",
-                            },
                             "& .MuiSvgIcon-root": {
                               color: config.color,
                             },
                           }}
-                        >
-                          {config.icon}
-                          {severityLabels[f.severity]}
-                        </Box>
+                        />
                       );
                     })()}
                   </TableCell>
@@ -1610,18 +1415,13 @@ export default function FindingsTable({
                       }
                       return (
                         <Tooltip title="Risk = Likelihood × Impact (OWASP)">
-                          <Chip
-                            size="small"
+                          <TableChip
                             label={`${riskBandShortLabels[band]} ${score}`}
                             sx={{
-                              height: 24,
-                              fontSize: "0.7rem",
-                              fontWeight: 700,
                               borderColor: RISK_BAND_COLORS[band],
                               color: RISK_BAND_COLORS[band],
-                              bgcolor: "rgba(255, 255, 255, 0.04)",
+                              bgcolor: muiAlpha(RISK_BAND_COLORS[band], 0.12),
                               border: "1px solid",
-                              "& .MuiChip-label": { px: 0.8 },
                             }}
                           />
                         </Tooltip>
@@ -1641,21 +1441,13 @@ export default function FindingsTable({
                     {(() => {
                       const config = statusConfig[f.status];
                       return (
-                        <Box
+                        <TableChip
+                          icon={config.icon}
+                          label={statusLabels[f.status] ?? f.status}
                           sx={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                            px: 1.25,
-                            py: 0.5,
-                            borderRadius: "16px",
-                            fontWeight: 500,
-                            fontSize: "0.75rem",
                             color: config.color,
                             bgcolor: config.bgcolor,
                             border: config.borderColor ? `1px solid ${config.borderColor}` : "none",
-                            transition: "all 0.2s ease",
-                            // Пульсация для "New" статуса
                             ...(config.pulse && {
                               animation: "statusPulse 2s ease-in-out infinite",
                               "@keyframes statusPulse": {
@@ -1671,10 +1463,7 @@ export default function FindingsTable({
                               color: config.color,
                             },
                           }}
-                        >
-                          {config.icon}
-                          {statusLabels[f.status] ?? f.status}
-                        </Box>
+                        />
                       );
                     })()}
                   </TableCell>
@@ -1695,25 +1484,15 @@ export default function FindingsTable({
                           : "SLA not set"
                       }
                     >
-                      <Box
+                      <TableChip
+                        label={slaDisplay.label}
                         sx={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          px: 1,
-                          py: 0.4,
                           minWidth: 80,
-                          borderRadius: "14px",
-                          fontWeight: 600,
-                          fontSize: "0.7rem",
                           color: slaDisplay.color,
                           bgcolor: slaDisplay.bgcolor,
                           border: `1px solid ${slaDisplay.borderColor}`,
-                          textTransform: "uppercase",
                         }}
-                      >
-                        {slaDisplay.label}
-                      </Box>
+                      />
                     </Tooltip>
                   </TableCell>
 
@@ -1739,7 +1518,6 @@ export default function FindingsTable({
               );
             })}
         </TableBody>
-      </Table>
-    </TableContainer>
+    </DataTable>
   );
 }

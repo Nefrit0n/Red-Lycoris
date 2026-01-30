@@ -1,7 +1,7 @@
 /**
  * Theme Context - Provides theme management for the application
  *
- * Uses the Lotus Warden Design System themes with support for
+ * Uses the RED LYCORIS Design System themes with support for
  * dark, light, and system preference modes.
  */
 
@@ -87,7 +87,7 @@ interface ThemeContextProviderProps {
 /**
  * Theme Context Provider
  *
- * Wraps the application with MUI ThemeProvider using Lotus Warden themes.
+ * Wraps the application with MUI ThemeProvider using RED LYCORIS themes.
  * Handles system preference detection and localStorage persistence.
  *
  * @example

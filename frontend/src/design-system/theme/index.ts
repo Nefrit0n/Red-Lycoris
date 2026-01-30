@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Theme Exports
+ * RED LYCORIS Design System - Theme Exports
  *
  * @example
  * import { darkTheme, lightTheme, getTheme } from '@/design-system/theme';

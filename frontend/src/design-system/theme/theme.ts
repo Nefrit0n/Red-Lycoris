@@ -1,9 +1,9 @@
 /**
- * Lotus Warden Design System - MUI Theme Configuration
+ * RED LYCORIS Design System - MUI Theme Configuration
  *
  * Enhanced Material-UI theme built on our design tokens.
  * Provides dark and light theme variants with full
- * Lotus Warden branding.
+ * RED LYCORIS branding.
  */
 
 import { createTheme, ThemeOptions, alpha } from '@mui/material/styles';
@@ -168,7 +168,7 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
           },
         },
         '::selection': {
-          backgroundColor: alpha(primitives.lotus[500], 0.3),
+          backgroundColor: alpha(colors.brand.primary, 0.3),
           color: primitives.night[50],
         },
       },
@@ -192,37 +192,40 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
         sizeLarge: {
           padding: '12px 24px',
           fontSize: fontSize.base,
+          minHeight: '48px',
         },
         sizeMedium: {
-          padding: '8px 16px',
+          padding: '8px 18px',
           fontSize: fontSize.sm,
+          minHeight: '40px',
         },
         sizeSmall: {
-          padding: '6px 12px',
+          padding: '6px 14px',
           fontSize: fontSize.xs,
+          minHeight: '32px',
         },
         containedPrimary: {
-          background: primitives.lotus[500],
+          background: colors.brand.primary,
           '&:hover': {
-            background: primitives.lotus[400],
+            background: colors.brand.primaryHover,
             boxShadow: glow.lotus.subtle,
           },
           '&:active': {
-            background: primitives.lotus[600],
+            background: colors.brand.primaryActive,
           },
         },
         outlinedPrimary: {
-          borderColor: primitives.lotus[500],
-          color: primitives.lotus[400],
+          borderColor: colors.brand.primary,
+          color: colors.brand.primaryHover,
           '&:hover': {
-            borderColor: primitives.lotus[400],
-            backgroundColor: alpha(primitives.lotus[500], 0.08),
+            borderColor: colors.brand.primaryHover,
+            backgroundColor: alpha(colors.brand.primary, 0.08),
           },
         },
         textPrimary: {
-          color: primitives.lotus[400],
+          color: colors.brand.primaryHover,
           '&:hover': {
-            backgroundColor: alpha(primitives.lotus[500], 0.08),
+            backgroundColor: alpha(colors.brand.primary, 0.08),
           },
         },
       },
@@ -288,10 +291,10 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
           height: '32px',
         },
         colorPrimary: {
-          backgroundColor: alpha(primitives.lotus[500], 0.15),
-          color: primitives.lotus[300],
+          backgroundColor: alpha(colors.brand.primary, 0.15),
+          color: colors.brand.primaryHover,
           '&:hover': {
-            backgroundColor: alpha(primitives.lotus[500], 0.25),
+            backgroundColor: alpha(colors.brand.primary, 0.25),
           },
         },
         colorSecondary: {
@@ -333,12 +336,16 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
         root: {
           borderRadius: radius.input,
           transition: `all ${duration.fast} ${easing.smooth}`,
+          minHeight: '40px',
           '&:hover .MuiOutlinedInput-notchedOutline': {
             borderColor: colors.border.interactive,
           },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-            borderColor: primitives.lotus[500],
+            borderColor: colors.border.focus,
             borderWidth: '2px',
+          },
+          '&.Mui-focused': {
+            boxShadow: focusRing.default,
           },
           '&.Mui-error .MuiOutlinedInput-notchedOutline': {
             borderColor: semantic.feedback.error.base,
@@ -553,7 +560,7 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
           minHeight: '40px',
         },
         indicator: {
-          backgroundColor: primitives.lotus[500],
+          backgroundColor: colors.brand.primary,
           height: '2px',
           borderRadius: '2px 2px 0 0',
         },
@@ -570,7 +577,7 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
           padding: '8px 16px',
           transition: `color ${duration.fast} ${easing.smooth}`,
           '&.Mui-selected': {
-            color: primitives.lotus[400],
+            color: colors.brand.primaryHover,
           },
         },
       },
@@ -705,11 +712,11 @@ const darkThemeOptions: ThemeOptions = {
   palette: {
     mode: 'dark',
 
-    // Primary - Lotus purple
+    // Primary - RED LYCORIS
     primary: {
-      main: primitives.lotus[500],
-      light: primitives.lotus[400],
-      dark: primitives.lotus[600],
+      main: darkColors.brand.primary,
+      light: darkColors.brand.primaryHover,
+      dark: darkColors.brand.primaryActive,
       contrastText: '#ffffff',
     },
 
@@ -788,9 +795,9 @@ const darkThemeOptions: ThemeOptions = {
 
     // Custom brand colors
     lotus: {
-      main: primitives.lotus[500],
-      light: primitives.lotus[400],
-      dark: primitives.lotus[600],
+      main: darkColors.brand.primary,
+      light: darkColors.brand.primaryHover,
+      dark: darkColors.brand.primaryActive,
       contrastText: '#ffffff',
     },
     petal: {
@@ -843,7 +850,7 @@ const darkThemeOptions: ThemeOptions = {
 
     // Glow colors
     glow: {
-      lotus: primitives.lotus[500],
+      lotus: darkColors.brand.primary,
       petal: primitives.petal[500],
       jade: primitives.jade[500],
       gold: primitives.gold[500],
@@ -889,9 +896,9 @@ const lightThemeOptions: ThemeOptions = {
     mode: 'light',
 
     primary: {
-      main: primitives.lotus[600],
-      light: primitives.lotus[500],
-      dark: primitives.lotus[700],
+      main: lightColors.brand.primary,
+      light: lightColors.brand.primaryHover,
+      dark: lightColors.brand.primaryActive,
       contrastText: '#ffffff',
     },
 
@@ -960,9 +967,9 @@ const lightThemeOptions: ThemeOptions = {
     },
 
     lotus: {
-      main: primitives.lotus[600],
-      light: primitives.lotus[500],
-      dark: primitives.lotus[700],
+      main: lightColors.brand.primary,
+      light: lightColors.brand.primaryHover,
+      dark: lightColors.brand.primaryActive,
       contrastText: '#ffffff',
     },
     petal: {
@@ -1010,7 +1017,7 @@ const lightThemeOptions: ThemeOptions = {
       border: 'rgba(0, 0, 0, 0.06)',
     },
     glow: {
-      lotus: primitives.lotus[600],
+      lotus: lightColors.brand.primary,
       petal: primitives.petal[600],
       jade: primitives.jade[600],
       gold: primitives.gold[600],
@@ -1029,7 +1036,7 @@ const lightThemeOptions: ThemeOptions = {
     dropdown: elevation.lg,
     modal: elevation['2xl'],
     glow: {
-      lotus: `0 0 20px ${alpha(primitives.lotus[600], 0.3)}`,
+      lotus: `0 0 20px ${alpha(lightColors.brand.primary, 0.3)}`,
       petal: `0 0 20px ${alpha(primitives.petal[600], 0.3)}`,
       jade: `0 0 20px ${alpha(primitives.jade[600], 0.3)}`,
       gold: `0 0 20px ${alpha(primitives.gold[600], 0.3)}`,

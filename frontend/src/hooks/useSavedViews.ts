@@ -15,7 +15,7 @@ const STORAGE_KEY = "lotus_warden_saved_views";
 const BUILT_IN_VIEWS: SavedView[] = [
   {
     id: "critical-high",
-    name: "Critical & High",
+    name: "Критичные и высокие",
     filters: {
       filterSeverity: "",
       filterStatus: "new",
@@ -25,7 +25,7 @@ const BUILT_IN_VIEWS: SavedView[] = [
   },
   {
     id: "needs-triage",
-    name: "Needs Triage",
+    name: "Нужен триаж",
     filters: {
       filterStatus: "new",
       filterSeverity: "",
@@ -35,7 +35,7 @@ const BUILT_IN_VIEWS: SavedView[] = [
   },
   {
     id: "false-positives",
-    name: "False Positives",
+    name: "Ложные срабатывания",
     filters: {
       filterStatus: "false_positive",
     },
@@ -44,7 +44,7 @@ const BUILT_IN_VIEWS: SavedView[] = [
   },
   {
     id: "mitigated",
-    name: "Mitigated",
+    name: "Митигированы",
     filters: {
       filterStatus: "mitigated",
     },
@@ -104,6 +104,7 @@ export function useSavedViews(): UseSavedViewsReturn {
         searchInput: filters.searchInput,
         filterSeverity: filters.filterSeverity,
         filterStatus: filters.filterStatus,
+        filterRiskBand: filters.filterRiskBand,
         filterOccurrence: filters.filterOccurrence,
         filterScannerType: filters.filterScannerType,
         filterPolicyDecision: filters.filterPolicyDecision,
@@ -135,6 +136,7 @@ export function useSavedViews(): UseSavedViewsReturn {
                 searchInput: filters.searchInput,
                 filterSeverity: filters.filterSeverity,
                 filterStatus: filters.filterStatus,
+                filterRiskBand: filters.filterRiskBand,
                 filterOccurrence: filters.filterOccurrence,
                 filterScannerType: filters.filterScannerType,
                 filterPolicyDecision: filters.filterPolicyDecision,

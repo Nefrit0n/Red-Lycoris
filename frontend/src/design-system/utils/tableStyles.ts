@@ -1,11 +1,11 @@
 /**
- * Lotus Warden Design System - Table Styles Configuration
+ * RED LYCORIS Design System - Table Styles Configuration
  *
  * Centralized styling for FindingsTable and other data tables.
  * Uses design system tokens for consistency.
  */
 
-import { semantic, primitives, alpha } from '../tokens/colors';
+import { semantic, primitives, alpha, darkTheme } from '../tokens/colors';
 
 // ============================================================
 // SEVERITY CONFIGURATION
@@ -223,23 +223,31 @@ export const tableColumnWidths = {
 
 export const tableStyles = {
   // Highlight styles for search
-  highlightBg: `rgba(255, 193, 7, 0.22)`,
+  highlightBg: alpha.lotus[15],
 
   // Row hover
   rowHover: alpha.white[5],
 
   // Selected row
-  rowSelected: `rgba(168, 85, 247, 0.08)`,
+  rowSelected: alpha.lotus[10],
 
   // Active row (in drawer)
-  rowActive: `rgba(168, 85, 247, 0.12)`,
+  rowActive: alpha.lotus[20],
+
+  // Zebra row
+  rowZebra: alpha.white[3],
 
   // Cell borders
-  cellBorder: primitives.night[600],
+  cellBorder: darkTheme.border.subtle,
 
   // Header styles
-  headerBg: primitives.night[750],
-  headerText: primitives.night[100],
+  headerBg: darkTheme.bg.subtle,
+  headerText: darkTheme.text.secondary,
+
+  // Layout
+  rowHeight: 48,
+  cellPaddingY: 1.25,
+  cellPaddingX: 2,
 } as const;
 
 // ============================================================

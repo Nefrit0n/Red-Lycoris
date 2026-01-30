@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Typography Tokens
+ * RED LYCORIS Design System - Typography Tokens
  *
  * Type scale based on Perfect Fourth (1.333) ratio
  * This creates a harmonious, readable hierarchy that feels
