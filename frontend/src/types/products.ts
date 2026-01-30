@@ -12,6 +12,19 @@ export interface ProductDetailDTO extends ProductListItemDTO {
   description?: string | null;
 }
 
+export interface ProductStatsDTO {
+  openCount: number;
+  mitigatedCount: number;
+  falsePositiveCount: number;
+  severityCounts?: {
+    critical?: number;
+    high?: number;
+    medium?: number;
+    low?: number;
+    info?: number;
+  };
+}
+
 export type ProductDTO = ProductListItemDTO;
 
 export interface ProductWithStats extends ProductListItemDTO {
