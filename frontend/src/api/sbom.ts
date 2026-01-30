@@ -1,5 +1,5 @@
-import { request, requestBlob } from "./client";
-import { SbomComponentItem, SbomIndexStatus, SbomItem, SbomPath, SbomTransitiveResponse } from "../types/sbom";
+import { request, requestBlob, requestWithMeta } from "./client";
+import { SbomComponentItem, SbomIndexStatus, SbomItem, SbomTransitiveExposureResponse } from "../types/sbom";
 
 export const listSboms = async (productId: string): Promise<SbomItem[]> => {
   return request<SbomItem[]>("/api/v1/sbom", {
@@ -63,34 +63,17 @@ export const listProductComponents = async (
       query: params,
     }
   );
-export const listSbomTransitive = async (
+export const listSbomTransitiveExposure = async (
   sbomId: string,
-  rootComponentId: string,
   params: {
     maxDepth?: number;
+    q?: string;
     limit?: number;
     offset?: number;
   }
-): Promise<SbomTransitiveResponse> =>
-  request<SbomTransitiveResponse>(`/api/v1/sbom/${sbomId}/transitive`, {
+): Promise<SbomTransitiveExposureResponse> =>
+  requestWithMeta<SbomTransitiveExposureResponse>(`/api/v1/sbom/${sbomId}/transitive`, {
     query: {
-      rootComponentId,
       ...params,
-    },
-  });
-
-export const getSbomPath = async (
-  sbomId: string,
-  fromComponentId: string,
-  toComponentId: string,
-  params?: {
-    maxDepth?: number;
-  }
-): Promise<SbomPath> =>
-  request<SbomPath>(`/api/v1/sbom/${sbomId}/path`, {
-    query: {
-      fromComponentId,
-      toComponentId,
-      ...(params ?? {}),
     },
   });
