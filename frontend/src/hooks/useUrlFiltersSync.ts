@@ -141,6 +141,40 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     return normalizedEntries;
   };
 
+  const buildFiltersQuery = (state: FiltersState) =>
+    buildQueryString({
+      page: state.page + 1,
+      limit: state.pageSize,
+      product: state.productId,
+      severity: state.filterSeverity,
+      status: state.filterStatus,
+      riskBand: state.filterRiskBand,
+      occurrenceStatus: state.filterOccurrence,
+      scannerType: state.filterScannerType,
+      policyDecision: state.filterPolicyDecision,
+      search: state.searchInput,
+      dateFrom: state.dateFrom,
+      dateTo: state.dateTo,
+      import_job_id: state.importJobId,
+      canonicalOnly: !state.showRepeats,
+      includeRepeats: state.showRepeats,
+      sortField: state.sortField,
+      sortOrder: state.sortOrder,
+      selected: state.selectedFindingId || undefined,
+    });
+
+  const areSearchParamsEqual = (left: string, right: string) => {
+    const leftParams = normalizeSearchParams(left);
+    const rightParams = normalizeSearchParams(right);
+    return (
+      leftParams.length === rightParams.length &&
+      leftParams.every(([key, value], index) => {
+        const [rightKey, rightValue] = rightParams[index];
+        return key === rightKey && value === rightValue;
+      })
+    );
+  };
+
   // URL -> State (on mount and when URL changes)
   useEffect(() => {
     const search = location.search;
@@ -221,35 +255,13 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
   useEffect(() => {
     if (!hydrated) return;
 
-    const params = buildQueryString({
-      page: filters.page + 1,
-      limit: filters.pageSize,
-      product: filters.productId,
-      severity: filters.filterSeverity,
-      status: filters.filterStatus,
-      riskBand: filters.filterRiskBand,
-      occurrenceStatus: filters.filterOccurrence,
-      scannerType: filters.filterScannerType,
-      policyDecision: filters.filterPolicyDecision,
-      search: filters.searchInput,
-      dateFrom: filters.dateFrom,
-      dateTo: filters.dateTo,
-      import_job_id: filters.importJobId,
-      canonicalOnly: !filters.showRepeats,
-      includeRepeats: filters.showRepeats,
-      sortField: filters.sortField,
-      sortOrder: filters.sortOrder,
-      selected: filters.selectedFindingId || undefined,
-    });
+    const params = buildFiltersQuery(filters);
+    const defaultParams = buildFiltersQuery(defaultFilters);
 
-    const currentSearchParams = normalizeSearchParams(location.search);
-    const nextSearchParams = normalizeSearchParams(params);
-    const shouldNavigate =
-      currentSearchParams.length !== nextSearchParams.length ||
-      currentSearchParams.some(([key, value], index) => {
-        const [nextKey, nextValue] = nextSearchParams[index];
-        return key !== nextKey || value !== nextValue;
-      });
+    const shouldSkipDefaultNavigation =
+      location.search === '' && areSearchParamsEqual(params, defaultParams);
+
+    const shouldNavigate = !shouldSkipDefaultNavigation && !areSearchParamsEqual(location.search, params);
 
     if (shouldNavigate) {
       navigate(

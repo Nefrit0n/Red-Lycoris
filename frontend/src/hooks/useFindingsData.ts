@@ -91,7 +91,13 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       };
       const requestKey = JSON.stringify(params);
 
+      const isAutoRequest = Boolean(signal);
+
       if (inFlightRef.current && lastRequestKeyRef.current === requestKey) {
+        return;
+      }
+
+      if (isAutoRequest && lastRequestKeyRef.current === requestKey) {
         return;
       }
 
@@ -174,6 +180,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
   }, [fetchData, hydrated]);
 
   const handleRetry = useCallback(() => {
+    lastRequestKeyRef.current = null;
     fetchData();
   }, [fetchData]);
 
