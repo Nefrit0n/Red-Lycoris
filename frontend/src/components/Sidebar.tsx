@@ -44,6 +44,7 @@ const COLLAPSED_WIDTH = 72;
 const EXPANDED_WIDTH = 260;
 
 const HEADER_H = 68; // высота зоны логотипа/бургера
+const HEADER_SLOT = 44; // единая “точка” под лого/бургер в collapsed (чтобы не прыгало)
 
 interface SidebarProps {
   onOpenCommandPalette?: () => void;
@@ -128,61 +129,77 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
         }}
       >
         {collapsed ? (
-          // COLLAPSED: логотип по центру, при hover по сайдбару превращается в бургер
+          // COLLAPSED: лого по центру, при hover по сайдбару превращается в бургер
           <Box
             sx={{
-              position: "relative",
               width: "100%",
-              height: "100%",
-              display: "grid",
-              placeItems: "center",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
             }}
           >
+            {/* ЕДИНЫЙ СЛОТ: и лого, и бургер занимают одну и ту же область */}
             <Box
-              component="img"
-              src="/brand/logo.svg"
-              alt="RED LYCORIS"
               sx={{
-                width: 32,
-                height: 32,
-                objectFit: "contain",
-                opacity: isSidebarHover ? 0 : 1,
-                transform: isSidebarHover ? "scale(0.92)" : "scale(1)",
-                transition: "opacity 140ms ease, transform 140ms ease",
-                userSelect: "none",
-                pointerEvents: "none",
+                width: HEADER_SLOT,
+                height: HEADER_SLOT,
+                position: "relative",
+                display: "grid",
+                placeItems: "center",
               }}
-            />
-
-            <IconButton
-              size="small"
-              onClick={toggleCollapsed}
-              aria-label="Развернуть сайдбар"
-              sx={(theme) => ({
-                width: 40,
-                height: 40,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: theme.palette.divider,
-                bgcolor: theme.palette.action.hover,
-                color: "text.primary",
-                opacity: isSidebarHover ? 1 : 0,
-                transform: isSidebarHover ? "scale(1)" : "scale(0.92)",
-                pointerEvents: isSidebarHover ? "auto" : "none",
-                transition: "opacity 140ms ease, transform 140ms ease",
-                "&:hover": {
-                  bgcolor: theme.palette.action.selected,
-                },
-                "&.Mui-focusVisible": {
-                  boxShadow: focusRing.default,
-                },
-              })}
             >
-              <MenuIcon />
-            </IconButton>
+              <Box
+                component="img"
+                src="/brand/logo.svg"
+                alt="RED LYCORIS"
+                sx={{
+                  position: "absolute",
+                  inset: 0,
+                  margin: "auto",
+                  width: 32,
+                  height: 32,
+                  objectFit: "contain",
+                  opacity: isSidebarHover ? 0 : 1,
+                  transform: isSidebarHover ? "scale(0.92)" : "scale(1)",
+                  transition: "opacity 140ms ease, transform 140ms ease",
+                  userSelect: "none",
+                  pointerEvents: "none",
+                }}
+              />
+
+              <IconButton
+                size="small"
+                onClick={toggleCollapsed}
+                aria-label="Развернуть сайдбар"
+                sx={(theme) => ({
+                  position: "absolute",
+                  inset: 0,
+                  margin: "auto",
+                  width: HEADER_SLOT,
+                  height: HEADER_SLOT,
+                  borderRadius: 2,
+                  border: "1px solid",
+                  borderColor: theme.palette.divider,
+                  bgcolor: theme.palette.action.hover,
+                  color: "text.primary",
+                  opacity: isSidebarHover ? 1 : 0,
+                  transform: isSidebarHover ? "scale(1)" : "scale(0.92)",
+                  pointerEvents: isSidebarHover ? "auto" : "none",
+                  transition: "opacity 140ms ease, transform 140ms ease",
+                  "&:hover": {
+                    bgcolor: theme.palette.action.selected,
+                  },
+                  "&.Mui-focusVisible": {
+                    boxShadow: focusRing.default,
+                  },
+                })}
+              >
+                <MenuIcon />
+              </IconButton>
+            </Box>
           </Box>
         ) : (
-          // EXPANDED: логотип занимает всё место до бургера, бургер всегда видим справа
+          // EXPANDED: logo_full занимает всё место до бургера, бургер ВСЕГДА видим справа
           <Box
             sx={{
               width: "100%",
@@ -206,10 +223,9 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
                 component="img"
                 src="/brand/logo_full.svg"
                 alt="RED LYCORIS"
-                sx={{
-                  height: 24,
-                  width: "100%",
-                  maxWidth: 190,
+                sx={{        
+                  width: "100%",          
+                  maxWidth: "100%",    
                   objectFit: "contain",
                   display: "block",
                   userSelect: "none",
@@ -222,8 +238,8 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
               onClick={toggleCollapsed}
               aria-label="Свернуть сайдбар"
               sx={(theme) => ({
-                width: 40,
-                height: 40,
+                width: HEADER_SLOT,
+                height: HEADER_SLOT,
                 borderRadius: 2,
                 border: "1px solid",
                 borderColor: theme.palette.divider,
