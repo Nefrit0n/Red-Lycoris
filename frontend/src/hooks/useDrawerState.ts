@@ -6,6 +6,7 @@ interface UseDrawerStateOptions {
   setSelectedFindingId: (id: string | null) => void;
   selectionCount: number;
   listStateKey?: string;
+  allowSelectionClose?: boolean;
 }
 
 interface UseDrawerStateResult {
@@ -24,6 +25,7 @@ export function useDrawerState({
   setSelectedFindingId,
   selectionCount,
   listStateKey = 'lotus_warden_findings_list_state',
+  allowSelectionClose = true,
 }: UseDrawerStateOptions): UseDrawerStateResult {
   const location = useLocation();
 
@@ -56,10 +58,11 @@ export function useDrawerState({
 
   // Close drawer when batch mode is enabled
   useEffect(() => {
+    if (!allowSelectionClose) return;
     if (selectionCount > 0 && selectedFindingId) {
       setSelectedFindingId(null);
     }
-  }, [selectionCount, selectedFindingId, setSelectedFindingId]);
+  }, [allowSelectionClose, selectionCount, selectedFindingId, setSelectedFindingId]);
 
   // Scroll restore
   useEffect(() => {
