@@ -40,7 +40,7 @@ import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import { FindingListItemDTO } from "../types/findings";
 
-import { FindingDetailContent } from "./FindingDetail";
+import { FindingDetailContent, FindingDetailErrorBoundary } from "./FindingDetail";
 
 const LIST_STATE_KEY = "lotus_warden_findings_list_state";
 
@@ -451,11 +451,13 @@ const FindingsList = () => {
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
                 Detail view mounted
               </Typography>
-              <FindingDetailContent
-                id={filters.selectedFindingId}
-                compact
-                onClose={drawer.closeDrawer}
-              />
+              <FindingDetailErrorBoundary>
+                <FindingDetailContent
+                  id={filters.selectedFindingId}
+                  compact
+                  onClose={drawer.closeDrawer}
+                />
+              </FindingDetailErrorBoundary>
             </>
           ) : null}
         </Box>
