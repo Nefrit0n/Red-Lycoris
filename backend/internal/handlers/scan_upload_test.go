@@ -131,8 +131,8 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, repeat_count, severity, first_seen_at, sla_due_at\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND product_id = \\$2").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
+	mock.ExpectQuery("SELECT id, repeat_count, severity, first_seen_at, sla_due_at\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND tenant_id = \\$2 AND product_id = \\$3").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count", "severity", "first_seen_at", "sla_due_at"}))
 
 	mock.ExpectExec("INSERT INTO findings").
@@ -166,6 +166,8 @@ func TestScanUploadEndpoint(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
@@ -181,8 +183,8 @@ func TestScanUploadEndpoint(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, repeat_count, severity, first_seen_at, sla_due_at\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND product_id = \\$2").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
+	mock.ExpectQuery("SELECT id, repeat_count, severity, first_seen_at, sla_due_at\\s+FROM findings\\s+WHERE fingerprint = \\$1\\s+AND duplicate_id IS NULL\\s+AND deleted_at IS NULL AND tenant_id = \\$2 AND product_id = \\$3").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "repeat_count", "severity", "first_seen_at", "sla_due_at"}).AddRow(duplicateID, 2, "medium", now, now))
 
 	mock.ExpectExec("INSERT INTO findings").
@@ -205,6 +207,8 @@ func TestScanUploadEndpoint(t *testing.T) {
 			0,
 			sqlmock.AnyArg(),
 			false,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),

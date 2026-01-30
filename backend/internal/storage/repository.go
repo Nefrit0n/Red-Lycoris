@@ -214,8 +214,8 @@ func createFindingWithExecer(ctx context.Context, ex execer, finding *models.Fin
 
 	_, err := ex.ExecContext(
 		ctx,
-		`INSERT INTO findings (id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, sla_due_at, sla_breached, sla_breached_at, sla_profile, sla_source, source_type, source_version, endpoint_method, endpoint_path, evidence, raw_data, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
+		`INSERT INTO findings (id, tenant_id, scan_result_id, product_id, fingerprint, category, title, description, severity, status, duplicate_id, assignee_id, import_job_id, first_seen_at, last_seen_at, repeat_count, sla_due_at, sla_breached, sla_breached_at, sla_profile, sla_source, source_type, source_version, endpoint_method, endpoint_path, evidence, cwe, owasp, raw_data, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)`,
 		finding.ID,
 		anyUUIDPtr(finding.TenantID),
 		anyUUIDPtr(finding.ScanResultID),
@@ -242,6 +242,8 @@ func createFindingWithExecer(ctx context.Context, ex execer, finding *models.Fin
 		anyStringPtr(finding.EndpointMethod),
 		anyStringPtr(finding.EndpointPath),
 		anyRawJSON(finding.Evidence),
+		pqStringArray(finding.CWE),
+		pqStringArray(finding.OWASP),
 		anyRawJSON(finding.RawData),
 		finding.CreatedAt,
 		finding.UpdatedAt,

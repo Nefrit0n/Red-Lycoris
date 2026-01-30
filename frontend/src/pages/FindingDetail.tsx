@@ -404,24 +404,19 @@ export const FindingDetailContent = ({
                 </span>
               </Tooltip>
               {navigation.neighbors && !navigation.neighborsError && (
-                <Stack direction="row" alignItems="center" gap={0.5}>
-                  <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-                    {navigation.neighbors.position} из {navigation.neighbors.total}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: "text.disabled",
-                      fontSize: "0.65rem",
-                      px: 0.5,
-                      py: 0.25,
-                      borderRadius: 0.5,
-                      bgcolor: "action.hover",
-                    }}
-                  >
-                    j/k
-                  </Typography>
-                </Stack>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.disabled",
+                    fontSize: "0.65rem",
+                    px: 0.5,
+                    py: 0.25,
+                    borderRadius: 0.5,
+                    bgcolor: "action.hover",
+                  }}
+                >
+                  j/k
+                </Typography>
               )}
             </Stack>
           )}

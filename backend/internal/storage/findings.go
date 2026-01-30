@@ -11,6 +11,7 @@ import (
 	"lotus-warden/backend/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 type FindingListItem struct {
@@ -39,8 +40,7 @@ type FindingListItem struct {
 	SLAProfile    sql.NullString
 	SLASource     sql.NullString
 
-	LastScanAt sql.NullTime
-	Scanner    sql.NullString
+	Scanner sql.NullString
 
 	AssigneeID   uuid.NullUUID
 	AssigneeName sql.NullString
@@ -56,8 +56,8 @@ type FindingListItem struct {
 	UpdatedAt  time.Time
 	SourceType sql.NullString
 
-	// Evidence JSONB for SAST CWE/OWASP extraction
-	Evidence json.RawMessage
+	CWE   []string
+	OWASP []string
 }
 
 type FindingNeighborsResult struct {
@@ -65,6 +65,11 @@ type FindingNeighborsResult struct {
 	NextID   *uuid.UUID
 	Position int
 	Total    int
+}
+
+type FindingListCursor struct {
+	SortKey time.Time
+	ID      uuid.UUID
 }
 
 type FindingFilters struct {
@@ -159,36 +164,39 @@ LEFT JOIN (
 ) pr_latest ON pr_latest.subject_id = f.id`
 
 // buildFindingOrderBy generates ORDER BY clause for the given sort field and order.
-// Parameter $16 is the sort field.
-func buildFindingOrderBy(sortOrder string) string {
-	nullsOrder := "NULLS LAST"
+func buildFindingOrderBy(sortField, sortOrder string) string {
 	order := "DESC"
 	if sortOrder == "asc" {
 		order = "ASC"
 	}
 
-	return fmt.Sprintf(`ORDER BY
-	CASE WHEN $16 = 'slaDueAt' THEN CASE WHEN f.sla_due_at IS NULL THEN 1 ELSE 0 END END ASC,
-	CASE WHEN $16 = 'slaDueAt' THEN f.sla_due_at END %s %s,
-	CASE WHEN $16 = 'title' THEN f.title END %s %s,
-	CASE WHEN $16 = 'productName' THEN p.name END %s %s,
-	CASE WHEN $16 = 'severity' THEN (CASE LOWER(f.severity) WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) END %s %s,
-	CASE WHEN $16 = 'status' THEN f.status END %s %s,
-	CASE WHEN $16 = 'lastSeenAt' THEN COALESCE(f.last_seen_at, f.created_at) END %s %s,
-	CASE WHEN $16 = 'createdAt' THEN f.created_at END %s %s,
-	CASE WHEN $16 = 'updatedAt' THEN f.updated_at END %s %s,
-	CASE WHEN $16 = 'riskScore' THEN fr.risk_score END %s %s,
-	f.id %s`,
-		order, nullsOrder,
-		order, nullsOrder,
-		order, nullsOrder,
-		order, nullsOrder,
-		order, nullsOrder,
-		order, nullsOrder,
-		order, nullsOrder,
-		order, nullsOrder,
-		order, nullsOrder,
-		order)
+	nulls := "NULLS LAST"
+	switch sortField {
+	case "slaDueAt":
+		return fmt.Sprintf("ORDER BY f.sla_due_at %s %s, f.id %s", order, nulls, order)
+	case "title":
+		return fmt.Sprintf("ORDER BY f.title %s %s, f.id %s", order, nulls, order)
+	case "productName":
+		return fmt.Sprintf("ORDER BY p.name %s %s, f.id %s", order, nulls, order)
+	case "severity":
+		return fmt.Sprintf("ORDER BY (CASE LOWER(f.severity) WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) %s %s, f.id %s", order, nulls, order)
+	case "status":
+		return fmt.Sprintf("ORDER BY f.status %s %s, f.id %s", order, nulls, order)
+	case "lastSeenAt":
+		return fmt.Sprintf("ORDER BY COALESCE(f.last_seen_at, f.created_at) %s %s, f.id %s", order, nulls, order)
+	case "updatedAt":
+		return fmt.Sprintf("ORDER BY f.updated_at %s %s, f.id %s", order, nulls, order)
+	case "riskScore":
+		return fmt.Sprintf("ORDER BY fr.risk_score %s %s, f.id %s", order, nulls, order)
+	case "createdAt":
+		fallthrough
+	default:
+		return fmt.Sprintf("ORDER BY f.created_at %s %s, f.id %s", order, nulls, order)
+	}
+}
+
+func buildFindingCursorOrderBy() string {
+	return "ORDER BY COALESCE(f.last_seen_at, f.created_at) DESC, f.id DESC"
 }
 
 // buildFindingFilterArgs normalizes filters into a stable argument list for SQL queries.
@@ -254,12 +262,15 @@ func normalizeFindingSortField(field string) string {
 	s := strings.TrimSpace(field)
 	s = strings.ToLower(s)
 	switch s {
-	case "title", "productname", "severity", "status", "lastseenat", "createdat", "updatedat", "sladueat", "riskscore":
+	case "title", "productname", "severity", "status", "lastseenat", "lastactivity", "createdat", "updatedat", "sladueat", "riskscore":
 		// Normalize camelCase used by frontend.
 		if s == "productname" {
 			return "productName"
 		}
 		if s == "lastseenat" {
+			return "lastSeenAt"
+		}
+		if s == "lastactivity" {
 			return "lastSeenAt"
 		}
 		if s == "createdat" {
@@ -414,9 +425,9 @@ func GetFindingByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*mode
 	return &finding, nil
 }
 
-func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]FindingListItem, int, error) {
+func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, cursor *FindingListCursor, useCursor bool, includeTotal bool) ([]FindingListItem, *int, *FindingListCursor, error) {
 	if filters.TenantID == nil {
-		return nil, 0, fmt.Errorf("tenant_id is required for listing findings")
+		return nil, nil, nil, fmt.Errorf("tenant_id is required for listing findings")
 	}
 
 	if filters.Limit <= 0 {
@@ -434,16 +445,15 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 
 	argsBase := buildFindingFilterArgs(filters)
 
-	// COUNT query
-	countQuery := fmt.Sprintf(`SELECT COUNT(*) %s WHERE %s`, findingBaseJoins, findingFilterWhereClause)
-
-	var total int
-	if err := db.QueryRowContext(ctx, countQuery, argsBase...).Scan(&total); err != nil {
-		return nil, 0, err
+	var total *int
+	if includeTotal {
+		countQuery := fmt.Sprintf(`SELECT COUNT(*) %s WHERE %s`, findingBaseJoins, findingFilterWhereClause)
+		var count int
+		if err := db.QueryRowContext(ctx, countQuery, argsBase...).Scan(&count); err != nil {
+			return nil, nil, nil, err
+		}
+		total = &count
 	}
-
-	// SELECT query with pagination
-	args := append(append([]any{}, argsBase...), sortField, filters.Limit, filters.Offset)
 
 	selectFields := `
 		SELECT
@@ -456,30 +466,58 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			f.first_seen_at, f.last_seen_at,
 			f.sla_due_at, f.sla_breached, f.sla_breached_at,
 			f.sla_profile::text, f.sla_source,
-			MAX(sr.created_at) OVER (PARTITION BY f.product_id) AS last_scan_at,
 			sr.scanner,
 			f.assignee_id, u.username,
 			pr_latest.decision,
 			fr.risk_score, fr.risk_band,
 			fr.computed_at, fr.model_version,
 			f.created_at, f.updated_at, f.source_type,
-			f.evidence`
+			f.cwe,
+			f.owasp,
+			COALESCE(f.last_seen_at, f.created_at) AS sort_key`
 
-	query := fmt.Sprintf(`%s %s WHERE %s %s LIMIT $17 OFFSET $18`,
-		selectFields,
-		findingListJoins,
-		findingFilterWhereClause,
-		buildFindingOrderBy(sortOrder))
+	whereClause := findingFilterWhereClause
+	args := append([]any{}, argsBase...)
+	argIndex := len(args) + 1
+
+	var query string
+	if useCursor {
+		orderBy := buildFindingCursorOrderBy()
+		if cursor != nil {
+			whereClause = fmt.Sprintf("%s AND (COALESCE(f.last_seen_at, f.created_at), f.id) < ($%d, $%d)", whereClause, argIndex, argIndex+1)
+			args = append(args, cursor.SortKey, cursor.ID)
+			argIndex += 2
+		}
+		query = fmt.Sprintf(`%s %s WHERE %s %s LIMIT $%d`,
+			selectFields,
+			findingListJoins,
+			whereClause,
+			orderBy,
+			argIndex)
+		args = append(args, filters.Limit)
+	} else {
+		orderBy := buildFindingOrderBy(sortField, sortOrder)
+		query = fmt.Sprintf(`%s %s WHERE %s %s LIMIT $%d OFFSET $%d`,
+			selectFields,
+			findingListJoins,
+			whereClause,
+			orderBy,
+			argIndex,
+			argIndex+1)
+		args = append(args, filters.Limit, filters.Offset)
+	}
 
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, nil, err
 	}
 	defer rows.Close()
 
 	items := []FindingListItem{}
+	var nextCursor *FindingListCursor
 	for rows.Next() {
 		var item FindingListItem
+		var sortKey time.Time
 		if err := rows.Scan(
 			&item.ID,
 			&item.TenantID,
@@ -505,8 +543,6 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.SLABreachedAt,
 			&item.SLAProfile,
 			&item.SLASource,
-
-			&item.LastScanAt,
 			&item.Scanner,
 
 			&item.AssigneeID,
@@ -522,17 +558,24 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters) ([]Fi
 			&item.CreatedAt,
 			&item.UpdatedAt,
 			&item.SourceType,
-			&item.Evidence,
+			pq.Array(&item.CWE),
+			pq.Array(&item.OWASP),
+			&sortKey,
 		); err != nil {
-			return nil, 0, err
+			return nil, nil, nil, err
 		}
 		items = append(items, item)
+		nextCursor = &FindingListCursor{SortKey: sortKey, ID: item.ID}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, err
+		return nil, nil, nil, err
 	}
 
-	return items, total, nil
+	if !useCursor || len(items) < filters.Limit {
+		nextCursor = nil
+	}
+
+	return items, total, nextCursor, nil
 }
 
 func GetFindingNeighbors(ctx context.Context, db *sql.DB, currentID uuid.UUID, filters FindingFilters) (FindingNeighborsResult, error) {
@@ -540,41 +583,81 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, currentID uuid.UUID, f
 		return FindingNeighborsResult{}, fmt.Errorf("tenant_id is required for finding neighbors")
 	}
 
-	sortField := normalizeFindingSortField(filters.SortField)
-	sortOrder := normalizeSortOrder(filters.SortOrder)
+	argsBase := buildFindingFilterArgs(filters)
+	currentArgs := append(argsBase, currentID)
 
-	args := append(buildFindingFilterArgs(filters), sortField, currentID)
-
-	query := fmt.Sprintf(`
-		WITH ranked AS (
-			SELECT
-				f.id,
-				ROW_NUMBER() OVER (%s) AS rn,
-				COUNT(*) OVER () AS total
-			%s
-			WHERE %s
-		),
-		cur AS (
-			SELECT rn, total FROM ranked WHERE id = $17
-		)
-		SELECT
-			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn - 1) AS prev_id,
-			(SELECT id FROM ranked, cur WHERE ranked.rn = cur.rn + 1) AS next_id,
-			cur.rn AS position,
-			cur.total
-		FROM cur`,
-		buildFindingOrderBy(sortOrder),
+	currentQuery := fmt.Sprintf(`
+		SELECT COALESCE(f.last_seen_at, f.created_at)
+		%s
+		WHERE %s AND f.id = $16`,
 		findingBaseJoins,
-		findingFilterWhereClause)
+		findingFilterWhereClause,
+	)
 
-	row := db.QueryRowContext(ctx, query, args...)
-	var res FindingNeighborsResult
-	if err := row.Scan(&res.PrevID, &res.NextID, &res.Position, &res.Total); err != nil {
+	var currentSortKey time.Time
+	if err := db.QueryRowContext(ctx, currentQuery, currentArgs...).Scan(&currentSortKey); err != nil {
 		if err == sql.ErrNoRows {
-			return res, nil
+			return FindingNeighborsResult{}, nil
 		}
+		return FindingNeighborsResult{}, err
+	}
+
+	res := FindingNeighborsResult{}
+
+	prevQuery := fmt.Sprintf(`
+		SELECT f.id
+		%s
+		WHERE %s
+		  AND (COALESCE(f.last_seen_at, f.created_at), f.id) > ($16, $17)
+		ORDER BY COALESCE(f.last_seen_at, f.created_at) DESC, f.id DESC
+		LIMIT 1`,
+		findingBaseJoins,
+		findingFilterWhereClause,
+	)
+	prevArgs := append(argsBase, currentSortKey, currentID)
+	if err := db.QueryRowContext(ctx, prevQuery, prevArgs...).Scan(&res.PrevID); err != nil {
+		if err != sql.ErrNoRows {
+			return res, err
+		}
+		res.PrevID = nil
+	}
+
+	nextQuery := fmt.Sprintf(`
+		SELECT f.id
+		%s
+		WHERE %s
+		  AND (COALESCE(f.last_seen_at, f.created_at), f.id) < ($16, $17)
+		ORDER BY COALESCE(f.last_seen_at, f.created_at) DESC, f.id DESC
+		LIMIT 1`,
+		findingBaseJoins,
+		findingFilterWhereClause,
+	)
+	nextArgs := append(argsBase, currentSortKey, currentID)
+	if err := db.QueryRowContext(ctx, nextQuery, nextArgs...).Scan(&res.NextID); err != nil {
+		if err != sql.ErrNoRows {
+			return res, err
+		}
+		res.NextID = nil
+	}
+
+	positionQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		%s
+		WHERE %s
+		  AND (COALESCE(f.last_seen_at, f.created_at), f.id) > ($16, $17)`,
+		findingBaseJoins,
+		findingFilterWhereClause,
+	)
+	if err := db.QueryRowContext(ctx, positionQuery, prevArgs...).Scan(&res.Position); err != nil {
 		return res, err
 	}
+	res.Position += 1
+
+	totalQuery := fmt.Sprintf(`SELECT COUNT(*) %s WHERE %s`, findingBaseJoins, findingFilterWhereClause)
+	if err := db.QueryRowContext(ctx, totalQuery, argsBase...).Scan(&res.Total); err != nil {
+		return res, err
+	}
+
 	return res, nil
 }
 
