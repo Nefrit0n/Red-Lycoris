@@ -66,7 +66,18 @@ const FindingsList = () => {
   useUploadRedirect(filters.pageSize);
 
   // данные
-  const { data, total, loading, error, fetchData, handleRetry } = useFindingsData({
+  const {
+    data,
+    total,
+    totalKnown,
+    hasNextPage,
+    loading,
+    error,
+    statsLoading,
+    loadStats,
+    fetchData,
+    handleRetry,
+  } = useFindingsData({
     filters,
     hydrated,
   });
@@ -75,9 +86,11 @@ const FindingsList = () => {
   const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
 
   // bulk actions
+  const totalCount = totalKnown ? total ?? 0 : data.length;
   const bulk = useBulkSelection({
     data,
-    total,
+    total: totalCount,
+    totalKnown,
     filters,
     debouncedSearch,
     onSuccess: fetchData,
@@ -208,7 +221,7 @@ const FindingsList = () => {
             data={data}
             filename="findings"
             disabled={loading}
-            totalCount={total}
+            totalCount={totalCount}
             selectAllMatching={bulk.selectAllMatching}
             filters={filters}
             debouncedSearch={debouncedSearch}
@@ -281,7 +294,8 @@ const FindingsList = () => {
       {canBulk && (
         <InlineActionsBar
           selectedCount={bulk.selectedIds.length}
-          totalCount={total}
+          totalCount={totalCount}
+          totalKnown={totalKnown}
           selectAllMatching={bulk.selectAllMatching}
           showSelectAllPrompt={bulk.showSelectAllPrompt}
           onApply={bulk.handleBulkApply}
@@ -323,19 +337,36 @@ const FindingsList = () => {
 
       </Paper>
 
-      <PaginationControl
-        page={filters.page}
-        pageSize={filters.pageSize}
-        total={total}
-        onPageChange={(nextPage) => {
-          actions.setPage(nextPage);
-          if (!bulk.selectAllMatching) bulk.setSelectedIds([]);
-        }}
-        onPageSizeChange={(v) => {
-          actions.setPageSize(v);
-          if (!bulk.selectAllMatching) bulk.setSelectedIds([]);
-        }}
-      />
+      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2} sx={{ mt: 2 }}>
+        {!totalKnown && (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={loadStats}
+            disabled={statsLoading || loading}
+          >
+            {statsLoading ? "Загрузка статистики..." : "Загрузить статистику"}
+          </Button>
+        )}
+        <Box sx={{ flex: 1 }}>
+          <PaginationControl
+            page={filters.page}
+            pageSize={filters.pageSize}
+            total={totalKnown ? totalCount : null}
+            hasNextPage={hasNextPage}
+            currentCount={data.length}
+            onPageChange={(nextPage) => {
+              if (nextPage > filters.page && !hasNextPage) return;
+              actions.setPage(nextPage);
+              if (!bulk.selectAllMatching) bulk.setSelectedIds([]);
+            }}
+            onPageSizeChange={(v) => {
+              actions.setPageSize(v);
+              if (!bulk.selectAllMatching) bulk.setSelectedIds([]);
+            }}
+          />
+        </Box>
+      </Stack>
 
       <Snackbar
         open={bulk.undoToastOpen}
