@@ -60,6 +60,7 @@ export interface FindingsListResponse {
   nextCursor?: string;
   meta?: {
     severityCounts?: Record<string, number>;
+    statusCounts?: Record<string, number>;
   };
 }
 

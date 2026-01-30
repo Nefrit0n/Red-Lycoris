@@ -108,7 +108,7 @@ func NewFindingsHandler(db *sql.DB, policyEngine policies.Evaluator, slaMatrix s
 // @Param status query string false "Status"
 // @Param productId query string false "Product ID"
 // @Param cursor query string false "Cursor (base64 json)"
-// @Param includeMeta query bool false "Include total and severity counts"
+// @Param includeMeta query bool false "Include total and severity/status counts"
 // @Param sortField query string false "Sort field"
 // @Param sortOrder query string false "Sort order"
 // @Success 200 {object} fiber.Map
@@ -194,11 +194,20 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings stats"})
 		}
+		statusCounts, err := storage.CountFindingsByStatus(
+			c.Context(),
+			h.db,
+			filterParams.toStorageFilters(1, 0),
+		)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings status stats"})
+		}
 		if total != nil {
 			resp["total"] = *total
 		}
 		resp["meta"] = fiber.Map{
 			"severityCounts": severityCounts,
+			"statusCounts":   statusCounts,
 		}
 	}
 
