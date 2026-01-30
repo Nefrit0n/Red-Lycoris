@@ -15,3 +15,10 @@ type ProductDetailDTO struct {
 	ProductListItemDTO
 	Description *string `json:"description,omitempty"`
 }
+
+type ProductStatsDTO struct {
+	OpenCount          int            `json:"openCount"`
+	MitigatedCount     int            `json:"mitigatedCount"`
+	FalsePositiveCount int            `json:"falsePositiveCount"`
+	SeverityCounts     map[string]int `json:"severityCounts"`
+}
