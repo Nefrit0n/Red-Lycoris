@@ -45,6 +45,7 @@ import {
   RiskBand,
 } from "../types/findings";
 import { RISK_BAND_COLORS } from "../utils/findingConstants";
+import { buildFindingLink } from "../utils/findingFormatters";
 import {
   tableColumnWidths,
   tableStyles,
@@ -434,13 +435,6 @@ const formatSmartTitle = (title: string): { display: string; isShortened: boolea
   }
 
   return { display: title, isShortened: false };
-};
-
-const buildFindingLink = (id: string, returnTo: string) => {
-  const params = new URLSearchParams();
-  if (returnTo) params.set("returnTo", returnTo);
-  const qs = params.toString();
-  return `/findings/${id}${qs ? `?${qs}` : ""}`;
 };
 
 export default function FindingsTable({
