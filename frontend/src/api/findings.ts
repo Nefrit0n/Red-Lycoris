@@ -59,7 +59,7 @@ export const fetchFindings = async (
     data?: FindingListItemDTO[];
     total?: number;
     nextCursor?: string;
-    meta?: { severityCounts?: Record<string, number> };
+    meta?: { severityCounts?: Record<string, number>; statusCounts?: Record<string, number> };
   }>("/api/v1/findings", {
     signal,
     query: searchParams,
