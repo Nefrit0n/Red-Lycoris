@@ -5,13 +5,10 @@ import {
   Chip,
   CircularProgress,
   Container,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   FormControlLabel,
   Grid,
+  MenuItem,
   Paper,
   Stack,
   Switch,
@@ -41,10 +38,16 @@ import {
   Tooltip as RechartsTooltip,
 } from "recharts";
 import { fetchProductDetail } from "../api/products";
-import { downloadSbom, listProductComponents, listSboms, uploadSbom, listSbomTransitive, getSbomPath } from "../api/sbom";
+import { downloadSbom, listProductComponents, listSboms, uploadSbom, listSbomTransitiveExposure } from "../api/sbom";
 import { Section } from "../components/Section";
 import { ProductDetail as ProductDetailType } from "../types/products";
-import { SbomComponentItem, SbomIndexStatus, SbomItem, SbomTransitiveItem, SbomPath } from "../types/sbom";
+import {
+  SbomComponentItem,
+  SbomIndexStatus,
+  SbomItem,
+  SbomTransitiveExposureItem,
+  SbomTransitiveStatus,
+} from "../types/sbom";
 
 
 const SEVERITY_COLORS = {
@@ -286,6 +289,25 @@ const formatIndexStatus = (
   }
 };
 
+const formatTransitiveStatus = (
+  status?: SbomTransitiveStatus | null
+): { label: string; color: "default" | "success" | "warning" | "error" } => {
+  if (!status) return { label: "нет данных", color: "default" };
+
+  switch (status.status) {
+    case "done":
+      return { label: "ready", color: "success" };
+    case "processing":
+      return { label: "processing", color: "warning" };
+    case "pending":
+      return { label: "queued", color: "warning" };
+    case "failed":
+      return { label: "failed", color: "error" };
+    default:
+      return { label: status.status || "unknown", color: "default" };
+  }
+};
+
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -309,20 +331,17 @@ const ProductDetailPage = () => {
     q: "",
   });
   const [indexStatus, setIndexStatus] = useState<SbomIndexStatus | null>(null);
-  const [transitiveSbomId, setTransitiveSbomId] = useState<string>("");
-  const [transitiveRoot, setTransitiveRoot] = useState<SbomComponentItem | null>(null);
-  const [transitiveMaxDepth, setTransitiveMaxDepth] = useState<number>(25);
+  const [transitiveSbom, setTransitiveSbom] = useState<SbomItem | null>(null);
+  const [transitiveStatus, setTransitiveStatus] = useState<SbomTransitiveStatus | null>(null);
+  const [transitiveFilters, setTransitiveFilters] = useState({
+    q: "",
+    maxDepth: 25,
+  });
 
-  const [transitiveItems, setTransitiveItems] = useState<SbomTransitiveItem[]>([]);
+  const [transitiveItems, setTransitiveItems] = useState<SbomTransitiveExposureItem[]>([]);
   const [transitiveTotal, setTransitiveTotal] = useState(0);
   const [transitiveLoading, setTransitiveLoading] = useState(false);
   const [transitiveError, setTransitiveError] = useState<string | null>(null);
-
-  const [pathOpen, setPathOpen] = useState(false);
-  const [pathLoading, setPathLoading] = useState(false);
-  const [pathError, setPathError] = useState<string | null>(null);
-  const [pathData, setPathData] = useState<SbomPath | null>(null);
-  const [pathTarget, setPathTarget] = useState<SbomTransitiveItem | null>(null);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
@@ -356,10 +375,14 @@ const ProductDetailPage = () => {
     try {
       const items = await listSboms(id);
       setSboms(items);
-      if (!transitiveSbomId) {
-        const ready = items.find((x) => x.indexStatus === "done" || x.indexStatus === "indexed");
-        if (ready) setTransitiveSbomId(ready.id);
-      }
+      const latestIndexed =
+        items.find((x) => x.indexStatus === "done" || x.indexStatus === "indexed") ?? null;
+      setTransitiveSbom((prev) => {
+        if (!latestIndexed) return null;
+        if (!prev) return latestIndexed;
+        if (prev.id === latestIndexed.id) return prev;
+        return latestIndexed;
+      });
     } catch (err) {
       setSbomError(err instanceof Error ? err.message : "Не удалось загрузить SBOM");
     } finally {
@@ -413,6 +436,26 @@ const ProductDetailPage = () => {
     return () => window.clearInterval(interval);
   }, [tabIndex, indexStatus?.status, fetchComponents]);
 
+  useEffect(() => {
+    if (tabIndex !== 2) return;
+    if (!transitiveSbom) return;
+    fetchTransitiveExposure();
+  }, [tabIndex, transitiveSbom, transitiveFilters, fetchTransitiveExposure]);
+
+  useEffect(() => {
+    if (tabIndex !== 2) return;
+    if (!transitiveStatus) return;
+
+    const status = transitiveStatus.status;
+    if (status !== "pending" && status !== "processing") return;
+
+    const interval = window.setInterval(() => {
+      if (!document.hidden) fetchTransitiveExposure();
+    }, 2000);
+
+    return () => window.clearInterval(interval);
+  }, [tabIndex, transitiveStatus?.status, fetchTransitiveExposure]);
+
   const handleSbomUpload = async (file: File) => {
     if (!id) return;
     setSbomUploading(true);
@@ -434,44 +477,27 @@ const ProductDetailPage = () => {
       setSbomError(err instanceof Error ? err.message : "Не удалось скачать SBOM");
     }
   };
-  const loadTransitive = async () => {
-    if (!transitiveSbomId || !transitiveRoot) return;
+  const fetchTransitiveExposure = useCallback(async () => {
+    if (!transitiveSbom) return;
 
     setTransitiveLoading(true);
     setTransitiveError(null);
     try {
-      const resp = await listSbomTransitive(transitiveSbomId, transitiveRoot.id, {
-        maxDepth: transitiveMaxDepth,
+      const resp = await listSbomTransitiveExposure(transitiveSbom.id, {
+        maxDepth: transitiveFilters.maxDepth,
+        q: transitiveFilters.q || undefined,
         limit: 200,
         offset: 0,
       });
-      setTransitiveItems(resp.items);
-      setTransitiveTotal(resp.total);
+      setTransitiveStatus(resp.status);
+      setTransitiveItems(resp.data.items);
+      setTransitiveTotal(resp.data.total);
     } catch (e) {
-      setTransitiveError(e instanceof Error ? e.message : "Не удалось загрузить транзитивные зависимости");
+      setTransitiveError(e instanceof Error ? e.message : "Не удалось загрузить transitive риск");
     } finally {
       setTransitiveLoading(false);
     }
-  };
-
-  const openPath = async (target: SbomTransitiveItem) => {
-    if (!transitiveSbomId || !transitiveRoot) return;
-
-    setPathOpen(true);
-    setPathTarget(target);
-    setPathLoading(true);
-    setPathError(null);
-    setPathData(null);
-
-    try {
-      const resp = await getSbomPath(transitiveSbomId, transitiveRoot.id, target.id, { maxDepth: transitiveMaxDepth });
-      setPathData(resp);
-    } catch (e) {
-      setPathError(e instanceof Error ? e.message : "Не удалось построить путь");
-    } finally {
-      setPathLoading(false);
-    }
-  };
+  }, [transitiveSbom, transitiveFilters]);
 
   if (!id) {
     return (
@@ -506,6 +532,7 @@ const ProductDetailPage = () => {
   const healthColor = getHealthColor(healthScore);
   const totalOpenFindings = data.findingsOpenCount;
   const statusChip = formatIndexStatus(indexStatus);
+  const transitiveChip = formatTransitiveStatus(transitiveStatus);
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -912,173 +939,139 @@ const ProductDetailPage = () => {
             )}
             {tabIndex === 2 && (
               <Stack spacing={2}>
-                <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
-                  <TextField
-                    label="Max depth"
-                    type="number"
-                    size="small"
-                    value={transitiveMaxDepth}
-                    onChange={(e) => setTransitiveMaxDepth(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
-                    sx={{ width: 140 }}
-                  />
-
-                  <TextField
-                    label="Root package search"
-                    size="small"
-                    value={componentsFilters.q}
-                    onChange={(event) =>
-                      setComponentsFilters((prev) => ({ ...prev, q: event.target.value }))
-                    }
-                    helperText="Используем direct компоненты из latest indexed SBOM"
-                  />
-
-                  <Button
-                    variant="outlined"
-                    onClick={async () => {
-                      // подгружаем directOnly список, и выбираем первый match как root (простая MVP логика)
-                      const resp = await listProductComponents(id, {
-                        directOnly: true,
-                        q: componentsFilters.q || undefined,
-                        limit: 50,
-                        offset: 0,
-                      });
-                      setTransitiveRoot(resp.items[0] ?? null);
-                    }}
-                  >
-                    Pick root
-                  </Button>
-
-                  <Button variant="contained" onClick={loadTransitive} disabled={!transitiveRoot || transitiveLoading}>
-                    {transitiveLoading ? "Loading..." : "Analyze"}
-                  </Button>
-                </Stack>
-
-                {transitiveRoot && (
-                  <Typography variant="body2" color="text.secondary">
-                    Root: <b>{transitiveRoot.name}{transitiveRoot.version ? `@${transitiveRoot.version}` : ""}</b>
-                  </Typography>
-                )}
-
-                {transitiveError && <Alert severity="error">{transitiveError}</Alert>}
-
-                {transitiveLoading ? (
-                  <Box display="flex" justifyContent="center" py={2}>
-                    <CircularProgress size={20} />
-                  </Box>
-                ) : transitiveItems.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Нет транзитивных уязвимых зависимостей (или не выбран root).
-                  </Typography>
+                {!transitiveSbom ? (
+                  <Alert severity="info">Нет проиндексированного SBOM для transitive риска.</Alert>
                 ) : (
-                  <Box sx={{ overflowX: "auto" }}>
-                    <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
-                      <Box component="thead">
-                        <Box component="tr" sx={{ textAlign: "left" }}>
-                          {["Component", "Depth", "Vulns", "Max CVSS", "Max EPSS", "KEV", ""].map((label) => (
-                            <Box
-                              key={label}
-                              component="th"
-                              style={{
-                                fontWeight: 600,
-                                fontSize: 12,
-                                padding: "10px 8px",
-                                borderBottom: "1px solid rgba(0,0,0,0.08)",
-                              }}
-                            >
-                              {label}
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
+                  <>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
+                      <Chip label={`Status: ${transitiveChip.label}`} color={transitiveChip.color} />
+                      {transitiveStatus?.updatedAt && (
+                        <Typography variant="body2" color="text.secondary">
+                          Updated: {new Date(transitiveStatus.updatedAt).toLocaleString("ru-RU")}
+                        </Typography>
+                      )}
+                      <Typography variant="body2" color="text.secondary">
+                        SBOM: {transitiveSbom.originalFilename}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total: {transitiveTotal}
+                      </Typography>
+                    </Stack>
 
-                      <Box component="tbody">
-                        {transitiveItems.map((it) => (
-                          <Box key={it.id} component="tr">
-                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                              <Stack spacing={0.25}>
-                                <Typography variant="body2">
-                                  {it.name}{it.version ? `@${it.version}` : ""}
-                                </Typography>
-                                {it.purl && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {it.purl}
-                                  </Typography>
-                                )}
-                              </Stack>
-                            </Box>
+                    {transitiveStatus?.error && <Alert severity="error">{transitiveStatus.error}</Alert>}
 
-                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                              {it.minDepth}
-                            </Box>
-
-                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                              <Stack spacing={0.25}>
-                                <Typography variant="body2">{it.vulnTotal}</Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  C/H/M/L: {it.vulnCritical}/{it.vulnHigh}/{it.vulnMedium}/{it.vulnLow}
-                                </Typography>
-                              </Stack>
-                            </Box>
-
-                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                              {it.maxCvssScore == null ? "—" : it.maxCvssScore.toFixed(1)}
-                            </Box>
-
-                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                              {it.maxEpssScore == null ? "—" : it.maxEpssScore.toFixed(3)}
-                            </Box>
-
-                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                              <Chip size="small" label={it.kev ? "YES" : "NO"} color={it.kev ? "error" : "default"} />
-                            </Box>
-
-                            <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                              <Button size="small" variant="outlined" onClick={() => openPath(it)}>
-                                Path
-                              </Button>
-                            </Box>
-                          </Box>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
+                      <TextField
+                        select
+                        label="Max depth"
+                        size="small"
+                        value={transitiveFilters.maxDepth}
+                        onChange={(event) =>
+                          setTransitiveFilters((prev) => ({
+                            ...prev,
+                            maxDepth: Number(event.target.value) || 25,
+                          }))
+                        }
+                        sx={{ width: 140 }}
+                      >
+                        {[10, 25, 50].map((depth) => (
+                          <MenuItem key={depth} value={depth}>
+                            {depth}
+                          </MenuItem>
                         ))}
-                      </Box>
-                    </Box>
+                      </TextField>
 
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                      Total vulnerable reachable components: {transitiveTotal}
-                    </Typography>
-                  </Box>
-                )}
+                      <TextField
+                        label="Search"
+                        size="small"
+                        value={transitiveFilters.q}
+                        onChange={(event) =>
+                          setTransitiveFilters((prev) => ({ ...prev, q: event.target.value }))
+                        }
+                      />
 
-                {/* Path dialog */}
-                <Dialog open={pathOpen} onClose={() => setPathOpen(false)} fullWidth maxWidth="md">
-                  <DialogTitle>
-                    Dependency path {pathTarget ? `→ ${pathTarget.name}${pathTarget.version ? `@${pathTarget.version}` : ""}` : ""}
-                  </DialogTitle>
-                  <DialogContent dividers>
-                    {pathLoading && (
+                      <Button variant="outlined" onClick={fetchTransitiveExposure} disabled={transitiveLoading}>
+                        Обновить
+                      </Button>
+                    </Stack>
+
+                    {transitiveError && <Alert severity="error">{transitiveError}</Alert>}
+
+                    {transitiveLoading ? (
                       <Box display="flex" justifyContent="center" py={2}>
                         <CircularProgress size={20} />
                       </Box>
-                    )}
-                    {pathError && <Alert severity="error">{pathError}</Alert>}
-                    {pathData && (
-                      <Stack spacing={1}>
-                        <Typography variant="body2" color="text.secondary">
-                          Depth: {pathData.depth}
-                        </Typography>
-                        <Box sx={{ bgcolor: "action.hover", borderRadius: 1, p: 1 }}>
-                          {pathData.nodes.map((n, idx) => (
-                            <Typography key={n.id} variant="body2" sx={{ fontFamily: "monospace" }}>
-                              {idx + 1}. {n.name}{n.version ? `@${n.version}` : ""}{n.ecosystem ? ` (${n.ecosystem})` : ""}
-                            </Typography>
-                          ))}
+                    ) : transitiveItems.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Нет direct зависимостей с транзитивным риском.
+                      </Typography>
+                    ) : (
+                      <Box sx={{ overflowX: "auto" }}>
+                        <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
+                          <Box component="thead">
+                            <Box component="tr" sx={{ textAlign: "left" }}>
+                              {["Name", "Version", "Ecosystem", "C/H/M/L", "Max CVSS", "Min distance"].map((label) => (
+                                <Box
+                                  key={label}
+                                  component="th"
+                                  style={{
+                                    fontWeight: 600,
+                                    fontSize: 12,
+                                    padding: "10px 8px",
+                                    borderBottom: "1px solid rgba(0,0,0,0.08)",
+                                  }}
+                                >
+                                  {label}
+                                </Box>
+                              ))}
+                            </Box>
+                          </Box>
+
+                          <Box component="tbody">
+                            {transitiveItems.map((it) => (
+                              <Box key={it.id} component="tr">
+                                <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                                  <Stack spacing={0.25}>
+                                    <Typography variant="body2">
+                                      {it.name}
+                                    </Typography>
+                                    {it.purl && (
+                                      <Typography variant="caption" color="text.secondary">
+                                        {it.purl}
+                                      </Typography>
+                                    )}
+                                  </Stack>
+                                </Box>
+
+                                <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                                  {it.version || "—"}
+                                </Box>
+
+                                <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                                  {it.ecosystem || "—"}
+                                </Box>
+
+                                <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                                  <Typography variant="body2">
+                                    {it.criticalCount}/{it.highCount}/{it.mediumCount}/{it.lowCount}
+                                  </Typography>
+                                </Box>
+
+                                <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                                  {it.maxCvssScore == null ? "—" : it.maxCvssScore.toFixed(1)}
+                                </Box>
+
+                                <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                                  {it.minDistanceToAnyVuln ?? "—"}
+                                </Box>
+                              </Box>
+                            ))}
+                          </Box>
                         </Box>
-                      </Stack>
+                      </Box>
                     )}
-                  </DialogContent>
-                  <DialogActions>
-                    <Button onClick={() => setPathOpen(false)}>Close</Button>
-                  </DialogActions>
-                </Dialog>
+                  </>
+                )}
               </Stack>
             )}
           </Section>
