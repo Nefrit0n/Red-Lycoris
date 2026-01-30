@@ -1,17 +1,15 @@
 /**
- * Lotus Warden Design System - Color Tokens
+ * RED LYCORIS Design System - Color Tokens
  *
- * Philosophy: The lotus grows from dark depths toward the light.
- * Just as security illuminates hidden vulnerabilities, our palette
- * transitions from deep, mysterious backgrounds to vibrant,
- * enlightened accents.
+ * Philosophy: RED LYCORIS blends bold red energy with graphite
+ * neutrals to deliver clarity and confidence in dark interfaces.
  *
- * Color naming follows the lotus metaphor:
- * - Night Waters: Deep backgrounds (where the lotus roots)
- * - Lotus: Primary brand colors (the flower itself)
- * - Petal: Vibrant accents (individual petals catching light)
- * - Jade: Secondary cool tones (lotus leaves)
- * - Gold: Highlight color (the enlightened center)
+ * Color naming follows the brand metaphor:
+ * - Graphite: Deep neutral backgrounds
+ * - Lycoris: Primary brand reds
+ * - Ember: Warm accent reds
+ * - Jade: Secondary cool tones
+ * - Gold: Highlight color for emphasis
  */
 
 // ============================================================
@@ -19,79 +17,79 @@
 // ============================================================
 
 export const primitives = {
-  // Night Waters - Deep backgrounds inspired by moonlit water
+  // Graphite - Deep neutral backgrounds
   night: {
-    950: '#05060a',  // Void - deepest black with blue undertone
-    900: '#08090e',  // Abyss
-    850: '#0b0c12',  // Deep
-    800: '#0f1117',  // Default background
-    750: '#13151d',  // Subtle elevation
-    700: '#171a24',  // Paper/Card
-    650: '#1c2030',  // Elevated
-    600: '#21263b',  // Overlay
-    550: '#282e47',  // Border strong
-    500: '#343c5a',  // Border medium
-    450: '#424b6d',  // Border subtle
-    400: '#525d80',  // Muted text
-    300: '#6b7794',  // Secondary text
-    200: '#8a94ad',  // Tertiary
-    100: '#b0b8cc',  // Placeholder
-    50:  '#e2e5ed',  // Light text on dark
+    950: '#050507',  // Void
+    900: '#0b0b10',  // Abyss
+    850: '#11121a',  // Deep
+    800: '#171821',  // Default background
+    750: '#1e2029',  // Subtle elevation
+    700: '#252730',  // Paper/Card
+    650: '#2c2f3a',  // Elevated
+    600: '#343846',  // Overlay
+    550: '#3d4254',  // Border strong
+    500: '#494f63',  // Border medium
+    450: '#586077',  // Border subtle
+    400: '#6f768f',  // Muted text
+    300: '#8b93a9',  // Secondary text
+    200: '#aab0c3',  // Tertiary
+    100: '#c7ccd9',  // Placeholder
+    50:  '#eceff6',  // Light text on dark
   },
 
-  // Lotus - Primary brand color (purple-pink gradient feel)
+  // Lycoris - Primary brand red
   lotus: {
-    950: '#1a0a24',
-    900: '#2d1040',
-    800: '#4a1a6b',
-    700: '#6b2494',
-    600: '#8b31b8',  // Dark
-    500: '#a855f7',  // Main - vibrant purple
-    400: '#b97afc',  // Light
-    300: '#c9a0fd',
-    200: '#dbc5fe',
-    100: '#ede5ff',
-    50:  '#f8f5ff',
+    950: '#2a0a0d',
+    900: '#3a0c12',
+    800: '#5a101a',
+    700: '#7a1623',
+    600: '#a11f2f',  // Dark
+    500: '#e11d48',  // Main - vivid red
+    400: '#f04f69',  // Light
+    300: '#f58296',
+    200: '#f8b0bf',
+    100: '#fbdae2',
+    50:  '#feeff2',
   },
 
-  // Petal - Accent color for highlights and CTAs (pink-magenta)
+  // Ember - Warm accent red (for highlights)
   petal: {
-    950: '#2a0a1f',
-    900: '#4a1035',
-    800: '#7a1a55',
-    700: '#a32472',
-    600: '#c7328f',  // Dark
-    500: '#e855a8',  // Main - vibrant pink
-    400: '#f080be',
-    300: '#f5a5d0',
-    200: '#facce4',
-    100: '#fde8f3',
-    50:  '#fff5fa',
+    950: '#2d0b08',
+    900: '#47110a',
+    800: '#6a1a10',
+    700: '#8f2316',
+    600: '#b22f1f',  // Dark
+    500: '#e94532',  // Main - warm red
+    400: '#f46c5d',
+    300: '#f89b91',
+    200: '#fcc4bd',
+    100: '#fee3df',
+    50:  '#fff4f2',
   },
 
-  // Jade - Secondary color for calm, trustworthy elements (teal-cyan)
+  // Jade - Secondary cool tone (teal)
   jade: {
     950: '#042f2e',
     900: '#064e4b',
-    800: '#0a7571',
-    700: '#109693',
-    600: '#18b4af',  // Dark
-    500: '#22d3ce',  // Main - vibrant teal
-    400: '#4eeae5',
-    300: '#7cf1ed',
-    200: '#b0f7f5',
-    100: '#dafcfb',
-    50:  '#f0fffe',
+    800: '#0a6d69',
+    700: '#128d88',
+    600: '#18a8a3',  // Dark
+    500: '#1fc3bc',  // Main
+    400: '#4bd8d2',
+    300: '#78e5e0',
+    200: '#b0f1ee',
+    100: '#daf8f6',
+    50:  '#effcfb',
   },
 
-  // Gold - Highlight color for important elements (warm amber)
+  // Gold - Highlight color for important elements
   gold: {
     950: '#2a1a00',
     900: '#4a2f00',
     800: '#7a4d00',
     700: '#a36a00',
     600: '#c98600',  // Dark
-    500: '#f0a500',  // Main - rich gold
+    500: '#f0a500',  // Main
     400: '#ffbe30',
     300: '#ffd066',
     200: '#ffe299',
@@ -234,12 +232,12 @@ export const darkTheme = {
     overlay: primitives.night[600],     // Modal backgrounds
     hover: 'rgba(255, 255, 255, 0.04)', // Interactive hover
     active: 'rgba(255, 255, 255, 0.08)', // Interactive active/pressed
-    selected: 'rgba(168, 85, 247, 0.12)', // Selected items (lotus tint)
+    selected: 'rgba(225, 29, 72, 0.16)', // Selected items (lycoris tint)
   },
 
   // Text
   text: {
-    primary: '#f4f4f5',                 // High contrast - headings
+    primary: '#f4f5f8',                 // High contrast - headings
     secondary: primitives.night[200],   // Body text
     tertiary: primitives.night[300],    // Captions, hints
     muted: primitives.night[400],       // Disabled, placeholders
@@ -262,17 +260,17 @@ export const darkTheme = {
     primary: primitives.lotus[500],
     primaryHover: primitives.lotus[400],
     primaryActive: primitives.lotus[600],
-    primarySubtle: 'rgba(168, 85, 247, 0.15)',
+    primarySubtle: 'rgba(225, 29, 72, 0.18)',
 
     secondary: primitives.jade[500],
     secondaryHover: primitives.jade[400],
     secondaryActive: primitives.jade[600],
-    secondarySubtle: 'rgba(34, 211, 206, 0.15)',
+    secondarySubtle: 'rgba(31, 195, 188, 0.15)',
 
     accent: primitives.petal[500],
     accentHover: primitives.petal[400],
     accentActive: primitives.petal[600],
-    accentSubtle: 'rgba(232, 85, 168, 0.15)',
+    accentSubtle: 'rgba(233, 69, 50, 0.18)',
 
     gold: primitives.gold[500],
     goldHover: primitives.gold[400],
@@ -289,10 +287,10 @@ export const darkTheme = {
 
     // Secondary button
     secondaryBg: 'transparent',
-    secondaryBgHover: 'rgba(168, 85, 247, 0.1)',
-    secondaryBgActive: 'rgba(168, 85, 247, 0.2)',
+    secondaryBgHover: 'rgba(225, 29, 72, 0.12)',
+    secondaryBgActive: 'rgba(225, 29, 72, 0.2)',
     secondaryBorder: primitives.lotus[500],
-    secondaryText: primitives.lotus[400],
+    secondaryText: primitives.lotus[300],
 
     // Ghost button
     ghostBg: 'transparent',
@@ -351,7 +349,7 @@ export const lightTheme = {
     primary: primitives.lotus[600],
     primaryHover: primitives.lotus[500],
     primaryActive: primitives.lotus[700],
-    primarySubtle: 'rgba(147, 51, 234, 0.1)',
+    primarySubtle: 'rgba(225, 29, 72, 0.1)',
 
     secondary: primitives.jade[600],
     secondaryHover: primitives.jade[500],
@@ -361,7 +359,7 @@ export const lightTheme = {
     accent: primitives.petal[600],
     accentHover: primitives.petal[500],
     accentActive: primitives.petal[700],
-    accentSubtle: 'rgba(199, 50, 143, 0.1)',
+    accentSubtle: 'rgba(233, 69, 50, 0.1)',
 
     gold: primitives.gold[600],
     goldHover: primitives.gold[500],
@@ -376,8 +374,8 @@ export const lightTheme = {
     primaryText: '#ffffff',
 
     secondaryBg: 'transparent',
-    secondaryBgHover: 'rgba(147, 51, 234, 0.08)',
-    secondaryBgActive: 'rgba(147, 51, 234, 0.15)',
+    secondaryBgHover: 'rgba(225, 29, 72, 0.08)',
+    secondaryBgActive: 'rgba(225, 29, 72, 0.15)',
     secondaryBorder: primitives.lotus[600],
     secondaryText: primitives.lotus[600],
 
@@ -399,9 +397,9 @@ export const lightTheme = {
 
 export const gradients = {
   // Brand gradients
-  lotus: 'linear-gradient(135deg, #a855f7 0%, #e855a8 100%)',
-  lotusSubtle: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(232, 85, 168, 0.2) 100%)',
-  lotusRadial: 'radial-gradient(ellipse at top, #a855f7 0%, #e855a8 50%, transparent 100%)',
+  lotus: 'linear-gradient(135deg, #e11d48 0%, #e94532 100%)',
+  lotusSubtle: 'linear-gradient(135deg, rgba(225, 29, 72, 0.2) 0%, rgba(233, 69, 50, 0.2) 100%)',
+  lotusRadial: 'radial-gradient(ellipse at top, #e11d48 0%, #e94532 50%, transparent 100%)',
 
   jade: 'linear-gradient(135deg, #22d3ce 0%, #3b82f6 100%)',
   jadeSubtle: 'linear-gradient(135deg, rgba(34, 211, 206, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%)',
@@ -417,14 +415,14 @@ export const gradients = {
 
   // Mesh gradients for backgrounds
   meshDark: `
-    radial-gradient(at 0% 0%, rgba(168, 85, 247, 0.15) 0%, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(34, 211, 206, 0.1) 0%, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(232, 85, 168, 0.1) 0%, transparent 50%)
+    radial-gradient(at 0% 0%, rgba(225, 29, 72, 0.15) 0%, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(31, 195, 188, 0.1) 0%, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(233, 69, 50, 0.1) 0%, transparent 50%)
   `,
   meshLight: `
-    radial-gradient(at 0% 0%, rgba(147, 51, 234, 0.1) 0%, transparent 50%),
+    radial-gradient(at 0% 0%, rgba(225, 29, 72, 0.1) 0%, transparent 50%),
     radial-gradient(at 100% 0%, rgba(20, 184, 175, 0.08) 0%, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(199, 50, 143, 0.08) 0%, transparent 50%)
+    radial-gradient(at 100% 100%, rgba(233, 69, 50, 0.08) 0%, transparent 50%)
   `,
 
   // Glass effect backgrounds
@@ -464,12 +462,12 @@ export const alpha = {
     90: 'rgba(0, 0, 0, 0.9)',
   },
   lotus: {
-    5: 'rgba(168, 85, 247, 0.05)',
-    10: 'rgba(168, 85, 247, 0.1)',
-    15: 'rgba(168, 85, 247, 0.15)',
-    20: 'rgba(168, 85, 247, 0.2)',
-    30: 'rgba(168, 85, 247, 0.3)',
-    50: 'rgba(168, 85, 247, 0.5)',
+    5: 'rgba(225, 29, 72, 0.05)',
+    10: 'rgba(225, 29, 72, 0.1)',
+    15: 'rgba(225, 29, 72, 0.15)',
+    20: 'rgba(225, 29, 72, 0.2)',
+    30: 'rgba(225, 29, 72, 0.3)',
+    50: 'rgba(225, 29, 72, 0.5)',
   },
 } as const;
 

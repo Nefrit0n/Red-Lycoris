@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Security Utilities
+ * RED LYCORIS Design System - Security Utilities
  *
  * Centralized utilities for severity, status, and risk handling.
  * Provides consistent styling and formatting across the application.

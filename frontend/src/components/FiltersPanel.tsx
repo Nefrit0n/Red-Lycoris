@@ -148,7 +148,7 @@ const FiltersPanel = ({
               onChange={(event) => onSearchChange(event.target.value)}
               size="small"
               fullWidth
-              placeholder="title / fingerprint / CVE / rule id"
+              placeholder="Название / CVE / правило / fingerprint"
               inputProps={{ "aria-label": "Поиск по находкам" }}
             />
           </Stack>
@@ -160,99 +160,105 @@ const FiltersPanel = ({
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
             Классификация
           </Typography>
-          <Stack spacing={1.5}>
-            <FormControl size="small" fullWidth>
-              <InputLabel id="filter-severity-label">Критичность</InputLabel>
-              <Select
-                labelId="filter-severity-label"
-                label="Критичность"
-                value={filterSeverity}
-                onChange={handleSeverityChange}
-              >
-                <MenuItem value="">
-                  <em>Все</em>
-                </MenuItem>
-                <MenuItem value="low">{SEVERITY_STYLES.low.label}</MenuItem>
-                <MenuItem value="medium">{SEVERITY_STYLES.medium.label}</MenuItem>
-                <MenuItem value="high">{SEVERITY_STYLES.high.label}</MenuItem>
-                <MenuItem value="critical">{SEVERITY_STYLES.critical.label}</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" fullWidth>
-              <InputLabel id="filter-risk-label">Risk band</InputLabel>
-              <Select
-                labelId="filter-risk-label"
-                label="Risk band"
-                value={filterRiskBand}
-                onChange={handleRiskBandChange}
-              >
-                <MenuItem value="">
-                  <em>Все</em>
-                </MenuItem>
-                <MenuItem value="low">{RISK_BAND_LABELS.low}</MenuItem>
-                <MenuItem value="medium">{RISK_BAND_LABELS.medium}</MenuItem>
-                <MenuItem value="high">{RISK_BAND_LABELS.high}</MenuItem>
-                <MenuItem value="critical">{RISK_BAND_LABELS.critical}</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" fullWidth>
-              <InputLabel id="filter-status-label">Статус</InputLabel>
-              <Select
-                labelId="filter-status-label"
-                label="Статус"
-                value={filterStatus}
-                onChange={handleStatusChange}
-              >
-                <MenuItem value="">
-                  <em>Все</em>
-                </MenuItem>
-                <MenuItem value="new">{STATUS_LABELS.new}</MenuItem>
-                <MenuItem value="under_review">{STATUS_LABELS.under_review}</MenuItem>
-                <MenuItem value="confirmed">{STATUS_LABELS.confirmed}</MenuItem>
-                <MenuItem value="false_positive">{STATUS_LABELS.false_positive}</MenuItem>
-                <MenuItem value="out_of_scope">{STATUS_LABELS.out_of_scope}</MenuItem>
-                <MenuItem value="risk_accepted">{STATUS_LABELS.risk_accepted}</MenuItem>
-                <MenuItem value="mitigated">{STATUS_LABELS.mitigated}</MenuItem>
-                <MenuItem value="duplicate">{STATUS_LABELS.duplicate}</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" fullWidth>
-              <InputLabel id="filter-scanner-label">Сканер</InputLabel>
-              <Select
-                labelId="filter-scanner-label"
-                label="Сканер"
-                value={filterScannerType}
-                onChange={handleScannerChange}
-              >
-                <MenuItem value="">
-                  <em>Все</em>
-                </MenuItem>
-                <MenuItem value="trivy">Trivy</MenuItem>
-                <MenuItem value="zap">ZAP</MenuItem>
-                <MenuItem value="semgrep">Semgrep</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" fullWidth>
-              <InputLabel id="filter-policy-decision-label">Policy decision</InputLabel>
-              <Select
-                labelId="filter-policy-decision-label"
-                label="Policy decision"
-                value={filterPolicyDecision}
-                onChange={handlePolicyDecisionChange}
-              >
-                <MenuItem value="">
-                  <em>Все</em>
-                </MenuItem>
-                <MenuItem value="pass">PASS</MenuItem>
-                <MenuItem value="warn">WARN</MenuItem>
-                <MenuItem value="fail">FAIL</MenuItem>
-              </Select>
-            </FormControl>
-          </Stack>
+          <Grid container spacing={1.5}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="filter-severity-label">Критичность</InputLabel>
+                <Select
+                  labelId="filter-severity-label"
+                  label="Критичность"
+                  value={filterSeverity}
+                  onChange={handleSeverityChange}
+                >
+                  <MenuItem value="">
+                    <em>Все</em>
+                  </MenuItem>
+                  <MenuItem value="low">{SEVERITY_STYLES.low.label}</MenuItem>
+                  <MenuItem value="medium">{SEVERITY_STYLES.medium.label}</MenuItem>
+                  <MenuItem value="high">{SEVERITY_STYLES.high.label}</MenuItem>
+                  <MenuItem value="critical">{SEVERITY_STYLES.critical.label}</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="filter-risk-label">Риск</InputLabel>
+                <Select
+                  labelId="filter-risk-label"
+                  label="Риск"
+                  value={filterRiskBand}
+                  onChange={handleRiskBandChange}
+                >
+                  <MenuItem value="">
+                    <em>Все</em>
+                  </MenuItem>
+                  <MenuItem value="low">{RISK_BAND_LABELS.low}</MenuItem>
+                  <MenuItem value="medium">{RISK_BAND_LABELS.medium}</MenuItem>
+                  <MenuItem value="high">{RISK_BAND_LABELS.high}</MenuItem>
+                  <MenuItem value="critical">{RISK_BAND_LABELS.critical}</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="filter-status-label">Статус</InputLabel>
+                <Select
+                  labelId="filter-status-label"
+                  label="Статус"
+                  value={filterStatus}
+                  onChange={handleStatusChange}
+                >
+                  <MenuItem value="">
+                    <em>Все</em>
+                  </MenuItem>
+                  <MenuItem value="new">{STATUS_LABELS.new}</MenuItem>
+                  <MenuItem value="under_review">{STATUS_LABELS.under_review}</MenuItem>
+                  <MenuItem value="confirmed">{STATUS_LABELS.confirmed}</MenuItem>
+                  <MenuItem value="false_positive">{STATUS_LABELS.false_positive}</MenuItem>
+                  <MenuItem value="out_of_scope">{STATUS_LABELS.out_of_scope}</MenuItem>
+                  <MenuItem value="risk_accepted">{STATUS_LABELS.risk_accepted}</MenuItem>
+                  <MenuItem value="mitigated">{STATUS_LABELS.mitigated}</MenuItem>
+                  <MenuItem value="duplicate">{STATUS_LABELS.duplicate}</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="filter-scanner-label">Сканер</InputLabel>
+                <Select
+                  labelId="filter-scanner-label"
+                  label="Сканер"
+                  value={filterScannerType}
+                  onChange={handleScannerChange}
+                >
+                  <MenuItem value="">
+                    <em>Все</em>
+                  </MenuItem>
+                  <MenuItem value="trivy">Trivy</MenuItem>
+                  <MenuItem value="zap">ZAP</MenuItem>
+                  <MenuItem value="semgrep">Semgrep</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="filter-policy-decision-label">Политика</InputLabel>
+                <Select
+                  labelId="filter-policy-decision-label"
+                  label="Политика"
+                  value={filterPolicyDecision}
+                  onChange={handlePolicyDecisionChange}
+                >
+                  <MenuItem value="">
+                    <em>Все</em>
+                  </MenuItem>
+                  <MenuItem value="pass">PASS</MenuItem>
+                  <MenuItem value="warn">WARN</MenuItem>
+                  <MenuItem value="fail">FAIL</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
         </Box>
 
         <Divider />
@@ -261,35 +267,38 @@ const FiltersPanel = ({
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
             Повторы
           </Typography>
-          <Stack spacing={1.5}>
-            <FormControl size="small" fullWidth>
-              <InputLabel id="filter-occurrence-label">Повторяемость</InputLabel>
-              <Select
-                labelId="filter-occurrence-label"
-                label="Повторяемость"
-                value={filterOccurrence}
-                onChange={handleOccurrenceChange}
-              >
-                <MenuItem value="">
-                  <em>Все</em>
-                </MenuItem>
-                <MenuItem value="NEW">{OCCURRENCE_LABELS.NEW}</MenuItem>
-                <MenuItem value="REPEAT">{OCCURRENCE_LABELS.REPEAT}</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={showRepeats}
-                  onChange={(event) => onShowRepeatsChange(event.target.checked)}
-                  color="primary"
-                />
-              }
-              label="Только повторы"
-              sx={{ userSelect: "none" }}
-            />
-          </Stack>
+          <Grid container spacing={1.5}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="filter-occurrence-label">Повторяемость</InputLabel>
+                <Select
+                  labelId="filter-occurrence-label"
+                  label="Повторяемость"
+                  value={filterOccurrence}
+                  onChange={handleOccurrenceChange}
+                >
+                  <MenuItem value="">
+                    <em>Все</em>
+                  </MenuItem>
+                  <MenuItem value="NEW">{OCCURRENCE_LABELS.NEW}</MenuItem>
+                  <MenuItem value="REPEAT">{OCCURRENCE_LABELS.REPEAT}</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showRepeats}
+                    onChange={(event) => onShowRepeatsChange(event.target.checked)}
+                    color="primary"
+                  />
+                }
+                label="Только повторы"
+                sx={{ userSelect: "none" }}
+              />
+            </Grid>
+          </Grid>
         </Box>
 
         <Divider />
@@ -301,7 +310,7 @@ const FiltersPanel = ({
           <Grid container spacing={1.5}>
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
-                label="Last seen от"
+                label="Последнее обнаружение от"
                 type="date"
                 value={dateFrom}
                 onChange={(event) => onDateFromChange(event.target.value)}
@@ -312,7 +321,7 @@ const FiltersPanel = ({
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
-                label="Last seen до"
+                label="Последнее обнаружение до"
                 type="date"
                 value={dateTo}
                 onChange={(event) => onDateToChange(event.target.value)}

@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { AUTH_INVALIDATED_EVENT, getToken } from "../api/http";
-import AppShell from "./AppShell";
+import SidebarLayout from "./SidebarLayout";
 
 const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
 
@@ -42,9 +42,9 @@ const ProtectedLayout = () => {
   }
 
   return (
-    <AppShell>
+    <SidebarLayout>
       <Outlet />
-    </AppShell>
+    </SidebarLayout>
   );
 };
 

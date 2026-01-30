@@ -1,12 +1,15 @@
 import {
+  Avatar,
   Box,
   Chip,
   Divider,
   IconButton,
+  InputAdornment,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -29,6 +32,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrentUser, isAdminUser, logout } from "../api/auth";
 import { useThemeMode } from "../contexts/ThemeContext";
+import { focusRing } from "../design-system/tokens";
 
 type NavItem = {
   label: string;
@@ -36,7 +40,7 @@ type NavItem = {
   icon: React.ReactNode;
 };
 
-const COLLAPSED_KEY = "lotus_warden_sidebar_collapsed";
+const COLLAPSED_KEY = "red_lycoris_sidebar_collapsed";
 const COLLAPSED_WIDTH = 72;
 const EXPANDED_WIDTH = 260;
 
@@ -59,7 +63,7 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
   const navigationItems = useMemo<NavItem[]>(
     () => {
       const items: NavItem[] = [
-        { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
+        { label: "Дашборд", path: "/dashboard", icon: <DashboardIcon /> },
         { label: "Находки", path: "/findings", icon: <BugReportIcon /> },
         { label: "Продукты", path: "/products", icon: <Inventory2Icon /> },
         { label: "Анализ", path: "/analyze", icon: <AnalyticsIcon /> },
@@ -115,16 +119,36 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
           gap: 1,
         }}
       >
-        {!collapsed && (
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600}>
-              Lotus Warden
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Управление находками уязвимостей
-            </Typography>
-          </Box>
-        )}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            flex: 1,
+            justifyContent: collapsed ? "center" : "flex-start",
+          }}
+        >
+          <Box
+            component="img"
+            src={collapsed ? "/brand/logo.png" : "/brand/logo_full.png"}
+            alt="RED LYCORIS"
+            sx={{
+              height: collapsed ? 32 : 28,
+              width: "auto",
+              maxWidth: collapsed ? 32 : 180,
+            }}
+          />
+          {!collapsed && (
+            <Box>
+              <Typography variant="subtitle2" fontWeight={700}>
+                RED LYCORIS
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Платформа ASOC
+              </Typography>
+            </Box>
+          )}
+        </Box>
         <IconButton
           size="small"
           onClick={() => setCollapsed((prev) => !prev)}
@@ -154,19 +178,41 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
                 <ListItemButton
                   onClick={() => navigate(item.path)}
                   selected={isActive}
-                  sx={{
-                    mx: collapsed ? 0.5 : 0,
+                  sx={(theme) => ({
+                    mx: collapsed ? 0.75 : 0,
                     my: 0.5,
                     borderRadius: 1.5,
                     justifyContent: collapsed ? "center" : "flex-start",
                     px: collapsed ? 1 : 2,
+                    minHeight: 40,
+                    position: "relative",
+                    "&::before": {
+                      content: '""',
+                      position: "absolute",
+                      left: collapsed ? "50%" : 6,
+                      top: "50%",
+                      transform: collapsed ? "translate(-50%, -50%)" : "translateY(-50%)",
+                      width: collapsed ? 6 : 3,
+                      height: collapsed ? 6 : "60%",
+                      borderRadius: 999,
+                      backgroundColor: isActive
+                        ? theme.palette.primary.main
+                        : "transparent",
+                      transition: "all 0.2s ease",
+                    },
                     "&.Mui-selected": {
-                      bgcolor: "rgba(122, 162, 247, 0.18)",
+                      bgcolor: theme.palette.action.selected,
                       "&:hover": {
-                        bgcolor: "rgba(122, 162, 247, 0.24)",
+                        bgcolor: theme.palette.action.hover,
                       },
                     },
-                  }}
+                    "&:hover": {
+                      bgcolor: theme.palette.action.hover,
+                    },
+                    "&.Mui-focusVisible": {
+                      boxShadow: focusRing.default,
+                    },
+                  })}
                 >
                   <ListItemIcon
                     sx={{
@@ -207,39 +253,43 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
           gap: 1,
         }}
       >
-        {/* Search Button */}
+        {/* Quick search */}
         {onOpenCommandPalette && (
           <Tooltip title={collapsed ? "Поиск (⌘K)" : ""} placement="right">
-            <ListItemButton
-              onClick={onOpenCommandPalette}
-              sx={{
-                borderRadius: 1.5,
-                justifyContent: collapsed ? "center" : "flex-start",
-                px: collapsed ? 1 : 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <ListItemIcon
-                sx={{
-                  minWidth: 0,
-                  mr: collapsed ? 0 : 1.5,
+            {collapsed ? (
+              <IconButton
+                onClick={onOpenCommandPalette}
+                sx={(theme) => ({
+                  borderRadius: 1.5,
+                  border: "1px solid",
+                  borderColor: theme.palette.divider,
                   color: "text.secondary",
-                  justifyContent: "center",
-                }}
+                })}
+                aria-label="Поиск"
               >
                 <SearchIcon fontSize="small" />
-              </ListItemIcon>
-              {!collapsed && (
-                <>
-                  <ListItemText
-                    primary="Поиск"
-                    primaryTypographyProps={{ fontSize: "0.875rem" }}
-                  />
-                  <Chip label="⌘K" size="small" sx={{ height: 20, fontSize: "0.65rem" }} />
-                </>
-              )}
-            </ListItemButton>
+              </IconButton>
+            ) : (
+              <TextField
+                size="small"
+                placeholder="Поиск"
+                onClick={onOpenCommandPalette}
+                fullWidth
+                InputProps={{
+                  readOnly: true,
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Chip label="⌘K" size="small" sx={{ height: 20, fontSize: "0.65rem" }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            )}
           </Tooltip>
         )}
 
@@ -254,6 +304,10 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
               borderRadius: 1.5,
               justifyContent: collapsed ? "center" : "flex-start",
               px: collapsed ? 1 : 2,
+              minHeight: 40,
+              "&.Mui-focusVisible": {
+                boxShadow: focusRing.subtle,
+              },
             }}
           >
             <ListItemIcon
@@ -275,14 +329,30 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
         <Divider sx={{ my: 0.5 }} />
 
         {/* User Info */}
-        {!collapsed && user && (
-          <Box sx={{ px: 1 }}>
-            <Typography variant="body2" fontWeight={600}>
-              {user.username}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {user.email}
-            </Typography>
+        {!collapsed && (
+          <Box
+            sx={{
+              px: 1,
+              py: 1,
+              borderRadius: 1.5,
+              border: "1px solid",
+              borderColor: "divider",
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
+            <Avatar sx={{ width: 28, height: 28, fontSize: "0.75rem" }}>
+              {(user?.username ?? "root").slice(0, 2).toUpperCase()}
+            </Avatar>
+            <Box>
+              <Typography variant="body2" fontWeight={600}>
+                {user?.username ?? "root"}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {user?.email ?? "Security Admin"}
+              </Typography>
+            </Box>
           </Box>
         )}
 
@@ -294,6 +364,10 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
               borderRadius: 1.5,
               justifyContent: collapsed ? "center" : "flex-start",
               px: collapsed ? 1 : 2,
+              minHeight: 40,
+              "&.Mui-focusVisible": {
+                boxShadow: focusRing.subtle,
+              },
             }}
           >
             <ListItemIcon
