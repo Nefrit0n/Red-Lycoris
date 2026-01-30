@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
+	"time"
 
 	dtov1 "lotus-warden/backend/internal/dto/v1"
 	"lotus-warden/backend/internal/storage"
@@ -20,45 +21,45 @@ func NewSbomTransitiveHandler(db *sql.DB) *SbomTransitiveHandler {
 	return &SbomTransitiveHandler{db: db}
 }
 
-// GET /api/v1/sbom/:id/transitive?rootComponentId=<uuid>&maxDepth=25&limit=50&offset=0
+// GET /api/v1/sbom/:id/transitive?maxDepth=25&q=&limit=200&offset=0
 func (h *SbomTransitiveHandler) ListVulnerable(c *fiber.Ctx) error {
 	sbomID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid sbom id"})
 	}
 
-	rootRaw := strings.TrimSpace(c.Query("rootComponentId"))
-	if rootRaw == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "rootComponentId is required"})
-	}
-	rootID, err := uuid.Parse(rootRaw)
-	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid rootComponentId"})
-	}
-
 	maxDepth := parseIntOrDefault(strings.TrimSpace(c.Query("maxDepth")), 25)
-	limit := parseIntOrDefault(strings.TrimSpace(c.Query("limit")), 50)
+	limit := parseIntOrDefault(strings.TrimSpace(c.Query("limit")), 200)
 	offset := parseIntOrDefault(strings.TrimSpace(c.Query("offset")), 0)
+	query := strings.TrimSpace(c.Query("q"))
 
 	if limit < 1 || limit > 1000 || offset < 0 {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid limit/offset"})
 	}
-	if maxDepth < 1 || maxDepth > 100 {
+	if maxDepth != 10 && maxDepth != 25 && maxDepth != 50 {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid maxDepth"})
 	}
 
-	items, total, err := storage.ListSbomTransitiveVulnerableComponents(c.Context(), h.db, storage.SbomTransitiveFilters{
-		SbomID:          sbomID,
-		RootComponentID: rootID,
-		MaxDepth:        maxDepth,
-		Limit:           limit,
-		Offset:          offset,
-	})
+	status, err := storage.GetSbomTransitiveStatus(c.Context(), h.db, sbomID)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute transitive dependencies"})
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch sbom status"})
+	}
+	if status == nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "sbom not found"})
 	}
 
-	respItems := make([]dtov1.SbomTransitiveComponentDTO, 0, len(items))
+	items, total, err := storage.ListSbomTransitiveExposure(c.Context(), h.db, storage.SbomTransitiveExposureFilters{
+		SbomID:   sbomID,
+		MaxDepth: maxDepth,
+		Query:    query,
+		Limit:    limit,
+		Offset:   offset,
+	})
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch transitive exposure"})
+	}
+
+	respItems := make([]dtov1.SbomTransitiveExposureDTO, 0, len(items))
 	for _, it := range items {
 		var purl *string
 		if it.Purl.Valid {
@@ -75,33 +76,50 @@ func (h *SbomTransitiveHandler) ListVulnerable(c *fiber.Ctx) error {
 			v := it.Ecosystem.String
 			eco = &v
 		}
+		var minDistance *int
+		if it.MinDistanceToAnyVuln.Valid {
+			v := int(it.MinDistanceToAnyVuln.Int64)
+			minDistance = &v
+		}
 
-		respItems = append(respItems, dtov1.SbomTransitiveComponentDTO{
-			ID:           it.ID.String(),
-			Purl:         purl,
-			Name:         it.Name,
-			Version:      ver,
-			Ecosystem:    eco,
-			MinDepth:     it.MinDepth,
-			VulnTotal:    it.VulnTotal,
-			VulnCritical: it.VulnCritical,
-			VulnHigh:     it.VulnHigh,
-			VulnMedium:   it.VulnMedium,
-			VulnLow:      it.VulnLow,
-			MaxCvssScore: it.MaxCvssScore,
-			MaxEpssScore: it.MaxEpssScore,
-			KEV:          it.KEV,
+		respItems = append(respItems, dtov1.SbomTransitiveExposureDTO{
+			ID:                   it.ComponentID.String(),
+			Purl:                 purl,
+			Name:                 it.Name,
+			Version:              ver,
+			Ecosystem:            eco,
+			CriticalCount:        it.CriticalCount,
+			HighCount:            it.HighCount,
+			MediumCount:          it.MediumCount,
+			LowCount:             it.LowCount,
+			MaxCvssScore:         it.MaxCvss,
+			MaxEpssScore:         it.MaxEpss,
+			MinDistanceToAnyVuln: minDistance,
 		})
+	}
+
+	var updatedAt *time.Time
+	if status.UpdatedAt.Valid {
+		t := status.UpdatedAt.Time
+		updatedAt = &t
+	}
+	var transitiveError *string
+	if status.Error.Valid {
+		msg := status.Error.String
+		transitiveError = &msg
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{
 		"success": true,
+		"status": dtov1.SbomTransitiveStatusDTO{
+			Status:    status.Status,
+			Error:     transitiveError,
+			UpdatedAt: updatedAt,
+		},
 		"data": fiber.Map{
-			"sbomId":          sbomID.String(),
-			"rootComponentId": rootID.String(),
-			"maxDepth":        maxDepth,
-			"items":           respItems,
-			"total":           total,
+			"items":    respItems,
+			"total":    total,
+			"maxDepth": maxDepth,
 		},
 	})
 }
