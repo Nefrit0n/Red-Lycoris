@@ -130,6 +130,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	productsHandler := handlers.NewProductsHandler(db)
 	secured.Get("/products", productsHandler.List)
 	secured.Get("/products/:id", productsHandler.Get)
+	secured.Get("/products/:id/stats", productsHandler.Stats)
 	secured.Post("/products", middleware.AuthorizeRole("admin", "analyst"), productsHandler.Create)
 
 	assetContextHandler := handlers.NewAssetContextHandler(db, publisher)
