@@ -89,7 +89,7 @@ export function prettifyScanner(value?: string | null): string {
  * Build finding link with optional returnTo parameter
  */
 export function buildFindingLink(findingId: string, returnToParam?: string): string {
-  const query = returnToParam ? `?returnTo=${returnToParam}` : "";
+  const query = returnToParam ? `?returnTo=${encodeURIComponent(returnToParam)}` : "";
   return `/findings/${findingId}${query}`;
 }
 
