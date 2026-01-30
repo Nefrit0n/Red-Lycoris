@@ -4,7 +4,9 @@ import { useEffect, useMemo } from "react";
 interface PaginationControlProps {
   page: number; // 0-based (как в MUI TablePagination) :contentReference[oaicite:2]{index=2}
   pageSize: number;
-  total: number; // общее число результатов (count) :contentReference[oaicite:3]{index=3}
+  total?: number | null; // общее число результатов (count)
+  hasNextPage?: boolean;
+  currentCount?: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
 }
@@ -16,20 +18,27 @@ const PaginationControl = ({
   page,
   pageSize,
   total,
+  hasNextPage = false,
+  currentCount,
   onPageChange,
   onPageSizeChange,
 }: PaginationControlProps) => {
-  const safeTotal = Number.isFinite(total) && total > 0 ? total : 0;
+  const totalKnown = typeof total === "number" && Number.isFinite(total) && total >= 0;
+  const safeTotal = totalKnown ? total : 0;
   const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 20;
 
   const lastPageIndex = useMemo(() => {
+    if (!totalKnown) return 0;
     if (safeTotal === 0) return 0;
     return Math.max(0, Math.ceil(safeTotal / safePageSize) - 1);
-  }, [safeTotal, safePageSize]);
+  }, [safeTotal, safePageSize, totalKnown]);
 
   const safePage = useMemo(() => {
+    if (!totalKnown) {
+      return Math.max(0, Number.isFinite(page) ? page : 0);
+    }
     return clamp(Number.isFinite(page) ? page : 0, 0, lastPageIndex);
-  }, [page, lastPageIndex]);
+  }, [page, lastPageIndex, totalKnown]);
 
   // Если total/rowsPerPage изменились и page стала невалидной — мягко возвращаем в диапазон
   useEffect(() => {
@@ -39,8 +48,19 @@ const PaginationControl = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safePage]);
 
-  const from = safeTotal === 0 ? 0 : safePage * safePageSize + 1;
-  const to = safeTotal === 0 ? 0 : Math.min((safePage + 1) * safePageSize, safeTotal);
+  const resolvedCurrentCount =
+    typeof currentCount === "number" && currentCount >= 0 ? currentCount : safePageSize;
+  const from =
+    safeTotal === 0 && totalKnown
+      ? 0
+      : !totalKnown && resolvedCurrentCount === 0
+        ? 0
+        : safePage * safePageSize + 1;
+  const to = totalKnown
+    ? safeTotal === 0
+      ? 0
+      : Math.min((safePage + 1) * safePageSize, safeTotal)
+    : safePage * safePageSize + resolvedCurrentCount;
 
   return (
     <Box
@@ -52,12 +72,12 @@ const PaginationControl = ({
       sx={{ mt: 2 }}
     >
       <Typography variant="body2" color="text.secondary">
-        Показано {from}-{to} из {safeTotal}
+        {totalKnown ? `Показано ${from}-${to} из ${safeTotal}` : `Показано ${from}-${to}`}
       </Typography>
 
       <TablePagination
         component="div"
-        count={safeTotal}
+        count={totalKnown ? safeTotal : -1}
         page={safePage}
         onPageChange={(_, nextPage) => onPageChange(nextPage)}
         rowsPerPage={safePageSize}
@@ -69,15 +89,21 @@ const PaginationControl = ({
         }}
         rowsPerPageOptions={[10, 20, 50, 100]}
         labelRowsPerPage="Строк на странице"
-        labelDisplayedRows={({ from, to, count }) => `Показано ${from}-${to} из ${count}`}
+        labelDisplayedRows={({ from, to, count }) =>
+          count === -1 ? `Показано ${from}-${to}` : `Показано ${from}-${to} из ${count}`
+        }
         getItemAriaLabel={(type) => {
           if (type === "next") return "Следующая страница";
           if (type === "previous") return "Предыдущая страница";
           if (type === "first") return "Первая страница";
           return "Последняя страница";
         }}
-        showFirstButton
-        showLastButton
+        showFirstButton={totalKnown}
+        showLastButton={totalKnown}
+        backIconButtonProps={{ disabled: safePage === 0 }}
+        nextIconButtonProps={{
+          disabled: totalKnown ? false : !hasNextPage,
+        }}
       />
     </Box>
   );

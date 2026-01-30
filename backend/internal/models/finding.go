@@ -94,6 +94,8 @@ type Finding struct {
 	EndpointMethod *string         `db:"endpoint_method"`
 	EndpointPath   *string         `db:"endpoint_path"`
 	Evidence       json.RawMessage `db:"evidence"`
+	CWE            []string        `db:"cwe"`
+	OWASP          []string        `db:"owasp"`
 	RawData        json.RawMessage `db:"raw_data"`
 	CreatedAt      time.Time       `db:"created_at"`
 	UpdatedAt      time.Time       `db:"updated_at"`

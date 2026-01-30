@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"lotus-warden/backend/internal/config"
 	"lotus-warden/backend/internal/middleware"
@@ -25,12 +26,88 @@ func TestFindingsListDefaultsToCanonical(t *testing.T) {
 	cfg := config.Config{JWTSecret: "test-secret"}
 	app := server.NewApp(cfg, db, nil, nil)
 
-	mock.ExpectQuery("(?s)\\s*SELECT COUNT\\(\\*\\).*duplicate_id IS NULL").
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	now := time.Now()
 	mock.ExpectQuery("(?s)\\s*SELECT f.id.*duplicate_id IS NULL").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "severity", "status", "category", "product_id", "name", "assignee_id", "username", "import_job_id", "created_at", "updated_at", "first_seen_at", "last_seen_at", "repeat_count", "duplicate_id", "sla_due_at", "sla_breached", "sla_breached_at", "sla_profile", "sla_source", "scanner", "source_type"}))
-	mock.ExpectQuery("(?s)\\s*SELECT f.severity, COUNT\\(\\*\\).*duplicate_id IS NULL").
-		WillReturnRows(sqlmock.NewRows([]string{"severity", "count"}))
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"tenant_id",
+			"import_job_id",
+			"fingerprint",
+			"title",
+			"severity",
+			"status",
+			"category",
+			"product_id",
+			"name",
+			"duplicate_id",
+			"repeat_count",
+			"first_seen_at",
+			"last_seen_at",
+			"sla_due_at",
+			"sla_breached",
+			"sla_breached_at",
+			"sla_profile",
+			"sla_source",
+			"scanner",
+			"assignee_id",
+			"username",
+			"decision",
+			"risk_score",
+			"risk_band",
+			"computed_at",
+			"model_version",
+			"created_at",
+			"updated_at",
+			"source_type",
+			"cwe",
+			"owasp",
+			"sort_key",
+		}).AddRow(
+			uuid.New(),
+			uuid.New(),
+			nil,
+			"fp-1",
+			"Finding",
+			"low",
+			"new",
+			"SAST",
+			uuid.New(),
+			"Product",
+			nil,
+			0,
+			now,
+			now,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			"scanner",
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			now,
+			now,
+			nil,
+			"{CWE-79}",
+			"{A01}",
+			now,
+		))
+	mock.ExpectQuery("(?s)\\s*SELECT\\s+fvi.finding_id").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"finding_id",
+			"identifiers",
+			"cvss_score",
+			"cvss_version",
+			"epss_score",
+			"epss_percentile",
+			"kev",
+			"last_refreshed_at",
+		}))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
 		UserID: uuid.New().String(),
@@ -55,15 +132,17 @@ func TestFindingsListDefaultsToCanonical(t *testing.T) {
 		t.Fatalf("expected 200 status, got %d: %s", resp.StatusCode, string(body))
 	}
 
-	var response struct {
-		Success bool            `json:"success"`
-		Data    json.RawMessage `json:"data"`
-		Total   int             `json:"total"`
-	}
+	var response map[string]json.RawMessage
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
-	if !response.Success {
+	if _, ok := response["success"]; !ok {
+		t.Fatalf("expected success response")
+	}
+	if _, ok := response["total"]; ok {
+		t.Fatalf("expected total to be omitted when includeMeta is false")
+	}
+	if _, ok := response["data"]; !ok {
 		t.Fatalf("expected success response")
 	}
 

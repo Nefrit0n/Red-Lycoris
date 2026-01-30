@@ -355,6 +355,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 			_ = tx.Rollback()
 			return nil, err
 		}
+		cwe, owasp := extractEvidenceTags(params.finding.Evidence)
 		model := &models.Finding{
 			TenantID:      params.tenantID,
 			ScanResultID:  &params.scanID,
@@ -372,6 +373,8 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 			SourceType:    params.sourceType,
 			SourceVersion: params.sourceVersion,
 			Evidence:      evidence,
+			CWE:           cwe,
+			OWASP:         owasp,
 			RawData:       rawData,
 		}
 		if dueAt, ok := sla.DueAt(params.seenAt, params.finding.Severity, params.slaMatrix); ok {
@@ -407,6 +410,7 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		_ = tx.Rollback()
 		return nil, err
 	}
+	cwe, owasp := extractEvidenceTags(params.finding.Evidence)
 	duplicate := &models.Finding{
 		TenantID:      params.tenantID,
 		ScanResultID:  &params.scanID,
@@ -425,6 +429,8 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		SourceType:    params.sourceType,
 		SourceVersion: params.sourceVersion,
 		Evidence:      evidence,
+		CWE:           cwe,
+		OWASP:         owasp,
 		RawData:       rawData,
 	}
 	if err := storage.CreateFindingTx(ctx, tx, duplicate); err != nil {
@@ -712,6 +718,49 @@ func normalizeSourceType(value string) string {
 		return "scanner"
 	}
 	return strings.ToLower(normalized)
+}
+
+func extractEvidenceTags(evidence map[string]any) ([]string, []string) {
+	if len(evidence) == 0 {
+		return nil, nil
+	}
+	return extractEvidenceStringSlice(evidence, "cwe"), extractEvidenceStringSlice(evidence, "owasp")
+}
+
+func extractEvidenceStringSlice(evidence map[string]any, key string) []string {
+	raw, ok := evidence[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch value := raw.(type) {
+	case []string:
+		return compactStrings(value)
+	case []any:
+		out := make([]string, 0, len(value))
+		for _, entry := range value {
+			if str, ok := entry.(string); ok && strings.TrimSpace(str) != "" {
+				out = append(out, str)
+			}
+		}
+		return out
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return nil
+		}
+		return []string{value}
+	default:
+		return nil
+	}
+}
+
+func compactStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func marshalJSONMap(value map[string]any) (json.RawMessage, error) {
