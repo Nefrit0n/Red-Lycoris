@@ -26,9 +26,6 @@ export const fetchFindings = async (
   if (params.filterProductId) {
     searchParams.set("productId", params.filterProductId);
   } else if (params.filterProduct) {
-    searchParams.set("productId", params.filterProduct);
-  }
-  if (params.filterProduct) {
     searchParams.set("product", params.filterProduct);
   }
 
