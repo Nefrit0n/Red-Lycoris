@@ -42,6 +42,14 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
   const cooldownUntilRef = useRef(0);
 
   const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
+  const sortFieldValue = String(filters.sortField);
+  const useCursorPagination =
+    sortFieldValue === "lastSeenAt" || sortFieldValue === "lastActivity";
+  const isUuid = (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    );
+  const productIsUuid = Boolean(filters.productId && isUuid(filters.productId));
   const filterKey = [
     filters.pageSize,
     filters.productId,
@@ -69,11 +77,18 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
-      const cursor = filters.page === 0 ? undefined : cursorsByPage[filters.page - 1];
+      const cursor = useCursorPagination
+        ? filters.page === 0
+          ? undefined
+          : cursorsByPage[filters.page - 1]
+        : undefined;
+      const offset = useCursorPagination ? undefined : filters.page * filters.pageSize;
       const params = {
         limit: filters.pageSize,
         cursor,
-        filterProductId: filters.productId,
+        offset,
+        filterProductId: productIsUuid ? filters.productId : undefined,
+        filterProduct: productIsUuid ? undefined : filters.productId,
         filterSeverity: filters.filterSeverity,
         filterStatus: filters.filterStatus,
         filterRiskBand: filters.filterRiskBand,
@@ -101,7 +116,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
         return;
       }
 
-      if (filters.page > 0 && !cursor) {
+      if (useCursorPagination && filters.page > 0 && !cursor) {
         setError("Недоступна следующая страница. Обновите список.");
         setData([]);
         setLoading(false);
@@ -128,9 +143,13 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
           setNextCursor(null);
         } else {
           setData(response.data);
-          setNextCursor(response.nextCursor ?? null);
-          if (response.nextCursor) {
-            setCursorsByPage((prev) => ({ ...prev, [filters.page]: response.nextCursor! }));
+          if (useCursorPagination) {
+            setNextCursor(response.nextCursor ?? null);
+            if (response.nextCursor) {
+              setCursorsByPage((prev) => ({ ...prev, [filters.page]: response.nextCursor! }));
+            }
+          } else {
+            setNextCursor(null);
           }
           if (typeof response.total === "number") {
             setTotal(response.total);
@@ -139,10 +158,14 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
         }
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          let errorMessage = 'Не удалось загрузить данные. Попробуйте позже.';
           if (err instanceof ApiError && err.status === 503) {
             cooldownUntilRef.current = Date.now() + 800;
           }
-          setError('Не удалось загрузить данные. Попробуйте позже.');
+          if (err instanceof ApiError && err.message) {
+            errorMessage = err.message;
+          }
+          setError(errorMessage);
           setData([]);
           setNextCursor(null);
         }
@@ -169,6 +192,8 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       filters.sortOrder,
       debouncedSearch,
       cursorsByPage,
+      productIsUuid,
+      useCursorPagination,
     ]
   );
 
@@ -189,13 +214,20 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     setStatsLoading(true);
     setError(null);
     try {
-      const cursor = filters.page === 0 ? undefined : cursorsByPage[filters.page - 1];
+      const cursor = useCursorPagination
+        ? filters.page === 0
+          ? undefined
+          : cursorsByPage[filters.page - 1]
+        : undefined;
+      const offset = useCursorPagination ? undefined : filters.page * filters.pageSize;
       const response = await fetchFindings(
         {
           limit: filters.pageSize,
           cursor,
+          offset,
           includeMeta: true,
-          filterProductId: filters.productId,
+          filterProductId: productIsUuid ? filters.productId : undefined,
+          filterProduct: productIsUuid ? undefined : filters.productId,
           filterSeverity: filters.filterSeverity,
           filterStatus: filters.filterStatus,
           filterRiskBand: filters.filterRiskBand,
@@ -218,7 +250,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       }
     } catch (err) {
       if (!(err instanceof DOMException && err.name === "AbortError")) {
-        setError("Не удалось загрузить статистику.");
+        setError(err instanceof ApiError && err.message ? err.message : "Не удалось загрузить статистику.");
       }
     } finally {
       setStatsLoading(false);
@@ -242,13 +274,19 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     filters.sortOrder,
     debouncedSearch,
     cursorsByPage,
+    productIsUuid,
+    useCursorPagination,
   ]);
 
   return {
     data,
     total,
     totalKnown,
-    hasNextPage: Boolean(nextCursor),
+    hasNextPage: useCursorPagination
+      ? Boolean(nextCursor)
+      : totalKnown && typeof total === "number"
+        ? (filters.page + 1) * filters.pageSize < total
+        : data.length === filters.pageSize,
     loading,
     error,
     statsLoading,
