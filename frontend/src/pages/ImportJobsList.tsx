@@ -1,11 +1,10 @@
 import {
   Alert,
   Box,
-  CircularProgress,
   Container,
+  IconButton,
   Paper,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -17,9 +16,13 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { alpha as muiAlpha } from "@mui/material/styles";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { fetchImportJobs } from "../api/importJobs";
 import PaginationControl from "../components/PaginationControl";
 import { ImportJobListItemDTO } from "../types/imports";
+import DataTable, { TableChip, TableEmptyState, TableLoadingRows } from "../components/DataTable";
+import { semantic } from "../design-system/tokens/colors";
 
 const ImportJobsList = () => {
   const [data, setData] = useState<ImportJobListItemDTO[]>([]);
@@ -136,57 +139,82 @@ const ImportJobsList = () => {
         </Stack>
       </Paper>
 
-      <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-        {loading ? (
-          <Box display="flex" justifyContent="center" py={8}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Job</TableCell>
-                <TableCell>Scanner</TableCell>
-                <TableCell>Продукт</TableCell>
-                <TableCell>Статус</TableCell>
-                <TableCell>Статистика</TableCell>
-                <TableCell>Создано</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                    <Typography color="text.secondary">
-                      Импортов пока нет.
-                    </Typography>
+      <DataTable minWidth={920}>
+        <TableHead>
+          <TableRow>
+            <TableCell>Job</TableCell>
+            <TableCell>Scanner</TableCell>
+            <TableCell>Продукт</TableCell>
+            <TableCell>Статус</TableCell>
+            <TableCell>Статистика</TableCell>
+            <TableCell>Создано</TableCell>
+            <TableCell align="right">Действия</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {loading ? (
+            <TableLoadingRows rowCount={6} cellCount={7} />
+          ) : data.length === 0 ? (
+            <TableEmptyState
+              colSpan={7}
+              title="Нет импортов"
+              description="Импорты появятся после загрузки сканов."
+              hint="Попробуйте загрузить скан или изменить фильтры."
+            />
+          ) : (
+            data.map((item) => {
+              const statusColor =
+                item.status === "succeeded"
+                  ? semantic.feedback.success
+                  : item.status === "failed"
+                    ? semantic.feedback.error
+                    : item.status === "running"
+                      ? semantic.feedback.warning
+                      : semantic.feedback.info;
+
+              return (
+                <TableRow key={item.id} hover>
+                  <TableCell>
+                    <MuiLink component={Link} to={`/imports/${item.id}`} underline="hover">
+                      {item.id}
+                    </MuiLink>
+                  </TableCell>
+                  <TableCell>{item.scanner}</TableCell>
+                  <TableCell>
+                    {item.productName || "—"}
+                    {item.productVersion ? ` (${item.productVersion})` : ""}
+                  </TableCell>
+                  <TableCell>
+                    <TableChip
+                      label={item.status}
+                      sx={{
+                        bgcolor: statusColor.subtle,
+                        color: statusColor.text,
+                        border: `1px solid ${muiAlpha(statusColor.base, 0.4)}`,
+                        textTransform: "none",
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    New: {item.findingsNew} · Duplicates: {item.duplicatesTotal}
+                  </TableCell>
+                  <TableCell>{new Date(item.createdAt).toLocaleString("ru-RU")}</TableCell>
+                  <TableCell align="right">
+                    <IconButton
+                      size="small"
+                      component={Link}
+                      to={`/imports/${item.id}`}
+                      aria-label="Открыть импорт"
+                    >
+                      <OpenInNewIcon fontSize="small" />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
-              ) : (
-                data.map((item) => (
-                  <TableRow key={item.id} hover>
-                    <TableCell>
-                      <MuiLink component={Link} to={`/imports/${item.id}`} underline="hover">
-                        {item.id}
-                      </MuiLink>
-                    </TableCell>
-                    <TableCell>{item.scanner}</TableCell>
-                    <TableCell>
-                      {item.productName || "—"}
-                      {item.productVersion ? ` (${item.productVersion})` : ""}
-                    </TableCell>
-                    <TableCell>{item.status}</TableCell>
-                    <TableCell>
-                      New: {item.findingsNew} · Duplicates: {item.duplicatesTotal}
-                    </TableCell>
-                    <TableCell>{new Date(item.createdAt).toLocaleString("ru-RU")}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        )}
-      </Paper>
+              );
+            })
+          )}
+        </TableBody>
+      </DataTable>
 
       <PaginationControl
         page={page}
