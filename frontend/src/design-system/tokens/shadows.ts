@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Shadow & Glow Tokens
+ * RED LYCORIS Design System - Shadow & Glow Tokens
  *
  * Shadows create depth and hierarchy in the interface.
  * Glows add the signature "Lotus" ethereal feeling.

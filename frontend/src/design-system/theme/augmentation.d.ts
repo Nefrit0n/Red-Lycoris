@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - MUI Theme Augmentation
+ * RED LYCORIS Design System - MUI Theme Augmentation
  *
  * Extends Material-UI's theme types to include our custom design tokens.
  * This provides full TypeScript support for custom palette colors,
