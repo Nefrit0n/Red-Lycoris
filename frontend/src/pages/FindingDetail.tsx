@@ -23,7 +23,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import LinkIcon from "@mui/icons-material/Link";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import { useState } from "react";
+import { Component, ErrorInfo, ReactNode, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCurrentUser } from "../api/auth";
 import CodeBlock from "../components/CodeBlock";
@@ -180,15 +180,29 @@ export const FindingDetailContent = ({
     }
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" py={compact ? 3 : 8}>
+        <CircularProgress aria-label="Загрузка" />
+      </Box>
+    );
+  }
+
+  // Error state
+  if (error || !data) {
+    return <Alert severity="error">{error || "Данные не найдены"}</Alert>;
+  }
+
   // Extract occurrences
-  const occurrences = Array.isArray(data?.occurrences) ? data.occurrences : [];
+  const occurrences = Array.isArray(data.occurrences) ? data.occurrences : [];
   const hasOccurrences = occurrences.length > 0;
   const semgrepEvidence =
-    data?.evidence && (data.evidence as SemgrepEvidence).scannerType === "semgrep"
+    data.evidence && (data.evidence as SemgrepEvidence).scannerType === "semgrep"
       ? (data.evidence as SemgrepEvidence)
       : null;
-  const intelSummary = data?.intel_summary ?? null;
-  const intelDetails = data?.intel_details ?? null;
+  const intelSummary = data.intel_summary ?? null;
+  const intelDetails = data.intel_details ?? null;
   const intelIdentifiers =
     intelDetails?.identifiers?.length
       ? intelDetails.identifiers
@@ -220,7 +234,7 @@ export const FindingDetailContent = ({
     Boolean(subcategory) ||
     references.length > 0;
 
-  const resolvedDetails = data ? resolveFindingDetails(data) : { category: "UNKNOWN", details: null };
+  const resolvedDetails = resolveFindingDetails(data);
   const scaDetails = resolvedDetails.category === "SCA" ? resolvedDetails.details : null;
   const sastDetails = resolvedDetails.category === "SAST" ? resolvedDetails.details : null;
   const secretsDetails = resolvedDetails.category === "SECRETS" ? resolvedDetails.details : null;
@@ -233,12 +247,10 @@ export const FindingDetailContent = ({
   const showIacTab = resolvedDetails.category === "IAC";
   const showContainerTab = resolvedDetails.category === "CONTAINER";
   const showDastTab = resolvedDetails.category === "DAST";
-  // NOTE: `data` is null until the detail request resolves.
-  // Avoid crashing the render during the initial (loading) pass.
   const riskScore =
-    typeof data?.riskScore === "number" ? Math.round(data.riskScore) : null;
-  const riskBand = data?.riskBand ?? null;
-  const riskFactors = data?.riskFactors ?? null;
+    typeof data.riskScore === "number" ? Math.round(data.riskScore) : null;
+  const riskBand = data.riskBand ?? null;
+  const riskFactors = data.riskFactors ?? null;
   const canShowFactors = Boolean(riskFactors);
   const primaryMetadata = [
     { label: "Severity", value: SEVERITY_STYLES[data.severity].label },
@@ -269,22 +281,7 @@ export const FindingDetailContent = ({
   const occurrencesIndex = tabIndex++;
   const commentsIndex = tabIndex++;
   const historyIndex = tabIndex++;
-  const duplicatesIndex = data?.duplicates ? tabIndex++ : null;
-
-
-  // Loading state
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" py={compact ? 3 : 8}>
-        <CircularProgress aria-label="Загрузка" />
-      </Box>
-    );
-  }
-
-  // Error state
-  if (error || !data) {
-    return <Alert severity="error">{error || "Данные не найдены"}</Alert>;
-  }
+  const duplicatesIndex = data.duplicates ? tabIndex++ : null;
 
   const slaDueAt = data.slaDueAt ? new Date(data.slaDueAt) : null;
   const slaDaysRemaining =
@@ -1679,8 +1676,50 @@ export const FindingDetailContent = ({
   );
 };
 
+type FindingDetailErrorBoundaryProps = {
+  children: ReactNode;
+};
+
+type FindingDetailErrorBoundaryState = {
+  error: Error | null;
+};
+
+export class FindingDetailErrorBoundary extends Component<
+  FindingDetailErrorBoundaryProps,
+  FindingDetailErrorBoundaryState
+> {
+  state: FindingDetailErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): FindingDetailErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[FindingDetail] render error", error);
+    console.error("[FindingDetail] component stack", info.componentStack);
+  }
+
+  render() {
+    const { error } = this.state;
+    if (error) {
+      return (
+        <Alert severity="error">
+          Не удалось отобразить детали находки.
+          {error.message ? ` Причина: ${error.message}` : " Проверьте консоль для деталей."}
+        </Alert>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const FindingDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+
+  useEffect(() => {
+    console.log("FindingDetailPage mounted", id);
+  }, [id]);
+
   if (!id) {
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
@@ -1691,7 +1730,9 @@ const FindingDetailPage = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
-      <FindingDetailContent id={id} compact={false} />
+      <FindingDetailErrorBoundary>
+        <FindingDetailContent id={id} compact={false} />
+      </FindingDetailErrorBoundary>
     </Container>
   );
 };
