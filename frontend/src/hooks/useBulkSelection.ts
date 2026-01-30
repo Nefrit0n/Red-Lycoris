@@ -12,6 +12,7 @@ type BulkUndoItem = {
 interface UseBulkSelectionOptions {
   data: Finding[];
   total: number;
+  totalKnown: boolean;
   filters: FiltersState;
   debouncedSearch: string;
   onSuccess?: () => void;
@@ -44,6 +45,7 @@ interface UseBulkSelectionResult {
 export function useBulkSelection({
   data,
   total,
+  totalKnown,
   filters,
   debouncedSearch,
   onSuccess,
@@ -56,12 +58,13 @@ export function useBulkSelection({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectionCount = selectAllMatching ? total : selectedIds.length;
+  const selectionCount = selectAllMatching && totalKnown ? total : selectedIds.length;
 
   const showSelectAllPrompt =
     !selectAllMatching &&
     selectedIds.length > 0 &&
     selectedIds.length === data.length &&
+    totalKnown &&
     total > data.length;
 
   // Reset selection when filters change
@@ -115,8 +118,9 @@ export function useBulkSelection({
   }, []);
 
   const handleSelectAllResults = useCallback(() => {
+    if (!totalKnown) return;
     setSelectAllMatching(true);
-  }, []);
+  }, [totalKnown]);
 
   const handleBulkApply = useCallback(
     async (action: 'set_status' | 'assign' | 'dismiss', payload: Record<string, unknown>) => {

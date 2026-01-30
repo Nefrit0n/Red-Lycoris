@@ -54,14 +54,20 @@ export interface FindingListItemDTO {
   owasp?: string[] | null;
 }
 
-export interface ApiResponse {
+export interface FindingsListResponse {
   data: FindingListItemDTO[];
-  total: number;
+  total?: number;
+  nextCursor?: string;
+  meta?: {
+    severityCounts?: Record<string, number>;
+  };
 }
 
 export interface FetchFindingsParams {
   limit: number;
-  offset: number;
+  offset?: number;
+  cursor?: string;
+  includeMeta?: boolean;
   filterProduct?: string;
   filterProductId?: string;
   filterSeverity?: FindingSeverity | "";
@@ -337,8 +343,6 @@ export interface FindingOccurrence {
 export interface FindingNeighbors {
   prevId?: string | null;
   nextId?: string | null;
-  position: number;
-  total: number;
 }
 
 export type FindingEvidence = Record<string, unknown>;

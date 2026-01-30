@@ -1,21 +1,26 @@
 import {
-  ApiResponse,
   BulkUpdateResponse,
   FetchFindingsParams,
   FindingListItemDTO,
   FindingDetailDTO,
   FindingNeighbors,
   FindingStatus,
+  FindingsListResponse,
 } from "../types/findings";
-import { request, requestList } from "./client";
+import { request, requestWithMeta } from "./client";
 
 export const fetchFindings = async (
   params: FetchFindingsParams,
   signal?: AbortSignal
-): Promise<ApiResponse> => {
+): Promise<FindingsListResponse> => {
   const searchParams = new URLSearchParams();
   searchParams.set("limit", String(params.limit));
-  searchParams.set("offset", String(params.offset));
+  if (params.cursor) {
+    searchParams.set("cursor", params.cursor);
+  } else if (typeof params.offset === "number") {
+    searchParams.set("offset", String(params.offset));
+  }
+  if (params.includeMeta) searchParams.set("includeMeta", "true");
 
   // product filter (держим оба ключа для совместимости, но отправляем только один)
   if (params.filterProduct) {
@@ -49,10 +54,23 @@ export const fetchFindings = async (
   if (params.sortField) searchParams.set("sortField", String(params.sortField));
   if (params.sortOrder) searchParams.set("sortOrder", params.sortOrder);
 
-  return requestList<FindingListItemDTO>("/api/v1/findings", {
+  const response = await requestWithMeta<{
+    success?: boolean;
+    data?: FindingListItemDTO[];
+    total?: number;
+    nextCursor?: string;
+    meta?: { severityCounts?: Record<string, number> };
+  }>("/api/v1/findings", {
     signal,
     query: searchParams,
   });
+
+  return {
+    data: Array.isArray(response?.data) ? response.data : [],
+    total: typeof response?.total === "number" ? response.total : undefined,
+    nextCursor: response?.nextCursor,
+    meta: response?.meta,
+  };
 };
 
 export const fetchFindingDetail = async (

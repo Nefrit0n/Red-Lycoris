@@ -231,11 +231,12 @@ const ScanUploadPage = () => {
             canonicalOnly: true,
             includeRepeats: false,
             importJobId: success.importJobId,
+            includeMeta: true,
           },
           controller.signal
         );
 
-        setPreviewTotal(response.total ?? 0);
+        setPreviewTotal(typeof response.total === "number" ? response.total : response.data.length);
 
         if (!response.data.length) {
           setPreviewFindings([]);
