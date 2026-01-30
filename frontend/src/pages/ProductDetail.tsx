@@ -436,6 +436,28 @@ const ProductDetailPage = () => {
     return () => window.clearInterval(interval);
   }, [tabIndex, indexStatus?.status, fetchComponents]);
 
+  const fetchTransitiveExposure = useCallback(async () => {
+    if (!transitiveSbom) return;
+
+    setTransitiveLoading(true);
+    setTransitiveError(null);
+    try {
+      const resp = await listSbomTransitiveExposure(transitiveSbom.id, {
+        maxDepth: transitiveFilters.maxDepth,
+        q: transitiveFilters.q || undefined,
+        limit: 200,
+        offset: 0,
+      });
+      setTransitiveStatus(resp.status);
+      setTransitiveItems(resp.data.items);
+      setTransitiveTotal(resp.data.total);
+    } catch (e) {
+      setTransitiveError(e instanceof Error ? e.message : "Не удалось загрузить transitive риск");
+    } finally {
+      setTransitiveLoading(false);
+    }
+  }, [transitiveSbom, transitiveFilters]);
+
   useEffect(() => {
     if (tabIndex !== 2) return;
     if (!transitiveSbom) return;
@@ -477,27 +499,6 @@ const ProductDetailPage = () => {
       setSbomError(err instanceof Error ? err.message : "Не удалось скачать SBOM");
     }
   };
-  const fetchTransitiveExposure = useCallback(async () => {
-    if (!transitiveSbom) return;
-
-    setTransitiveLoading(true);
-    setTransitiveError(null);
-    try {
-      const resp = await listSbomTransitiveExposure(transitiveSbom.id, {
-        maxDepth: transitiveFilters.maxDepth,
-        q: transitiveFilters.q || undefined,
-        limit: 200,
-        offset: 0,
-      });
-      setTransitiveStatus(resp.status);
-      setTransitiveItems(resp.data.items);
-      setTransitiveTotal(resp.data.total);
-    } catch (e) {
-      setTransitiveError(e instanceof Error ? e.message : "Не удалось загрузить transitive риск");
-    } finally {
-      setTransitiveLoading(false);
-    }
-  }, [transitiveSbom, transitiveFilters]);
 
   if (!id) {
     return (
