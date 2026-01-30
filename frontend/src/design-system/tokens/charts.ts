@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Chart Tokens
+ * RED LYCORIS Design System - Chart Tokens
  *
  * Unified chart configuration for all visualization components.
  * Uses design system colors for consistency.

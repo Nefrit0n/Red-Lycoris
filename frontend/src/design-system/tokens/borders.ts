@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Border Tokens
+ * RED LYCORIS Design System - Border Tokens
  *
  * Borders define the shape and boundaries of UI elements.
  * The Lotus design uses soft, rounded corners that evoke
@@ -22,8 +22,8 @@ export const radius = {
 
   // Standard rounding
   md: '0.375rem',   // 6px - buttons, cards
-  DEFAULT: '0.5rem', // 8px - default radius
-  lg: '0.625rem',   // 10px - larger cards
+  DEFAULT: '0.75rem', // 12px - default radius
+  lg: '0.875rem',   // 14px - larger cards
 
   // Prominent rounding
   xl: '0.75rem',    // 12px - modals, featured cards
@@ -34,8 +34,8 @@ export const radius = {
   full: '9999px',   // Pills, circles
 
   // Semantic aliases
-  button: '0.5rem',     // 8px
-  input: '0.5rem',      // 8px
+  button: '0.75rem',    // 12px
+  input: '0.75rem',     // 12px
   card: '0.75rem',      // 12px
   modal: '1rem',        // 16px
   badge: '0.375rem',    // 6px

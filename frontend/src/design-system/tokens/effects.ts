@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Visual Effects Tokens
+ * RED LYCORIS Design System - Visual Effects Tokens
  *
  * Modern visual effects that give the interface its premium,
  * ethereal quality. Includes glassmorphism, backdrop effects,

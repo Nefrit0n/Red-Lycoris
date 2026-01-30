@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Animation & Motion Tokens
+ * RED LYCORIS Design System - Animation & Motion Tokens
  *
  * Motion design that feels fluid and natural, like water ripples
  * around a lotus flower. Animations should feel responsive yet

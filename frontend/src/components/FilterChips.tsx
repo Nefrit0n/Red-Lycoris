@@ -1,4 +1,4 @@
-import { Chip, Stack } from "@mui/material";
+import { Button, Chip, Stack } from "@mui/material";
 import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision, RiskBand } from "../types/findings";
 import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS, RISK_BAND_LABELS } from "../utils/findingConstants";
 
@@ -26,6 +26,7 @@ interface FilterChipsProps {
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
   onShowRepeatsChange: (value: boolean) => void;
+  onResetAll?: () => void;
 }
 
 /**
@@ -55,6 +56,7 @@ export const FilterChips = ({
   onDateFromChange,
   onDateToChange,
   onShowRepeatsChange,
+  onResetAll,
 }: FilterChipsProps) => {
   const chips = [];
 
@@ -136,7 +138,7 @@ export const FilterChips = ({
         key="policyDecision"
         size="small"
         variant="outlined"
-        label={`Policy: ${filterPolicyDecision.toUpperCase()}`}
+        label={`Политика: ${filterPolicyDecision.toUpperCase()}`}
         onDelete={() => onPolicyDecisionChange("")}
       />
     );
@@ -148,7 +150,7 @@ export const FilterChips = ({
         key="dateFrom"
         size="small"
         variant="outlined"
-        label={`Last seen ≥ ${dateFrom}`}
+        label={`Обнаружено ≥ ${dateFrom}`}
         onDelete={() => onDateFromChange("")}
       />
     );
@@ -160,7 +162,7 @@ export const FilterChips = ({
         key="dateTo"
         size="small"
         variant="outlined"
-        label={`Last seen ≤ ${dateTo}`}
+        label={`Обнаружено ≤ ${dateTo}`}
         onDelete={() => onDateToChange("")}
       />
     );
@@ -195,8 +197,13 @@ export const FilterChips = ({
   }
 
   return (
-    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+    <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center" useFlexGap>
       {chips}
+      {onResetAll ? (
+        <Button size="small" variant="text" onClick={onResetAll}>
+          Сбросить всё
+        </Button>
+      ) : null}
     </Stack>
   );
 };
