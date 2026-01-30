@@ -22,6 +22,7 @@ export function useFindingDetail(id: string): UseFindingDetailResult {
       setLoading(true);
       setError(null);
       try {
+        console.log("[FindingDetail] fetch detail", id);
         const response = await fetchFindingDetail(id, signal, { includeRiskFactors: true });
         setData(response);
       } catch (e) {

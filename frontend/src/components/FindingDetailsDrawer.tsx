@@ -12,7 +12,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import { FindingDetailContent } from "../pages/FindingDetail";
+import { FindingDetailContent, FindingDetailErrorBoundary } from "../pages/FindingDetail";
 import { buildFindingLink } from "../utils/findingFormatters";
 
 type Props = {
@@ -113,12 +113,14 @@ export default function FindingDetailsDrawer({ findingId, returnTo, onClose }: P
             {/* Body */}
             <Box sx={{ p: 2, overflow: "auto" }}>
                 {findingId ? (
-                    <FindingDetailContent
-                        key={`${findingId}-${refreshKey}`}
-                        id={findingId}
-                        compact
-                        returnTo={returnTo}
-                    />
+                    <FindingDetailErrorBoundary>
+                        <FindingDetailContent
+                            key={`${findingId}-${refreshKey}`}
+                            id={findingId}
+                            compact
+                            returnTo={returnTo}
+                        />
+                    </FindingDetailErrorBoundary>
                 ) : (
                     <Typography variant="body2" color="text.secondary">
                         Выберите находку, чтобы увидеть детали.
