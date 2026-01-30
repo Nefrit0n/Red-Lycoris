@@ -422,20 +422,6 @@ const ProductDetailPage = () => {
     fetchComponents();
   }, [fetchComponents, tabIndex]);
 
-  useEffect(() => {
-    if (tabIndex !== 1) return;
-    if (!indexStatus) return;
-
-    const s = indexStatus.status;
-    if (s !== "queued" && s !== "processing" && s !== "pending") return;
-
-    const interval = window.setInterval(() => {
-      if (!document.hidden) fetchComponents();
-    }, 2000);
-
-    return () => window.clearInterval(interval);
-  }, [tabIndex, indexStatus?.status, fetchComponents]);
-
   const fetchTransitiveExposure = useCallback(async () => {
     if (!transitiveSbom) return;
 
@@ -457,6 +443,20 @@ const ProductDetailPage = () => {
       setTransitiveLoading(false);
     }
   }, [transitiveSbom, transitiveFilters]);
+
+  useEffect(() => {
+    if (tabIndex !== 1) return;
+    if (!indexStatus) return;
+
+    const s = indexStatus.status;
+    if (s !== "queued" && s !== "processing" && s !== "pending") return;
+
+    const interval = window.setInterval(() => {
+      if (!document.hidden) fetchComponents();
+    }, 2000);
+
+    return () => window.clearInterval(interval);
+  }, [tabIndex, indexStatus?.status, fetchComponents]);
 
   useEffect(() => {
     if (tabIndex !== 2) return;
