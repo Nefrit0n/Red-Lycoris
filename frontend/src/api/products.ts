@@ -2,6 +2,7 @@ import {
   ProductDetailDTO,
   ProductDetailView,
   ProductListItemDTO,
+  ProductStatsDTO,
   ProductWithStats,
 } from "../types/products";
 import { ImportJobListItemDTO } from "../types/imports";
@@ -41,6 +42,33 @@ const normalizeSeverityBreakdown = (counts?: SeverityCounts) => {
   };
 };
 
+const runWithConcurrency = async <T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>
+): Promise<Array<R | null>> => {
+  if (items.length === 0) return [];
+  const safeLimit = Math.max(1, limit);
+  const results: Array<R | null> = new Array(items.length).fill(null);
+
+  let nextIndex = 0;
+  const runNext = async (): Promise<void> => {
+    const current = nextIndex;
+    if (current >= items.length) return;
+    nextIndex += 1;
+    try {
+      results[current] = await task(items[current], current);
+    } catch {
+      results[current] = null;
+    }
+    return runNext();
+  };
+
+  const runners = Array.from({ length: Math.min(safeLimit, items.length) }, () => runNext());
+  await Promise.allSettled(runners);
+  return results;
+};
+
 const fetchFindingsEnvelope = async (
   query: Record<string, any>,
   signal?: AbortSignal
@@ -76,9 +104,11 @@ export const fetchProductsWithStats = async (
   const productsResponse = await fetchProducts(limit, offset, signal);
 
   // ⚠️ N+1 (как быстрый workaround). Правильнее — отдельный endpoint /products-with-stats.
-  const productsWithStats: ProductWithStats[] = await Promise.all(
-    productsResponse.data.map(async (product) => {
-      const env = await fetchFindingsEnvelope(
+  const findingsEnvelopes = await runWithConcurrency(
+    productsResponse.data,
+    4,
+    async (product) =>
+      fetchFindingsEnvelope(
         {
           productId: product.id,
           limit: 1,
@@ -87,22 +117,24 @@ export const fetchProductsWithStats = async (
           includeRepeats: false,
         },
         signal
-      );
-
-      const breakdown = normalizeSeverityBreakdown(env?.meta?.severityCounts);
-
-      return {
-        ...product,
-        // если бэк не отдаёт findingsOpenCount в product list item (или отдаёт 0),
-        // то подстрахуем total из findings
-        findingsOpenCount:
-          typeof env?.total === "number" ? env!.total : (product as any).findingsOpenCount ?? 0,
-        severityBreakdown: breakdown,
-        trend: "flat",
-        trendValue: 0,
-      };
-    })
+      )
   );
+
+  const productsWithStats: ProductWithStats[] = productsResponse.data.map((product, index) => {
+    const env = findingsEnvelopes[index];
+    const breakdown = normalizeSeverityBreakdown(env?.meta?.severityCounts);
+
+    return {
+      ...product,
+      // если бэк не отдаёт findingsOpenCount в product list item (или отдаёт 0),
+      // то подстрахуем total из findings
+      findingsOpenCount:
+        typeof env?.total === "number" ? env!.total : (product as any).findingsOpenCount ?? 0,
+      severityBreakdown: breakdown,
+      trend: "flat",
+      trendValue: 0,
+    };
+  });
 
   return {
     data: productsWithStats,
@@ -118,53 +150,21 @@ export const fetchProductDetail = async (
     signal,
   });
 
-  // 1) Open findings + severity breakdown (для health + графиков)
-  const openEnv = await fetchFindingsEnvelope(
-    {
-      productId,
-      limit: 1,
-      offset: 0,
-      canonicalOnly: true,
-      includeRepeats: false,
-    },
-    signal
-  );
+  // 1) Findings stats + severity breakdown (для health + графиков)
+  const stats = await request<ProductStatsDTO>(`/api/v1/products/${productId}/stats`, {
+    signal,
+  });
 
-  const severityBreakdown = normalizeSeverityBreakdown(openEnv?.meta?.severityCounts);
+  const severityBreakdown = normalizeSeverityBreakdown(stats.severityCounts);
   const findingsOpenCount =
-    typeof openEnv?.total === "number"
-      ? openEnv.total
+    typeof stats.openCount === "number"
+      ? stats.openCount
       : (product as any).findingsOpenCount ?? 0;
 
   // 2) Fixed / False positives (карточки сверху)
   // В модели бэка “исправлено” = mitigated
-  const mitigatedEnv = await fetchFindingsEnvelope(
-    {
-      productId,
-      status: "mitigated",
-      limit: 1,
-      offset: 0,
-      canonicalOnly: true,
-      includeRepeats: false,
-    },
-    signal
-  );
-
-  const falsePositiveEnv = await fetchFindingsEnvelope(
-    {
-      productId,
-      status: "false_positive",
-      limit: 1,
-      offset: 0,
-      canonicalOnly: true,
-      includeRepeats: false,
-    },
-    signal
-  );
-
-  const findingsFixedCount = typeof mitigatedEnv?.total === "number" ? mitigatedEnv.total : 0;
-  const findingsFalsePositiveCount =
-    typeof falsePositiveEnv?.total === "number" ? falsePositiveEnv.total : 0;
+  const findingsFixedCount = stats.mitigatedCount || 0;
+  const findingsFalsePositiveCount = stats.falsePositiveCount || 0;
 
   // 3) Recent scans (import jobs)
   let recentScans: ProductDetailView["recentScans"] = [];
