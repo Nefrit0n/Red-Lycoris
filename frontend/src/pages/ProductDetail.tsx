@@ -391,8 +391,31 @@ const ProductDetailPage = () => {
   }, [id]);
 
   useEffect(() => {
+    if (tabIndex !== 0 && tabIndex !== 2) return;
     fetchSboms();
-  }, [fetchSboms]);
+  }, [fetchSboms, tabIndex]);
+
+  const fetchTransitiveExposure = useCallback(async () => {
+    if (!transitiveSbom) return;
+
+    setTransitiveLoading(true);
+    setTransitiveError(null);
+    try {
+      const resp = await listSbomTransitiveExposure(transitiveSbom.id, {
+        maxDepth: transitiveFilters.maxDepth,
+        q: transitiveFilters.q || undefined,
+        limit: 200,
+        offset: 0,
+      });
+      setTransitiveStatus(resp.status);
+      setTransitiveItems(resp.data.items);
+      setTransitiveTotal(resp.data.total);
+    } catch (e) {
+      setTransitiveError(e instanceof Error ? e.message : "Не удалось загрузить transitive риск");
+    } finally {
+      setTransitiveLoading(false);
+    }
+  }, [transitiveSbom, transitiveFilters]);
 
   const fetchComponents = useCallback(async () => {
     if (!id) return;
@@ -421,28 +444,6 @@ const ProductDetailPage = () => {
     if (tabIndex !== 1) return;
     fetchComponents();
   }, [fetchComponents, tabIndex]);
-
-  const fetchTransitiveExposure = useCallback(async () => {
-    if (!transitiveSbom) return;
-
-    setTransitiveLoading(true);
-    setTransitiveError(null);
-    try {
-      const resp = await listSbomTransitiveExposure(transitiveSbom.id, {
-        maxDepth: transitiveFilters.maxDepth,
-        q: transitiveFilters.q || undefined,
-        limit: 200,
-        offset: 0,
-      });
-      setTransitiveStatus(resp.status);
-      setTransitiveItems(resp.data.items);
-      setTransitiveTotal(resp.data.total);
-    } catch (e) {
-      setTransitiveError(e instanceof Error ? e.message : "Не удалось загрузить transitive риск");
-    } finally {
-      setTransitiveLoading(false);
-    }
-  }, [transitiveSbom, transitiveFilters]);
 
   useEffect(() => {
     if (tabIndex !== 1) return;
