@@ -29,26 +29,31 @@ type SbomIndexStatusDTO struct {
 	EdgeCount      int        `json:"edgeCount"`
 	IndexedAt      *time.Time `json:"indexedAt,omitempty"`
 }
+
 // ---------- Transitive dependencies ----------
 
-type SbomTransitiveComponentDTO struct {
+type SbomTransitiveStatusDTO struct {
+	Status    string     `json:"status"`
+	Error     *string    `json:"error,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+}
+
+type SbomTransitiveExposureDTO struct {
 	ID        string  `json:"id"`
 	Purl      *string `json:"purl,omitempty"`
 	Name      string  `json:"name"`
 	Version   *string `json:"version,omitempty"`
 	Ecosystem *string `json:"ecosystem,omitempty"`
 
-	MinDepth int `json:"minDepth"`
-
-	VulnTotal    int `json:"vulnTotal"`
-	VulnCritical int `json:"vulnCritical"`
-	VulnHigh     int `json:"vulnHigh"`
-	VulnMedium   int `json:"vulnMedium"`
-	VulnLow      int `json:"vulnLow"`
+	CriticalCount int `json:"criticalCount"`
+	HighCount     int `json:"highCount"`
+	MediumCount   int `json:"mediumCount"`
+	LowCount      int `json:"lowCount"`
 
 	MaxCvssScore *float64 `json:"maxCvssScore,omitempty"`
 	MaxEpssScore *float64 `json:"maxEpssScore,omitempty"`
-	KEV          bool     `json:"kev"`
+
+	MinDistanceToAnyVuln *int `json:"minDistanceToAnyVuln,omitempty"`
 }
 
 type SbomPathNodeDTO struct {
@@ -60,6 +65,6 @@ type SbomPathNodeDTO struct {
 }
 
 type SbomPathDTO struct {
-	Depth int              `json:"depth"`
+	Depth int               `json:"depth"`
 	Nodes []SbomPathNodeDTO `json:"nodes"`
 }
