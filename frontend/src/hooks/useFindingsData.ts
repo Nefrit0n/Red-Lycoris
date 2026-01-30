@@ -73,7 +73,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       const params = {
         limit: filters.pageSize,
         cursor,
-        filterProduct: filters.productId,
+        filterProductId: filters.productId,
         filterSeverity: filters.filterSeverity,
         filterStatus: filters.filterStatus,
         filterRiskBand: filters.filterRiskBand,
@@ -188,7 +188,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
           limit: filters.pageSize,
           cursor,
           includeMeta: true,
-          filterProduct: filters.productId,
+          filterProductId: filters.productId,
           filterSeverity: filters.filterSeverity,
           filterStatus: filters.filterStatus,
           filterRiskBand: filters.filterRiskBand,
