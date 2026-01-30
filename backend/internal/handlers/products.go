@@ -115,3 +115,67 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 	response := v1mapper.ProductDetailFromListItem(*product)
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response})
 }
+
+func (h *ProductsHandler) Stats(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid product id"})
+	}
+
+	tenantID := tenantIDFromContext(c)
+	if tenantID == nil {
+		zero := uuid.Nil
+		tenantID = &zero
+	}
+
+	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, id, tenantID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch product"})
+	}
+	if !exists {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "product not found"})
+	}
+
+	filters := storage.FindingFilters{
+		TenantID:       tenantID,
+		ProductID:      &id,
+		CanonicalOnly:  true,
+		IncludeRepeats: false,
+	}
+
+	statusCounts, err := storage.CountFindingsByStatus(c.Context(), h.db, filters)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings status stats"})
+	}
+
+	openStatuses := append([]string{}, models.FindingOpenStatuses...)
+	openStatuses = append(openStatuses, models.StatusRiskAccepted)
+	openCount := 0
+	for _, status := range openStatuses {
+		openCount += statusCounts[status]
+	}
+
+	mitigatedCount := statusCounts[models.StatusMitigated]
+	falsePositiveCount := statusCounts[models.StatusFalsePositive]
+
+	severityCounts := make(map[string]int)
+	for _, status := range openStatuses {
+		filters.Status = status
+		counts, err := storage.CountFindingsBySeverity(c.Context(), h.db, filters)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings severity stats"})
+		}
+		for severity, count := range counts {
+			severityCounts[severity] += count
+		}
+	}
+
+	response := v1dto.ProductStatsDTO{
+		OpenCount:          openCount,
+		MitigatedCount:     mitigatedCount,
+		FalsePositiveCount: falsePositiveCount,
+		SeverityCounts:     severityCounts,
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response})
+}
