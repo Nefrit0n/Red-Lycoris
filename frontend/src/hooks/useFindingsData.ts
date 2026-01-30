@@ -13,9 +13,13 @@ interface UseFindingsDataOptions {
 
 interface UseFindingsDataResult {
   data: FindingListItemDTO[];
-  total: number;
+  total: number | null;
+  totalKnown: boolean;
+  hasNextPage: boolean;
   loading: boolean;
   error: string | null;
+  statsLoading: boolean;
+  loadStats: () => Promise<void>;
   fetchData: (signal?: AbortSignal) => Promise<void>;
   handleRetry: () => void;
 }
@@ -26,20 +30,49 @@ interface UseFindingsDataResult {
  */
 export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): UseFindingsDataResult {
   const [data, setData] = useState<FindingListItemDTO[]>([]);
-  const [total, setTotal] = useState<number>(0);
+  const [total, setTotal] = useState<number | null>(null);
+  const [totalKnown, setTotalKnown] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [cursorsByPage, setCursorsByPage] = useState<Record<number, string>>({});
   const lastRequestKeyRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
   const cooldownUntilRef = useRef(0);
 
   const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
+  const filterKey = [
+    filters.pageSize,
+    filters.productId,
+    filters.filterSeverity,
+    filters.filterStatus,
+    filters.filterRiskBand,
+    filters.filterOccurrence,
+    filters.filterScannerType,
+    filters.filterPolicyDecision,
+    filters.searchInput,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.showRepeats,
+    filters.importJobId,
+    filters.sortField,
+    filters.sortOrder,
+  ].join("|");
+
+  useEffect(() => {
+    setCursorsByPage({});
+    setNextCursor(null);
+    setTotal(null);
+    setTotalKnown(false);
+  }, [filterKey]);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
+      const cursor = filters.page === 0 ? undefined : cursorsByPage[filters.page - 1];
       const params = {
         limit: filters.pageSize,
-        offset: filters.page * filters.pageSize,
+        cursor,
         filterProduct: filters.productId,
         filterSeverity: filters.filterSeverity,
         filterStatus: filters.filterStatus,
@@ -62,6 +95,13 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
         return;
       }
 
+      if (filters.page > 0 && !cursor) {
+        setError("Недоступна следующая страница. Обновите список.");
+        setData([]);
+        setLoading(false);
+        return;
+      }
+
       lastRequestKeyRef.current = requestKey;
       setLoading(true);
       setError(null);
@@ -79,10 +119,17 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
 
         if (!response || !Array.isArray(response.data)) {
           setData([]);
-          setTotal(0);
+          setNextCursor(null);
         } else {
           setData(response.data);
-          setTotal(typeof response.total === 'number' ? response.total : 0);
+          setNextCursor(response.nextCursor ?? null);
+          if (response.nextCursor) {
+            setCursorsByPage((prev) => ({ ...prev, [filters.page]: response.nextCursor! }));
+          }
+          if (typeof response.total === "number") {
+            setTotal(response.total);
+            setTotalKnown(true);
+          }
         }
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
@@ -91,7 +138,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
           }
           setError('Не удалось загрузить данные. Попробуйте позже.');
           setData([]);
-          setTotal(0);
+          setNextCursor(null);
         }
       } finally {
         inFlightRef.current = false;
@@ -115,6 +162,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       filters.sortField,
       filters.sortOrder,
       debouncedSearch,
+      cursorsByPage,
     ]
   );
 
@@ -129,11 +177,75 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     fetchData();
   }, [fetchData]);
 
+  const loadStats = useCallback(async () => {
+    if (statsLoading) return;
+    setStatsLoading(true);
+    setError(null);
+    try {
+      const cursor = filters.page === 0 ? undefined : cursorsByPage[filters.page - 1];
+      const response = await fetchFindings(
+        {
+          limit: filters.pageSize,
+          cursor,
+          includeMeta: true,
+          filterProduct: filters.productId,
+          filterSeverity: filters.filterSeverity,
+          filterStatus: filters.filterStatus,
+          filterRiskBand: filters.filterRiskBand,
+          filterOccurrence: filters.filterOccurrence,
+          filterScannerType: filters.filterScannerType,
+          filterPolicyDecision: filters.filterPolicyDecision,
+          search: debouncedSearch,
+          dateFrom: normalizeDateFrom(filters.dateFrom),
+          dateTo: normalizeDateTo(filters.dateTo),
+          canonicalOnly: !filters.showRepeats,
+          includeRepeats: filters.showRepeats,
+          importJobId: filters.importJobId,
+          sortField: filters.sortField,
+          sortOrder: filters.sortOrder,
+        }
+      );
+      if (typeof response.total === "number") {
+        setTotal(response.total);
+        setTotalKnown(true);
+      }
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setError("Не удалось загрузить статистику.");
+      }
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [
+    statsLoading,
+    filters.page,
+    filters.pageSize,
+    filters.productId,
+    filters.filterSeverity,
+    filters.filterStatus,
+    filters.filterRiskBand,
+    filters.filterOccurrence,
+    filters.filterScannerType,
+    filters.filterPolicyDecision,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.showRepeats,
+    filters.importJobId,
+    filters.sortField,
+    filters.sortOrder,
+    debouncedSearch,
+    cursorsByPage,
+  ]);
+
   return {
     data,
     total,
+    totalKnown,
+    hasNextPage: Boolean(nextCursor),
     loading,
     error,
+    statsLoading,
+    loadStats,
     fetchData,
     handleRetry,
   };
