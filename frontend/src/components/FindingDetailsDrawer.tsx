@@ -13,6 +13,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { FindingDetailContent } from "../pages/FindingDetail";
+import { buildFindingLink } from "../utils/findingFormatters";
 
 type Props = {
     /** id выбранной находки. null/"" => панель закрыта */
@@ -35,9 +36,7 @@ export default function FindingDetailsDrawer({ findingId, returnTo, onClose }: P
         []
     );
 
-    const openInFullPageHref = findingId
-        ? `/findings/${findingId}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`
-        : "#";
+    const openInFullPageHref = findingId ? buildFindingLink(findingId, returnTo) : "#";
 
     return (
         <Drawer

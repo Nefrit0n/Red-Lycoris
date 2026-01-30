@@ -58,7 +58,7 @@ export function useFindingNeighbors({
     }
   }, [returnTo]);
 
-  const returnToParam = returnToUrl ? encodeURIComponent(`${returnToUrl.pathname}${returnToUrl.search}`) : "";
+  const returnToParam = returnToUrl ? `${returnToUrl.pathname}${returnToUrl.search}` : "";
   const returnToQuery = returnToUrl?.search.replace(/^\?/, "") ?? "";
 
   // Fetch neighbors
