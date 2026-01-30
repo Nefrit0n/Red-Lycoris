@@ -22,11 +22,14 @@ export const fetchFindings = async (
   }
   if (params.includeMeta) searchParams.set("includeMeta", "true");
 
-  // product filter (держим оба ключа для совместимости, но отправляем только один)
+  // product filter (productId основной, product оставляем для совместимости)
+  if (params.filterProductId) {
+    searchParams.set("productId", params.filterProductId);
+  } else if (params.filterProduct) {
+    searchParams.set("productId", params.filterProduct);
+  }
   if (params.filterProduct) {
     searchParams.set("product", params.filterProduct);
-  } else if (params.filterProductId) {
-    searchParams.set("productId", params.filterProductId);
   }
 
   if (params.filterSeverity) searchParams.set("severity", params.filterSeverity);
