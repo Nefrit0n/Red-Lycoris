@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Spacing Tokens
+ * RED LYCORIS Design System - Spacing Tokens
  *
  * Based on 4px grid system with a harmonic scale.
  * All spacing values are multiples of 4px for pixel-perfect alignment.

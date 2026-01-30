@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Component Exports
+ * RED LYCORIS Design System - Component Exports
  *
  * @example
  * import { Button, GlassCard, StatusBadge, MetricDisplay } from '@/design-system/components';
