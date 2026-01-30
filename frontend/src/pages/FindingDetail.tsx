@@ -240,6 +240,22 @@ export const FindingDetailContent = ({
   const riskBand = data?.riskBand ?? null;
   const riskFactors = data?.riskFactors ?? null;
   const canShowFactors = Boolean(riskFactors);
+  const primaryMetadata = [
+    { label: "Severity", value: SEVERITY_STYLES[data.severity].label },
+    { label: "Status", value: STATUS_LABELS[data.status] ?? data.status },
+    { label: "Category", value: resolvedDetails.category || data.category },
+    { label: "Product", value: data.productName || "—" },
+    { label: "Scanner", value: data.scannerType || "—" },
+    { label: "Source", value: data.sourceType || "—" },
+    {
+      label: "First seen",
+      value: data.firstSeenAt ? formatDateRu(data.firstSeenAt) : "—",
+    },
+    {
+      label: "Last seen",
+      value: data.lastSeenAt ? formatDateRu(data.lastSeenAt) : "—",
+    },
+  ];
 
   let tabIndex = 0;
   const descriptionIndex = tabIndex++;
@@ -347,6 +363,13 @@ export const FindingDetailContent = ({
       />
     ) : null,
   ].filter(Boolean);
+  const panelBoxSx = {
+    p: 2,
+    borderRadius: 2,
+    border: "1px solid",
+    borderColor: "divider",
+    bgcolor: "background.paper",
+  } as const;
 
   return (
     <Box>
@@ -439,6 +462,21 @@ export const FindingDetailContent = ({
         onChange={(_, v) => setTab(v)}
         variant="scrollable"
         allowScrollButtonsMobile
+        sx={{
+          "& .MuiTabs-flexContainer": {
+            justifyContent: "flex-start",
+          },
+          "& .MuiTab-root": {
+            textTransform: "none",
+            fontWeight: 500,
+            minHeight: 42,
+            color: "text.secondary",
+          },
+          "& .MuiTab-root.Mui-selected": {
+            color: "text.primary",
+            fontWeight: 600,
+          },
+        }}
       >
         <Tab label="Описание" />
         {showScaTab ? <Tab label="SCA" /> : null}
@@ -477,26 +515,34 @@ export const FindingDetailContent = ({
             {data.description || "Описание отсутствует."}
           </Typography>
 
-          <Stack spacing={1.2} sx={{ mt: 2 }}>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 92 }}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+              gap: 2,
+              mt: 2,
+            }}
+          >
+            <Box sx={panelBoxSx}>
+              <Typography variant="overline" color="text.secondary">
                 Finding ID
               </Typography>
-              <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
-                {data.id}
-              </Typography>
-              <Tooltip title="Скопировать">
-                <IconButton size="small" onClick={() => handleCopyValue(data.id)}>
-                  <ContentCopyIcon fontSize="inherit" />
-                </IconButton>
-              </Tooltip>
-            </Stack>
-
-            {data.fingerprint && (
-              <Stack direction="row" alignItems="center" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 92 }}>
-                  Fingerprint
+              <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
+                <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+                  {data.id}
                 </Typography>
+                <Tooltip title="Скопировать">
+                  <IconButton size="small" onClick={() => handleCopyValue(data.id)}>
+                    <ContentCopyIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </Box>
+            <Box sx={panelBoxSx}>
+              <Typography variant="overline" color="text.secondary">
+                Fingerprint
+              </Typography>
+              <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
                 <Typography
                   variant="body2"
                   sx={{
@@ -507,16 +553,38 @@ export const FindingDetailContent = ({
                     overflow: "hidden",
                   }}
                 >
-                  {data.fingerprint}
+                  {data.fingerprint || "—"}
                 </Typography>
                 <Tooltip title="Скопировать">
-                  <IconButton size="small" onClick={() => handleCopyValue(data.fingerprint ?? "")}>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleCopyValue(data.fingerprint ?? "")}
+                    disabled={!data.fingerprint}
+                  >
                     <ContentCopyIcon fontSize="inherit" />
                   </IconButton>
                 </Tooltip>
               </Stack>
-            )}
-          </Stack>
+            </Box>
+          </Box>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+              gap: 2,
+              mt: 2,
+            }}
+          >
+            {primaryMetadata.map((item) => (
+              <Stack key={item.label} direction="row" alignItems="center" gap={1}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 110 }}>
+                  {item.label}
+                </Typography>
+                <Typography variant="body2">{item.value}</Typography>
+              </Stack>
+            ))}
+          </Box>
         </Section>
 
         <Section
@@ -1284,7 +1352,8 @@ export const FindingDetailContent = ({
       {semgrepEvidence && semgrepIndex !== null && (
         <TabPanel value={tab} index={semgrepIndex}>
           <Section title="Источник (Semgrep)" dense={compact}>
-            <Stack spacing={1.2}>
+            <Box sx={panelBoxSx}>
+              <Stack spacing={1.2}>
               <Stack direction="row" gap={1}>
                 <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
                   Rule ID
@@ -1354,7 +1423,8 @@ export const FindingDetailContent = ({
                   </Collapse>
                 </Box>
               )}
-            </Stack>
+              </Stack>
+            </Box>
           </Section>
 
           {/* Remediation Guidance */}
@@ -1471,54 +1541,72 @@ export const FindingDetailContent = ({
       {/* Tab: Comments */}
       <TabPanel value={tab} index={commentsIndex}>
         <Section title="Комментарии" dense={compact}>
-          <Stack spacing={1.2}>
-            {(data.comments ?? []).length === 0 && (
-              <Typography variant="body2" color="text.secondary">
-                Комментариев пока нет.
-              </Typography>
-            )}
-
-            {(data.comments ?? []).map((c: FindingComment) => (
-              <Box key={c.id} sx={{ p: 1.5, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-                <Typography variant="caption" color="text.secondary">
-                  {c.author || "Пользователь"} · {formatDateRu(c.createdAt)}
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-line" }}>
-                  {c.body}
-                </Typography>
-              </Box>
-            ))}
-
-            {commentsManager.commentError && <Alert severity="error">{commentsManager.commentError}</Alert>}
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 1 }}>
-              <TextField
-                label="Добавить комментарий"
-                value={commentsManager.comment}
-                onChange={(e) => commentsManager.setComment(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                    e.preventDefault();
-                    commentsManager.handleAddComment();
+          <Stack spacing={2}>
+            <Box sx={panelBoxSx}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                <TextField
+                  label="Добавить комментарий"
+                  value={commentsManager.comment}
+                  onChange={(e) => commentsManager.setComment(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      commentsManager.handleAddComment();
+                    }
+                  }}
+                  multiline
+                  minRows={2}
+                  size="small"
+                  fullWidth
+                  helperText="Ctrl+Enter / Cmd+Enter — отправить"
+                />
+                <Button
+                  variant="contained"
+                  onClick={commentsManager.handleAddComment}
+                  disabled={
+                    commentsManager.commentState === "saving" || !commentsManager.comment.trim()
                   }
-                }}
-                multiline
-                minRows={2}
-                size="small"
-                fullWidth
-                helperText="Ctrl+Enter / Cmd+Enter — отправить"
-              />
-              <Button
-                variant="contained"
-                onClick={commentsManager.handleAddComment}
-                disabled={
-                  commentsManager.commentState === "saving" || !commentsManager.comment.trim()
-                }
-                sx={{ minWidth: 140 }}
-              >
-                {commentsManager.commentState === "saving" ? "..." : "Добавить"}
-              </Button>
-            </Stack>
+                  sx={{ minWidth: 140 }}
+                >
+                  {commentsManager.commentState === "saving" ? "..." : "Добавить"}
+                </Button>
+              </Stack>
+              {commentsManager.commentError && (
+                <Alert severity="error" sx={{ mt: 1.5 }}>
+                  {commentsManager.commentError}
+                </Alert>
+              )}
+            </Box>
+
+            <Box sx={panelBoxSx}>
+              {(data.comments ?? []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Комментариев пока нет.
+                </Typography>
+              ) : (
+                <Stack spacing={1.2}>
+                  {(data.comments ?? []).map((c: FindingComment) => (
+                    <Box
+                      key={c.id}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 2,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        bgcolor: "background.default",
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        {c.author || "Пользователь"} · {formatDateRu(c.createdAt)}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-line" }}>
+                        {c.body}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              )}
+            </Box>
           </Stack>
         </Section>
       </TabPanel>
@@ -1526,25 +1614,27 @@ export const FindingDetailContent = ({
       {/* Tab: Events History */}
       <TabPanel value={tab} index={historyIndex}>
         <Section title="История изменений" dense={compact}>
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={eventFilter}
-            onChange={(_, v) => v && setEventFilter(v)}
-            sx={{ flexWrap: "wrap", mb: 2 }}
-          >
-            <ToggleButton value="all">Все</ToggleButton>
-            <ToggleButton value="status">Статус</ToggleButton>
-            <ToggleButton value="comment">Комментарии</ToggleButton>
-            <ToggleButton value="dedup">Дубликаты</ToggleButton>
-            <ToggleButton value="other">Другое</ToggleButton>
-          </ToggleButtonGroup>
+          <Box sx={panelBoxSx}>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={eventFilter}
+              onChange={(_, v) => v && setEventFilter(v)}
+              sx={{ flexWrap: "wrap", mb: 2 }}
+            >
+              <ToggleButton value="all">Все</ToggleButton>
+              <ToggleButton value="status">Статус</ToggleButton>
+              <ToggleButton value="comment">Комментарии</ToggleButton>
+              <ToggleButton value="dedup">Дубликаты</ToggleButton>
+              <ToggleButton value="other">Другое</ToggleButton>
+            </ToggleButtonGroup>
 
-          <EventTimeline
-            events={data.events ?? []}
-            filter={eventFilter}
-            compact={compact}
-          />
+            <EventTimeline
+              events={data.events ?? []}
+              filter={eventFilter}
+              compact={compact}
+            />
+          </Box>
         </Section>
       </TabPanel>
 

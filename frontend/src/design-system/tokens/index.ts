@@ -1,5 +1,5 @@
 /**
- * Lotus Warden Design System - Token Exports
+ * RED LYCORIS Design System - Token Exports
  *
  * Central export point for all design tokens.
  * Import from here for a clean API:
