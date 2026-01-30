@@ -97,11 +97,24 @@ const FindingsList = () => {
   });
 
   // drawer
+  const selectedFromUrl = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("selected");
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (selectedFromUrl && filters.selectedFindingId !== selectedFromUrl) {
+      actions.setSelectedFindingId(selectedFromUrl);
+    }
+  }, [actions, filters.selectedFindingId, hydrated, selectedFromUrl]);
+
   const drawer = useDrawerState({
     selectedFindingId: filters.selectedFindingId,
     setSelectedFindingId: actions.setSelectedFindingId,
     selectionCount: bulk.selectionCount,
     listStateKey: LIST_STATE_KEY,
+    allowSelectionClose: !selectedFromUrl,
   });
 
   const listReturnTo = useMemo(() => {
@@ -434,11 +447,16 @@ const FindingsList = () => {
 
         <Box sx={{ p: 2, height: "100%", overflow: "auto" }}>
           {filters.selectedFindingId ? (
-            <FindingDetailContent
-              id={filters.selectedFindingId}
-              compact
-              onClose={drawer.closeDrawer}
-            />
+            <>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                Detail view mounted
+              </Typography>
+              <FindingDetailContent
+                id={filters.selectedFindingId}
+                compact
+                onClose={drawer.closeDrawer}
+              />
+            </>
           ) : null}
         </Box>
       </Drawer>
