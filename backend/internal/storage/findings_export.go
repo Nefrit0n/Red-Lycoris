@@ -47,8 +47,15 @@ func QueryFindingsExport(ctx context.Context, db *sql.DB, filters FindingFilters
 		filters.Offset = 0
 	}
 
-	sortField := normalizeFindingSortField(filters.SortField)
-	sortOrder := normalizeSortOrder(filters.SortOrder)
+	sortField, err := NormalizeFindingSortField(filters.SortField)
+	if err != nil {
+		return nil, err
+	}
+	sortOrder := NormalizeFindingSortOrder(filters.SortOrder)
+	sortConfig, err := findingSortConfigFor(sortField)
+	if err != nil {
+		return nil, err
+	}
 
 	args := append(buildFindingFilterArgs(filters), filters.Limit, filters.Offset)
 
@@ -85,7 +92,7 @@ func QueryFindingsExport(ctx context.Context, db *sql.DB, filters FindingFilters
 		selectFields,
 		findingExportJoins,
 		findingFilterWhereClause,
-		buildFindingOrderBy(sortField, sortOrder))
+		findingSortOrderBy(sortConfig, sortOrder))
 
 	return db.QueryContext(ctx, query, args...)
 }

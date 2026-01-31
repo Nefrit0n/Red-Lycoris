@@ -42,9 +42,6 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
   const cooldownUntilRef = useRef(0);
 
   const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
-  const sortFieldValue = String(filters.sortField);
-  const useCursorPagination =
-    sortFieldValue === "lastSeenAt" || sortFieldValue === "lastActivity";
   const isUuid = (value: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       value
@@ -77,16 +74,10 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
-      const cursor = useCursorPagination
-        ? filters.page === 0
-          ? undefined
-          : cursorsByPage[filters.page - 1]
-        : undefined;
-      const offset = useCursorPagination ? undefined : filters.page * filters.pageSize;
+      const cursor = filters.page === 0 ? undefined : cursorsByPage[filters.page - 1];
       const params = {
         limit: filters.pageSize,
         cursor,
-        offset,
         filterProductId: productIsUuid ? filters.productId : undefined,
         filterProduct: productIsUuid ? undefined : filters.productId,
         filterSeverity: filters.filterSeverity,
@@ -116,7 +107,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
         return;
       }
 
-      if (useCursorPagination && filters.page > 0 && !cursor) {
+      if (filters.page > 0 && !cursor) {
         setError("Недоступна следующая страница. Обновите список.");
         setData([]);
         setLoading(false);
@@ -143,13 +134,9 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
           setNextCursor(null);
         } else {
           setData(response.data);
-          if (useCursorPagination) {
-            setNextCursor(response.nextCursor ?? null);
-            if (response.nextCursor) {
-              setCursorsByPage((prev) => ({ ...prev, [filters.page]: response.nextCursor! }));
-            }
-          } else {
-            setNextCursor(null);
+          setNextCursor(response.nextCursor ?? null);
+          if (response.nextCursor) {
+            setCursorsByPage((prev) => ({ ...prev, [filters.page]: response.nextCursor! }));
           }
           if (typeof response.total === "number") {
             setTotal(response.total);
@@ -193,7 +180,6 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       debouncedSearch,
       cursorsByPage,
       productIsUuid,
-      useCursorPagination,
     ]
   );
 
@@ -214,17 +200,11 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     setStatsLoading(true);
     setError(null);
     try {
-      const cursor = useCursorPagination
-        ? filters.page === 0
-          ? undefined
-          : cursorsByPage[filters.page - 1]
-        : undefined;
-      const offset = useCursorPagination ? undefined : filters.page * filters.pageSize;
+      const cursor = filters.page === 0 ? undefined : cursorsByPage[filters.page - 1];
       const response = await fetchFindings(
         {
           limit: filters.pageSize,
           cursor,
-          offset,
           includeMeta: true,
           filterProductId: productIsUuid ? filters.productId : undefined,
           filterProduct: productIsUuid ? undefined : filters.productId,
@@ -272,21 +252,16 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     filters.importJobId,
     filters.sortField,
     filters.sortOrder,
-    debouncedSearch,
-    cursorsByPage,
-    productIsUuid,
-    useCursorPagination,
-  ]);
+      debouncedSearch,
+      cursorsByPage,
+      productIsUuid,
+    ]);
 
   return {
     data,
     total,
     totalKnown,
-    hasNextPage: useCursorPagination
-      ? Boolean(nextCursor)
-      : totalKnown && typeof total === "number"
-        ? (filters.page + 1) * filters.pageSize < total
-        : data.length === filters.pageSize,
+    hasNextPage: Boolean(nextCursor),
     loading,
     error,
     statsLoading,

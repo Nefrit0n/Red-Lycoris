@@ -112,7 +112,6 @@ export const fetchProductsWithStats = async (
         {
           productId: product.id,
           limit: 1,
-          offset: 0,
           canonicalOnly: true,
           includeRepeats: false,
         },
