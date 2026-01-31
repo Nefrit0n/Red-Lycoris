@@ -8,6 +8,7 @@ interface GridCardArgs {
   version?: string;
   findingsOpenCount: number;
   lastScanAt?: string;
+  newFindings: number;
   severityBreakdown: ProductWithStats["severityBreakdown"];
 }
 
@@ -20,6 +21,7 @@ const meta: Meta<typeof ProductGridCard> = {
     version: "2.4.1",
     findingsOpenCount: 18,
     lastScanAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    newFindings: 4,
     severityBreakdown: {
       critical: 2,
       high: 5,
@@ -31,6 +33,7 @@ const meta: Meta<typeof ProductGridCard> = {
   argTypes: {
     severityBreakdown: { control: "object" },
     lastScanAt: { control: "text" },
+    newFindings: { control: { type: "number", min: 0, max: 50 } },
   },
   render: (args: GridCardArgs) => (
     <ProductGridCard
@@ -42,6 +45,17 @@ const meta: Meta<typeof ProductGridCard> = {
         lastScanAt: args.lastScanAt,
         findingsOpenCount: args.findingsOpenCount,
         severityBreakdown: args.severityBreakdown,
+        recentScans: args.lastScanAt
+          ? [
+              {
+                id: "scan-1",
+                scanner: "Snyk",
+                status: "completed",
+                createdAt: args.lastScanAt,
+                findingsNew: args.newFindings,
+              },
+            ]
+          : [],
       }}
     />
   ),
