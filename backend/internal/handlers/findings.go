@@ -117,12 +117,9 @@ func NewFindingsHandler(db *sql.DB, policyEngine policies.Evaluator, slaMatrix s
 // @Failure 401 {object} fiber.Map
 // @Router /api/v1/findings [get]
 func (h *FindingsHandler) List(c *fiber.Ctx) error {
-	limit, _, err := parsePagination(c)
+	limit, offset, err := parsePagination(c)
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
-	}
-	if c.Query("offset") != "" || c.Query("page") != "" || c.Query("pageSize") != "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "offset pagination is not supported"})
 	}
 
 	filterParams, err := parseFindingFiltersFromQuery(c, h.db)
@@ -144,6 +141,9 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 
 	var cursor *storage.FindingListCursor
 	if cursorParam != "" {
+		if offset != 0 {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "cursor pagination cannot be combined with offset"})
+		}
 		payload, err := decodeFindingCursor(cursorParam)
 		if err != nil {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
@@ -174,8 +174,9 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		cursor = &storage.FindingListCursor{SortValue: sortValue, ID: id}
 	}
 
-	filters := filterParams.toStorageFilters(limit, 0)
-	items, total, nextCursor, err := storage.ListFindings(c.Context(), h.db, filters, cursor, true, includeMeta)
+	filters := filterParams.toStorageFilters(limit, offset)
+	useCursor := cursor != nil
+	items, total, nextCursor, hasNext, err := storage.ListFindings(c.Context(), h.db, filters, cursor, useCursor, includeMeta)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
 	}
@@ -201,6 +202,9 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 	resp := fiber.Map{
 		"success": true,
 		"data":    response,
+		"meta": fiber.Map{
+			"hasNext": hasNext,
+		},
 	}
 
 	if nextCursor != nil {
@@ -221,6 +225,7 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 	}
 
 	if includeMeta {
+		meta := resp["meta"].(fiber.Map)
 		severityCounts, err := storage.CountFindingsBySeverity(
 			c.Context(),
 			h.db,
@@ -238,12 +243,10 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings status stats"})
 		}
 		if total != nil {
-			resp["total"] = *total
+			meta["total"] = *total
 		}
-		resp["meta"] = fiber.Map{
-			"severityCounts": severityCounts,
-			"statusCounts":   statusCounts,
-		}
+		meta["severityCounts"] = severityCounts
+		meta["statusCounts"] = statusCounts
 	}
 
 	return c.Status(http.StatusOK).JSON(resp)
