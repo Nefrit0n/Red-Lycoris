@@ -6,6 +6,7 @@ import {
   Stack,
   Tooltip,
   Typography,
+  alpha,
   useTheme,
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
@@ -15,6 +16,7 @@ import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined
 import { GlassCard, StatusBadge } from "../design-system/components";
 import { ProductWithStats } from "../types/products";
 import ProductPostureDonut from "./ProductPostureDonut";
+import { calculateHealthScore } from "../utils/productHealth";
 
 export interface ProductListRowProps {
   product: ProductWithStats;
@@ -26,21 +28,10 @@ export interface ProductListRowProps {
 const ProductListRow = memo(({ product, onOpen, onViewFindings, onUploadScan }: ProductListRowProps) => {
   const theme = useTheme();
 
-  const healthScore = useMemo(() => {
-    const breakdown = product.severityBreakdown;
-    if (!breakdown) return 100;
-    const total =
-      breakdown.critical + breakdown.high + breakdown.medium + breakdown.low + breakdown.info;
-    if (total === 0) return 100;
-    const weighted =
-      breakdown.critical * 10 +
-      breakdown.high * 5 +
-      breakdown.medium * 2 +
-      breakdown.low * 1 +
-      breakdown.info * 0.5;
-    const score = Math.max(0, Math.round(100 - (weighted / (total * 10)) * 100));
-    return score;
-  }, [product.severityBreakdown]);
+  const healthScore = useMemo(
+    () => calculateHealthScore(product.severityBreakdown),
+    [product.severityBreakdown]
+  );
 
   const scoreColor = useMemo(() => {
     if (healthScore >= 80) return theme.palette.success.main;
@@ -60,6 +51,8 @@ const ProductListRow = memo(({ product, onOpen, onViewFindings, onUploadScan }: 
 
   const criticalCount = product.severityBreakdown?.critical ?? 0;
   const highCount = product.severityBreakdown?.high ?? 0;
+  const latestScan = product.recentScans?.[0];
+  const newFindingsCount = latestScan?.findingsNew ?? 0;
 
   const identifierText = product.identifier || product.version
     ? `${product.identifier ?? ""}${product.version ? ` • v${product.version}` : ""}`
@@ -109,7 +102,21 @@ const ProductListRow = memo(({ product, onOpen, onViewFindings, onUploadScan }: 
             {highCount > 0 && (
               <StatusBadge type="severity" value="high" label={`${highCount} high`} compact />
             )}
-            {criticalCount === 0 && highCount === 0 && (
+            {newFindingsCount > 0 && (
+              <Chip
+                label={`${newFindingsCount} new`}
+                size="small"
+                sx={{
+                  bgcolor: alpha(theme.palette.info.main, 0.15),
+                  color: theme.palette.info.light,
+                  border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+                }}
+              />
+            )}
+            {newFindingsCount === 0 && latestScan && (
+              <Chip label="No new findings" size="small" variant="outlined" />
+            )}
+            {!latestScan && criticalCount === 0 && highCount === 0 && (
               <Chip label="stable" size="small" variant="outlined" />
             )}
           </Stack>
