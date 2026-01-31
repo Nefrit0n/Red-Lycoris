@@ -227,7 +227,6 @@ const ScanUploadPage = () => {
         const response = await fetchFindings(
           {
             limit: 10,
-            offset: 0,
             canonicalOnly: true,
             includeRepeats: false,
             importJobId: success.importJobId,
