@@ -77,7 +77,9 @@ type Finding struct {
 	Title          string          `db:"title"`
 	Description    *string         `db:"description"`
 	Severity       string          `db:"severity"`
+	SeverityRank   int16           `db:"severity_rank"`
 	Status         string          `db:"status"`
+	StatusRank     int16           `db:"status_rank"`
 	DuplicateID    *uuid.UUID      `db:"duplicate_id"`
 	AssigneeID     *uuid.UUID      `db:"assignee_id"`
 	ImportJobID    *uuid.UUID      `db:"import_job_id"`
@@ -154,6 +156,7 @@ func (f *Finding) PrepareForInsert() {
 	if f.Category == "" {
 		f.Category = CategorySAST
 	}
+	f.applyRanks()
 	if f.CreatedAt.IsZero() {
 		f.CreatedAt = time.Now().UTC()
 	}
@@ -169,5 +172,53 @@ func (f *Finding) PrepareForInsert() {
 }
 
 func (f *Finding) PrepareForUpdate() {
+	f.applyRanks()
 	f.UpdatedAt = time.Now().UTC()
+}
+
+func SeverityRank(severity string) int16 {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case SeverityCritical:
+		return 4
+	case SeverityHigh:
+		return 3
+	case SeverityMedium:
+		return 2
+	case SeverityLow:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func StatusRank(status string) int16 {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case StatusNew:
+		return 1
+	case StatusUnderReview:
+		return 2
+	case StatusConfirmed:
+		return 3
+	case StatusMitigated:
+		return 4
+	case StatusFalsePositive:
+		return 5
+	case StatusOutOfScope:
+		return 6
+	case StatusRiskAccepted:
+		return 7
+	case StatusDuplicate:
+		return 8
+	default:
+		return 0
+	}
+}
+
+func (f *Finding) applyRanks() {
+	if f.Severity != "" {
+		f.SeverityRank = SeverityRank(f.Severity)
+	}
+	if f.Status != "" {
+		f.StatusRank = StatusRank(f.Status)
+	}
 }
