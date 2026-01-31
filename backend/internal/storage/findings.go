@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,8 +69,8 @@ type FindingNeighborsResult struct {
 }
 
 type FindingListCursor struct {
-	SortKey time.Time
-	ID      uuid.UUID
+	SortValue any
+	ID        uuid.UUID
 }
 
 type FindingFilters struct {
@@ -163,40 +164,241 @@ LEFT JOIN (
 	ORDER BY subject_id, evaluated_at DESC
 ) pr_latest ON pr_latest.subject_id = f.id`
 
-// buildFindingOrderBy generates ORDER BY clause for the given sort field and order.
-func buildFindingOrderBy(sortField, sortOrder string) string {
-	order := "DESC"
-	if sortOrder == "asc" {
-		order = "ASC"
-	}
+type findingSortValueType string
 
-	nulls := "NULLS LAST"
-	switch sortField {
-	case "slaDueAt":
-		return fmt.Sprintf("ORDER BY f.sla_due_at %s %s, f.id %s", order, nulls, order)
-	case "title":
-		return fmt.Sprintf("ORDER BY f.title %s %s, f.id %s", order, nulls, order)
-	case "productName":
-		return fmt.Sprintf("ORDER BY p.name %s %s, f.id %s", order, nulls, order)
+const (
+	sortValueTime   findingSortValueType = "time"
+	sortValueString findingSortValueType = "string"
+	sortValueFloat  findingSortValueType = "float"
+	sortValueInt    findingSortValueType = "int"
+)
+
+type findingSortConfig struct {
+	Field     string
+	ValueType findingSortValueType
+	ExprAsc   string
+	ExprDesc  string
+}
+
+const (
+	riskScoreNullHigh = 1.0e9
+	riskScoreNullLow  = -1.0
+)
+
+var findingSortConfigs = map[string]findingSortConfig{
+	"lastSeenAt": {
+		Field:     "lastSeenAt",
+		ValueType: sortValueTime,
+		ExprAsc:   "COALESCE(f.last_seen_at, f.created_at)",
+		ExprDesc:  "COALESCE(f.last_seen_at, f.created_at)",
+	},
+	"createdAt": {
+		Field:     "createdAt",
+		ValueType: sortValueTime,
+		ExprAsc:   "f.created_at",
+		ExprDesc:  "f.created_at",
+	},
+	"severity": {
+		Field:     "severity",
+		ValueType: sortValueInt,
+		ExprAsc:   "f.severity_rank",
+		ExprDesc:  "f.severity_rank",
+	},
+	"status": {
+		Field:     "status",
+		ValueType: sortValueInt,
+		ExprAsc:   "f.status_rank",
+		ExprDesc:  "f.status_rank",
+	},
+	"riskScore": {
+		Field:     "riskScore",
+		ValueType: sortValueFloat,
+		ExprAsc:   fmt.Sprintf("COALESCE(fr.risk_score, %f)", riskScoreNullHigh),
+		ExprDesc:  fmt.Sprintf("COALESCE(fr.risk_score, %f)", riskScoreNullLow),
+	},
+	"slaDueAt": {
+		Field:     "slaDueAt",
+		ValueType: sortValueTime,
+		ExprAsc:   "COALESCE(f.sla_due_at, TIMESTAMPTZ '9999-12-31T23:59:59Z')",
+		ExprDesc:  "COALESCE(f.sla_due_at, TIMESTAMPTZ '0001-01-01T00:00:00Z')",
+	},
+	"title": {
+		Field:     "title",
+		ValueType: sortValueString,
+		ExprAsc:   "f.title",
+		ExprDesc:  "f.title",
+	},
+	"updatedAt": {
+		Field:     "updatedAt",
+		ValueType: sortValueTime,
+		ExprAsc:   "f.updated_at",
+		ExprDesc:  "f.updated_at",
+	},
+}
+
+// NormalizeFindingSortField validates and normalizes sort field names.
+func NormalizeFindingSortField(field string) (string, error) {
+	s := strings.ToLower(strings.TrimSpace(field))
+	switch s {
+	case "", "lastseenat", "lastactivity":
+		return "lastSeenAt", nil
+	case "createdat":
+		return "createdAt", nil
 	case "severity":
-		return fmt.Sprintf("ORDER BY (CASE LOWER(f.severity) WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END) %s %s, f.id %s", order, nulls, order)
+		return "severity", nil
 	case "status":
-		return fmt.Sprintf("ORDER BY f.status %s %s, f.id %s", order, nulls, order)
-	case "lastSeenAt":
-		return fmt.Sprintf("ORDER BY COALESCE(f.last_seen_at, f.created_at) %s %s, f.id %s", order, nulls, order)
-	case "updatedAt":
-		return fmt.Sprintf("ORDER BY f.updated_at %s %s, f.id %s", order, nulls, order)
-	case "riskScore":
-		return fmt.Sprintf("ORDER BY fr.risk_score %s %s, f.id %s", order, nulls, order)
-	case "createdAt":
-		fallthrough
+		return "status", nil
+	case "riskscore":
+		return "riskScore", nil
+	case "sladueat":
+		return "slaDueAt", nil
+	case "title":
+		return "title", nil
+	case "updatedat":
+		return "updatedAt", nil
 	default:
-		return fmt.Sprintf("ORDER BY f.created_at %s %s, f.id %s", order, nulls, order)
+		return "", fmt.Errorf("unsupported sortField")
 	}
 }
 
-func buildFindingCursorOrderBy() string {
-	return "ORDER BY COALESCE(f.last_seen_at, f.created_at) DESC, f.id DESC"
+// NormalizeFindingSortOrder validates and normalizes sort order values.
+func NormalizeFindingSortOrder(order string) string {
+	if strings.EqualFold(strings.TrimSpace(order), "asc") {
+		return "asc"
+	}
+	return "desc"
+}
+
+func findingSortConfigFor(field string) (findingSortConfig, error) {
+	config, ok := findingSortConfigs[field]
+	if !ok {
+		return findingSortConfig{}, fmt.Errorf("unsupported sortField")
+	}
+	return config, nil
+}
+
+func findingSortExpr(config findingSortConfig, order string) string {
+	if order == "asc" {
+		return config.ExprAsc
+	}
+	return config.ExprDesc
+}
+
+func findingSortOrderBy(config findingSortConfig, order string) string {
+	expr := findingSortExpr(config, order)
+	if order == "asc" {
+		return fmt.Sprintf("ORDER BY %s ASC, f.id ASC", expr)
+	}
+	return fmt.Sprintf("ORDER BY %s DESC, f.id DESC", expr)
+}
+
+func findingSortCursorPredicate(config findingSortConfig, order string, argIndex int) string {
+	expr := findingSortExpr(config, order)
+	operator := ">"
+	if order == "desc" {
+		operator = "<"
+	}
+	return fmt.Sprintf("(%s, f.id) %s ($%d, $%d)", expr, operator, argIndex, argIndex+1)
+}
+
+func findingCursorKeyDestination(valueType findingSortValueType) any {
+	switch valueType {
+	case sortValueFloat:
+		var v float64
+		return &v
+	case sortValueInt:
+		var v int16
+		return &v
+	case sortValueString:
+		var v string
+		return &v
+	default:
+		var v time.Time
+		return &v
+	}
+}
+
+func findCursorValueFromDestination(dest any) any {
+	switch value := dest.(type) {
+	case *float64:
+		return *value
+	case *int16:
+		return *value
+	case *string:
+		return *value
+	case *time.Time:
+		return *value
+	default:
+		return nil
+	}
+}
+
+func ParseFindingCursorValue(sortField, raw string) (any, error) {
+	config, err := findingSortConfigFor(sortField)
+	if err != nil {
+		return nil, err
+	}
+	switch config.ValueType {
+	case sortValueFloat:
+		v, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor")
+		}
+		return v, nil
+	case sortValueInt:
+		var v int16
+		if _, err := fmt.Sscanf(raw, "%d", &v); err != nil {
+			return nil, fmt.Errorf("invalid cursor")
+		}
+		return v, nil
+	case sortValueString:
+		if raw == "" {
+			return nil, fmt.Errorf("invalid cursor")
+		}
+		return raw, nil
+	default:
+		parsed, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor")
+		}
+		return parsed, nil
+	}
+}
+
+func FormatFindingCursorValue(sortField string, value any) (string, error) {
+	config, err := findingSortConfigFor(sortField)
+	if err != nil {
+		return "", err
+	}
+	switch config.ValueType {
+	case sortValueFloat:
+		typed, ok := value.(float64)
+		if !ok {
+			return "", fmt.Errorf("invalid cursor")
+		}
+		return strconv.FormatFloat(typed, 'g', -1, 64), nil
+	case sortValueInt:
+		switch v := value.(type) {
+		case int16:
+			return fmt.Sprintf("%d", v), nil
+		case int:
+			return fmt.Sprintf("%d", v), nil
+		default:
+			return "", fmt.Errorf("invalid cursor")
+		}
+	case sortValueString:
+		typed, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("invalid cursor")
+		}
+		return typed, nil
+	default:
+		typed, ok := value.(time.Time)
+		if !ok {
+			return "", fmt.Errorf("invalid cursor")
+		}
+		return typed.UTC().Format(time.RFC3339Nano), nil
+	}
 }
 
 // buildFindingFilterArgs normalizes filters into a stable argument list for SQL queries.
@@ -256,46 +458,6 @@ func buildFindingFilterArgs(filters FindingFilters) []any {
 		dateTo,
 		canonicalOnly,
 	}
-}
-
-func normalizeFindingSortField(field string) string {
-	s := strings.TrimSpace(field)
-	s = strings.ToLower(s)
-	switch s {
-	case "title", "productname", "severity", "status", "lastseenat", "lastactivity", "createdat", "updatedat", "sladueat", "riskscore":
-		// Normalize camelCase used by frontend.
-		if s == "productname" {
-			return "productName"
-		}
-		if s == "lastseenat" {
-			return "lastSeenAt"
-		}
-		if s == "lastactivity" {
-			return "lastSeenAt"
-		}
-		if s == "createdat" {
-			return "createdAt"
-		}
-		if s == "updatedat" {
-			return "updatedAt"
-		}
-		if s == "sladueat" {
-			return "slaDueAt"
-		}
-		if s == "riskscore" {
-			return "riskScore"
-		}
-		return s
-	default:
-		return "createdAt"
-	}
-}
-
-func normalizeSortOrder(order string) string {
-	if strings.EqualFold(strings.TrimSpace(order), "asc") {
-		return "asc"
-	}
-	return "desc"
 }
 
 // findingScanFields is the list of fields to scan from a finding query result.
@@ -440,8 +602,11 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 		filters.Offset = 0
 	}
 
-	sortField := normalizeFindingSortField(filters.SortField)
-	sortOrder := normalizeSortOrder(filters.SortOrder)
+	sortField, err := NormalizeFindingSortField(filters.SortField)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sortOrder := NormalizeFindingSortOrder(filters.SortOrder)
 
 	argsBase := buildFindingFilterArgs(filters)
 
@@ -474,31 +639,37 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 			f.created_at, f.updated_at, f.source_type,
 			f.cwe,
 			f.owasp,
-			COALESCE(f.last_seen_at, f.created_at) AS sort_key`
+			%s AS sort_key`
 
 	whereClause := findingFilterWhereClause
 	args := append([]any{}, argsBase...)
 	argIndex := len(args) + 1
 
 	var query string
+	sortConfig, err := findingSortConfigFor(sortField)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	if useCursor {
-		orderBy := buildFindingCursorOrderBy()
 		if cursor != nil {
-			whereClause = fmt.Sprintf("%s AND (COALESCE(f.last_seen_at, f.created_at), f.id) < ($%d, $%d)", whereClause, argIndex, argIndex+1)
-			args = append(args, cursor.SortKey, cursor.ID)
+			whereClause = fmt.Sprintf("%s AND %s", whereClause, findingSortCursorPredicate(sortConfig, sortOrder, argIndex))
+			args = append(args, cursor.SortValue, cursor.ID)
 			argIndex += 2
 		}
+		orderBy := findingSortOrderBy(sortConfig, sortOrder)
+		limitValue := filters.Limit + 1
 		query = fmt.Sprintf(`%s %s WHERE %s %s LIMIT $%d`,
-			selectFields,
+			fmt.Sprintf(selectFields, findingSortExpr(sortConfig, sortOrder)),
 			findingListJoins,
 			whereClause,
 			orderBy,
 			argIndex)
-		args = append(args, filters.Limit)
+		args = append(args, limitValue)
 	} else {
-		orderBy := buildFindingOrderBy(sortField, sortOrder)
+		orderBy := findingSortOrderBy(sortConfig, sortOrder)
 		query = fmt.Sprintf(`%s %s WHERE %s %s LIMIT $%d OFFSET $%d`,
-			selectFields,
+			fmt.Sprintf(selectFields, findingSortExpr(sortConfig, sortOrder)),
 			findingListJoins,
 			whereClause,
 			orderBy,
@@ -514,10 +685,11 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 	defer rows.Close()
 
 	items := []FindingListItem{}
+	sortKeys := []any{}
 	var nextCursor *FindingListCursor
 	for rows.Next() {
 		var item FindingListItem
-		var sortKey time.Time
+		sortKeyDest := findingCursorKeyDestination(sortConfig.ValueType)
 		if err := rows.Scan(
 			&item.ID,
 			&item.TenantID,
@@ -560,18 +732,23 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 			&item.SourceType,
 			pq.Array(&item.CWE),
 			pq.Array(&item.OWASP),
-			&sortKey,
+			sortKeyDest,
 		); err != nil {
 			return nil, nil, nil, err
 		}
 		items = append(items, item)
-		nextCursor = &FindingListCursor{SortKey: sortKey, ID: item.ID}
+		sortKeys = append(sortKeys, findCursorValueFromDestination(sortKeyDest))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, nil, err
 	}
 
-	if !useCursor || len(items) < filters.Limit {
+	if useCursor && len(items) > filters.Limit {
+		items = items[:filters.Limit]
+		sortKeys = sortKeys[:filters.Limit]
+		lastIndex := len(items) - 1
+		nextCursor = &FindingListCursor{SortValue: sortKeys[lastIndex], ID: items[lastIndex].ID}
+	} else {
 		nextCursor = nil
 	}
 
@@ -669,6 +846,16 @@ func UpdateFinding(ctx context.Context, db *sql.DB, findingID uuid.UUID, params 
 	}
 
 	updatedAt := time.Now().UTC()
+	var severityRank *int16
+	var statusRank *int16
+	if params.Severity != nil {
+		rank := models.SeverityRank(*params.Severity)
+		severityRank = &rank
+	}
+	if params.Status != nil {
+		rank := models.StatusRank(*params.Status)
+		statusRank = &rank
+	}
 
 	row := db.QueryRowContext(
 		ctx,
@@ -676,22 +863,26 @@ func UpdateFinding(ctx context.Context, db *sql.DB, findingID uuid.UUID, params 
 		 SET title = COALESCE($1, title),
 		     description = COALESCE($2, description),
 		     severity = COALESCE($3, severity),
-		     status = COALESCE($4, status),
-		     product_id = COALESCE($5, product_id),
-		     assignee_id = COALESCE($6, assignee_id),
-		     sla_due_at = COALESCE($7, sla_due_at),
-		     sla_breached = COALESCE($8, sla_breached),
-		     sla_breached_at = COALESCE($9, sla_breached_at),
-		     sla_profile = COALESCE($10, sla_profile),
-		     sla_source = COALESCE($11, sla_source),
-		     updated_at = $12
-		 WHERE id = $13 AND deleted_at IS NULL
+		     severity_rank = COALESCE($4, severity_rank),
+		     status = COALESCE($5, status),
+		     status_rank = COALESCE($6, status_rank),
+		     product_id = COALESCE($7, product_id),
+		     assignee_id = COALESCE($8, assignee_id),
+		     sla_due_at = COALESCE($9, sla_due_at),
+		     sla_breached = COALESCE($10, sla_breached),
+		     sla_breached_at = COALESCE($11, sla_breached_at),
+		     sla_profile = COALESCE($12, sla_profile),
+		     sla_source = COALESCE($13, sla_source),
+		     updated_at = $14
+		 WHERE id = $15 AND deleted_at IS NULL
 		 RETURNING id, scan_result_id, product_id, import_job_id, fingerprint, title, description, severity, status, duplicate_id, repeat_count, first_seen_at, last_seen_at, created_at, updated_at, evidence, source_type, category,
 			sla_due_at, sla_breached, sla_breached_at, sla_profile, sla_source, assignee_id`,
 		params.Title,
 		params.Description,
 		params.Severity,
+		severityRank,
 		params.Status,
+		statusRank,
 		params.ProductID,
 		params.AssigneeID,
 		params.SLADueAt,

@@ -17,8 +17,6 @@ export const fetchFindings = async (
   searchParams.set("limit", String(params.limit));
   if (params.cursor) {
     searchParams.set("cursor", params.cursor);
-  } else if (typeof params.offset === "number") {
-    searchParams.set("offset", String(params.offset));
   }
   if (params.includeMeta) searchParams.set("includeMeta", "true");
 
