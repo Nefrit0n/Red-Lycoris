@@ -141,9 +141,13 @@ func (c *OsvClient) QueryComponents(ctx context.Context, components []OsvCompone
 		batch := components[start:end]
 		queries := make([]osvQuery, 0, len(batch))
 		for _, comp := range batch {
+			version := comp.Version
+			if purlHasVersion(comp.Purl) {
+				version = ""
+			}
 			queries = append(queries, osvQuery{
 				Package: osvPackage{Purl: comp.Purl},
-				Version: comp.Version,
+				Version: version,
 			})
 		}
 
@@ -188,6 +192,19 @@ func (c *OsvClient) QueryComponents(ctx context.Context, components []OsvCompone
 	}
 
 	return results, nil
+}
+
+func purlHasVersion(purl string) bool {
+	if purl == "" {
+		return false
+	}
+
+	trimmed := purl
+	if queryIndex := strings.Index(trimmed, "?"); queryIndex != -1 {
+		trimmed = trimmed[:queryIndex]
+	}
+
+	return strings.Contains(trimmed, "@")
 }
 
 func (c *OsvClient) queryBatch(ctx context.Context, queries []osvQuery) (*osvQueryBatchResponse, error) {
