@@ -127,6 +127,7 @@ export const fetchProductsWithStats = async (
           limit: 1,
           canonicalOnly: true,
           includeRepeats: false,
+          includeMeta: true,
         },
         signal
       )
@@ -152,8 +153,8 @@ export const fetchProductsWithStats = async (
     const importJobEnv = importJobEnvelopes[index];
     const recentScans = Array.isArray(importJobEnv?.data)
       ? importJobEnv!.data
-          .map(normalizeImportJob)
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .map(normalizeImportJob)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       : [];
 
     return {
