@@ -296,7 +296,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     setDateTo: (dateTo) => setFilters((prev) => ({ ...prev, dateTo, page: 0 })),
     setShowRepeats: (showRepeats) => setFilters((prev) => ({ ...prev, showRepeats, page: 0 })),
     setSortField: (sortField) => setFilters((prev) => ({ ...prev, sortField, page: 0 })),
-    setSortOrder: (sortOrder) => setFilters((prev) => ({ ...prev, sortOrder })),
+    setSortOrder: (sortOrder) => setFilters((prev) => ({ ...prev, sortOrder, page: 0 })),
     setSelectedFindingId: (selectedFindingId) => setFilters((prev) => ({ ...prev, selectedFindingId })),
     resetFilters: () => setFilters(defaultFilters),
   };

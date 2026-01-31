@@ -98,11 +98,11 @@ const PaginationControl = ({
           if (type === "first") return "Первая страница";
           return "Последняя страница";
         }}
-        showFirstButton={totalKnown}
-        showLastButton={totalKnown}
+        showFirstButton={false}
+        showLastButton={false}
         backIconButtonProps={{ disabled: safePage === 0 }}
         nextIconButtonProps={{
-          disabled: totalKnown ? false : !hasNextPage,
+          disabled: totalKnown ? safePage >= lastPageIndex : !hasNextPage,
         }}
       />
     </Box>
