@@ -7,14 +7,9 @@ import {
 } from "../types/products";
 import { ImportJobListItemDTO } from "../types/imports";
 import { request, requestList, requestWithMeta } from "./client";
+import { normalizeSeverityCounts } from "../utils/normalizeSeverityCounts";
 
-type SeverityCounts = {
-  critical?: number;
-  high?: number;
-  medium?: number;
-  low?: number;
-  info?: number;
-};
+type SeverityCounts = Record<string, unknown>;
 
 type FindingsMeta = {
   severityCounts?: SeverityCounts;
@@ -31,15 +26,17 @@ type ImportJobsEnvelope = {
   total: number;
 };
 
+const normalizeImportJob = (job: ImportJobListItemDTO) => ({
+  id: job.id,
+  scanner: job.scanner,
+  status: job.status,
+  createdAt: job.createdAt,
+  findingsNew: Number(job.findingsNew || 0),
+});
+
 const normalizeSeverityBreakdown = (counts?: SeverityCounts) => {
   if (!counts) return undefined;
-  return {
-    critical: Number(counts.critical || 0),
-    high: Number(counts.high || 0),
-    medium: Number(counts.medium || 0),
-    low: Number(counts.low || 0),
-    info: Number(counts.info || 0),
-  };
+  return normalizeSeverityCounts(counts);
 };
 
 const runWithConcurrency = async <T, R>(
@@ -85,6 +82,22 @@ const fetchFindingsEnvelope = async (
   }
 };
 
+const fetchImportJobsEnvelope = async (
+  query: Record<string, any>,
+  signal?: AbortSignal
+): Promise<ImportJobsEnvelope | null> => {
+  try {
+    const res = await requestWithMeta<ImportJobsEnvelope>("/api/v1/import-jobs", {
+      signal,
+      query,
+    });
+    if (!res || !Array.isArray(res.data)) return null;
+    return res;
+  } catch {
+    return null;
+  }
+};
+
 export const fetchProducts = async (
   limit: number,
   offset: number,
@@ -119,9 +132,29 @@ export const fetchProductsWithStats = async (
       )
   );
 
+  const importJobEnvelopes = await runWithConcurrency(
+    productsResponse.data,
+    4,
+    async (product) =>
+      fetchImportJobsEnvelope(
+        {
+          productId: product.id,
+          limit: 1,
+          offset: 0,
+        },
+        signal
+      )
+  );
+
   const productsWithStats: ProductWithStats[] = productsResponse.data.map((product, index) => {
     const env = findingsEnvelopes[index];
     const breakdown = normalizeSeverityBreakdown(env?.meta?.severityCounts);
+    const importJobEnv = importJobEnvelopes[index];
+    const recentScans = Array.isArray(importJobEnv?.data)
+      ? importJobEnv!.data
+          .map(normalizeImportJob)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      : [];
 
     return {
       ...product,
@@ -132,6 +165,7 @@ export const fetchProductsWithStats = async (
       severityBreakdown: breakdown,
       trend: "flat",
       trendValue: 0,
+      recentScans,
     };
   });
 
@@ -154,7 +188,7 @@ export const fetchProductDetail = async (
     signal,
   });
 
-  const severityBreakdown = normalizeSeverityBreakdown(stats.severityCounts);
+  const severityBreakdown = normalizeSeverityBreakdown(stats.severityCounts as SeverityCounts);
   const findingsOpenCount =
     typeof stats.openCount === "number"
       ? stats.openCount
@@ -180,13 +214,15 @@ export const fetchProductDetail = async (
     });
 
     if (Array.isArray(scansResponse.data)) {
-      recentScans = scansResponse.data.map((scan) => ({
-        id: scan.id,
-        scanner: scan.scanner,
-        status: scan.status,
-        createdAt: scan.createdAt,
-        findingsNew: scan.findingsNew,
-      }));
+      recentScans = scansResponse.data
+        .map((scan) => ({
+          id: scan.id,
+          scanner: scan.scanner,
+          status: scan.status,
+          createdAt: scan.createdAt,
+          findingsNew: Number(scan.findingsNew || 0),
+        }))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
     if (typeof scansResponse.total === "number") {
       totalScans = scansResponse.total;
