@@ -15,9 +15,7 @@ export const fetchFindings = async (
 ): Promise<FindingsListResponse> => {
   const searchParams = new URLSearchParams();
   searchParams.set("limit", String(params.limit));
-  if (params.cursor) {
-    searchParams.set("cursor", params.cursor);
-  }
+  searchParams.set("offset", String(params.offset ?? 0));
   if (params.includeMeta) searchParams.set("includeMeta", "true");
 
   // product filter (productId основной, product оставляем для совместимости)
@@ -55,19 +53,23 @@ export const fetchFindings = async (
   const response = await requestWithMeta<{
     success?: boolean;
     data?: FindingListItemDTO[];
-    total?: number;
     nextCursor?: string;
-    meta?: { severityCounts?: Record<string, number>; statusCounts?: Record<string, number> };
+    meta?: {
+      hasNext?: boolean;
+      total?: number;
+      severityCounts?: Record<string, number>;
+      statusCounts?: Record<string, number>;
+    };
   }>("/api/v1/findings", {
     signal,
     query: searchParams,
   });
 
+  const meta = response?.meta ?? undefined;
   return {
     data: Array.isArray(response?.data) ? response.data : [],
-    total: typeof response?.total === "number" ? response.total : undefined,
-    nextCursor: response?.nextCursor,
-    meta: response?.meta,
+    total: typeof meta?.total === "number" ? meta.total : undefined,
+    meta,
   };
 };
 
