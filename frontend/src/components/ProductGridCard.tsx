@@ -18,6 +18,7 @@ import { GlassCard, StatusBadge } from "../design-system/components";
 import { ProductWithStats } from "../types/products";
 import ProductPostureDonut from "./ProductPostureDonut";
 import { semantic } from "../design-system/tokens";
+import { calculateHealthScore } from "../utils/productHealth";
 
 export interface ProductGridCardProps {
   product: ProductWithStats;
@@ -29,21 +30,10 @@ export interface ProductGridCardProps {
 const ProductGridCard = memo(({ product, onOpen, onViewFindings, onUploadScan }: ProductGridCardProps) => {
   const theme = useTheme();
 
-  const healthScore = useMemo(() => {
-    const breakdown = product.severityBreakdown;
-    if (!breakdown) return 100;
-    const total =
-      breakdown.critical + breakdown.high + breakdown.medium + breakdown.low + breakdown.info;
-    if (total === 0) return 100;
-    const weighted =
-      breakdown.critical * 10 +
-      breakdown.high * 5 +
-      breakdown.medium * 2 +
-      breakdown.low * 1 +
-      breakdown.info * 0.5;
-    const score = Math.max(0, Math.round(100 - (weighted / (total * 10)) * 100));
-    return score;
-  }, [product.severityBreakdown]);
+  const healthScore = useMemo(
+    () => calculateHealthScore(product.severityBreakdown),
+    [product.severityBreakdown]
+  );
 
   const scoreColor = useMemo(() => {
     if (healthScore >= 80) return theme.palette.success.main;
@@ -65,7 +55,8 @@ const ProductGridCard = memo(({ product, onOpen, onViewFindings, onUploadScan }:
     ? Math.floor((Date.now() - lastScanDate.getTime()) / (1000 * 60 * 60 * 24))
     : null;
   const isSlaRisk = daysSinceScan !== null && daysSinceScan > 30;
-  const isFreshScan = daysSinceScan !== null && daysSinceScan <= 1;
+  const latestScan = product.recentScans?.[0];
+  const newFindingsCount = latestScan?.findingsNew ?? 0;
 
   const criticalCount = product.severityBreakdown?.critical ?? 0;
   const highCount = product.severityBreakdown?.high ?? 0;
@@ -182,18 +173,21 @@ const ProductGridCard = memo(({ product, onOpen, onViewFindings, onUploadScan }:
           <StatusBadge type="severity" value="high" label={`${highCount} high`} compact />
         )}
         {isSlaRisk && <Chip label="SLA risk" size="small" color="warning" variant="outlined" />}
-        {isFreshScan && (
+        {newFindingsCount > 0 && (
           <Chip
-            label="new scan"
+            label={`${newFindingsCount} new`}
             size="small"
             sx={{
-              bgcolor: alpha(theme.palette.success.main, 0.15),
-              color: theme.palette.success.light,
-              border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
+              bgcolor: alpha(theme.palette.info.main, 0.15),
+              color: theme.palette.info.light,
+              border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
             }}
           />
         )}
-        {!isSlaRisk && !isFreshScan && criticalCount === 0 && highCount === 0 && (
+        {newFindingsCount === 0 && latestScan && (
+          <Chip label="No new findings" size="small" variant="outlined" />
+        )}
+        {!isSlaRisk && !latestScan && criticalCount === 0 && highCount === 0 && (
           <Chip label="stable" size="small" variant="outlined" />
         )}
       </Stack>

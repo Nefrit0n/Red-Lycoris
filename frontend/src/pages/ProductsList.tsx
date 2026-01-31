@@ -22,12 +22,14 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { differenceInDays, differenceInHours, differenceInMinutes } from "date-fns";
 import { fetchProductsWithStats } from "../api/products";
 import PaginationControl from "../components/PaginationControl";
 import ProductGridCard from "../components/ProductGridCard";
 import ProductKpiRow from "../components/ProductKpiRow";
 import ProductListRow from "../components/ProductListRow";
 import { ProductWithStats } from "../types/products";
+import { calculateHealthScore } from "../utils/productHealth";
 
 const VIEW_MODE_KEY = "productsViewMode";
 
@@ -101,6 +103,16 @@ const ProductsList = () => {
     navigate("/scans/upload");
   };
 
+  const formatLastScanActivity = (date: Date) => {
+    const minutes = differenceInMinutes(new Date(), date);
+    if (minutes < 1) return "Updated just now";
+    if (minutes < 60) return `Updated ${minutes} min ago`;
+    const hours = differenceInHours(new Date(), date);
+    if (hours < 24) return `Updated ${hours}h ago`;
+    const days = differenceInDays(new Date(), date);
+    return `Updated ${days}d ago`;
+  };
+
   const filteredData = useMemo(() => {
     if (!search.trim()) return data;
     const query = search.toLowerCase();
@@ -112,7 +124,7 @@ const ProductsList = () => {
   }, [data, search]);
 
   const metrics = useMemo(() => {
-    if (loading || total === 0) {
+    if (loading || data.length === 0) {
       return {
         totalProducts: total > 0 ? total : null,
         productsAtRisk: null,
@@ -124,8 +136,9 @@ const ProductsList = () => {
     const openFindings = data.reduce((acc, item) => acc + (item.findingsOpenCount || 0), 0);
     const productsAtRisk = data.filter((item) => {
       const breakdown = item.severityBreakdown;
-      if (!breakdown) return false;
-      return breakdown.critical + breakdown.high > 0;
+      const hasHighCritical = (breakdown?.critical ?? 0) + (breakdown?.high ?? 0) > 0;
+      const healthScore = calculateHealthScore(breakdown);
+      return hasHighCritical || healthScore < 80;
     }).length;
 
     const lastScan = data
@@ -133,16 +146,7 @@ const ProductsList = () => {
       .filter((date): date is Date => Boolean(date))
       .sort((a, b) => b.getTime() - a.getTime())[0];
 
-    const lastScanLabel = lastScan
-      ? (() => {
-          const diffMs = Date.now() - lastScan.getTime();
-          const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-          if (diffHours < 1) return "Updated just now";
-          if (diffHours < 24) return `Updated ${diffHours}h ago`;
-          const diffDays = Math.floor(diffHours / 24);
-          return `Updated ${diffDays}d ago`;
-        })()
-      : "No recent scans";
+    const lastScanLabel = lastScan ? formatLastScanActivity(lastScan) : "No recent scans";
 
     return {
       totalProducts: total > 0 ? total : data.length,
