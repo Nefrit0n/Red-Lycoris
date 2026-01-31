@@ -256,7 +256,12 @@ func RefreshSbomTransitiveExposure(ctx context.Context, db *sql.DB, sbomID uuid.
 			0 AS depth,
 			ARRAY[sco.component_id] AS path
 		FROM sbom_component_occurrences sco
-		WHERE sco.sbom_id = $1 AND sco.direct = true
+		WHERE sco.sbom_id = $1
+			AND (sco.direct = true OR NOT EXISTS (
+				SELECT 1
+				FROM sbom_component_occurrences
+				WHERE sbom_id = $1 AND direct = true
+			))
 		UNION ALL
 		SELECT w.root_component_id,
 			e.to_component_id,
