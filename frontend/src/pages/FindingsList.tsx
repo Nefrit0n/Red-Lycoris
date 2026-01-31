@@ -372,11 +372,10 @@ const FindingsList = () => {
             onPageChange={(nextPage) => {
               if (nextPage > filters.page && !hasNextPage) return;
               actions.setPage(nextPage);
-              if (!bulk.selectAllMatching) bulk.setSelectedIds([]);
             }}
             onPageSizeChange={(v) => {
               actions.setPageSize(v);
-              if (!bulk.selectAllMatching) bulk.setSelectedIds([]);
+              bulk.handleClearSelection();
             }}
           />
         </Box>
