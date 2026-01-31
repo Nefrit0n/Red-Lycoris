@@ -40,6 +40,8 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
   const lastRequestKeyRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
   const cooldownUntilRef = useRef(0);
+  const retryTimeoutRef = useRef<number | null>(null);
+  const retryAttemptsRef = useRef(0);
 
   const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
   const isUuid = (value: string) =>
@@ -99,6 +101,10 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
 
       const isAutoRequest = Boolean(signal);
 
+      if (lastRequestKeyRef.current !== requestKey) {
+        retryAttemptsRef.current = 0;
+      }
+
       if (inFlightRef.current && lastRequestKeyRef.current === requestKey) {
         return;
       }
@@ -120,6 +126,10 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       inFlightRef.current = true;
 
       try {
+        if (retryTimeoutRef.current) {
+          window.clearTimeout(retryTimeoutRef.current);
+          retryTimeoutRef.current = null;
+        }
         const now = Date.now();
         const waitMs = cooldownUntilRef.current - now;
         if (waitMs > 0) {
@@ -146,15 +156,32 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
           let errorMessage = 'Не удалось загрузить данные. Попробуйте позже.';
-          if (err instanceof ApiError && err.status === 503) {
-            cooldownUntilRef.current = Date.now() + 800;
+          if (err instanceof ApiError && (err.status === 429 || err.status === 503)) {
+            const jitterMs = 300 + Math.floor(Math.random() * 500);
+            cooldownUntilRef.current = Date.now() + jitterMs;
+            errorMessage =
+              err.status === 429
+                ? "Слишком много запросов, повторяем..."
+                : "Сервис перегружен, повторяем...";
+            if (retryAttemptsRef.current < 2 && !signal?.aborted) {
+              retryAttemptsRef.current += 1;
+              retryTimeoutRef.current = window.setTimeout(() => {
+                fetchData();
+              }, jitterMs);
+            }
           }
-          if (err instanceof ApiError && err.message) {
+          if (
+            err instanceof ApiError &&
+            err.message &&
+            !(err.status === 429 || err.status === 503)
+          ) {
             errorMessage = err.message;
           }
           setError(errorMessage);
-          setData([]);
-          setNextCursor(null);
+          if (!(err instanceof ApiError && (err.status === 429 || err.status === 503))) {
+            setData([]);
+            setNextCursor(null);
+          }
         }
       } finally {
         inFlightRef.current = false;
@@ -189,6 +216,14 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     fetchData(controller.signal);
     return () => controller.abort();
   }, [fetchData, hydrated]);
+
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        window.clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleRetry = useCallback(() => {
     lastRequestKeyRef.current = null;

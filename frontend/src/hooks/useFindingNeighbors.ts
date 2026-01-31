@@ -7,6 +7,7 @@ import { buildFindingLink } from "../utils/findingFormatters";
 interface UseFindingNeighborsOptions {
   findingId: string;
   returnToProp?: string | null;
+  enabled?: boolean;
 }
 
 interface UseFindingNeighborsResult {
@@ -28,6 +29,7 @@ interface UseFindingNeighborsResult {
 export function useFindingNeighbors({
   findingId,
   returnToProp,
+  enabled = true,
 }: UseFindingNeighborsOptions): UseFindingNeighborsResult {
   const location = useLocation();
   const navigate = useNavigate();
@@ -63,7 +65,7 @@ export function useFindingNeighbors({
 
   // Fetch neighbors
   useEffect(() => {
-    if (!returnToUrl) {
+    if (!enabled || !returnToUrl) {
       setNeighbors(null);
       return;
     }
@@ -84,7 +86,7 @@ export function useFindingNeighbors({
     };
 
     load();
-  }, [findingId, returnToQuery, returnToUrl]);
+  }, [enabled, findingId, returnToQuery, returnToUrl]);
 
   const handleBackToResults = useCallback(() => {
     if (!returnToUrl) return;
