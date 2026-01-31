@@ -153,6 +153,7 @@ export const FindingDetailContent = ({
   const navigation = useFindingNeighbors({
     findingId: id,
     returnToProp,
+    enabled: !loading,
   });
 
   // Keyboard navigation (j/k for next/prev)
