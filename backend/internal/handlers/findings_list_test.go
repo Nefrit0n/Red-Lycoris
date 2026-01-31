@@ -139,11 +139,25 @@ func TestFindingsListDefaultsToCanonical(t *testing.T) {
 	if _, ok := response["success"]; !ok {
 		t.Fatalf("expected success response")
 	}
+	if _, ok := response["data"]; !ok {
+		t.Fatalf("expected success response")
+	}
+	if _, ok := response["meta"]; !ok {
+		t.Fatalf("expected meta response")
+	}
 	if _, ok := response["total"]; ok {
 		t.Fatalf("expected total to be omitted when includeMeta is false")
 	}
-	if _, ok := response["data"]; !ok {
-		t.Fatalf("expected success response")
+
+	var meta map[string]json.RawMessage
+	if err := json.Unmarshal(response["meta"], &meta); err != nil {
+		t.Fatalf("decode meta failed: %v", err)
+	}
+	if _, ok := meta["hasNext"]; !ok {
+		t.Fatalf("expected hasNext in meta response")
+	}
+	if _, ok := meta["total"]; ok {
+		t.Fatalf("expected total to be omitted from meta when includeMeta is false")
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

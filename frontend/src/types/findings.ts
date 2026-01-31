@@ -57,8 +57,9 @@ export interface FindingListItemDTO {
 export interface FindingsListResponse {
   data: FindingListItemDTO[];
   total?: number;
-  nextCursor?: string;
   meta?: {
+    hasNext?: boolean;
+    total?: number;
     severityCounts?: Record<string, number>;
     statusCounts?: Record<string, number>;
   };
@@ -67,7 +68,6 @@ export interface FindingsListResponse {
 export interface FetchFindingsParams {
   limit: number;
   offset?: number;
-  cursor?: string;
   includeMeta?: boolean;
   filterProduct?: string;
   filterProductId?: string;
