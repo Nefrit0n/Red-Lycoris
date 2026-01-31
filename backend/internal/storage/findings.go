@@ -587,9 +587,9 @@ func GetFindingByID(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*mode
 	return &finding, nil
 }
 
-func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, cursor *FindingListCursor, useCursor bool, includeTotal bool) ([]FindingListItem, *int, *FindingListCursor, error) {
+func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, cursor *FindingListCursor, useCursor bool, includeTotal bool) ([]FindingListItem, *int, *FindingListCursor, bool, error) {
 	if filters.TenantID == nil {
-		return nil, nil, nil, fmt.Errorf("tenant_id is required for listing findings")
+		return nil, nil, nil, false, fmt.Errorf("tenant_id is required for listing findings")
 	}
 
 	if filters.Limit <= 0 {
@@ -604,7 +604,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 
 	sortField, err := NormalizeFindingSortField(filters.SortField)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 	sortOrder := NormalizeFindingSortOrder(filters.SortOrder)
 
@@ -615,7 +615,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 		countQuery := fmt.Sprintf(`SELECT COUNT(*) %s WHERE %s`, findingBaseJoins, findingFilterWhereClause)
 		var count int
 		if err := db.QueryRowContext(ctx, countQuery, argsBase...).Scan(&count); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, false, err
 		}
 		total = &count
 	}
@@ -648,7 +648,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 	var query string
 	sortConfig, err := findingSortConfigFor(sortField)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	if useCursor {
@@ -668,6 +668,7 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 		args = append(args, limitValue)
 	} else {
 		orderBy := findingSortOrderBy(sortConfig, sortOrder)
+		limitValue := filters.Limit + 1
 		query = fmt.Sprintf(`%s %s WHERE %s %s LIMIT $%d OFFSET $%d`,
 			fmt.Sprintf(selectFields, findingSortExpr(sortConfig, sortOrder)),
 			findingListJoins,
@@ -675,18 +676,19 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 			orderBy,
 			argIndex,
 			argIndex+1)
-		args = append(args, filters.Limit, filters.Offset)
+		args = append(args, limitValue, filters.Offset)
 	}
 
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 	defer rows.Close()
 
 	items := []FindingListItem{}
 	sortKeys := []any{}
 	var nextCursor *FindingListCursor
+	hasNext := false
 	for rows.Next() {
 		var item FindingListItem
 		sortKeyDest := findingCursorKeyDestination(sortConfig.ValueType)
@@ -734,25 +736,27 @@ func ListFindings(ctx context.Context, db *sql.DB, filters FindingFilters, curso
 			pq.Array(&item.OWASP),
 			sortKeyDest,
 		); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, false, err
 		}
 		items = append(items, item)
 		sortKeys = append(sortKeys, findCursorValueFromDestination(sortKeyDest))
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
-	if useCursor && len(items) > filters.Limit {
+	if len(items) > filters.Limit {
+		hasNext = true
 		items = items[:filters.Limit]
 		sortKeys = sortKeys[:filters.Limit]
-		lastIndex := len(items) - 1
-		nextCursor = &FindingListCursor{SortValue: sortKeys[lastIndex], ID: items[lastIndex].ID}
-	} else {
-		nextCursor = nil
 	}
 
-	return items, total, nextCursor, nil
+	if useCursor && hasNext {
+		lastIndex := len(items) - 1
+		nextCursor = &FindingListCursor{SortValue: sortKeys[lastIndex], ID: items[lastIndex].ID}
+	}
+
+	return items, total, nextCursor, hasNext, nil
 }
 
 func GetFindingNeighbors(ctx context.Context, db *sql.DB, currentID uuid.UUID, filters FindingFilters) (FindingNeighborsResult, error) {
