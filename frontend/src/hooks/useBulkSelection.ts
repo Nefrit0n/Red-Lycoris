@@ -72,9 +72,11 @@ export function useBulkSelection({
     setSelectedIds([]);
     setSelectAllMatching(false);
   }, [
+    filters.pageSize,
     filters.productId,
     filters.filterSeverity,
     filters.filterStatus,
+    filters.filterRiskBand,
     filters.filterOccurrence,
     filters.filterScannerType,
     filters.filterPolicyDecision,
@@ -96,13 +98,19 @@ export function useBulkSelection({
 
   const handleToggleAll = useCallback(
     (checked: boolean) => {
+      const pageIds = data.map((item) => item.id);
+      const pageIdSet = new Set(pageIds);
       if (!checked) {
-        setSelectedIds([]);
+        setSelectedIds((prev) => prev.filter((id) => !pageIdSet.has(id)));
         setSelectAllMatching(false);
         return;
       }
       setSelectAllMatching(false);
-      setSelectedIds(data.map((item) => item.id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id) => next.add(id));
+        return Array.from(next);
+      });
     },
     [data]
   );

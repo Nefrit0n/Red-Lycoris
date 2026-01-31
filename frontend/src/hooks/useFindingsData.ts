@@ -32,11 +32,10 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
   const [data, setData] = useState<FindingListItemDTO[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [totalKnown, setTotalKnown] = useState(false);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [cursorsByPage, setCursorsByPage] = useState<Record<number, string>>({});
   const lastRequestKeyRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
   const cooldownUntilRef = useRef(0);
@@ -68,18 +67,16 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
   ].join("|");
 
   useEffect(() => {
-    setCursorsByPage({});
-    setNextCursor(null);
+    setHasNextPage(false);
     setTotal(null);
     setTotalKnown(false);
   }, [filterKey]);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
-      const cursor = filters.page === 0 ? undefined : cursorsByPage[filters.page - 1];
       const params = {
         limit: filters.pageSize,
-        cursor,
+        offset: filters.page * filters.pageSize,
         filterProductId: productIsUuid ? filters.productId : undefined,
         filterProduct: productIsUuid ? undefined : filters.productId,
         filterSeverity: filters.filterSeverity,
@@ -113,13 +110,6 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
         return;
       }
 
-      if (filters.page > 0 && !cursor) {
-        setError("Недоступна следующая страница. Обновите список.");
-        setData([]);
-        setLoading(false);
-        return;
-      }
-
       lastRequestKeyRef.current = requestKey;
       setLoading(true);
       setError(null);
@@ -141,13 +131,10 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
 
         if (!response || !Array.isArray(response.data)) {
           setData([]);
-          setNextCursor(null);
+          setHasNextPage(false);
         } else {
           setData(response.data);
-          setNextCursor(response.nextCursor ?? null);
-          if (response.nextCursor) {
-            setCursorsByPage((prev) => ({ ...prev, [filters.page]: response.nextCursor! }));
-          }
+          setHasNextPage(Boolean(response.meta?.hasNext));
           if (typeof response.total === "number") {
             setTotal(response.total);
             setTotalKnown(true);
@@ -180,7 +167,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
           setError(errorMessage);
           if (!(err instanceof ApiError && (err.status === 429 || err.status === 503))) {
             setData([]);
-            setNextCursor(null);
+            setHasNextPage(false);
           }
         }
       } finally {
@@ -205,7 +192,6 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
       filters.sortField,
       filters.sortOrder,
       debouncedSearch,
-      cursorsByPage,
       productIsUuid,
     ]
   );
@@ -235,11 +221,10 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     setStatsLoading(true);
     setError(null);
     try {
-      const cursor = filters.page === 0 ? undefined : cursorsByPage[filters.page - 1];
       const response = await fetchFindings(
         {
           limit: filters.pageSize,
-          cursor,
+          offset: filters.page * filters.pageSize,
           includeMeta: true,
           filterProductId: productIsUuid ? filters.productId : undefined,
           filterProduct: productIsUuid ? undefined : filters.productId,
@@ -287,16 +272,15 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     filters.importJobId,
     filters.sortField,
     filters.sortOrder,
-      debouncedSearch,
-      cursorsByPage,
-      productIsUuid,
-    ]);
+    debouncedSearch,
+    productIsUuid,
+  ]);
 
   return {
     data,
     total,
     totalKnown,
-    hasNextPage: Boolean(nextCursor),
+    hasNextPage,
     loading,
     error,
     statsLoading,
