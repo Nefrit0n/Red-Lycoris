@@ -250,18 +250,20 @@ func RefreshSbomTransitiveExposure(ctx context.Context, db *sql.DB, sbomID uuid.
 		return fmt.Errorf("delete sbom transitive exposure failed: %w", err)
 	}
 
-	query := `WITH RECURSIVE walk AS (
+	query := `WITH RECURSIVE direct_components AS (
+		SELECT 1
+		FROM sbom_component_occurrences
+		WHERE sbom_id = $1
+			AND direct = true
+		LIMIT 1
+	), walk AS (
 		SELECT sco.component_id AS root_component_id,
 			sco.component_id AS component_id,
 			0 AS depth,
 			ARRAY[sco.component_id] AS path
 		FROM sbom_component_occurrences sco
 		WHERE sco.sbom_id = $1
-			AND (sco.direct = true OR NOT EXISTS (
-				SELECT 1
-				FROM sbom_component_occurrences
-				WHERE sbom_id = $1 AND direct = true
-			))
+			AND (sco.direct = true OR NOT EXISTS (SELECT 1 FROM direct_components))
 		UNION ALL
 		SELECT w.root_component_id,
 			e.to_component_id,
