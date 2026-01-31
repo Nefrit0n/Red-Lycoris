@@ -5,17 +5,17 @@ import {
   Chip,
   CircularProgress,
   Container,
-  Divider,
   FormControlLabel,
   Grid,
   MenuItem,
-  Paper,
   Stack,
   Switch,
   Tab,
   Tabs,
   TextField,
   Typography,
+  alpha,
+  useTheme,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import BugReportIcon from "@mui/icons-material/BugReport";
@@ -25,7 +25,7 @@ import ScheduleIcon from "@mui/icons-material/Schedule";
 import SecurityIcon from "@mui/icons-material/Security";
 import WarningIcon from "@mui/icons-material/Warning";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   PieChart,
   Pie,
@@ -39,7 +39,8 @@ import {
 } from "recharts";
 import { fetchProductDetail } from "../api/products";
 import { downloadSbom, listProductComponents, listSboms, uploadSbom, listSbomTransitiveExposure } from "../api/sbom";
-import { Section } from "../components/Section";
+import { ChartContainer, ChartTooltip, GlassCard, MetricDisplay } from "../design-system/components";
+import { tableStyles } from "../design-system/utils/tableStyles";
 import { ProductDetail as ProductDetailType } from "../types/products";
 import {
   SbomComponentItem,
@@ -48,14 +49,16 @@ import {
   SbomTransitiveExposureItem,
   SbomTransitiveStatus,
 } from "../types/sbom";
+import { semantic } from "../design-system/tokens";
+import { calculateHealthScore } from "../utils/productHealth";
 
 
 const SEVERITY_COLORS = {
-  critical: "#f44336",
-  high: "#ff9800",
-  medium: "#ffeb3b",
-  low: "#4caf50",
-  info: "#2196f3",
+  critical: semantic.severity.critical.base,
+  high: semantic.severity.high.base,
+  medium: semantic.severity.medium.base,
+  low: semantic.severity.low.base,
+  info: semantic.severity.info.base,
 };
 
 const STATUS_ICONS: Record<string, React.ReactElement> = {
@@ -64,156 +67,31 @@ const STATUS_ICONS: Record<string, React.ReactElement> = {
   processing: <ScheduleIcon sx={{ color: "warning.main" }} />,
 };
 
-const calculateHealthScore = (breakdown?: ProductDetailType["severityBreakdown"]): number => {
-  if (!breakdown) return 100;
-  const total =
-    breakdown.critical + breakdown.high + breakdown.medium + breakdown.low + breakdown.info;
-  if (total === 0) return 100;
-  const weightedSum =
-    breakdown.critical * 10 +
-    breakdown.high * 5 +
-    breakdown.medium * 2 +
-    breakdown.low * 1 +
-    breakdown.info * 0.5;
-  const maxPenalty = total * 10;
-  return Math.max(0, Math.round(100 - (weightedSum / maxPenalty) * 100));
-};
+const formatScanDate = (date: string) =>
+  new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(date));
 
-const getHealthColor = (score: number): string => {
-  if (score >= 80) return "#4caf50";
-  if (score >= 60) return "#8bc34a";
-  if (score >= 40) return "#ffeb3b";
-  if (score >= 20) return "#ff9800";
-  return "#f44336";
-};
-
-interface MetricCardProps {
-  title: string;
-  value: number | string;
-  icon: React.ReactElement;
-  color?: string;
-}
-
-const MetricCard = ({ title, value, icon, color }: MetricCardProps) => (
-  <Paper
-    elevation={0}
-    sx={{
-      p: 2,
-      border: "1px solid",
-      borderColor: "divider",
-      borderRadius: 2,
-      display: "flex",
-      alignItems: "center",
-      gap: 2,
-    }}
-  >
-    <Box
-      sx={{
-        width: 48,
-        height: 48,
-        borderRadius: 2,
-        bgcolor: color ? `${color}20` : "action.hover",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: color || "text.secondary",
-      }}
-    >
-      {icon}
-    </Box>
-    <Box>
-      <Typography variant="h5" fontWeight={600}>
-        {value}
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        {title}
-      </Typography>
-    </Box>
-  </Paper>
-);
-
-const SeverityPieChart = ({ breakdown }: { breakdown?: ProductDetailType["severityBreakdown"] }) => {
-  if (!breakdown) return null;
-
-  const data = [
+const buildSeverityData = (breakdown?: ProductDetailType["severityBreakdown"]) => {
+  if (!breakdown) return [];
+  return [
     { name: "Critical", value: breakdown.critical, color: SEVERITY_COLORS.critical },
     { name: "High", value: breakdown.high, color: SEVERITY_COLORS.high },
     { name: "Medium", value: breakdown.medium, color: SEVERITY_COLORS.medium },
     { name: "Low", value: breakdown.low, color: SEVERITY_COLORS.low },
     { name: "Info", value: breakdown.info, color: SEVERITY_COLORS.info },
-  ].filter((d) => d.value > 0);
-
-  const total = data.reduce((sum, d) => sum + d.value, 0);
-
-  if (total === 0) {
-    return (
-      <Box sx={{ textAlign: "center", py: 4 }}>
-        <SecurityIcon sx={{ fontSize: 48, color: "success.main", mb: 1 }} />
-        <Typography color="text.secondary">Нет открытых находок</Typography>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ height: 200 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            cx="50%"
-            cy="50%"
-            innerRadius={50}
-            outerRadius={80}
-            paddingAngle={2}
-            label={({ name, value }) => `${name}: ${value}`}
-            labelLine={false}
-          >
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
-            ))}
-          </Pie>
-          <RechartsTooltip />
-        </PieChart>
-      </ResponsiveContainer>
-    </Box>
-  );
-};
-
-const SeverityBarChart = ({ breakdown }: { breakdown?: ProductDetailType["severityBreakdown"] }) => {
-  if (!breakdown) return null;
-
-  const data = [
-    { name: "Critical", value: breakdown.critical, fill: SEVERITY_COLORS.critical },
-    { name: "High", value: breakdown.high, fill: SEVERITY_COLORS.high },
-    { name: "Medium", value: breakdown.medium, fill: SEVERITY_COLORS.medium },
-    { name: "Low", value: breakdown.low, fill: SEVERITY_COLORS.low },
-    { name: "Info", value: breakdown.info, fill: SEVERITY_COLORS.info },
   ];
-
-  return (
-    <Box sx={{ height: 200 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical" margin={{ left: 60 }}>
-          <XAxis type="number" />
-          <YAxis type="category" dataKey="name" width={60} />
-          <RechartsTooltip />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.fill} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </Box>
-  );
 };
 
 const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans"] }) => {
   if (!scans || scans.length === 0) {
     return (
       <Typography color="text.secondary" sx={{ py: 2 }}>
-        Нет данных о сканах.
+        No scans available.
       </Typography>
     );
   }
@@ -228,8 +106,10 @@ const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans
             alignItems: "center",
             gap: 2,
             p: 1.5,
-            borderRadius: 1.5,
-            bgcolor: "action.hover",
+            borderRadius: 2,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: "background.paper",
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center" }}>
@@ -240,15 +120,15 @@ const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans
               {scan.scanner}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {new Date(scan.createdAt).toLocaleString("ru-RU")}
+              {formatScanDate(scan.createdAt)}
             </Typography>
           </Box>
-          <Chip
-            label={`${scan.findingsNew} новых`}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: "0.7rem" }}
-          />
+          {scan.findingsNew > 0 && (
+            <Chip label={`${scan.findingsNew} new`} size="small" color="info" variant="outlined" />
+          )}
+          {scan.findingsNew === 0 && (
+            <Chip label="No new findings" size="small" variant="outlined" />
+          )}
         </Box>
       ))}
     </Stack>
@@ -311,6 +191,7 @@ const formatTransitiveStatus = (
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const theme = useTheme();
   const [data, setData] = useState<ProductDetailType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -531,158 +412,247 @@ const ProductDetailPage = () => {
   }
 
   const healthScore = calculateHealthScore(data.severityBreakdown);
-  const healthColor = getHealthColor(healthScore);
+  const healthColor =
+    healthScore >= 80
+      ? theme.palette.success.main
+      : healthScore >= 60
+        ? theme.palette.info.main
+        : healthScore >= 40
+          ? theme.palette.warning.main
+          : theme.palette.error.main;
   const totalOpenFindings = data.findingsOpenCount;
+  const criticalHighCount =
+    (data.severityBreakdown?.critical || 0) + (data.severityBreakdown?.high || 0);
+  const severityData = buildSeverityData(data.severityBreakdown);
+  const pieData = severityData.filter((item) => item.value > 0);
+  const hasSeverityData = severityData.some((item) => item.value > 0);
+  const latestScan = data.recentScans?.[0];
   const statusChip = formatIndexStatus(indexStatus);
   const transitiveChip = formatTransitiveStatus(transitiveStatus);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box sx={{ mb: 3 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/products")}
-          sx={{ mb: 1 }}
-        >
-          Назад к продуктам
-        </Button>
+    <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
+      <Stack spacing={4}>
+        <Stack spacing={1}>
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate("/products")}
+            sx={{ alignSelf: "flex-start" }}
+          >
+            Back to products
+          </Button>
 
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-          <Box>
-            <Typography variant="h4" component="h1" fontWeight={600}>
-              {data.name}
-            </Typography>
-            {data.identifier && (
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", md: "center" }}
+          >
+            <Box>
+              <Typography variant="h4" component="h1" fontWeight={700}>
+                {data.name}
+              </Typography>
               <Typography variant="body1" color="text.secondary">
-                {data.identifier}
+                {data.identifier || "No repository linked"}
                 {data.version && ` • v${data.version}`}
               </Typography>
-            )}
-          </Box>
-
-          <Chip
-            label={`Health: ${healthScore}%`}
-            sx={{
-              bgcolor: healthColor,
-              color: healthScore >= 40 && healthScore < 80 ? "rgba(0,0,0,0.87)" : "white",
-              fontWeight: 700,
-              fontSize: "0.875rem",
-              px: 1,
-            }}
-          />
+            </Box>
+            <Chip
+              label={`Health: ${healthScore}%`}
+              sx={{
+                bgcolor: alpha(healthColor, 0.2),
+                color: healthColor,
+                border: `1px solid ${alpha(healthColor, 0.4)}`,
+                fontWeight: 700,
+              }}
+            />
+          </Stack>
         </Stack>
-      </Box>
 
-      {/* Metrics Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricCard
-            title="Открытые находки"
-            value={totalOpenFindings}
-            icon={<BugReportIcon />}
-            color={totalOpenFindings > 0 ? "#ff9800" : "#4caf50"}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricCard
-            title="Critical/High"
-            value={
-              (data.severityBreakdown?.critical || 0) + (data.severityBreakdown?.high || 0)
-            }
-            icon={<WarningIcon />}
-            color="#f44336"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricCard
-            title="Исправлено"
-            value={data.findingsFixedCount || 0}
-            icon={<CheckCircleIcon />}
-            color="#4caf50"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricCard
-            title="False Positives"
-            value={data.findingsFalsePositiveCount || 0}
-            icon={<SecurityIcon />}
-            color="#9e9e9e"
-          />
-        </Grid>
-      </Grid>
+        <Box>
+          <Typography variant="overline" color="text.secondary">
+            Overview
+          </Typography>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+                lg: "repeat(4, minmax(0, 1fr))",
+              },
+              gap: 2,
+            }}
+          >
+            <MetricDisplay
+              title="Open findings"
+              value={totalOpenFindings}
+              size="small"
+              variant="subtle"
+              color="warning"
+              icon={<BugReportIcon />}
+            />
+            <MetricDisplay
+              title="Critical / High"
+              value={criticalHighCount}
+              size="small"
+              variant="subtle"
+              color="error"
+              icon={<WarningIcon />}
+            />
+            <MetricDisplay
+              title="Fixed"
+              value={data.findingsFixedCount || 0}
+              size="small"
+              variant="subtle"
+              color="success"
+              icon={<CheckCircleIcon />}
+            />
+            <MetricDisplay
+              title="False positives"
+              value={data.findingsFalsePositiveCount || 0}
+              size="small"
+              variant="subtle"
+              color="default"
+              icon={<SecurityIcon />}
+            />
+          </Box>
+        </Box>
 
-      {/* Charts Section */}
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Section title="Распределение по Severity">
-            <SeverityPieChart breakdown={data.severityBreakdown} />
-          </Section>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <ChartContainer
+              title="Severity distribution"
+              subtitle="Open findings breakdown"
+              height={240}
+              loadingVariant="pie"
+              hasData={hasSeverityData}
+              emptyMessage="No open findings"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    strokeWidth={0}
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`pie-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip content={<ChartTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </Grid>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <ChartContainer
+              title="Severity breakdown"
+              subtitle="Distribution by severity tier"
+              height={240}
+              loadingVariant="bar"
+              hasData={hasSeverityData}
+              emptyMessage="No open findings"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={severityData} layout="vertical" margin={{ left: 40, right: 24 }}>
+                  <XAxis type="number" tick={{ fill: theme.palette.text.secondary }} axisLine={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={80}
+                    tick={{ fill: theme.palette.text.secondary }}
+                    axisLine={false}
+                  />
+                  <RechartsTooltip content={<ChartTooltip />} />
+                  <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                    {severityData.map((entry, index) => (
+                      <Cell key={`bar-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </Grid>
         </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Section title="Breakdown по Severity">
-            <SeverityBarChart breakdown={data.severityBreakdown} />
-          </Section>
-        </Grid>
-      </Grid>
 
-      {/* Recent Scans and Actions */}
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Section title="Последние сканы">
-            <RecentScansTimeline scans={data.recentScans} />
-          </Section>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <GlassCard variant="subtle" padding="comfortable">
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="h6">Recent scans</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Latest activity from import jobs.
+                  </Typography>
+                </Box>
+                <RecentScansTimeline scans={data.recentScans} />
+                {latestScan && (
+                  <Typography variant="caption" color="text.secondary">
+                    Latest scan: {formatScanDate(latestScan.createdAt)}
+                  </Typography>
+                )}
+              </Stack>
+            </GlassCard>
+          </Grid>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <GlassCard variant="subtle" padding="comfortable">
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="h6">Actions</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Focus on the most urgent findings.
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  onClick={() =>
+                    navigate({
+                      pathname: "/findings",
+                      search: `?productId=${id}`,
+                    })
+                  }
+                >
+                  View all findings ({totalOpenFindings})
+                </Button>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() =>
+                    navigate({
+                      pathname: "/findings",
+                      search: `?productId=${id}&severity=critical,high`,
+                    })
+                  }
+                >
+                  Only Critical / High
+                </Button>
+                <Button variant="outlined" fullWidth onClick={() => navigate("/scans/upload")}>
+                  Upload scan
+                </Button>
+              </Stack>
+            </GlassCard>
+          </Grid>
         </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Section title="Действия">
-            <Stack spacing={2}>
-              <Button
-                variant="contained"
-                fullWidth
-                onClick={() =>
-                  navigate({
-                    pathname: "/findings",
-                    search: `?productId=${id}`,
-                  })
-                }
-              >
-                Просмотреть все находки ({totalOpenFindings})
-              </Button>
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={() =>
-                  navigate({
-                    pathname: "/findings",
-                    search: `?productId=${id}&severity=critical,high`,
-                  })
-                }
-              >
-                Только Critical/High
-              </Button>
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={() =>
-                  navigate({
-                    pathname: "/analysis",
-                  })
-                }
-              >
-                Запустить новый скан
-              </Button>
-            </Stack>
-          </Section>
-        </Grid>
-      </Grid>
 
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid size={12}>
-          <Section title="SBOM & Components">
+        <GlassCard variant="subtle" padding="comfortable">
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="h6">SBOM & Components</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Manage SBOMs, indexed components, and transitive exposure.
+              </Typography>
+            </Box>
             <Tabs
               value={tabIndex}
               onChange={(_, value) => setTabIndex(value)}
-              sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}
+              sx={{ borderBottom: 1, borderColor: "divider" }}
             >
               <Tab label="SBOM" />
               <Tab label="Components" />
@@ -691,11 +661,11 @@ const ProductDetailPage = () => {
             {tabIndex === 0 && (
               <Stack spacing={2}>
                 <Typography variant="body2" color="text.secondary">
-                  Поддерживаемые форматы: CycloneDX, SPDX, SPDX JSON.
+                  Supported formats: CycloneDX, SPDX, SPDX JSON.
                 </Typography>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
                   <Button variant="contained" component="label" disabled={sbomUploading}>
-                    {sbomUploading ? "Загрузка..." : "Загрузить SBOM"}
+                    {sbomUploading ? "Uploading..." : "Upload SBOM"}
                     <input
                       type="file"
                       hidden
@@ -709,7 +679,7 @@ const ProductDetailPage = () => {
                     />
                   </Button>
                   <Button variant="outlined" onClick={fetchSboms} disabled={sbomLoading}>
-                    Обновить список
+                    Refresh list
                   </Button>
                 </Stack>
                 {sbomUploadError && <Alert severity="error">{sbomUploadError}</Alert>}
@@ -720,21 +690,21 @@ const ProductDetailPage = () => {
                   </Box>
                 ) : sboms.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
-                    SBOM пока не загружены.
+                    No SBOM uploads yet.
                   </Typography>
                 ) : (
                   <Box sx={{ overflowX: "auto" }}>
                     <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
                       <Box component="thead">
-                        <Box component="tr" sx={{ textAlign: "left" }}>
+                        <Box component="tr">
                           {[
-                            "Файл",
-                            "Формат",
-                            "Размер",
+                            "File",
+                            "Format",
+                            "Size",
                             "SHA256",
                             "Indexed",
-                            "Компоненты",
-                            "Дата",
+                            "Components",
+                            "Created",
                             "",
                           ].map((label) => (
                             <Box
@@ -744,7 +714,9 @@ const ProductDetailPage = () => {
                                 fontWeight: 600,
                                 fontSize: 12,
                                 padding: "10px 8px",
-                                borderBottom: "1px solid rgba(0,0,0,0.08)",
+                                color: tableStyles.headerText,
+                                borderBottom: `1px solid ${tableStyles.cellBorder}`,
+                                background: tableStyles.headerBg,
                               }}
                             >
                               {label}
@@ -786,7 +758,7 @@ const ProductDetailPage = () => {
                               {item.componentCount ?? 0}
                             </Box>
                             <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                              {item.createdAt ? new Date(item.createdAt).toLocaleString("ru-RU") : "—"}
+                              {item.createdAt ? formatScanDate(item.createdAt) : "—"}
                             </Box>
                             <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
                               <Button
@@ -794,7 +766,7 @@ const ProductDetailPage = () => {
                                 variant="outlined"
                                 onClick={() => handleSbomDownload(item)}
                               >
-                                Скачать
+                                Download
                               </Button>
                             </Box>
                           </Box>
@@ -858,7 +830,7 @@ const ProductDetailPage = () => {
                     label="Direct only"
                   />
                   <Button variant="outlined" onClick={fetchComponents} disabled={componentsLoading}>
-                    Обновить
+                    Refresh
                   </Button>
                 </Stack>
                 {componentsError && <Alert severity="error">{componentsError}</Alert>}
@@ -868,13 +840,13 @@ const ProductDetailPage = () => {
                   </Box>
                 ) : components.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
-                    Компоненты не найдены.
+                    No components found.
                   </Typography>
                 ) : (
                   <Box sx={{ overflowX: "auto" }}>
                     <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
                       <Box component="thead">
-                        <Box component="tr" sx={{ textAlign: "left" }}>
+                        <Box component="tr">
                           {["Name", "Version", "Ecosystem", "Direct", "Vulns", "Licenses"].map((label) => (
                             <Box
                               key={label}
@@ -883,7 +855,9 @@ const ProductDetailPage = () => {
                                 fontWeight: 600,
                                 fontSize: 12,
                                 padding: "10px 8px",
-                                borderBottom: "1px solid rgba(0,0,0,0.08)",
+                                color: tableStyles.headerText,
+                                borderBottom: `1px solid ${tableStyles.cellBorder}`,
+                                background: tableStyles.headerBg,
                               }}
                             >
                               {label}
@@ -933,7 +907,7 @@ const ProductDetailPage = () => {
                       </Box>
                     </Box>
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                      Всего: {componentsTotal}
+                      Total: {componentsTotal}
                     </Typography>
                   </Box>
                 )}
@@ -942,14 +916,14 @@ const ProductDetailPage = () => {
             {tabIndex === 2 && (
               <Stack spacing={2}>
                 {!transitiveSbom ? (
-                  <Alert severity="info">Нет проиндексированного SBOM для transitive риска.</Alert>
+                  <Alert severity="info">No indexed SBOM available for transitive risk.</Alert>
                 ) : (
                   <>
                     <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
                       <Chip label={`Status: ${transitiveChip.label}`} color={transitiveChip.color} />
                       {transitiveStatus?.updatedAt && (
                         <Typography variant="body2" color="text.secondary">
-                          Updated: {new Date(transitiveStatus.updatedAt).toLocaleString("ru-RU")}
+                          Updated: {formatScanDate(transitiveStatus.updatedAt)}
                         </Typography>
                       )}
                       <Typography variant="body2" color="text.secondary">
@@ -993,7 +967,7 @@ const ProductDetailPage = () => {
                       />
 
                       <Button variant="outlined" onClick={fetchTransitiveExposure} disabled={transitiveLoading}>
-                        Обновить
+                        Refresh
                       </Button>
                     </Stack>
 
@@ -1005,13 +979,13 @@ const ProductDetailPage = () => {
                       </Box>
                     ) : transitiveItems.length === 0 ? (
                       <Typography variant="body2" color="text.secondary">
-                        Нет direct зависимостей с транзитивным риском.
+                        No transitive risk exposure found.
                       </Typography>
                     ) : (
                       <Box sx={{ overflowX: "auto" }}>
                         <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
                           <Box component="thead">
-                            <Box component="tr" sx={{ textAlign: "left" }}>
+                            <Box component="tr">
                               {["Name", "Version", "Ecosystem", "C/H/M/L", "Max CVSS", "Min distance"].map((label) => (
                                 <Box
                                   key={label}
@@ -1020,7 +994,9 @@ const ProductDetailPage = () => {
                                     fontWeight: 600,
                                     fontSize: 12,
                                     padding: "10px 8px",
-                                    borderBottom: "1px solid rgba(0,0,0,0.08)",
+                                    color: tableStyles.headerText,
+                                    borderBottom: `1px solid ${tableStyles.cellBorder}`,
+                                    background: tableStyles.headerBg,
                                   }}
                                 >
                                   {label}
@@ -1034,9 +1010,7 @@ const ProductDetailPage = () => {
                               <Box key={it.id} component="tr">
                                 <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
                                   <Stack spacing={0.25}>
-                                    <Typography variant="body2">
-                                      {it.name}
-                                    </Typography>
+                                    <Typography variant="body2">{it.name}</Typography>
                                     {it.purl && (
                                       <Typography variant="caption" color="text.secondary">
                                         {it.purl}
@@ -1076,9 +1050,9 @@ const ProductDetailPage = () => {
                 )}
               </Stack>
             )}
-          </Section>
-        </Grid>
-      </Grid>
+          </Stack>
+        </GlassCard>
+      </Stack>
     </Container>
   );
 };
