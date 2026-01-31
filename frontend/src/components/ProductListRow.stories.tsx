@@ -8,6 +8,7 @@ interface ListRowArgs {
   version?: string;
   findingsOpenCount: number;
   lastScanAt?: string;
+  newFindings: number;
   severityBreakdown: ProductWithStats["severityBreakdown"];
 }
 
@@ -20,6 +21,7 @@ const meta: Meta<typeof ProductListRow> = {
     version: "1.8.0",
     findingsOpenCount: 9,
     lastScanAt: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
+    newFindings: 3,
     severityBreakdown: {
       critical: 1,
       high: 2,
@@ -31,6 +33,7 @@ const meta: Meta<typeof ProductListRow> = {
   argTypes: {
     severityBreakdown: { control: "object" },
     lastScanAt: { control: "text" },
+    newFindings: { control: { type: "number", min: 0, max: 50 } },
   },
   render: (args: ListRowArgs) => (
     <ProductListRow
@@ -42,6 +45,17 @@ const meta: Meta<typeof ProductListRow> = {
         lastScanAt: args.lastScanAt,
         findingsOpenCount: args.findingsOpenCount,
         severityBreakdown: args.severityBreakdown,
+        recentScans: args.lastScanAt
+          ? [
+              {
+                id: "scan-2",
+                scanner: "Trivy",
+                status: "completed",
+                createdAt: args.lastScanAt,
+                findingsNew: args.newFindings,
+              },
+            ]
+          : [],
       }}
     />
   ),

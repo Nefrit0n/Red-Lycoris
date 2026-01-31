@@ -12,6 +12,7 @@ export interface ProductCardData {
   version?: string | null;
   lastScanAt?: string | null;
   findingsOpenCount: number;
+  latestScanFindingsNew?: number;
   severityBreakdown?: {
     critical: number;
     high: number;
@@ -61,14 +62,6 @@ const getHealthColor = (score: number): string => {
   if (score >= 40) return "#ffeb3b";
   if (score >= 20) return "#ff9800";
   return "#f44336";
-};
-
-const getHealthLabel = (score: number): string => {
-  if (score >= 80) return "Отлично";
-  if (score >= 60) return "Хорошо";
-  if (score >= 40) return "Средне";
-  if (score >= 20) return "Плохо";
-  return "Критично";
 };
 
 const TrendIndicator = ({ trend, value }: { trend?: "up" | "down" | "flat"; value?: number }) => {
@@ -195,7 +188,7 @@ const SeverityBadges = ({ breakdown }: { breakdown?: ProductCardData["severityBr
 const ProductCard = ({ product, onClick }: ProductCardProps) => {
   const healthScore = calculateHealthScore(product.severityBreakdown);
   const healthColor = getHealthColor(healthScore);
-  const healthLabel = getHealthLabel(healthScore);
+  const newFindingsCount = product.latestScanFindingsNew ?? 0;
 
   return (
     <Card
@@ -259,11 +252,22 @@ const ProductCard = ({ product, onClick }: ProductCardProps) => {
             {/* Footer */}
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <TrendIndicator trend={product.trend} value={product.trendValue} />
-              <Typography variant="caption" color="text.secondary">
-                {product.lastScanAt
-                  ? new Date(product.lastScanAt).toLocaleDateString("ru-RU")
-                  : "Нет сканов"}
-              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                {newFindingsCount > 0 && (
+                  <Chip
+                    label={`${newFindingsCount} new`}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                    sx={{ fontSize: "0.65rem", height: 20 }}
+                  />
+                )}
+                <Typography variant="caption" color="text.secondary">
+                  {product.lastScanAt
+                    ? new Date(product.lastScanAt).toLocaleDateString("ru-RU")
+                    : "Нет сканов"}
+                </Typography>
+              </Stack>
             </Stack>
           </Box>
         </Stack>
