@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -116,9 +117,12 @@ func NewFindingsHandler(db *sql.DB, policyEngine policies.Evaluator, slaMatrix s
 // @Failure 401 {object} fiber.Map
 // @Router /api/v1/findings [get]
 func (h *FindingsHandler) List(c *fiber.Ctx) error {
-	limit, offset, err := parsePagination(c)
+	limit, _, err := parsePagination(c)
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
+	}
+	if c.Query("offset") != "" || c.Query("page") != "" || c.Query("pageSize") != "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "offset pagination is not supported"})
 	}
 
 	filterParams, err := parseFindingFiltersFromQuery(c, h.db)
@@ -126,30 +130,52 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		return respondWithFilterError(c, err)
 	}
 
+	sortField, err := storage.NormalizeFindingSortField(filterParams.SortField)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid sortField"})
+	}
+	sortOrder := storage.NormalizeFindingSortOrder(filterParams.SortOrder)
+	filterParams.SortField = sortField
+	filterParams.SortOrder = sortOrder
+
 	includeMeta := parseBoolWithDefault(c.Query("includeMeta"), false)
 	cursorParam := strings.TrimSpace(c.Query("cursor"))
-	cursorAllowed := isCursorSortField(filterParams.SortField)
-	legacyPagination := c.Query("offset") != "" || c.Query("page") != "" || c.Query("pageSize") != ""
+	filtersHash := buildFindingFiltersHash(filterParams)
 
 	var cursor *storage.FindingListCursor
 	if cursorParam != "" {
-		if !cursorAllowed {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "cursor requires lastSeenAt/lastActivity sort"})
-		}
-		parsedCursor, err := decodeFindingCursor(cursorParam)
+		payload, err := decodeFindingCursor(cursorParam)
 		if err != nil {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 		}
-		cursor = parsedCursor
+		normalizedCursorField, err := storage.NormalizeFindingSortField(payload.SortField)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid cursor"})
+		}
+		normalizedCursorOrder := storage.NormalizeFindingSortOrder(payload.SortOrder)
+		if payload.Version != findingCursorVersion ||
+			normalizedCursorField != sortField ||
+			normalizedCursorOrder != sortOrder ||
+			payload.Limit != limit ||
+			payload.FiltersHash != filtersHash {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid cursor context"})
+		}
+		if len(payload.Key.Values) != 1 {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid cursor"})
+		}
+		sortValue, err := storage.ParseFindingCursorValue(sortField, payload.Key.Values[0])
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid cursor"})
+		}
+		id, err := uuid.Parse(payload.Key.ID)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid cursor"})
+		}
+		cursor = &storage.FindingListCursor{SortValue: sortValue, ID: id}
 	}
 
-	useCursor := cursor != nil || (!legacyPagination && cursorAllowed)
-	if useCursor {
-		offset = 0
-	}
-
-	filters := filterParams.toStorageFilters(limit, offset)
-	items, total, nextCursor, err := storage.ListFindings(c.Context(), h.db, filters, cursor, useCursor, includeMeta)
+	filters := filterParams.toStorageFilters(limit, 0)
+	items, total, nextCursor, err := storage.ListFindings(c.Context(), h.db, filters, cursor, true, includeMeta)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch findings"})
 	}
@@ -178,7 +204,16 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 	}
 
 	if nextCursor != nil {
-		encoded, err := encodeFindingCursor(*nextCursor)
+		encoded, err := encodeFindingCursor(findingCursorPayload{
+			Version:     findingCursorVersion,
+			SortField:   sortField,
+			SortOrder:   sortOrder,
+			Limit:       limit,
+			FiltersHash: filtersHash,
+			Key: findingCursorKey{
+				ID: nextCursor.ID.String(),
+			},
+		}, *nextCursor)
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to encode cursor"})
 		}
@@ -453,21 +488,23 @@ func (h *FindingsHandler) Create(c *fiber.Ctx) error {
 	})
 }
 
+const findingCursorVersion = 1
+
+type findingCursorKey struct {
+	Values []string `json:"values"`
+	ID     string   `json:"id"`
+}
+
 type findingCursorPayload struct {
-	SortKey string `json:"sortKey"`
-	ID      string `json:"id"`
+	Version     int              `json:"version"`
+	SortField   string           `json:"sortField"`
+	SortOrder   string           `json:"sortOrder"`
+	Limit       int              `json:"limit"`
+	FiltersHash string           `json:"filtersHash"`
+	Key         findingCursorKey `json:"key"`
 }
 
-func isCursorSortField(raw string) bool {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "lastseenat", "lastactivity":
-		return true
-	default:
-		return false
-	}
-}
-
-func decodeFindingCursor(raw string) (*storage.FindingListCursor, error) {
+func decodeFindingCursor(raw string) (*findingCursorPayload, error) {
 	decoded, err := base64.RawURLEncoding.DecodeString(raw)
 	if err != nil {
 		decoded, err = base64.StdEncoding.DecodeString(raw)
@@ -481,33 +518,86 @@ func decodeFindingCursor(raw string) (*storage.FindingListCursor, error) {
 		return nil, fmt.Errorf("invalid cursor")
 	}
 
-	if payload.SortKey == "" || payload.ID == "" {
+	if payload.Key.ID == "" || len(payload.Key.Values) == 0 {
 		return nil, fmt.Errorf("invalid cursor")
 	}
-
-	sortKey, err := time.Parse(time.RFC3339Nano, payload.SortKey)
-	if err != nil {
-		return nil, fmt.Errorf("invalid cursor")
-	}
-
-	id, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid cursor")
-	}
-
-	return &storage.FindingListCursor{SortKey: sortKey, ID: id}, nil
+	return &payload, nil
 }
 
-func encodeFindingCursor(cursor storage.FindingListCursor) (string, error) {
-	payload := findingCursorPayload{
-		SortKey: cursor.SortKey.Format(time.RFC3339Nano),
-		ID:      cursor.ID.String(),
+func encodeFindingCursor(payload findingCursorPayload, cursor storage.FindingListCursor) (string, error) {
+	sortValue, err := storage.FormatFindingCursorValue(payload.SortField, cursor.SortValue)
+	if err != nil {
+		return "", err
 	}
+	payload.Key.Values = []string{sortValue}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func buildFindingFiltersHash(params *FindingFilterParams) string {
+	type hashPayload struct {
+		TenantID         string `json:"tenantId"`
+		ProductID        string `json:"productId"`
+		ImportJobID      string `json:"importJobId"`
+		PolicyID         string `json:"policyId"`
+		PolicyDecision   string `json:"policyDecision"`
+		DateFrom         string `json:"dateFrom"`
+		DateTo           string `json:"dateTo"`
+		Severity         string `json:"severity"`
+		Status           string `json:"status"`
+		RiskBand         string `json:"riskBand"`
+		OccurrenceStatus string `json:"occurrenceStatus"`
+		ScannerType      string `json:"scannerType"`
+		SourceType       string `json:"sourceType"`
+		Query            string `json:"query"`
+		CanonicalOnly    bool   `json:"canonicalOnly"`
+		IncludeRepeats   bool   `json:"includeRepeats"`
+	}
+
+	payload := hashPayload{
+		Severity:         params.Severity,
+		Status:           params.Status,
+		RiskBand:         params.RiskBand,
+		OccurrenceStatus: params.OccurrenceStatus,
+		ScannerType:      params.ScannerType,
+		SourceType:       params.SourceType,
+		Query:            params.Query,
+		CanonicalOnly:    params.CanonicalOnly,
+		IncludeRepeats:   params.IncludeRepeats,
+		PolicyDecision:   params.PolicyDecision,
+	}
+
+	if params.TenantID != nil {
+		payload.TenantID = params.TenantID.String()
+	}
+	if params.ProductID != nil {
+		payload.ProductID = params.ProductID.String()
+	}
+	if params.ImportJobID != nil {
+		payload.ImportJobID = params.ImportJobID.String()
+	}
+	if params.PolicyID != nil {
+		payload.PolicyID = params.PolicyID.String()
+	}
+	if params.DateFrom != nil {
+		payload.DateFrom = params.DateFrom.UTC().Format(time.RFC3339Nano)
+	}
+	if params.DateTo != nil {
+		payload.DateTo = params.DateTo.UTC().Format(time.RFC3339Nano)
+	}
+
+	data, _ := json.Marshal(payload)
+	sum := sha256Sum(data)
+	return sum
+}
+
+func sha256Sum(data []byte) string {
+	hash := sha256.Sum256(data)
+	encoded := base64.RawURLEncoding.EncodeToString(hash[:])
+	return encoded
 }
 
 // Update updates a finding by ID
@@ -893,13 +983,15 @@ func (h *FindingsHandler) MakeMaster(c *fiber.Ctx) error {
 	}
 
 	oldMasterID := duplicateID.UUID
-	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = NULL, status = $1 WHERE id = $2`, models.StatusUnderReview, id); err != nil {
+	statusUnderReviewRank := models.StatusRank(models.StatusUnderReview)
+	statusDuplicateRank := models.StatusRank(models.StatusDuplicate)
+	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = NULL, status = $1, status_rank = $2 WHERE id = $3`, models.StatusUnderReview, statusUnderReviewRank, id); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to promote master"})
 	}
-	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = $1, status = $2 WHERE duplicate_id = $3 AND id <> $1`, id, models.StatusDuplicate, oldMasterID); err != nil {
+	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = $1, status = $2, status_rank = $3 WHERE duplicate_id = $4 AND id <> $1`, id, models.StatusDuplicate, statusDuplicateRank, oldMasterID); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to reassign duplicates"})
 	}
-	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = $1, status = $2 WHERE id = $3`, id, models.StatusDuplicate, oldMasterID); err != nil {
+	if _, err = tx.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = $1, status = $2, status_rank = $3 WHERE id = $4`, id, models.StatusDuplicate, statusDuplicateRank, oldMasterID); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to reassign master"})
 	}
 
@@ -939,7 +1031,8 @@ func (h *FindingsHandler) UnlinkDuplicate(c *fiber.Ctx) error {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "insufficient role"})
 	}
 
-	result, err := h.db.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = NULL, status = $1 WHERE id = $2 AND deleted_at IS NULL`, models.StatusUnderReview, id)
+	statusRank := models.StatusRank(models.StatusUnderReview)
+	result, err := h.db.ExecContext(c.Context(), `UPDATE findings SET duplicate_id = NULL, status = $1, status_rank = $2 WHERE id = $3 AND deleted_at IS NULL`, models.StatusUnderReview, statusRank, id)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to unlink duplicate"})
 	}

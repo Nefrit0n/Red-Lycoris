@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"lotus-warden/backend/internal/models"
+
 	"github.com/google/uuid"
 )
 
@@ -105,13 +107,16 @@ func BulkUpdateFindingStatus(ctx context.Context, db *sql.DB, ids []uuid.UUID, s
 	if len(ids) == 0 {
 		return 0, nil
 	}
+	statusRank := models.StatusRank(status)
 	result, err := db.ExecContext(
 		ctx,
 		`UPDATE findings
 		 SET status = $1,
-		     updated_at = $2
-		 WHERE id = ANY($3::uuid[]) AND deleted_at IS NULL`,
+		     status_rank = $2,
+		     updated_at = $3
+		 WHERE id = ANY($4::uuid[]) AND deleted_at IS NULL`,
 		status,
+		statusRank,
 		time.Now().UTC(),
 		pqUUIDArray(ids),
 	)
@@ -152,20 +157,53 @@ f.deleted_at IS NULL
   AND ($16::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $16)
   AND ($17::bool = FALSE OR f.duplicate_id IS NULL)`
 
+// findingFilterWhereClauseOffset3 is the same as findingFilterWhereClause but with $4-$18 placeholders
+// (offset by 3 for bulk status updates that include rank).
+const findingFilterWhereClauseOffset3 = `
+f.deleted_at IS NULL
+  AND (f.tenant_id = $4)
+  AND ($5::text IS NULL OR f.severity = $5)
+  AND ($6::text IS NULL OR f.status = $6)
+  AND ($7::uuid IS NULL OR f.product_id = $7)
+  AND ($8::uuid IS NULL OR f.import_job_id = $8)
+  AND ($9::uuid IS NULL OR EXISTS (
+		SELECT 1 FROM policy_results pr
+		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $9
+	))
+  AND ($10::text IS NULL OR (
+		SELECT pr.decision FROM policy_results pr
+		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
+		ORDER BY pr.evaluated_at DESC
+		LIMIT 1
+	) = $10)
+  AND ($11::text IS NULL OR fr.risk_band = $11)
+  AND ($12::text IS NULL OR (f.title ILIKE $12 OR f.description ILIKE $12 OR f.fingerprint ILIKE $12 OR p.identifier ILIKE $12 OR p.name ILIKE $12))
+  AND ($13::text IS NULL OR sr.scanner = $13)
+  AND ($14::text IS NULL OR f.source_type = $14)
+  AND ($15::text IS NULL OR (
+		($15 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
+		OR ($15 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
+	))
+  AND ($16::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $16)
+  AND ($17::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $17)
+  AND ($18::bool = FALSE OR f.duplicate_id IS NULL)`
+
 func BulkUpdateFindingStatusByFilters(ctx context.Context, db *sql.DB, filters FindingFilters, status string) (int64, error) {
 	if filters.TenantID == nil {
 		return 0, fmt.Errorf("tenant_id is required for bulk update")
 	}
 
+	statusRank := models.StatusRank(status)
 	filterArgs := buildFindingFilterArgs(filters)
-	args := append([]any{status, time.Now().UTC()}, filterArgs...)
+	args := append([]any{status, statusRank, time.Now().UTC()}, filterArgs...)
 
 	query := fmt.Sprintf(`UPDATE findings
 		 SET status = $1,
-		     updated_at = $2
+		     status_rank = $2,
+		     updated_at = $3
 		 WHERE id IN (
 			SELECT f.id %s WHERE %s
-		)`, findingBaseJoins, findingFilterWhereClauseOffset2)
+		)`, findingBaseJoins, findingFilterWhereClauseOffset3)
 
 	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
