@@ -117,8 +117,16 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 		}
 	}
 
+	// Determine direct dependencies
 	directSet := map[uuid.UUID]bool{}
+
+	// If we have a root reference, mark root and its direct dependencies
 	if result.RootRef != "" {
+		// The root component itself is always "direct"
+		if rootID, ok := componentIDs[result.RootRef]; ok {
+			directSet[rootID] = true
+		}
+		// Components directly referenced by root are direct dependencies
 		for _, edge := range result.Edges {
 			if edge.From != result.RootRef {
 				continue
@@ -126,6 +134,33 @@ func upsertInventory(ctx context.Context, db *sql.DB, sbomID uuid.UUID, result P
 			if id, ok := componentIDs[edge.To]; ok {
 				directSet[id] = true
 			}
+		}
+	}
+
+	// If no root and no direct deps found, use heuristic:
+	// Components that are not targets of any edge are likely top-level/direct
+	if len(directSet) == 0 && len(result.Edges) > 0 {
+		targetedComponents := map[uuid.UUID]bool{}
+		for _, edge := range result.Edges {
+			if id, ok := componentIDs[edge.To]; ok {
+				targetedComponents[id] = true
+			}
+		}
+		// Components that have outgoing edges but no incoming edges are likely roots
+		for _, edge := range result.Edges {
+			if id, ok := componentIDs[edge.From]; ok {
+				if !targetedComponents[id] {
+					directSet[id] = true
+				}
+			}
+		}
+	}
+
+	// If still no direct deps found and we have components, mark all as direct
+	// This handles flat SBOMs without dependency graph
+	if len(directSet) == 0 && len(componentIndex) > 0 && len(result.Edges) == 0 {
+		for _, id := range componentIndex {
+			directSet[id] = true
 		}
 	}
 
