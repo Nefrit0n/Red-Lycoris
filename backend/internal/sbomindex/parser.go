@@ -42,7 +42,7 @@ func ParseSBOM(format string, payload []byte) (ParseResult, error) {
 	case "spdx-json":
 		return parseSPDXJSON(payload)
 	case "spdx":
-		return ParseResult{}, fmt.Errorf("spdx tag-value format is not supported")
+		return parseSPDXTagValue(payload)
 	default:
 		return ParseResult{}, fmt.Errorf("unsupported sbom format")
 	}
@@ -460,6 +460,27 @@ func parseSPDXJSON(payload []byte) (ParseResult, error) {
 	}
 
 	edges := make([]EdgeInput, 0)
+	rootRef := ""
+	directRefs := make(map[string]bool)
+
+	// First pass: find DESCRIBES relationships to identify root and direct dependencies
+	for _, rel := range doc.Relationships {
+		from := strings.TrimSpace(rel.ElementID)
+		to := strings.TrimSpace(rel.RelatedElementID)
+		if from == "" || to == "" {
+			continue
+		}
+		typeNorm := strings.ToUpper(strings.TrimSpace(rel.RelationshipType))
+		if typeNorm == "DESCRIBES" {
+			// SPDXRef-DOCUMENT DESCRIBES the root package
+			if rootRef == "" {
+				rootRef = to
+			}
+			directRefs[to] = true
+		}
+	}
+
+	// Second pass: collect dependency edges
 	for _, rel := range doc.Relationships {
 		from := strings.TrimSpace(rel.ElementID)
 		to := strings.TrimSpace(rel.RelatedElementID)
@@ -468,14 +489,198 @@ func parseSPDXJSON(payload []byte) (ParseResult, error) {
 		}
 		typeNorm := strings.ToUpper(strings.TrimSpace(rel.RelationshipType))
 		switch typeNorm {
-		case "DEPENDS_ON", "DEPENDENCY_MANIFEST_OF":
+		case "DEPENDS_ON":
+			edges = append(edges, EdgeInput{From: from, To: to})
+			// If root depends on something, that's a direct dependency
+			if from == rootRef {
+				directRefs[to] = true
+			}
+		case "DEPENDENCY_MANIFEST_OF":
 			edges = append(edges, EdgeInput{From: from, To: to})
 		case "DEPENDENCY_OF":
+			// A DEPENDENCY_OF B means B depends on A (reverse direction)
 			edges = append(edges, EdgeInput{From: to, To: from})
+			if to == rootRef {
+				directRefs[from] = true
+			}
+		case "CONTAINS":
+			// CONTAINS relationship can indicate composition dependencies
+			edges = append(edges, EdgeInput{From: from, To: to})
 		}
 	}
 
-	return ParseResult{Components: components, Edges: edges}, nil
+	return ParseResult{Components: components, Edges: edges, RootRef: rootRef}, nil
+}
+
+// parseSPDXTagValue parses SPDX tag-value format (also known as SPDX TV format)
+// Format example:
+//
+//	SPDXVersion: SPDX-2.3
+//	PackageName: lodash
+//	SPDXID: SPDXRef-Package-lodash
+//	PackageVersion: 4.17.21
+//	PackageSupplier: Organization: npm
+//	PackageLicenseConcluded: MIT
+//	ExternalRef: PACKAGE-MANAGER purl pkg:npm/lodash@4.17.21
+//	Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-lodash
+func parseSPDXTagValue(payload []byte) (ParseResult, error) {
+	lines := strings.Split(string(payload), "\n")
+
+	type spdxTVPackage struct {
+		spdxID           string
+		name             string
+		version          string
+		supplier         string
+		licenseDeclared  string
+		licenseConcluded string
+		purl             string
+	}
+
+	var packages []spdxTVPackage
+	var relationships []spdxRelationship
+
+	var currentPkg *spdxTVPackage
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		colonIdx := strings.Index(line, ":")
+		if colonIdx < 0 {
+			continue
+		}
+
+		tag := strings.TrimSpace(line[:colonIdx])
+		value := strings.TrimSpace(line[colonIdx+1:])
+
+		switch tag {
+		case "PackageName":
+			// New package starts
+			if currentPkg != nil && currentPkg.name != "" {
+				packages = append(packages, *currentPkg)
+			}
+			currentPkg = &spdxTVPackage{name: value}
+
+		case "SPDXID":
+			if currentPkg != nil {
+				currentPkg.spdxID = value
+			}
+
+		case "PackageVersion":
+			if currentPkg != nil {
+				currentPkg.version = value
+			}
+
+		case "PackageSupplier":
+			if currentPkg != nil {
+				currentPkg.supplier = value
+			}
+
+		case "PackageLicenseConcluded":
+			if currentPkg != nil {
+				currentPkg.licenseConcluded = value
+			}
+
+		case "PackageLicenseDeclared":
+			if currentPkg != nil {
+				currentPkg.licenseDeclared = value
+			}
+
+		case "ExternalRef":
+			if currentPkg != nil {
+				// Format: CATEGORY TYPE LOCATOR
+				// Example: PACKAGE-MANAGER purl pkg:npm/lodash@4.17.21
+				parts := strings.Fields(value)
+				if len(parts) >= 3 && strings.EqualFold(parts[1], "purl") {
+					currentPkg.purl = parts[2]
+				}
+			}
+
+		case "Relationship":
+			// Save current package before processing relationships
+			if currentPkg != nil && currentPkg.name != "" {
+				packages = append(packages, *currentPkg)
+				currentPkg = nil
+			}
+			// Format: ELEMENT_ID RELATIONSHIP_TYPE RELATED_ELEMENT
+			// Example: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package
+			parts := strings.Fields(value)
+			if len(parts) >= 3 {
+				relationships = append(relationships, spdxRelationship{
+					ElementID:        parts[0],
+					RelationshipType: parts[1],
+					RelatedElementID: parts[2],
+				})
+			}
+		}
+	}
+
+	// Don't forget the last package
+	if currentPkg != nil && currentPkg.name != "" {
+		packages = append(packages, *currentPkg)
+	}
+
+	// Convert to ComponentInput
+	components := make([]ComponentInput, 0, len(packages))
+	for _, pkg := range packages {
+		ecosystem, name, version := normalizeComponentIdentity(pkg.purl, pkg.name, pkg.version)
+		licenses := normalizeLicenseList([]string{
+			normalizeSpdxLicense(pkg.licenseConcluded),
+			normalizeSpdxLicense(pkg.licenseDeclared),
+		})
+		components = append(components, ComponentInput{
+			BomRef:    pkg.spdxID,
+			Purl:      pkg.purl,
+			Name:      name,
+			Version:   version,
+			Ecosystem: ecosystem,
+			Supplier:  normalizeSupplier(pkg.supplier),
+			Licenses:  licenses,
+		})
+	}
+
+	// Process relationships (same logic as SPDX JSON)
+	edges := make([]EdgeInput, 0)
+	rootRef := ""
+
+	// First pass: find DESCRIBES relationships
+	for _, rel := range relationships {
+		from := strings.TrimSpace(rel.ElementID)
+		to := strings.TrimSpace(rel.RelatedElementID)
+		if from == "" || to == "" {
+			continue
+		}
+		typeNorm := strings.ToUpper(strings.TrimSpace(rel.RelationshipType))
+		if typeNorm == "DESCRIBES" {
+			if rootRef == "" {
+				rootRef = to
+			}
+		}
+	}
+
+	// Second pass: collect dependency edges
+	for _, rel := range relationships {
+		from := strings.TrimSpace(rel.ElementID)
+		to := strings.TrimSpace(rel.RelatedElementID)
+		if from == "" || to == "" {
+			continue
+		}
+		typeNorm := strings.ToUpper(strings.TrimSpace(rel.RelationshipType))
+		switch typeNorm {
+		case "DEPENDS_ON":
+			edges = append(edges, EdgeInput{From: from, To: to})
+		case "DEPENDENCY_MANIFEST_OF":
+			edges = append(edges, EdgeInput{From: from, To: to})
+		case "DEPENDENCY_OF":
+			edges = append(edges, EdgeInput{From: to, To: from})
+		case "CONTAINS":
+			edges = append(edges, EdgeInput{From: from, To: to})
+		}
+	}
+
+	return ParseResult{Components: components, Edges: edges, RootRef: rootRef}, nil
 }
 
 func normalizeComponentIdentity(purl string, name string, version string) (string, string, string) {
