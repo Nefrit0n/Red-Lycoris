@@ -165,7 +165,6 @@ func ListSbomTransitiveExposure(ctx context.Context, db *sql.DB, filters SbomTra
 			ON sco.sbom_id = ste.sbom_id AND sco.component_id = ste.root_component_id
 		WHERE ste.sbom_id = $1
 			AND ste.max_depth = $2
-			AND (ste.critical_cnt + ste.high_cnt + ste.medium_cnt + ste.low_cnt > 0 OR ste.max_cvss IS NOT NULL)
 			AND ($3 = '' OR c.name ILIKE $3 OR c.purl ILIKE $3 OR sco.version ILIKE $3)`
 
 	var total int
@@ -182,7 +181,6 @@ func ListSbomTransitiveExposure(ctx context.Context, db *sql.DB, filters SbomTra
 			ON sco.sbom_id = ste.sbom_id AND sco.component_id = ste.root_component_id
 		WHERE ste.sbom_id = $1
 			AND ste.max_depth = $2
-			AND (ste.critical_cnt + ste.high_cnt + ste.medium_cnt + ste.low_cnt > 0 OR ste.max_cvss IS NOT NULL)
 			AND ($3 = '' OR c.name ILIKE $3 OR c.purl ILIKE $3 OR sco.version ILIKE $3)
 		ORDER BY ste.max_cvss DESC NULLS LAST, (ste.critical_cnt + ste.high_cnt + ste.medium_cnt + ste.low_cnt) DESC, c.name
 		LIMIT $4 OFFSET $5`
@@ -250,21 +248,34 @@ func RefreshSbomTransitiveExposure(ctx context.Context, db *sql.DB, sbomID uuid.
 		return fmt.Errorf("delete sbom transitive exposure failed: %w", err)
 	}
 
-	query := `WITH RECURSIVE direct_components AS (
-		SELECT 1
-		FROM sbom_component_occurrences
-		WHERE sbom_id = $1
-			AND direct = true
-		LIMIT 1
-	), walk AS (
-		SELECT sco.component_id AS root_component_id,
-			sco.component_id AS component_id,
-			0 AS depth,
-			ARRAY[sco.component_id] AS path
+	// Improved transitive exposure query that:
+	// 1. Correctly walks the dependency graph from direct components
+	// 2. Handles cases with and without edges
+	// 3. Includes all direct components even if they have no transitive vulnerabilities
+	query := `WITH RECURSIVE
+	-- Get all direct (root-level) components for this SBOM
+	direct_comps AS (
+		SELECT DISTINCT sco.component_id
 		FROM sbom_component_occurrences sco
 		WHERE sco.sbom_id = $1
-			AND (sco.direct = true OR NOT EXISTS (SELECT 1 FROM direct_components))
+			AND sco.direct = true
+	),
+	-- Check if we have any edges for graph walking
+	has_edges AS (
+		SELECT EXISTS(SELECT 1 FROM sbom_edges WHERE sbom_id = $1) AS has_graph
+	),
+	-- Recursive walk through the dependency graph
+	walk AS (
+		-- Base case: start from each direct component
+		SELECT dc.component_id AS root_component_id,
+			dc.component_id AS component_id,
+			0 AS depth,
+			ARRAY[dc.component_id] AS path
+		FROM direct_comps dc
+
 		UNION ALL
+
+		-- Recursive case: follow edges to dependencies
 		SELECT w.root_component_id,
 			e.to_component_id,
 			w.depth + 1,
@@ -272,18 +283,24 @@ func RefreshSbomTransitiveExposure(ctx context.Context, db *sql.DB, sbomID uuid.
 		FROM walk w
 		JOIN sbom_edges e ON e.sbom_id = $1 AND e.from_component_id = w.component_id
 		WHERE w.depth < $2
-			AND NOT (e.to_component_id = ANY(w.path))
-	), reachable AS (
+			AND NOT (e.to_component_id = ANY(w.path))  -- Prevent cycles
+	),
+	-- Get minimum distance to each reachable component from each root
+	reachable AS (
 		SELECT root_component_id, component_id, MIN(depth) AS min_depth
 		FROM walk
 		GROUP BY root_component_id, component_id
-	), distinct_vulns AS (
+	),
+	-- Join with vulnerabilities to get vuln data for reachable components
+	reachable_vulns AS (
 		SELECT DISTINCT r.root_component_id, r.component_id, r.min_depth,
 			v.identifier, v.severity, v.cvss_score, v.epss_score
 		FROM reachable r
-		JOIN sbom_component_vulns v
+		LEFT JOIN sbom_component_vulns v
 			ON v.sbom_id = $1 AND v.component_id = r.component_id
-	), agg AS (
+	),
+	-- Aggregate vulnerability counts per root component
+	agg AS (
 		SELECT root_component_id,
 			COUNT(*) FILTER (WHERE severity = 'critical') AS critical_cnt,
 			COUNT(*) FILTER (WHERE severity = 'high') AS high_cnt,
@@ -291,14 +308,27 @@ func RefreshSbomTransitiveExposure(ctx context.Context, db *sql.DB, sbomID uuid.
 			COUNT(*) FILTER (WHERE severity = 'low') AS low_cnt,
 			MAX(cvss_score) AS max_cvss,
 			MAX(epss_score) AS max_epss,
-			MIN(min_depth) AS min_distance
-		FROM distinct_vulns
+			MIN(CASE WHEN identifier IS NOT NULL THEN min_depth END) AS min_distance
+		FROM reachable_vulns
 		GROUP BY root_component_id
+	),
+	-- Include direct components that may have no vulnerabilities (show zeros)
+	all_direct AS (
+		SELECT dc.component_id AS root_component_id,
+			COALESCE(a.critical_cnt, 0) AS critical_cnt,
+			COALESCE(a.high_cnt, 0) AS high_cnt,
+			COALESCE(a.medium_cnt, 0) AS medium_cnt,
+			COALESCE(a.low_cnt, 0) AS low_cnt,
+			a.max_cvss,
+			a.max_epss,
+			a.min_distance
+		FROM direct_comps dc
+		LEFT JOIN agg a ON a.root_component_id = dc.component_id
 	)
 	INSERT INTO sbom_transitive_exposure
 		(sbom_id, root_component_id, max_depth, critical_cnt, high_cnt, medium_cnt, low_cnt, max_cvss, max_epss, min_distance_to_any_vuln, updated_at)
 	SELECT $1, root_component_id, $2, critical_cnt, high_cnt, medium_cnt, low_cnt, max_cvss, max_epss, min_distance, NOW()
-	FROM agg
+	FROM all_direct
 	ON CONFLICT (sbom_id, root_component_id, max_depth)
 	DO UPDATE SET
 		critical_cnt = EXCLUDED.critical_cnt,
