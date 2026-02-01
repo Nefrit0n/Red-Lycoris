@@ -54,6 +54,8 @@ export interface StatusBadgeProps extends Omit<ChipProps, 'color'> {
   pulse?: boolean;
   /** Glow effect */
   glow?: boolean;
+  /** Accessible description for screen readers */
+  'aria-label'?: string;
 }
 
 // ============================================================
@@ -214,6 +216,12 @@ const StyledChip = styled(Chip, {
     },
   }),
 
+  // Respect reduced motion preference
+  '@media (prefers-reduced-motion: reduce)': {
+    animation: 'none',
+    transition: 'none',
+  },
+
   '&:hover': {
     backgroundColor: alpha(badgeColor, 0.25),
   },
@@ -271,6 +279,7 @@ export const StatusBadge = forwardRef<HTMLDivElement, StatusBadgeProps>(
       glow = false,
       variant = 'filled',
       size = 'small',
+      'aria-label': ariaLabel,
       ...props
     },
     ref
@@ -282,17 +291,22 @@ export const StatusBadge = forwardRef<HTMLDivElement, StatusBadgeProps>(
     const shouldPulse =
       pulse || (type === 'severity' && value === 'critical') || (type === 'status' && value === 'new');
 
+    // Generate accessible label
+    const accessibleLabel = ariaLabel || `${type}: ${config.label}`;
+
     return (
       <StyledChip
         ref={ref}
         label={customLabel || config.label}
-        icon={showIcon ? <IconComponent /> : undefined}
+        icon={showIcon ? <IconComponent aria-hidden="true" /> : undefined}
         variant={variant}
         size={size}
         badgeColor={config.color}
         compact={compact}
         pulse={shouldPulse && !compact}
         glow={glow}
+        role="status"
+        aria-label={accessibleLabel}
         {...props}
       />
     );

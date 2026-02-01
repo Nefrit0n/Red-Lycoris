@@ -148,6 +148,10 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
       styleOverrides: {
         html: {
           scrollBehavior: 'smooth',
+          // Respect reduced motion preference for scroll behavior
+          '@media (prefers-reduced-motion: reduce)': {
+            scrollBehavior: 'auto',
+          },
         },
         body: {
           scrollbarWidth: 'thin',
@@ -171,6 +175,15 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
           backgroundColor: alpha(colors.brand.primary, 0.3),
           color: primitives.night[50],
         },
+        // Global reduced motion styles
+        '@media (prefers-reduced-motion: reduce)': {
+          '*, *::before, *::after': {
+            animationDuration: '0.01ms !important',
+            animationIterationCount: '1 !important',
+            transitionDuration: '0.01ms !important',
+            scrollBehavior: 'auto !important',
+          },
+        },
       },
     },
 
@@ -187,6 +200,10 @@ const createComponentOverrides = (mode: 'dark' | 'light'): ThemeOptions['compone
           transition: `all ${duration.fast} ${easing.smooth}`,
           '&:focus-visible': {
             boxShadow: focusRing.default,
+          },
+          // Respect reduced motion preference
+          '@media (prefers-reduced-motion: reduce)': {
+            transition: 'none',
           },
         },
         sizeLarge: {
