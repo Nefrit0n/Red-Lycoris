@@ -1,0 +1,36 @@
+{
+  "vulnerabilities": [
+    {
+      "id": "SNYK-JS-LODASH-590103",
+      "title": "Prototype Pollution",
+      "description": "lodash is vulnerable to Prototype Pollution.",
+      "severity": "high",
+      "packageName": "lodash",
+      "version": "4.17.15",
+      "from": ["project@1.0.0", "lodash@4.17.15"],
+      "upgradePath": [false, "lodash@4.17.21"],
+      "isUpgradable": true,
+      "isPatchable": false,
+      "identifiers": {
+        "CVE": ["CVE-2020-8203"],
+        "CWE": ["CWE-1321"]
+      },
+      "CVSSv3": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:H",
+      "cvssScore": 7.4,
+      "exploit": "Not Defined",
+      "publicationTime": "2020-07-15T00:00:00Z",
+      "disclosureTime": "2020-07-15T00:00:00Z",
+      "references": [
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/lodash/lodash/commit/c84fe82"
+        }
+      ]
+    }
+  ],
+  "packageManager": "npm",
+  "targetFile": "package-lock.json",
+  "projectName": "my-project",
+  "ok": false,
+  "summary": "1 vulnerable dependency path"
+}

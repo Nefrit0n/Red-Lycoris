@@ -7,7 +7,8 @@ export type ScannerCategory =
   | "SECRETS"
   | "CONTAINER"
   | "IAC"
-  | "API";
+  | "API"
+  | "OTHER";
 
 export interface ScannerInfo {
   id: string;
@@ -61,6 +62,11 @@ export const SCANNER_CATEGORIES: Record<ScannerCategory, Omit<ScannerCategoryInf
     id: "API",
     name: "API Security",
     description: "API Security Testing",
+  },
+  OTHER: {
+    id: "OTHER",
+    name: "Other",
+    description: "Other security tools and custom SARIF",
   },
 };
 
@@ -235,6 +241,16 @@ export const SCANNERS: ScannerInfo[] = [
     formats: ["json", "sarif"],
     category: "IAC",
     docsUrl: "https://runterrascan.io/",
+  },
+
+  // OTHER
+  {
+    id: "sarif",
+    name: "Generic SARIF",
+    description: "Upload SARIF from any security tool. You can specify a custom tool name.",
+    formats: ["sarif"],
+    category: "OTHER",
+    docsUrl: "https://sarifweb.azurewebsites.net/",
   },
 ];
 
