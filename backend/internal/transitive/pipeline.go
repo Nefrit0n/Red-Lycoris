@@ -54,9 +54,12 @@ func (p *Pipeline) Run(ctx context.Context, db *sql.DB, sbomID uuid.UUID) error 
 		return fmt.Errorf("sbom not found")
 	}
 
-	// Support both CycloneDX and SPDX formats
-	if sbom.Format != models.SbomFormatCycloneDX && sbom.Format != models.SbomFormatSPDXJSON {
-		return p.fail(ctx, db, sbomID, fmt.Sprintf("transitive analysis supports CycloneDX and SPDX-JSON formats, got: %s", sbom.Format))
+	// Support CycloneDX and all SPDX formats (JSON and tag-value)
+	switch sbom.Format {
+	case models.SbomFormatCycloneDX, models.SbomFormatSPDXJSON, models.SbomFormatSPDX:
+		// Supported formats
+	default:
+		return p.fail(ctx, db, sbomID, fmt.Sprintf("transitive analysis supports CycloneDX and SPDX formats, got: %s", sbom.Format))
 	}
 
 	if err := storage.UpdateSbomTransitiveStatus(ctx, db, sbomID, StatusProcessing, nil, nil); err != nil {
