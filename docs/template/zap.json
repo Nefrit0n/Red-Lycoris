@@ -1,0 +1,64 @@
+{
+  "@version": "2.14.0",
+  "@generated": "2024-01-15T10:00:00Z",
+  "site": [
+    {
+      "@name": "https://example.com",
+      "@host": "example.com",
+      "@port": "443",
+      "@ssl": "true",
+      "alerts": [
+        {
+          "pluginid": "10038",
+          "alertRef": "10038",
+          "alert": "Content Security Policy (CSP) Header Not Set",
+          "name": "Content Security Policy (CSP) Header Not Set",
+          "riskcode": "2",
+          "confidence": "3",
+          "riskdesc": "Medium (High)",
+          "conficence": "High",
+          "desc": "<p>Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks.</p>",
+          "instances": [
+            {
+              "uri": "https://example.com/api/v1/users",
+              "method": "GET",
+              "param": "",
+              "evidence": ""
+            }
+          ],
+          "count": "1",
+          "solution": "<p>Ensure that your web server, application server, load balancer, etc. is configured to set the Content-Security-Policy header.</p>",
+          "otherinfo": "",
+          "reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP</p>",
+          "cweid": "693",
+          "wascid": "15",
+          "sourceid": "3"
+        },
+        {
+          "pluginid": "10096",
+          "alertRef": "10096",
+          "alert": "Timestamp Disclosure - Unix",
+          "name": "Timestamp Disclosure - Unix",
+          "riskcode": "1",
+          "confidence": "1",
+          "riskdesc": "Low (Low)",
+          "desc": "<p>A timestamp was disclosed by the application/web server.</p>",
+          "instances": [
+            {
+              "uri": "https://example.com/api/v1/data",
+              "method": "GET",
+              "param": "",
+              "evidence": "1705312800"
+            }
+          ],
+          "count": "1",
+          "solution": "<p>Manually confirm that the timestamp data is not sensitive, and that the data cannot be aggregated to disclose exploitable patterns.</p>",
+          "reference": "<p>https://cwe.mitre.org/data/definitions/200.html</p>",
+          "cweid": "200",
+          "wascid": "13",
+          "sourceid": "5"
+        }
+      ]
+    }
+  ]
+}

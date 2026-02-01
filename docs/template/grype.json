@@ -1,0 +1,73 @@
+{
+  "matches": [
+    {
+      "vulnerability": {
+        "id": "CVE-2021-44228",
+        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+        "namespace": "nvd:cpe",
+        "severity": "Critical",
+        "urls": ["https://nvd.nist.gov/vuln/detail/CVE-2021-44228"],
+        "description": "Apache Log4j2 2.0-beta9 through 2.15.0 JNDI features do not protect against attacker controlled LDAP.",
+        "cvss": [
+          {
+            "version": "3.1",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+            "metrics": {
+              "baseScore": 10,
+              "exploitabilityScore": 3.9,
+              "impactScore": 6
+            },
+            "vendorMetadata": {}
+          }
+        ],
+        "fix": {
+          "versions": ["2.17.0"],
+          "state": "fixed"
+        }
+      },
+      "relatedVulnerabilities": [],
+      "matchDetails": [
+        {
+          "type": "exact-direct-match",
+          "matcher": "java-matcher",
+          "searchedBy": {
+            "language": "java",
+            "namespace": "github:language:java"
+          },
+          "found": {
+            "versionConstraint": ">=2.0-beta9,<2.17.0"
+          }
+        }
+      ],
+      "artifact": {
+        "name": "log4j-core",
+        "version": "2.14.1",
+        "type": "java-archive",
+        "locations": [
+          {
+            "path": "/app/lib/log4j-core-2.14.1.jar"
+          }
+        ],
+        "language": "java",
+        "licenses": ["Apache-2.0"],
+        "cpes": ["cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*"],
+        "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+      }
+    }
+  ],
+  "source": {
+    "type": "image",
+    "target": {
+      "userInput": "myapp:latest",
+      "imageID": "sha256:abc123..."
+    }
+  },
+  "distro": {
+    "name": "debian",
+    "version": "11"
+  },
+  "descriptor": {
+    "name": "grype",
+    "version": "0.70.0"
+  }
+}

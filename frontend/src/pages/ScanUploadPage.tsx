@@ -57,7 +57,7 @@ interface FindingPreview extends FindingListItemDTO {
 
 const STEPS = ["Выбор сканера", "Загрузка файла", "Обработка", "Результаты"];
 
-const CATEGORY_ORDER: ScannerCategory[] = ["SAST", "SCA", "DAST", "SECRETS", "CONTAINER", "IAC"];
+const CATEGORY_ORDER: ScannerCategory[] = ["SAST", "SCA", "DAST", "SECRETS", "CONTAINER", "IAC", "OTHER"];
 
 const getCategoryColor = (category: ScannerCategory): string => {
   switch (category) {
@@ -73,6 +73,8 @@ const getCategoryColor = (category: ScannerCategory): string => {
       return "#2196f3";
     case "IAC":
       return "#4caf50";
+    case "OTHER":
+      return "#607d8b";
     default:
       return "#9e9e9e";
   }
@@ -96,6 +98,7 @@ const ScanUploadPage = () => {
   const [productName, setProductName] = useState<string>("");
   const [productVersion, setProductVersion] = useState<string>("");
   const [productIdentifier, setProductIdentifier] = useState<string>("");
+  const [customToolName, setCustomToolName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<UploadScanResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -189,6 +192,7 @@ const ScanUploadPage = () => {
         productName: productName || undefined,
         productVersion: productVersion || undefined,
         productIdentifier: productIdentifier || undefined,
+        customToolName: scannerType === "sarif" ? (customToolName || undefined) : undefined,
       });
 
       clearInterval(progressInterval);
@@ -278,6 +282,7 @@ const ScanUploadPage = () => {
     setProductName("");
     setProductVersion("");
     setProductIdentifier("");
+    setCustomToolName("");
     setError(null);
     setSuccess(null);
     setUploadProgress(0);
@@ -592,6 +597,21 @@ const ScanUploadPage = () => {
                         </Tooltip>
                       )}
                     </Stack>
+                    {/* Custom tool name for Generic SARIF */}
+                    {selectedScanner.id === "sarif" && (
+                      <Box sx={{ mt: 2 }}>
+                        <TextField
+                          label="Название инструмента (опционально)"
+                          fullWidth
+                          size="small"
+                          placeholder="Например: my-custom-scanner"
+                          value={customToolName}
+                          onChange={(e) => setCustomToolName(e.target.value)}
+                          disabled={loading}
+                          helperText="Укажите название инструмента для фильтров. Если не указано, будет определено из SARIF файла."
+                        />
+                      </Box>
+                    )}
                   </CardContent>
                 </Card>
               )}
