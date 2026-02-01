@@ -49,6 +49,10 @@ export interface GlassCardProps extends Omit<PaperProps, 'variant'> {
   interactive?: boolean;
   /** Selected state */
   selected?: boolean;
+  /** Accessible label for screen readers */
+  'aria-label'?: string;
+  /** Accessible description */
+  'aria-describedby'?: string;
 }
 
 // ============================================================
@@ -185,6 +189,23 @@ const StyledPaper = styled(Paper, {
         transform: 'translateY(0)',
       } : {},
     }),
+
+    // Respect reduced motion preference
+    '@media (prefers-reduced-motion: reduce)': {
+      transition: 'none',
+      '&:hover': {
+        transform: 'none',
+      },
+      '&:active': {
+        transform: 'none',
+      },
+    },
+
+    // Focus visible for keyboard navigation
+    '&:focus-visible': interactive ? {
+      outline: `2px solid ${primitives.lotus[500]}`,
+      outlineOffset: '2px',
+    } : {},
   };
 });
 
@@ -248,6 +269,8 @@ export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
       interactive = false,
       selected = false,
       children,
+      'aria-label': ariaLabel,
+      'aria-describedby': ariaDescribedBy,
       ...props
     },
     ref
@@ -301,6 +324,11 @@ export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
         interactive={interactive}
         selected={selected}
         paddingPreset={padding}
+        role={interactive ? 'button' : undefined}
+        tabIndex={interactive ? 0 : undefined}
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        aria-pressed={interactive ? selected : undefined}
         {...props}
       >
         {renderHeader()}

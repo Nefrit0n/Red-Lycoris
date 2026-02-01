@@ -68,6 +68,10 @@ const StyledButton = styled(MuiButton, {
     position: 'relative' as const,
     overflow: 'hidden' as const,
     transition: `all ${duration.fast} ${easing.smooth}`,
+    // Respect reduced motion preference
+    '@media (prefers-reduced-motion: reduce)': {
+      transition: 'none',
+    },
     '&:disabled': {
       opacity: 0.5,
     },
@@ -121,6 +125,16 @@ const StyledButton = styled(MuiButton, {
       '&:active': {
         transform: 'translateY(0)',
         boxShadow: `0 0 15px ${alpha(glowColor, 0.4)}`,
+      },
+      // Respect reduced motion preference
+      '@media (prefers-reduced-motion: reduce)': {
+        transition: 'none',
+        '&:hover': {
+          transform: 'none',
+        },
+        '&:active': {
+          transform: 'none',
+        },
       },
     };
   }
