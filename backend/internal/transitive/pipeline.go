@@ -53,17 +53,19 @@ func (p *Pipeline) Run(ctx context.Context, db *sql.DB, sbomID uuid.UUID) error 
 	if sbom == nil {
 		return fmt.Errorf("sbom not found")
 	}
-	if sbom.Format != models.SbomFormatCycloneDX {
-		return p.fail(ctx, db, sbomID, "transitive supports CycloneDX SBOMs only")
+
+	// Support both CycloneDX and SPDX formats
+	if sbom.Format != models.SbomFormatCycloneDX && sbom.Format != models.SbomFormatSPDXJSON {
+		return p.fail(ctx, db, sbomID, fmt.Sprintf("transitive analysis supports CycloneDX and SPDX-JSON formats, got: %s", sbom.Format))
 	}
 
 	if err := storage.UpdateSbomTransitiveStatus(ctx, db, sbomID, StatusProcessing, nil, nil); err != nil {
 		return err
 	}
 
-	if sbom.EdgeCount == 0 {
-		return p.fail(ctx, db, sbomID, "SBOM has no dependencies graph")
-	}
+	// Note: The transitive exposure query handles cases with and without edges correctly.
+	// When EdgeCount == 0, the recursive CTE simply won't expand beyond direct components,
+	// but we still get vulnerability data for direct dependencies.
 
 	components, err := storage.ListSbomOsvComponents(ctx, db, sbomID)
 	if err != nil {

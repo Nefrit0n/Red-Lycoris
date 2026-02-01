@@ -460,6 +460,27 @@ func parseSPDXJSON(payload []byte) (ParseResult, error) {
 	}
 
 	edges := make([]EdgeInput, 0)
+	rootRef := ""
+	directRefs := make(map[string]bool)
+
+	// First pass: find DESCRIBES relationships to identify root and direct dependencies
+	for _, rel := range doc.Relationships {
+		from := strings.TrimSpace(rel.ElementID)
+		to := strings.TrimSpace(rel.RelatedElementID)
+		if from == "" || to == "" {
+			continue
+		}
+		typeNorm := strings.ToUpper(strings.TrimSpace(rel.RelationshipType))
+		if typeNorm == "DESCRIBES" {
+			// SPDXRef-DOCUMENT DESCRIBES the root package
+			if rootRef == "" {
+				rootRef = to
+			}
+			directRefs[to] = true
+		}
+	}
+
+	// Second pass: collect dependency edges
 	for _, rel := range doc.Relationships {
 		from := strings.TrimSpace(rel.ElementID)
 		to := strings.TrimSpace(rel.RelatedElementID)
@@ -468,14 +489,27 @@ func parseSPDXJSON(payload []byte) (ParseResult, error) {
 		}
 		typeNorm := strings.ToUpper(strings.TrimSpace(rel.RelationshipType))
 		switch typeNorm {
-		case "DEPENDS_ON", "DEPENDENCY_MANIFEST_OF":
+		case "DEPENDS_ON":
+			edges = append(edges, EdgeInput{From: from, To: to})
+			// If root depends on something, that's a direct dependency
+			if from == rootRef {
+				directRefs[to] = true
+			}
+		case "DEPENDENCY_MANIFEST_OF":
 			edges = append(edges, EdgeInput{From: from, To: to})
 		case "DEPENDENCY_OF":
+			// A DEPENDENCY_OF B means B depends on A (reverse direction)
 			edges = append(edges, EdgeInput{From: to, To: from})
+			if to == rootRef {
+				directRefs[from] = true
+			}
+		case "CONTAINS":
+			// CONTAINS relationship can indicate composition dependencies
+			edges = append(edges, EdgeInput{From: from, To: to})
 		}
 	}
 
-	return ParseResult{Components: components, Edges: edges}, nil
+	return ParseResult{Components: components, Edges: edges, RootRef: rootRef}, nil
 }
 
 func normalizeComponentIdentity(purl string, name string, version string) (string, string, string) {
