@@ -15,6 +15,11 @@ func (p *TrivyParser) ScannerType() string {
 }
 
 func (p *TrivyParser) CanParse(data []byte) bool {
+	// Try SARIF first
+	if canParseTrivySarif(data) {
+		return true
+	}
+
 	if !json.Valid(data) {
 		return false
 	}
@@ -32,7 +37,46 @@ func (p *TrivyParser) CanParse(data []byte) bool {
 	return false
 }
 
+// canParseTrivySarif checks if data is SARIF from Trivy
+func canParseTrivySarif(data []byte) bool {
+	if !canParseSarif(data) {
+		return false
+	}
+
+	var sarif sarifReport
+	if err := json.Unmarshal(data, &sarif); err != nil {
+		return false
+	}
+
+	for _, run := range sarif.Runs {
+		toolName := strings.ToLower(run.Tool.Driver.Name)
+		if strings.Contains(toolName, "trivy") {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
+	// Try SARIF first
+	if canParseTrivySarif(data) {
+		findings, err := parseSarif(data, "trivy")
+		if err != nil {
+			return nil, err
+		}
+		// Post-process for trivy SCA
+		for i := range findings {
+			findings[i].Category = models.CategorySCA
+			if findings[i].Evidence == nil {
+				findings[i].Evidence = map[string]any{}
+			}
+			findings[i].Evidence["scannerType"] = "trivy"
+			findings[i].Evidence["findingType"] = "vulnerability"
+			findings[i].Evidence["category"] = models.CategorySCA
+		}
+		return findings, nil
+	}
+
 	var report trivyReport
 	if err := json.Unmarshal(data, &report); err != nil {
 		return nil, err

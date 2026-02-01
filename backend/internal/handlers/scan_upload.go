@@ -38,6 +38,7 @@ type ScanUploadRequest struct {
 	ProductName       string     `json:"product_name,omitempty"`
 	ProductVersion    string     `json:"product_version,omitempty"`
 	ProductIdentifier string     `json:"product_identifier,omitempty"`
+	CustomToolName    string     `json:"custom_tool_name,omitempty"`
 }
 
 type ScanUploadResponse struct {
@@ -274,6 +275,7 @@ type scanUploadJSONPayload struct {
 	ProductName       string          `json:"product_name,omitempty"`
 	ProductVersion    string          `json:"product_version,omitempty"`
 	ProductIdentifier string          `json:"product_identifier,omitempty"`
+	CustomToolName    string          `json:"custom_tool_name,omitempty"`
 }
 
 func (h *ScanUploadHandler) parseRequest(c *fiber.Ctx) (ScanUploadRequest, error) {
@@ -305,6 +307,7 @@ func (h *ScanUploadHandler) parseRequest(c *fiber.Ctx) (ScanUploadRequest, error
 		ProductName:       strings.TrimSpace(payload.ProductName),
 		ProductVersion:    strings.TrimSpace(payload.ProductVersion),
 		ProductIdentifier: strings.TrimSpace(payload.ProductIdentifier),
+		CustomToolName:    strings.TrimSpace(payload.CustomToolName),
 	}, nil
 }
 
@@ -352,6 +355,7 @@ func (h *ScanUploadHandler) parseMultipartRequest(c *fiber.Ctx) (ScanUploadReque
 		ProductName:       strings.TrimSpace(c.FormValue("product_name")),
 		ProductVersion:    strings.TrimSpace(c.FormValue("product_version")),
 		ProductIdentifier: strings.TrimSpace(c.FormValue("product_identifier")),
+		CustomToolName:    strings.TrimSpace(c.FormValue("custom_tool_name")),
 	}, nil
 }
 

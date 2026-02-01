@@ -1,0 +1,28 @@
+{
+  "Golang errors": {},
+  "Issues": [
+    {
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "cwe": {
+        "id": "798",
+        "url": "https://cwe.mitre.org/data/definitions/798.html"
+      },
+      "rule_id": "G101",
+      "details": "Potential hardcoded credentials",
+      "file": "/path/to/file.go",
+      "code": "var password = \"secret123\"",
+      "line": "15",
+      "column": "5",
+      "nosec": false,
+      "suppressions": null
+    }
+  ],
+  "Stats": {
+    "files": 10,
+    "lines": 500,
+    "nosec": 0,
+    "found": 1
+  },
+  "GosecVersion": "2.18.0"
+}
