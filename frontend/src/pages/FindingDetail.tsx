@@ -18,6 +18,7 @@ import {
   ToggleButtonGroup,
   Tooltip,
   Typography,
+  alpha,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
@@ -25,6 +26,7 @@ import LinkIcon from "@mui/icons-material/Link";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { Component, ErrorInfo, ReactNode, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { primitives, semantic } from "../design-system/tokens/colors";
 import { getCurrentUser } from "../api/auth";
 import CodeBlock from "../components/CodeBlock";
 import EventTimeline from "../components/EventTimeline";
@@ -315,58 +317,64 @@ export const FindingDetailContent = ({
         ? "rgba(255, 152, 0, 0.15)"
         : "rgba(76, 175, 80, 0.12)";
 
-  // Build chips for header
+  // Severity color from design system
+  const severityColor = semantic.severity[data.severity]?.base ?? primitives.night[300];
+
+  // Build minimal header chips - only essential info
   const chips = [
-    <Chip
+    <Typography
       key="sev"
-      label={SEVERITY_STYLES[data.severity].label}
-      size="small"
-      variant="outlined"
+      component="span"
+      variant="caption"
       sx={{
-        color: SEVERITY_STYLES[data.severity].color,
-        borderColor: SEVERITY_STYLES[data.severity].color,
+        fontWeight: 700,
+        color: severityColor,
+        textTransform: "uppercase",
+        letterSpacing: "0.05em",
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        bgcolor: alpha(severityColor, 0.12),
       }}
-    />,
-    <Chip
+    >
+      {SEVERITY_STYLES[data.severity].label}
+    </Typography>,
+    <Typography
       key="st"
-      label={STATUS_LABELS[data.status] ?? data.status}
-      size="small"
-      color={STATUS_COLORS[data.status]}
-    />,
-    data.productName ? (
-      <Chip key="prod" label={`Продукт: ${data.productName}`} size="small" variant="outlined" />
-    ) : null,
-    data.occurrenceStatus ? (
-      <Chip
-        key="occ"
-        label={`Occurrence: ${data.occurrenceStatus}`}
-        size="small"
-        variant="outlined"
-      />
-    ) : null,
-    typeof data.repeatCount === "number" ? (
-      <Chip
-        key="rep"
-        label={`Repeats: ${data.repeatCount}`}
-        size="small"
-        variant="outlined"
-      />
-    ) : null,
-    data.lastSeenAt ? (
-      <Chip
-        key="last"
-        label={`Last seen: ${formatDateRu(data.lastSeenAt)}`}
-        size="small"
-        variant="outlined"
-      />
+      component="span"
+      variant="caption"
+      sx={{
+        color: primitives.night[200],
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        border: "1px solid",
+        borderColor: primitives.night[600],
+      }}
+    >
+      {STATUS_LABELS[data.status] ?? data.status}
+    </Typography>,
+    resolvedDetails.category ? (
+      <Typography
+        key="cat"
+        component="span"
+        variant="caption"
+        sx={{
+          color: primitives.night[300],
+          px: 1,
+          py: 0.25,
+        }}
+      >
+        {resolvedDetails.category}
+      </Typography>
     ) : null,
   ].filter(Boolean);
   const panelBoxSx = {
     p: 2,
     borderRadius: 2,
     border: "1px solid",
-    borderColor: "divider",
-    bgcolor: "background.paper",
+    borderColor: primitives.night[600],
+    bgcolor: alpha(primitives.night[700], 0.3),
   } as const;
 
   return (
@@ -452,7 +460,7 @@ export const FindingDetailContent = ({
         </Stack>
       </Stack>
 
-      <Divider sx={{ my: 2 }} />
+      <Divider sx={{ my: 2, borderColor: primitives.night[600] }} />
 
       {/* Tabs */}
       <Tabs
@@ -461,18 +469,28 @@ export const FindingDetailContent = ({
         variant="scrollable"
         allowScrollButtonsMobile
         sx={{
+          borderBottom: "1px solid",
+          borderColor: primitives.night[600],
           "& .MuiTabs-flexContainer": {
             justifyContent: "flex-start",
+          },
+          "& .MuiTabs-indicator": {
+            backgroundColor: primitives.lotus[500],
+            height: 2,
           },
           "& .MuiTab-root": {
             textTransform: "none",
             fontWeight: 500,
             minHeight: 42,
-            color: "text.secondary",
+            color: primitives.night[400],
+            fontSize: "0.8125rem",
           },
           "& .MuiTab-root.Mui-selected": {
-            color: "text.primary",
+            color: primitives.night[100],
             fontWeight: 600,
+          },
+          "& .MuiTab-root:hover": {
+            color: primitives.night[200],
           },
         }}
       >

@@ -1,37 +1,43 @@
 import {
   Alert,
-  Badge,
   Box,
   Button,
   Container,
-  Drawer,
-  IconButton,
-  Paper,
+  Divider,
+  InputAdornment,
   Snackbar,
   Stack,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
   Typography,
-  useMediaQuery,
+  alpha,
+  useTheme,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import FilterAltIcon from "@mui/icons-material/FilterAlt";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import ViewCompactIcon from "@mui/icons-material/ViewCompact";
-import ViewStreamIcon from "@mui/icons-material/ViewStream";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import FilterListIcon from "@mui/icons-material/FilterList";
+import ViewListIcon from "@mui/icons-material/ViewList";
+import ViewModuleIcon from "@mui/icons-material/ViewModule";
+import SearchIcon from "@mui/icons-material/Search";
+import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
+import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
+import SecurityIcon from "@mui/icons-material/Security";
+import AssignmentLateOutlinedIcon from "@mui/icons-material/AssignmentLateOutlined";
+import { useCallback, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
 import InlineActionsBar from "../components/InlineActionsBar";
 import ExportMenu from "../components/ExportMenu";
-import FiltersPanel from "../components/FiltersPanel";
 import { FilterChips } from "../components/FilterChips";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
 import ViewsDropdown from "../components/ViewsDropdown";
 import FilterDrawer from "../components/FilterDrawer";
+import FiltersPanel from "../components/FiltersPanel";
+import { MetricDisplay } from "../design-system/components";
 import { useUrlFiltersSync, FiltersState } from "../hooks/useUrlFiltersSync";
 import { useFindingsData } from "../hooks/useFindingsData";
 import { useBulkSelection } from "../hooks/useBulkSelection";
@@ -40,32 +46,39 @@ import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import { FindingListItemDTO } from "../types/findings";
 
-import { FindingDetailContent, FindingDetailErrorBoundary } from "./FindingDetail";
+import FindingDetailsDrawer from "../components/FindingDetailsDrawer";
 
 const LIST_STATE_KEY = "lotus_warden_findings_list_state";
+const VIEW_MODE_KEY = "findingsViewMode";
+
+type ViewMode = "table" | "cards";
 
 const FindingsList = () => {
+  const theme = useTheme();
   const location = useLocation();
-  const isMdUp = useMediaQuery("(min-width:900px)");
+  const navigate = useNavigate();
 
   // URL <-> state
   const [filters, actions, hydrated] = useUrlFiltersSync();
 
-  // UI only
-  const [compactMode, setCompactMode] = useState(() => {
-    const v = localStorage.getItem("findings.compactMode");
-    return v ? v === "1" : true; // default: compact = ON
+  // View mode
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const stored = localStorage.getItem(VIEW_MODE_KEY) as ViewMode;
+    return stored === "cards" ? "cards" : "table";
   });
+
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem("findings.compactMode", compactMode ? "1" : "0");
-  }, [compactMode]);
-  
-  // после загрузки (если надо) — автопереход на product
+  const handleViewChange = (_: React.MouseEvent, newView: ViewMode | null) => {
+    if (!newView) return;
+    setViewMode(newView);
+    localStorage.setItem(VIEW_MODE_KEY, newView);
+  };
+
+  // Auto-redirect after upload
   useUploadRedirect(filters.pageSize);
 
-  // данные
+  // Data fetching
   const {
     data,
     total,
@@ -82,10 +95,10 @@ const FindingsList = () => {
     hydrated,
   });
 
-  // подсветка текста + bulk (в bulk уже нужен debounced)
+  // Debounced search for highlighting
   const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
 
-  // bulk actions
+  // Bulk actions
   const totalCount = totalKnown ? total ?? 0 : data.length;
   const bulk = useBulkSelection({
     data,
@@ -96,7 +109,7 @@ const FindingsList = () => {
     onSuccess: fetchData,
   });
 
-  // drawer - selectedFindingId is already synced via useUrlFiltersSync
+  // Drawer state
   const drawer = useDrawerState({
     selectedFindingId: filters.selectedFindingId,
     setSelectedFindingId: actions.setSelectedFindingId,
@@ -117,25 +130,20 @@ const FindingsList = () => {
         actions.setSortOrder(filters.sortOrder === "asc" ? "desc" : "asc");
       } else {
         actions.setSortField(field);
-
         const defaultOrder: "asc" | "desc" =
           field === "severity" ||
-            field === "riskScore" ||
-            field === "lastSeenAt" ||
-            field === "createdAt" ||
-            field === "updatedAt"
+          field === "riskScore" ||
+          field === "lastSeenAt" ||
+          field === "createdAt" ||
+          field === "updatedAt"
             ? "desc"
             : "asc";
-
         actions.setSortOrder(defaultOrder);
       }
       actions.setPage(0);
     },
     [actions, filters.sortField, filters.sortOrder]
   );
-
-  const drawerWidth = isMdUp ? 620 : "100vw";
-  const filtersDrawerWidth = isMdUp ? 420 : "100vw";
 
   const user = getCurrentUser();
   const canBulk = user?.roles?.includes("admin") || user?.roles?.includes("analyst");
@@ -197,72 +205,208 @@ const FindingsList = () => {
     [actions]
   );
 
+  const handleUploadScan = () => {
+    navigate("/scans/upload");
+  };
+
+  // Calculate metrics from data
+  const metrics = useMemo(() => {
+    if (loading || data.length === 0) {
+      return {
+        totalFindings: totalKnown && total ? total : null,
+        criticalCount: null,
+        highCount: null,
+        openCount: null,
+      };
+    }
+
+    const criticalCount = data.filter((f) => f.severity === "critical").length;
+    const highCount = data.filter((f) => f.severity === "high").length;
+    const openCount = data.filter(
+      (f) => f.status === "new" || f.status === "under_review" || f.status === "confirmed"
+    ).length;
+
+    return {
+      totalFindings: totalKnown && total ? total : data.length,
+      criticalCount,
+      highCount,
+      openCount,
+    };
+  }, [data, loading, total, totalKnown]);
+
   return (
-    <Container maxWidth="xl" sx={{ py: { xs: 2, md: 3 } }}>
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        sx={{ mb: 2 }}
-      >
-        <Typography variant="h4" component="h1">
-          Список находок
-        </Typography>
+    <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
+      <Stack spacing={4}>
+        {/* Header */}
+        <Stack
+          direction={{ xs: "column", lg: "row" }}
+          spacing={3}
+          alignItems={{ xs: "flex-start", lg: "center" }}
+          justifyContent="space-between"
+        >
+          <Box>
+            <Typography variant="h4" component="h1" gutterBottom>
+              Findings
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Security vulnerabilities and issues across all products.
+            </Typography>
+          </Box>
 
-        <Stack direction="row" alignItems="center" spacing={1}>
-          {/* Saved Views */}
-          <ViewsDropdown
-            currentFilters={filters}
-            onApplyView={handleApplyView}
-          />
-
-          {/* Export */}
-          <ExportMenu
-            data={data}
-            filename="findings"
-            disabled={loading}
-            totalCount={totalCount}
-            selectAllMatching={bulk.selectAllMatching}
-            filters={filters}
-            debouncedSearch={debouncedSearch}
-          />
-
-          <Tooltip title="Переключить режим отображения">
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            alignItems={{ xs: "stretch", sm: "center" }}
+          >
             <ToggleButtonGroup
-              value={compactMode ? "compact" : "normal"}
+              value={viewMode}
               exclusive
-              onChange={(_, value) => {
-                if (value !== null) setCompactMode(value === "compact");
-              }}
+              onChange={handleViewChange}
               size="small"
-              aria-label="Режим отображения"
+              aria-label="view mode"
+              sx={{
+                bgcolor: alpha(theme.palette.common.white, 0.04),
+                border: "1px solid",
+                borderColor: "divider",
+              }}
             >
-              <ToggleButton value="normal" aria-label="Нормальный режим">
-                <ViewStreamIcon fontSize="small" />
+              <ToggleButton value="table" aria-label="table view">
+                <ViewListIcon fontSize="small" />
               </ToggleButton>
-              <ToggleButton value="compact" aria-label="Компактный режим">
-                <ViewCompactIcon fontSize="small" />
+              <ToggleButton value="cards" aria-label="cards view" disabled>
+                <ViewModuleIcon fontSize="small" />
               </ToggleButton>
             </ToggleButtonGroup>
-          </Tooltip>
 
-          <Tooltip title="Фильтры">
-            <IconButton onClick={() => setFiltersDrawerOpen(true)} aria-label="Фильтры">
-              <Badge
-                badgeContent={activeFiltersCount}
-                color="primary"
-                overlap="circular"
-                invisible={activeFiltersCount === 0}
+            <TextField
+              value={filters.searchInput}
+              onChange={(e) => actions.setSearchInput(e.target.value)}
+              placeholder="Search findings"
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ minWidth: { xs: "100%", sm: 220 } }}
+            />
+
+            <ViewsDropdown currentFilters={filters} onApplyView={handleApplyView} />
+
+            <ExportMenu
+              data={data}
+              filename="findings"
+              disabled={loading}
+              totalCount={totalCount}
+              selectAllMatching={bulk.selectAllMatching}
+              filters={filters}
+              debouncedSearch={debouncedSearch}
+            />
+
+            <Tooltip title={`Filters${activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ""}`}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => setFiltersDrawerOpen(true)}
+                startIcon={<FilterListIcon />}
+                sx={{
+                  minWidth: 100,
+                  ...(activeFiltersCount > 0 && {
+                    borderColor: "primary.main",
+                    color: "primary.main",
+                  }),
+                }}
               >
-                <FilterAltIcon />
-              </Badge>
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      </Stack>
+                Filters{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ""}
+              </Button>
+            </Tooltip>
 
-      {activeFiltersCount > 0 ? (
-        <Box sx={{ mb: 2 }}>
+            <Button
+              variant="contained"
+              startIcon={<UploadFileOutlinedIcon />}
+              sx={{ whiteSpace: "nowrap" }}
+              onClick={handleUploadScan}
+            >
+              Upload scan
+            </Button>
+          </Stack>
+        </Stack>
+
+        {/* Error Alert */}
+        {error && (
+          <Alert
+            severity="error"
+            icon={<ErrorOutlineIcon fontSize="small" />}
+            sx={{
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "error.main",
+              bgcolor: alpha(theme.palette.error.main, 0.1),
+            }}
+          >
+            {error}
+          </Alert>
+        )}
+
+        {/* Overview Metrics */}
+        <Box>
+          <Typography variant="overline" color="text.secondary">
+            Overview
+          </Typography>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+                lg: "repeat(4, minmax(0, 1fr))",
+              },
+              gap: 2,
+            }}
+          >
+            <MetricDisplay
+              title="Total Findings"
+              value={metrics.totalFindings ?? "—"}
+              loading={loading}
+              size="small"
+              variant="subtle"
+              color="default"
+              icon={<BugReportOutlinedIcon />}
+            />
+            <MetricDisplay
+              title="Critical"
+              value={metrics.criticalCount ?? "—"}
+              loading={loading}
+              size="small"
+              variant="subtle"
+              color="error"
+              icon={<SecurityIcon />}
+            />
+            <MetricDisplay
+              title="High"
+              value={metrics.highCount ?? "—"}
+              loading={loading}
+              size="small"
+              variant="subtle"
+              color="warning"
+              icon={<WarningAmberOutlinedIcon />}
+            />
+            <MetricDisplay
+              title="Requires Action"
+              value={metrics.openCount ?? "—"}
+              loading={loading}
+              size="small"
+              variant="subtle"
+              color="lotus"
+              icon={<AssignmentLateOutlinedIcon />}
+            />
+          </Box>
+        </Box>
+
+        {/* Active Filter Chips */}
+        {activeFiltersCount > 0 && (
           <FilterChips
             productId={filters.productId}
             productLabel={filters.productId}
@@ -289,85 +433,91 @@ const FindingsList = () => {
             onShowRepeatsChange={actions.setShowRepeats}
             onResetAll={actions.resetFilters}
           />
-        </Box>
-      ) : null}
-
-      {canBulk && (
-        <InlineActionsBar
-          selectedCount={bulk.selectedIds.length}
-          totalCount={totalCount}
-          totalKnown={totalKnown}
-          selectAllMatching={bulk.selectAllMatching}
-          showSelectAllPrompt={bulk.showSelectAllPrompt}
-          onApply={bulk.handleBulkApply}
-          onClearSelection={bulk.handleClearSelection}
-          onSelectAllResults={bulk.handleSelectAllResults}
-          loading={bulk.loading}
-        />
-      )}
-
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 2,
-          border: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <FindingsTable
-          data={data}
-          selectedIds={bulk.selectedIds}
-          sortField={filters.sortField}
-          sortOrder={filters.sortOrder}
-          onToggleAll={bulk.handleToggleAll}
-          onToggleOne={bulk.handleToggleOne}
-          onSortChange={handleSortChange}
-          loading={loading || bulk.loading}
-          errorMessage={error || bulk.error}
-          onRetry={handleRetry}
-          onResetFilters={actions.resetFilters}
-          batchMode={bulk.selectionCount > 0}
-          highlightQuery={debouncedSearch}
-          rowCount={filters.pageSize}
-          onOpenDetails={(id) => drawer.openDrawer(id)}
-          activeFindingId={filters.selectedFindingId}
-          returnTo={listReturnTo}
-          onNavigateToDetail={handleNavigateToDetail}
-          compactMode={compactMode}
-        />
-
-      </Paper>
-
-      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2} sx={{ mt: 2 }}>
-        {!totalKnown && (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={loadStats}
-            disabled={statsLoading || loading}
-          >
-            {statsLoading ? "Загрузка статистики..." : "Загрузить статистику"}
-          </Button>
         )}
-        <Box sx={{ flex: 1 }}>
-          <PaginationControl
-            page={filters.page}
-            pageSize={filters.pageSize}
-            total={totalKnown ? totalCount : null}
-            hasNextPage={hasNextPage}
-            currentCount={data.length}
-            onPageChange={(nextPage) => {
-              if (nextPage > filters.page && !hasNextPage) return;
-              actions.setPage(nextPage);
-            }}
-            onPageSizeChange={(v) => {
-              actions.setPageSize(v);
-              bulk.handleClearSelection();
-            }}
+
+        <Divider sx={{ borderColor: alpha(theme.palette.common.white, 0.08) }} />
+
+        {/* Bulk Actions Bar */}
+        {canBulk && (
+          <InlineActionsBar
+            selectedCount={bulk.selectedIds.length}
+            totalCount={totalCount}
+            totalKnown={totalKnown}
+            selectAllMatching={bulk.selectAllMatching}
+            showSelectAllPrompt={bulk.showSelectAllPrompt}
+            onApply={bulk.handleBulkApply}
+            onClearSelection={bulk.handleClearSelection}
+            onSelectAllResults={bulk.handleSelectAllResults}
+            loading={bulk.loading}
+          />
+        )}
+
+        {/* Table */}
+        <Box
+          sx={{
+            borderRadius: 2,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: alpha(theme.palette.common.white, 0.02),
+            overflow: "hidden",
+          }}
+        >
+          <FindingsTable
+            data={data}
+            selectedIds={bulk.selectedIds}
+            sortField={filters.sortField}
+            sortOrder={filters.sortOrder}
+            onToggleAll={bulk.handleToggleAll}
+            onToggleOne={bulk.handleToggleOne}
+            onSortChange={handleSortChange}
+            loading={loading || bulk.loading}
+            errorMessage={error || bulk.error}
+            onRetry={handleRetry}
+            onResetFilters={actions.resetFilters}
+            batchMode={bulk.selectionCount > 0}
+            highlightQuery={debouncedSearch}
+            rowCount={filters.pageSize}
+            onOpenDetails={(id) => drawer.openDrawer(id)}
+            activeFindingId={filters.selectedFindingId}
+            returnTo={listReturnTo}
+            onNavigateToDetail={handleNavigateToDetail}
+            compactMode
           />
         </Box>
+
+        {/* Pagination */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+          {!totalKnown && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={loadStats}
+              disabled={statsLoading || loading}
+            >
+              {statsLoading ? "Loading stats..." : "Load statistics"}
+            </Button>
+          )}
+          <Box sx={{ flex: 1 }}>
+            <PaginationControl
+              page={filters.page}
+              pageSize={filters.pageSize}
+              total={totalKnown ? totalCount : null}
+              hasNextPage={hasNextPage}
+              currentCount={data.length}
+              onPageChange={(nextPage) => {
+                if (nextPage > filters.page && !hasNextPage) return;
+                actions.setPage(nextPage);
+              }}
+              onPageSizeChange={(v) => {
+                actions.setPageSize(v);
+                bulk.handleClearSelection();
+              }}
+            />
+          </Box>
+        </Stack>
       </Stack>
 
+      {/* Snackbar for bulk operations */}
       <Snackbar
         open={bulk.undoToastOpen}
         autoHideDuration={8000}
@@ -389,71 +539,19 @@ const FindingsList = () => {
         </Alert>
       </Snackbar>
 
-      <Drawer
-        anchor="right"
-        open={Boolean(filters.selectedFindingId)}
+      {/* Finding Details Drawer */}
+      <FindingDetailsDrawer
+        findingId={filters.selectedFindingId}
+        returnTo={listReturnTo}
         onClose={drawer.closeDrawer}
-        PaperProps={{
-          sx: {
-            width: drawerWidth,
-            maxWidth: "100vw",
-            borderTopLeftRadius: isMdUp ? 16 : 0,
-            borderBottomLeftRadius: isMdUp ? 16 : 0,
-          },
-        }}
-      >
-        <Box sx={{ p: 2, borderBottom: "1px solid", borderColor: "divider" }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              Детали находки
-            </Typography>
+      />
 
-            <Stack direction="row" gap={1} alignItems="center">
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<OpenInNewIcon />}
-                onClick={drawer.openInNewTab}
-                disabled={!filters.selectedFindingId}
-              >
-                Открыть
-              </Button>
-              <IconButton onClick={drawer.closeDrawer} aria-label="Закрыть">
-                <CloseIcon />
-              </IconButton>
-            </Stack>
-          </Stack>
-
-          {filters.selectedFindingId && (
-            <Typography variant="caption" color="text.secondary">
-              ID: {filters.selectedFindingId}
-            </Typography>
-          )}
-        </Box>
-
-        <Box sx={{ p: 2, height: "100%", overflow: "auto" }}>
-          {filters.selectedFindingId ? (
-            <>
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                Detail view mounted
-              </Typography>
-              <FindingDetailErrorBoundary>
-                <FindingDetailContent
-                  id={filters.selectedFindingId}
-                  compact
-                  onClose={drawer.closeDrawer}
-                />
-              </FindingDetailErrorBoundary>
-            </>
-          ) : null}
-        </Box>
-      </Drawer>
-
+      {/* Filters Drawer */}
       <FilterDrawer
         open={filtersDrawerOpen}
         onClose={() => setFiltersDrawerOpen(false)}
         onReset={actions.resetFilters}
-        width={filtersDrawerWidth}
+        width={{ xs: "100vw", md: 420 }}
       >
         <FiltersPanel
           productId={filters.productId}
