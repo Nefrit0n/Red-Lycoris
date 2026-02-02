@@ -268,7 +268,7 @@ type gosecReport struct {
 type gosecIssue struct {
 	Severity     string          `json:"severity"`
 	Confidence   string          `json:"confidence"`
-	CWE          []gosecCWE      `json:"cwe"`
+	CWE          gosecCWEList    `json:"cwe"`
 	RuleID       string          `json:"rule_id"`
 	Details      string          `json:"details"`
 	File         string          `json:"file"`
@@ -282,6 +282,37 @@ type gosecIssue struct {
 type gosecCWE struct {
 	ID  string `json:"id"`
 	URL string `json:"url"`
+}
+
+// gosecCWEList handles both array and single object CWE formats
+type gosecCWEList []gosecCWE
+
+func (c *gosecCWEList) UnmarshalJSON(data []byte) error {
+	data = []byte(strings.TrimSpace(string(data)))
+	if len(data) == 0 || string(data) == "null" {
+		*c = nil
+		return nil
+	}
+
+	// Try array format first
+	var arr []gosecCWE
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*c = arr
+		return nil
+	}
+
+	// Try single object format
+	var single gosecCWE
+	if err := json.Unmarshal(data, &single); err == nil {
+		if single.ID != "" || single.URL != "" {
+			*c = []gosecCWE{single}
+		}
+		return nil
+	}
+
+	// Unknown format, return empty
+	*c = nil
+	return nil
 }
 
 type gosecErr struct {
