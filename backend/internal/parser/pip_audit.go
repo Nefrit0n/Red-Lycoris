@@ -20,24 +20,39 @@ func (p *PipAuditParser) CanParse(data []byte) bool {
 
 	// pip-audit outputs an array of findings
 	var results []pipAuditResult
-	if err := json.Unmarshal(data, &results); err != nil {
-		return false
+	if err := json.Unmarshal(data, &results); err == nil {
+		// Check if it looks like pip-audit output
+		if len(results) == 0 {
+			return true // Empty array is valid
+		}
+		// Check for pip-audit specific fields
+		first := results[0]
+		return first.Name != "" && first.Version != ""
 	}
 
-	// Check if it looks like pip-audit output
-	if len(results) == 0 {
-		return true // Empty array is valid
+	// Also try object format with "dependencies" key
+	var report pipAuditObjectReport
+	if err := json.Unmarshal(data, &report); err == nil {
+		if len(report.Dependencies) > 0 {
+			first := report.Dependencies[0]
+			return first.Name != "" && first.Version != ""
+		}
 	}
 
-	// Check for pip-audit specific fields
-	first := results[0]
-	return first.Name != "" && first.Version != ""
+	return false
 }
 
 func (p *PipAuditParser) Parse(data []byte) ([]Finding, error) {
 	var results []pipAuditResult
+
+	// Try array format first
 	if err := json.Unmarshal(data, &results); err != nil {
-		return nil, fmt.Errorf("failed to parse pip-audit report: %w", err)
+		// Try object format with "dependencies" key
+		var report pipAuditObjectReport
+		if err := json.Unmarshal(data, &report); err != nil {
+			return nil, fmt.Errorf("failed to parse pip-audit report: %w", err)
+		}
+		results = report.Dependencies
 	}
 
 	var findings []Finding
@@ -183,4 +198,9 @@ type pipAuditVuln struct {
 	FixVersions []string `json:"fix_versions"`
 	Aliases     []string `json:"aliases"`
 	Description string   `json:"description"`
+}
+
+// pipAuditObjectReport is an alternative format where results are under "dependencies" key
+type pipAuditObjectReport struct {
+	Dependencies []pipAuditResult `json:"dependencies"`
 }
