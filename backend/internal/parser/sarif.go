@@ -19,13 +19,13 @@ type sarifRun struct {
 }
 
 type sarifRule struct {
-	ID               string            `json:"id"`
-	Name             string            `json:"name"`
-	ShortDescription sarifMessage      `json:"shortDescription"`
-	FullDescription  sarifMessage      `json:"fullDescription"`
-	Help             sarifMessage      `json:"help"`
-	HelpURI          string            `json:"helpUri"`
-	Properties       sarifRuleProps    `json:"properties"`
+	ID               string             `json:"id"`
+	Name             string             `json:"name"`
+	ShortDescription sarifMessage       `json:"shortDescription"`
+	FullDescription  sarifMessage       `json:"fullDescription"`
+	Help             sarifMessage       `json:"help"`
+	HelpURI          string             `json:"helpUri"`
+	Properties       sarifRuleProps     `json:"properties"`
 	DefaultConfig    sarifDefaultConfig `json:"defaultConfiguration"`
 }
 
@@ -109,6 +109,15 @@ func parseSarif(data []byte, toolName string) ([]Finding, error) {
 			continue
 		}
 
+		// Determine effective tool name: prefer provided toolName, fallback to SARIF driver name
+		effectiveToolName := toolName
+		if effectiveToolName == "" {
+			effectiveToolName = strings.TrimSpace(run.Tool.Driver.Name)
+		}
+		if effectiveToolName == "" {
+			effectiveToolName = "sarif"
+		}
+
 		// Build rule lookup for descriptions and help text
 		ruleMap := make(map[string]sarifRule)
 		for _, rule := range run.Tool.Driver.Rules {
@@ -133,12 +142,13 @@ func parseSarif(data []byte, toolName string) ([]Finding, error) {
 			}
 
 			// Build evidence with all available information
-			evidence := buildSarifEvidence(result, region, filePath, toolName)
+			evidence := buildSarifEvidence(result, region, filePath, effectiveToolName)
 
 			// Build rawData
 			rawData := map[string]any{
-				"rule_id": result.RuleID,
-				"level":   result.Level,
+				"rule_id":   result.RuleID,
+				"level":     result.Level,
+				"tool_name": effectiveToolName,
 			}
 
 			// Add rule description if available
@@ -190,14 +200,14 @@ func parseSarif(data []byte, toolName string) ([]Finding, error) {
 }
 
 func buildSarifEvidence(result sarifResult, region sarifRegion, filePath, toolName string) map[string]any {
+	scannerType := toolName
+	if scannerType == "" {
+		scannerType = "sarif"
+	}
 	evidence := map[string]any{
-		"scannerType": "sarif",
+		"scannerType": scannerType,
 		"findingType": "sast",
 		"category":    models.CategorySAST,
-	}
-
-	if toolName != "" {
-		evidence["scannerType"] = toolName
 	}
 
 	if result.RuleID != "" {

@@ -1,0 +1,53 @@
+{
+  "kics_version": "1.7.0",
+  "files_scanned": 5,
+  "lines_scanned": 250,
+  "files_parsed": 5,
+  "lines_parsed": 250,
+  "files_failed_to_scan": 0,
+  "queries_total": 500,
+  "queries_failed_to_execute": 0,
+  "queries_failed_to_compute_similarity_id": 0,
+  "scan_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "severity_counters": {
+    "CRITICAL": 0,
+    "HIGH": 1,
+    "INFO": 0,
+    "LOW": 1,
+    "MEDIUM": 0,
+    "TRACE": 0
+  },
+  "total_counter": 2,
+  "total_bom_resources": 0,
+  "start": "2024-01-15T10:00:00Z",
+  "end": "2024-01-15T10:00:30Z",
+  "queries": [
+    {
+      "query_name": "S3 Bucket Without Server-side-encryption",
+      "query_id": "5a2a7640-7f75-4088-9c2d-5b0f3e3e3f3e",
+      "query_url": "https://docs.kics.io/latest/queries/terraform-queries/aws/5a2a7640",
+      "severity": "HIGH",
+      "platform": "Terraform",
+      "cloud_provider": "AWS",
+      "category": "Encryption",
+      "description": "S3 Bucket should have server-side encryption enabled",
+      "description_id": "1234abcd",
+      "cis_description_id": "",
+      "cis_description_title": "",
+      "cis_description_text": "",
+      "files": [
+        {
+          "file_name": "main.tf",
+          "similarity_id": "abc123def456",
+          "line": 15,
+          "issue_type": "MissingAttribute",
+          "search_key": "aws_s3_bucket[my_bucket]",
+          "search_line": 15,
+          "search_value": "",
+          "expected_value": "aws_s3_bucket.server_side_encryption_configuration should be defined",
+          "actual_value": "aws_s3_bucket.server_side_encryption_configuration is not defined"
+        }
+      ]
+    }
+  ]
+}
