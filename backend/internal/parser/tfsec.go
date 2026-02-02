@@ -39,11 +39,31 @@ func (p *TfsecParser) CanParse(data []byte) bool {
 	}
 
 	// tfsec format has "results" array
-	if _, hasResults := payload["results"]; !hasResults {
+	resultsRaw, hasResults := payload["results"]
+	if !hasResults {
 		return false
 	}
 
-	return true
+	// Check if results array contains tfsec-specific fields
+	var results []json.RawMessage
+	if err := json.Unmarshal(resultsRaw, &results); err != nil {
+		return false
+	}
+	// Allow empty results (valid tfsec output with no findings)
+	if len(results) == 0 {
+		return true
+	}
+	// Check first result for tfsec-specific fields
+	var firstResult map[string]json.RawMessage
+	if err := json.Unmarshal(results[0], &firstResult); err != nil {
+		return false
+	}
+	// tfsec results have "rule_id" and "location" fields
+	_, hasRuleID := firstResult["rule_id"]
+	_, hasLocation := firstResult["location"]
+	_, hasRuleProvider := firstResult["rule_provider"]
+	// Must have at least rule_id and (location or rule_provider)
+	return hasRuleID && (hasLocation || hasRuleProvider)
 }
 
 func (p *TfsecParser) Parse(data []byte) ([]Finding, error) {
