@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   FindingListItemDTO,
@@ -102,6 +102,8 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
 
   const [hydrated, setHydrated] = useState(false);
   const [filters, setFilters] = useState<FiltersState>(defaultFilters);
+  const lastPushedSearchRef = useRef<string | null>(null);
+  const isNavigatingRef = useRef(false);
 
   const areFiltersEqual = (left: FiltersState, right: FiltersState) =>
     left.page === right.page &&
@@ -175,8 +177,19 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     );
   };
 
-  // URL -> State (on mount and when URL changes)
+  // URL -> State (on mount and when URL changes externally)
   useEffect(() => {
+    // Skip if we just pushed this URL ourselves
+    if (isNavigatingRef.current) {
+      isNavigatingRef.current = false;
+      return;
+    }
+
+    // Skip if URL matches what we last pushed (prevents loop)
+    if (lastPushedSearchRef.current === location.search) {
+      return;
+    }
+
     const search = location.search;
 
     const page = getUrlParamNumber(search, 'page', 1) - 1;
@@ -256,50 +269,103 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     if (!hydrated) return;
 
     const params = buildFiltersQuery(filters);
-    const defaultParams = buildFiltersQuery(defaultFilters);
+    const newSearch = params ? `?${params}` : '';
 
+    // Skip if search hasn't changed
+    if (newSearch === location.search) {
+      return;
+    }
+
+    // Skip if we already pushed this search
+    if (newSearch === lastPushedSearchRef.current) {
+      return;
+    }
+
+    const defaultParams = buildFiltersQuery(defaultFilters);
     const shouldSkipDefaultNavigation =
       location.search === '' && areSearchParamsEqual(params, defaultParams);
 
-    const shouldNavigate = !shouldSkipDefaultNavigation && !areSearchParamsEqual(location.search, params);
-
-    if (shouldNavigate) {
-      navigate(
-        {
-          pathname: location.pathname,
-          search: params ? `?${params}` : '',
-        },
-        { replace: true }
-      );
+    if (shouldSkipDefaultNavigation) {
+      return;
     }
-  }, [
-    hydrated,
-    filters,
-    location.pathname,
-    location.search,
-    navigate,
-  ]);
 
-  const actions: FiltersActions = {
-    setPage: (page) => setFilters((prev) => ({ ...prev, page })),
-    setPageSize: (pageSize) => setFilters((prev) => ({ ...prev, pageSize, page: 0 })),
-    setProductId: (productId) => setFilters((prev) => ({ ...prev, productId, page: 0 })),
-    setSearchInput: (searchInput) => setFilters((prev) => ({ ...prev, searchInput, page: 0 })),
-    setImportJobId: (importJobId) => setFilters((prev) => ({ ...prev, importJobId, page: 0 })),
-    setFilterSeverity: (filterSeverity) => setFilters((prev) => ({ ...prev, filterSeverity, page: 0 })),
-    setFilterStatus: (filterStatus) => setFilters((prev) => ({ ...prev, filterStatus, page: 0 })),
-    setFilterRiskBand: (filterRiskBand) => setFilters((prev) => ({ ...prev, filterRiskBand, page: 0 })),
-    setFilterOccurrence: (filterOccurrence) => setFilters((prev) => ({ ...prev, filterOccurrence, page: 0 })),
-    setFilterScannerType: (filterScannerType) => setFilters((prev) => ({ ...prev, filterScannerType, page: 0 })),
-    setFilterPolicyDecision: (filterPolicyDecision) => setFilters((prev) => ({ ...prev, filterPolicyDecision, page: 0 })),
-    setDateFrom: (dateFrom) => setFilters((prev) => ({ ...prev, dateFrom, page: 0 })),
-    setDateTo: (dateTo) => setFilters((prev) => ({ ...prev, dateTo, page: 0 })),
-    setShowRepeats: (showRepeats) => setFilters((prev) => ({ ...prev, showRepeats, page: 0 })),
-    setSortField: (sortField) => setFilters((prev) => ({ ...prev, sortField, page: 0 })),
-    setSortOrder: (sortOrder) => setFilters((prev) => ({ ...prev, sortOrder, page: 0 })),
-    setSelectedFindingId: (selectedFindingId) => setFilters((prev) => ({ ...prev, selectedFindingId })),
-    resetFilters: () => setFilters(defaultFilters),
+    // Mark that we're navigating to prevent URL->State effect from running
+    isNavigatingRef.current = true;
+    lastPushedSearchRef.current = newSearch;
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: newSearch,
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, filters, location.pathname, navigate]);
+
+  // Memoize all action callbacks to prevent unnecessary re-renders
+  const setPage = useCallback((page: number) => setFilters((prev) => ({ ...prev, page })), []);
+  const setPageSize = useCallback((pageSize: number) => setFilters((prev) => ({ ...prev, pageSize, page: 0 })), []);
+  const setProductId = useCallback((productId: string) => setFilters((prev) => ({ ...prev, productId, page: 0 })), []);
+  const setSearchInput = useCallback((searchInput: string) => setFilters((prev) => ({ ...prev, searchInput, page: 0 })), []);
+  const setImportJobId = useCallback((importJobId: string) => setFilters((prev) => ({ ...prev, importJobId, page: 0 })), []);
+  const setFilterSeverity = useCallback((filterSeverity: FindingSeverity | '') => setFilters((prev) => ({ ...prev, filterSeverity, page: 0 })), []);
+  const setFilterStatus = useCallback((filterStatus: FindingStatus | '') => setFilters((prev) => ({ ...prev, filterStatus, page: 0 })), []);
+  const setFilterRiskBand = useCallback((filterRiskBand: RiskBand | '') => setFilters((prev) => ({ ...prev, filterRiskBand, page: 0 })), []);
+  const setFilterOccurrence = useCallback((filterOccurrence: FindingOccurrenceStatus | '') => setFilters((prev) => ({ ...prev, filterOccurrence, page: 0 })), []);
+  const setFilterScannerType = useCallback((filterScannerType: string) => setFilters((prev) => ({ ...prev, filterScannerType, page: 0 })), []);
+  const setFilterPolicyDecision = useCallback((filterPolicyDecision: PolicyDecision | '') => setFilters((prev) => ({ ...prev, filterPolicyDecision, page: 0 })), []);
+  const setDateFrom = useCallback((dateFrom: string) => setFilters((prev) => ({ ...prev, dateFrom, page: 0 })), []);
+  const setDateTo = useCallback((dateTo: string) => setFilters((prev) => ({ ...prev, dateTo, page: 0 })), []);
+  const setShowRepeats = useCallback((showRepeats: boolean) => setFilters((prev) => ({ ...prev, showRepeats, page: 0 })), []);
+  const setSortField = useCallback((sortField: keyof FindingListItemDTO) => setFilters((prev) => ({ ...prev, sortField, page: 0 })), []);
+  const setSortOrder = useCallback((sortOrder: 'asc' | 'desc') => setFilters((prev) => ({ ...prev, sortOrder, page: 0 })), []);
+  const setSelectedFindingId = useCallback((selectedFindingId: string | null) => setFilters((prev) => ({ ...prev, selectedFindingId })), []);
+  const resetFilters = useCallback(() => setFilters(defaultFilters), []);
+
+  // Use ref to create stable actions object
+  const actionsRef = useRef<FiltersActions>({
+    setPage,
+    setPageSize,
+    setProductId,
+    setSearchInput,
+    setImportJobId,
+    setFilterSeverity,
+    setFilterStatus,
+    setFilterRiskBand,
+    setFilterOccurrence,
+    setFilterScannerType,
+    setFilterPolicyDecision,
+    setDateFrom,
+    setDateTo,
+    setShowRepeats,
+    setSortField,
+    setSortOrder,
+    setSelectedFindingId,
+    resetFilters,
+  });
+
+  // Update ref with latest callbacks (they're already stable due to useCallback)
+  actionsRef.current = {
+    setPage,
+    setPageSize,
+    setProductId,
+    setSearchInput,
+    setImportJobId,
+    setFilterSeverity,
+    setFilterStatus,
+    setFilterRiskBand,
+    setFilterOccurrence,
+    setFilterScannerType,
+    setFilterPolicyDecision,
+    setDateFrom,
+    setDateTo,
+    setShowRepeats,
+    setSortField,
+    setSortOrder,
+    setSelectedFindingId,
+    resetFilters,
   };
 
-  return [filters, actions, hydrated];
+  return [filters, actionsRef.current, hydrated];
 }
