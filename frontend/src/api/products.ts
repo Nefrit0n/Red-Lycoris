@@ -116,7 +116,6 @@ export const fetchProductsWithStats = async (
 ): Promise<{ data: ProductWithStats[]; total: number }> => {
   const productsResponse = await fetchProducts(limit, offset, signal);
 
-  // ⚠️ N+1 (как быстрый workaround). Правильнее — отдельный endpoint /products-with-stats.
   const findingsEnvelopes = await runWithConcurrency(
     productsResponse.data,
     4,
