@@ -19,9 +19,22 @@ export function useFindingDetail(id: string): UseFindingDetailResult {
   const [error, setError] = useState<string | null>(null);
   const retryTimeoutRef = useRef<number | null>(null);
   const retryAttemptsRef = useRef(0);
+  const lastFetchedIdRef = useRef<string | null>(null);
+  const inFlightRef = useRef(false);
 
   const fetchDetail = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal, force = false) => {
+      // Prevent duplicate requests for the same ID
+      if (!force && lastFetchedIdRef.current === id && data !== null) {
+        return;
+      }
+
+      // Prevent concurrent requests for the same ID
+      if (inFlightRef.current && lastFetchedIdRef.current === id) {
+        return;
+      }
+
+      inFlightRef.current = true;
       setLoading(true);
       setError(null);
       try {
@@ -29,9 +42,9 @@ export function useFindingDetail(id: string): UseFindingDetailResult {
           window.clearTimeout(retryTimeoutRef.current);
           retryTimeoutRef.current = null;
         }
-        console.log("[FindingDetail] fetch detail", id);
         const response = await fetchFindingDetail(id, signal, { includeRiskFactors: true });
         retryAttemptsRef.current = 0;
+        lastFetchedIdRef.current = id;
         setData(response);
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
@@ -44,7 +57,7 @@ export function useFindingDetail(id: string): UseFindingDetailResult {
           if (retryAttemptsRef.current < 2 && !signal?.aborted) {
             retryAttemptsRef.current += 1;
             retryTimeoutRef.current = window.setTimeout(() => {
-              fetchDetail();
+              fetchDetail(undefined, true);
             }, jitterMs);
           }
           return;
@@ -52,17 +65,26 @@ export function useFindingDetail(id: string): UseFindingDetailResult {
 
         setError("Не удалось загрузить детали находки.");
       } finally {
+        inFlightRef.current = false;
         setLoading(false);
       }
     },
-    [id]
+    [id, data]
   );
 
   useEffect(() => {
+    // Reset state when ID changes
+    if (lastFetchedIdRef.current !== id) {
+      setData(null);
+      setLoading(true);
+      setError(null);
+    }
+
     const controller = new AbortController();
     fetchDetail(controller.signal);
     return () => controller.abort();
-  }, [fetchDetail]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     retryAttemptsRef.current = 0;
