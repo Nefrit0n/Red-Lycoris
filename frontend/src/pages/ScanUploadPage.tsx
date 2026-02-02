@@ -14,11 +14,13 @@ import {
   Step,
   StepLabel,
   Stepper,
+  Switch,
   Tab,
   Tabs,
   TextField,
   Tooltip,
   Typography,
+  FormControlLabel,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -27,6 +29,9 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import SearchIcon from "@mui/icons-material/Search";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import ErrorIcon from "@mui/icons-material/Error";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import BatchPredictionIcon from "@mui/icons-material/BatchPrediction";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchFindingDetail, fetchFindings } from "../api/findings";
@@ -40,7 +45,7 @@ import {
   detectScannerFromFile,
   getScannersByCategory,
 } from "../types/scanners";
-import DragDropUpload from "../components/DragDropUpload";
+import DragDropUpload, { FileWithValidation } from "../components/DragDropUpload";
 
 interface UploadHistoryItem extends UploadScanResponse {
   fileName: string;
@@ -55,7 +60,15 @@ interface FindingPreview extends FindingListItemDTO {
   evidence?: FindingEvidence | null;
 }
 
+interface BatchUploadResult {
+  file: File;
+  result?: UploadScanResponse;
+  error?: string;
+  status: "pending" | "uploading" | "success" | "error";
+}
+
 const STEPS = ["Выбор сканера", "Загрузка файла", "Обработка", "Результаты"];
+const BATCH_STEPS = ["Загрузка файлов", "Проверка", "Обработка", "Результаты"];
 
 const CATEGORY_ORDER: ScannerCategory[] = ["SAST", "SCA", "DAST", "SECRETS", "CONTAINER", "IAC", "OTHER"];
 
@@ -92,6 +105,7 @@ const getSemgrepEvidence = (evidence?: FindingEvidence | null): SemgrepEvidence 
 const ScanUploadPage = () => {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<FileWithValidation[]>([]);
   const [scannerType, setScannerType] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<ScannerCategory>("SAST");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -109,6 +123,10 @@ const ScanUploadPage = () => {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [autoDetectedScanner, setAutoDetectedScanner] = useState<string | null>(null);
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchResults, setBatchResults] = useState<BatchUploadResult[]>([]);
+  const [batchUploading, setBatchUploading] = useState(false);
   const [history, setHistory] = useState<UploadHistoryItem[]>(() => {
     const raw = localStorage.getItem(HISTORY_KEY);
     if (!raw) return [];
@@ -134,17 +152,38 @@ const ScanUploadPage = () => {
     }
   }, [file, scannerType]);
 
+  // Handle auto-detected scanner from content
+  const handleScannerDetected = (scannerId: string) => {
+    setAutoDetectedScanner(scannerId);
+    if (!scannerType || scannerType === "sarif") {
+      setScannerType(scannerId);
+      const scanner = SCANNERS.find((s) => s.id === scannerId);
+      if (scanner) {
+        setSelectedCategory(scanner.category);
+      }
+    }
+  };
+
   // Calculate current step
   const activeStep = useMemo(() => {
+    if (batchMode) {
+      if (batchResults.some((r) => r.status === "success")) return 3;
+      if (batchUploading) return 2;
+      if (files.length > 0) return 1;
+      return 0;
+    }
     if (success) return 3;
     if (loading) return 2;
     if (file && scannerType) return 1;
     return 0;
-  }, [file, scannerType, loading, success]);
+  }, [file, scannerType, loading, success, batchMode, files, batchResults, batchUploading]);
 
   const isValid = useMemo(() => {
+    if (batchMode) {
+      return files.length > 0 && files.every((f) => f.validation?.valid !== false);
+    }
     return Boolean(file && scannerType);
-  }, [file, scannerType]);
+  }, [file, scannerType, batchMode, files]);
 
   // Filter scanners by search query
   const filteredScanners = useMemo(() => {
@@ -220,6 +259,71 @@ const ScanUploadPage = () => {
     }
   };
 
+  const handleBatchUpload = async () => {
+    if (files.length === 0) {
+      setError("Добавьте файлы для загрузки");
+      return;
+    }
+
+    const validFiles = files.filter((f) => f.validation?.valid !== false);
+    if (validFiles.length === 0) {
+      setError("Нет валидных файлов для загрузки");
+      return;
+    }
+
+    setError(null);
+    setBatchUploading(true);
+
+    const results: BatchUploadResult[] = validFiles.map((f) => ({
+      file: f.file,
+      status: "pending" as const,
+    }));
+    setBatchResults(results);
+
+    for (let i = 0; i < validFiles.length; i++) {
+      const fileData = validFiles[i];
+      const scannerForFile = fileData.detectedScanner || detectScannerFromFile(fileData.file.name) || "sarif";
+
+      setBatchResults((prev) =>
+        prev.map((r, idx) => (idx === i ? { ...r, status: "uploading" } : r))
+      );
+
+      try {
+        const result = await uploadScan({
+          file: fileData.file,
+          scannerType: scannerForFile,
+          productName: productName || undefined,
+          productVersion: productVersion || undefined,
+          productIdentifier: productIdentifier || undefined,
+        });
+
+        setBatchResults((prev) =>
+          prev.map((r, idx) => (idx === i ? { ...r, status: "success", result } : r))
+        );
+
+        // Add to history
+        const entry: UploadHistoryItem = {
+          ...result,
+          fileName: fileData.file.name,
+          scannerType: scannerForFile,
+          uploadedAt: new Date().toISOString(),
+        };
+        setHistory((prev) => [entry, ...prev].slice(0, 10));
+      } catch (err) {
+        setBatchResults((prev) =>
+          prev.map((r, idx) =>
+            idx === i
+              ? { ...r, status: "error", error: err instanceof Error ? err.message : "Ошибка" }
+              : r
+          )
+        );
+      }
+    }
+
+    setBatchUploading(false);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  };
+
   useEffect(() => {
     if (!success?.importJobId) return;
 
@@ -278,6 +382,7 @@ const ScanUploadPage = () => {
 
   const handleReset = () => {
     setFile(null);
+    setFiles([]);
     setScannerType("");
     setProductName("");
     setProductVersion("");
@@ -288,6 +393,8 @@ const ScanUploadPage = () => {
     setUploadProgress(0);
     setPreviewFindings([]);
     setPreviewTotal(null);
+    setAutoDetectedScanner(null);
+    setBatchResults([]);
   };
 
   const handleViewFindings = () => {
@@ -320,6 +427,20 @@ const ScanUploadPage = () => {
     setSearchQuery("");
   };
 
+  const handleFilesSelect = (newFiles: FileWithValidation[]) => {
+    setFiles(newFiles);
+  };
+
+  // Calculate batch stats
+  const batchStats = useMemo(() => {
+    const successCount = batchResults.filter((r) => r.status === "success").length;
+    const errorCount = batchResults.filter((r) => r.status === "error").length;
+    const totalFindings = batchResults
+      .filter((r) => r.result)
+      .reduce((sum, r) => sum + (r.result?.createdFindings || 0), 0);
+    return { successCount, errorCount, totalFindings };
+  }, [batchResults]);
+
   return (
     <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }} maxWidth="xl" mx="auto">
       <Stack spacing={3}>
@@ -334,14 +455,34 @@ const ScanUploadPage = () => {
                 Загрузите отчёт сканера безопасности для анализа
               </Typography>
             </Box>
-            <Button
-              startIcon={<HistoryIcon />}
-              onClick={() => setShowHistory(!showHistory)}
-              variant={showHistory ? "contained" : "outlined"}
-              size="small"
-            >
-              История ({history.length})
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={batchMode}
+                    onChange={(e) => {
+                      setBatchMode(e.target.checked);
+                      handleReset();
+                    }}
+                    size="small"
+                  />
+                }
+                label={
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <BatchPredictionIcon fontSize="small" />
+                    <Typography variant="body2">Batch</Typography>
+                  </Stack>
+                }
+              />
+              <Button
+                startIcon={<HistoryIcon />}
+                onClick={() => setShowHistory(!showHistory)}
+                variant={showHistory ? "contained" : "outlined"}
+                size="small"
+              >
+                История ({history.length})
+              </Button>
+            </Stack>
           </Stack>
         </Box>
 
@@ -404,7 +545,7 @@ const ScanUploadPage = () => {
 
         {/* Stepper */}
         <Stepper activeStep={activeStep} alternativeLabel>
-          {STEPS.map((label) => (
+          {(batchMode ? BATCH_STEPS : STEPS).map((label) => (
             <Step key={label}>
               <StepLabel>{label}</StepLabel>
             </Step>
@@ -413,154 +554,181 @@ const ScanUploadPage = () => {
 
         {/* Main Content */}
         <Grid container spacing={3}>
-          {/* Scanner Selection */}
-          <Grid size={{ xs: 12, md: 7 }}>
-            <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
-              <CardContent>
-                <Stack spacing={2}>
-                  <Box>
-                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                      1. Выберите сканер
-                    </Typography>
+          {/* Scanner Selection (only in single mode) */}
+          {!batchMode && (
+            <Grid size={{ xs: 12, md: 7 }}>
+              <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
+                <CardContent>
+                  <Stack spacing={2}>
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                        1. Выберите сканер
+                      </Typography>
 
-                    {/* Search */}
-                    <TextField
-                      fullWidth
-                      size="small"
-                      placeholder="Поиск сканера..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      InputProps={{
-                        startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />,
-                      }}
-                      sx={{ mb: 2 }}
-                    />
+                      {/* Auto-detected info */}
+                      {autoDetectedScanner && (
+                        <Alert
+                          severity="info"
+                          icon={<AutoFixHighIcon />}
+                          sx={{ mb: 2 }}
+                          action={
+                            <Button
+                              color="inherit"
+                              size="small"
+                              onClick={() => {
+                                setScannerType(autoDetectedScanner);
+                                const scanner = SCANNERS.find((s) => s.id === autoDetectedScanner);
+                                if (scanner) setSelectedCategory(scanner.category);
+                              }}
+                            >
+                              Применить
+                            </Button>
+                          }
+                        >
+                          Автоопределён сканер:{" "}
+                          <strong>{SCANNERS.find((s) => s.id === autoDetectedScanner)?.name || autoDetectedScanner}</strong>
+                        </Alert>
+                      )}
 
-                    {/* Category Tabs */}
-                    {!searchQuery && (
-                      <Tabs
-                        value={selectedCategory}
-                        onChange={handleCategoryChange}
-                        variant="scrollable"
-                        scrollButtons="auto"
-                        sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
-                      >
-                        {CATEGORY_ORDER.map((cat) => (
-                          <Tab
-                            key={cat}
-                            value={cat}
-                            label={
-                              <Stack direction="row" spacing={1} alignItems="center">
+                      {/* Search */}
+                      <TextField
+                        fullWidth
+                        size="small"
+                        placeholder="Поиск сканера..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        InputProps={{
+                          startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />,
+                        }}
+                        sx={{ mb: 2 }}
+                      />
+
+                      {/* Category Tabs */}
+                      {!searchQuery && (
+                        <Tabs
+                          value={selectedCategory}
+                          onChange={handleCategoryChange}
+                          variant="scrollable"
+                          scrollButtons="auto"
+                          sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
+                        >
+                          {CATEGORY_ORDER.map((cat) => (
+                            <Tab
+                              key={cat}
+                              value={cat}
+                              label={
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <Box
+                                    sx={{
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: "50%",
+                                      bgcolor: getCategoryColor(cat),
+                                    }}
+                                  />
+                                  <span>{SCANNER_CATEGORIES[cat].name}</span>
+                                  <Chip
+                                    label={getScannersByCategory(cat).length}
+                                    size="small"
+                                    sx={{ height: 18, fontSize: "0.7rem" }}
+                                  />
+                                </Stack>
+                              }
+                            />
+                          ))}
+                        </Tabs>
+                      )}
+
+                      {/* Category Description */}
+                      {!searchQuery && (
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: "block" }}>
+                          {SCANNER_CATEGORIES[selectedCategory].description}
+                        </Typography>
+                      )}
+
+                      {/* Scanner Grid */}
+                      <Grid container spacing={1.5}>
+                        {filteredScanners.map((scanner) => (
+                          <Grid size={{ xs: 6, sm: 4 }} key={scanner.id}>
+                            <Paper
+                              onClick={() => !loading && handleScannerSelect(scanner)}
+                              sx={{
+                                p: 1.5,
+                                cursor: loading ? "not-allowed" : "pointer",
+                                border: "2px solid",
+                                borderColor: scannerType === scanner.id ? "primary.main" : "divider",
+                                bgcolor: scannerType === scanner.id ? "action.selected" : "transparent",
+                                transition: "all 0.15s ease",
+                                position: "relative",
+                                "&:hover": {
+                                  borderColor: loading ? "divider" : "primary.light",
+                                  bgcolor: loading ? "transparent" : "action.hover",
+                                },
+                              }}
+                            >
+                              {scannerType === scanner.id && (
+                                <CheckCircleIcon
+                                  sx={{
+                                    position: "absolute",
+                                    top: 4,
+                                    right: 4,
+                                    fontSize: 16,
+                                    color: "primary.main",
+                                  }}
+                                />
+                              )}
+                              <Stack direction="row" spacing={1} alignItems="flex-start">
                                 <Box
                                   sx={{
-                                    width: 8,
-                                    height: 8,
+                                    width: 6,
+                                    height: 6,
                                     borderRadius: "50%",
-                                    bgcolor: getCategoryColor(cat),
+                                    bgcolor: getCategoryColor(scanner.category),
+                                    mt: 0.8,
+                                    flexShrink: 0,
                                   }}
                                 />
-                                <span>{SCANNER_CATEGORIES[cat].name}</span>
-                                <Chip
-                                  label={getScannersByCategory(cat).length}
-                                  size="small"
-                                  sx={{ height: 18, fontSize: "0.7rem" }}
-                                />
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant="body2" fontWeight={600} noWrap>
+                                    {scanner.name}
+                                  </Typography>
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{
+                                      display: "-webkit-box",
+                                      WebkitLineClamp: 2,
+                                      WebkitBoxOrient: "vertical",
+                                      overflow: "hidden",
+                                      lineHeight: 1.3,
+                                    }}
+                                  >
+                                    {scanner.description}
+                                  </Typography>
+                                </Box>
                               </Stack>
-                            }
-                          />
+                            </Paper>
+                          </Grid>
                         ))}
-                      </Tabs>
-                    )}
+                      </Grid>
 
-                    {/* Category Description */}
-                    {!searchQuery && (
-                      <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: "block" }}>
-                        {SCANNER_CATEGORIES[selectedCategory].description}
-                      </Typography>
-                    )}
-
-                    {/* Scanner Grid */}
-                    <Grid container spacing={1.5}>
-                      {filteredScanners.map((scanner) => (
-                        <Grid size={{ xs: 6, sm: 4 }} key={scanner.id}>
-                          <Paper
-                            onClick={() => !loading && handleScannerSelect(scanner)}
-                            sx={{
-                              p: 1.5,
-                              cursor: loading ? "not-allowed" : "pointer",
-                              border: "2px solid",
-                              borderColor: scannerType === scanner.id ? "primary.main" : "divider",
-                              bgcolor: scannerType === scanner.id ? "action.selected" : "transparent",
-                              transition: "all 0.15s ease",
-                              position: "relative",
-                              "&:hover": {
-                                borderColor: loading ? "divider" : "primary.light",
-                                bgcolor: loading ? "transparent" : "action.hover",
-                              },
-                            }}
-                          >
-                            {scannerType === scanner.id && (
-                              <CheckCircleIcon
-                                sx={{
-                                  position: "absolute",
-                                  top: 4,
-                                  right: 4,
-                                  fontSize: 16,
-                                  color: "primary.main",
-                                }}
-                              />
-                            )}
-                            <Stack direction="row" spacing={1} alignItems="flex-start">
-                              <Box
-                                sx={{
-                                  width: 6,
-                                  height: 6,
-                                  borderRadius: "50%",
-                                  bgcolor: getCategoryColor(scanner.category),
-                                  mt: 0.8,
-                                  flexShrink: 0,
-                                }}
-                              />
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography variant="body2" fontWeight={600} noWrap>
-                                  {scanner.name}
-                                </Typography>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{
-                                    display: "-webkit-box",
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: "vertical",
-                                    overflow: "hidden",
-                                    lineHeight: 1.3,
-                                  }}
-                                >
-                                  {scanner.description}
-                                </Typography>
-                              </Box>
-                            </Stack>
-                          </Paper>
-                        </Grid>
-                      ))}
-                    </Grid>
-
-                    {filteredScanners.length === 0 && (
-                      <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                        Сканеры не найдены
-                      </Typography>
-                    )}
-                  </Box>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
+                      {filteredScanners.length === 0 && (
+                        <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+                          Сканеры не найдены
+                        </Typography>
+                      )}
+                    </Box>
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
 
           {/* File Upload and Actions */}
-          <Grid size={{ xs: 12, md: 5 }}>
+          <Grid size={{ xs: 12, md: batchMode ? 12 : 5 }}>
             <Stack spacing={2}>
-              {/* Selected Scanner Info */}
-              {selectedScanner && (
+              {/* Selected Scanner Info (single mode only) */}
+              {!batchMode && selectedScanner && (
                 <Card elevation={0} sx={{ border: "1px solid", borderColor: "primary.main", bgcolor: "action.selected" }}>
                   <CardContent sx={{ py: 1.5 }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -620,19 +788,104 @@ const ScanUploadPage = () => {
               <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
                 <CardContent>
                   <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                    2. Загрузите файл отчёта
+                    {batchMode ? "1. Загрузите файлы отчётов" : "2. Загрузите файл отчёта"}
                   </Typography>
+                  {batchMode ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Перетащите несколько файлов или ZIP-архив. Сканер будет определён автоматически.
+                    </Typography>
+                  ) : null}
                   <DragDropUpload
                     onFileSelect={setFile}
+                    onFilesSelect={handleFilesSelect}
+                    onScannerDetected={handleScannerDetected}
                     file={file}
-                    accept=".json,.sarif,.csv,.xml,.jsonl"
-                    disabled={loading}
+                    files={files}
+                    accept=".json,.sarif,.csv,.xml,.jsonl,.zip"
+                    disabled={loading || batchUploading}
                     uploading={loading}
                     uploadProgress={uploadProgress}
                     uploadComplete={Boolean(success)}
+                    multiple={batchMode}
+                    showValidation={true}
+                    enableClipboard={true}
+                    enableArchives={true}
                   />
                 </CardContent>
               </Card>
+
+              {/* Batch results */}
+              {batchMode && batchResults.length > 0 && (
+                <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
+                  <CardContent>
+                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                      Результаты загрузки
+                    </Typography>
+                    <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+                      <Chip
+                        label={`Успешно: ${batchStats.successCount}`}
+                        color="success"
+                        size="small"
+                      />
+                      {batchStats.errorCount > 0 && (
+                        <Chip
+                          label={`Ошибок: ${batchStats.errorCount}`}
+                          color="error"
+                          size="small"
+                        />
+                      )}
+                      <Chip
+                        label={`Всего находок: ${batchStats.totalFindings}`}
+                        color="primary"
+                        size="small"
+                      />
+                    </Stack>
+                    <Stack spacing={1}>
+                      {batchResults.map((r, i) => (
+                        <Paper
+                          key={i}
+                          sx={{
+                            p: 1,
+                            bgcolor:
+                              r.status === "error"
+                                ? "error.light"
+                                : r.status === "success"
+                                ? "success.light"
+                                : "action.hover",
+                          }}
+                        >
+                          <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              {r.status === "uploading" && (
+                                <LinearProgress sx={{ width: 20 }} />
+                              )}
+                              {r.status === "success" && (
+                                <CheckCircleIcon fontSize="small" color="success" />
+                              )}
+                              {r.status === "error" && (
+                                <ErrorIcon fontSize="small" color="error" />
+                              )}
+                              <Typography variant="body2">{r.file.name}</Typography>
+                            </Stack>
+                            {r.result && (
+                              <Chip
+                                label={`${r.result.createdFindings} находок`}
+                                size="small"
+                                color="success"
+                              />
+                            )}
+                            {r.error && (
+                              <Typography variant="caption" color="error">
+                                {r.error}
+                              </Typography>
+                            )}
+                          </Stack>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Advanced Options */}
               <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
@@ -656,7 +909,7 @@ const ScanUploadPage = () => {
                         size="small"
                         value={productName}
                         onChange={(e) => setProductName(e.target.value)}
-                        disabled={loading}
+                        disabled={loading || batchUploading}
                       />
                       <Stack direction="row" spacing={2}>
                         <TextField
@@ -665,7 +918,7 @@ const ScanUploadPage = () => {
                           size="small"
                           value={productVersion}
                           onChange={(e) => setProductVersion(e.target.value)}
-                          disabled={loading}
+                          disabled={loading || batchUploading}
                         />
                         <TextField
                           label="Идентификатор"
@@ -673,7 +926,7 @@ const ScanUploadPage = () => {
                           size="small"
                           value={productIdentifier}
                           onChange={(e) => setProductIdentifier(e.target.value)}
-                          disabled={loading}
+                          disabled={loading || batchUploading}
                         />
                       </Stack>
                     </Stack>
@@ -686,7 +939,24 @@ const ScanUploadPage = () => {
 
               {/* Actions */}
               <Stack direction="row" spacing={2}>
-                {success ? (
+                {batchMode ? (
+                  batchResults.some((r) => r.status === "success") ? (
+                    <Button variant="contained" onClick={handleReset} fullWidth>
+                      Загрузить ещё
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="contained"
+                      onClick={handleBatchUpload}
+                      disabled={!isValid || batchUploading}
+                      fullWidth
+                    >
+                      {batchUploading
+                        ? `Загрузка... (${batchResults.filter((r) => r.status === "success").length}/${files.length})`
+                        : `Загрузить ${files.length} файлов`}
+                    </Button>
+                  )
+                ) : success ? (
                   <Button variant="contained" onClick={handleReset} fullWidth>
                     Загрузить ещё
                   </Button>
@@ -702,8 +972,8 @@ const ScanUploadPage = () => {
                 )}
               </Stack>
 
-              {/* Success Results */}
-              {success && (
+              {/* Success Results (single mode) */}
+              {!batchMode && success && (
                 <Card elevation={0} sx={{ border: "1px solid", borderColor: "success.main" }}>
                   <CardContent>
                     <Alert
