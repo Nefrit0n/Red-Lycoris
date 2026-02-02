@@ -24,13 +24,33 @@ func (p *SemgrepParser) CanParse(data []byte) bool {
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return false
 	}
+	// Must have "results" array - this is the core semgrep output
 	if _, ok := payload["results"]; !ok {
 		return false
 	}
-	if _, ok := payload["paths"]; !ok {
+	// "paths" is optional - some semgrep versions don't include it
+	// Check for semgrep-specific markers: "errors" or "version" fields
+	_, hasErrors := payload["errors"]
+	_, hasVersion := payload["version"]
+	_, hasPaths := payload["paths"]
+	// If has paths or errors or version - likely semgrep
+	if hasPaths || hasErrors || hasVersion {
+		return true
+	}
+	// Also check if results array contains semgrep-style items (check_id field)
+	var results []json.RawMessage
+	if err := json.Unmarshal(payload["results"], &results); err != nil {
 		return false
 	}
-	return true
+	if len(results) > 0 {
+		var firstResult map[string]json.RawMessage
+		if err := json.Unmarshal(results[0], &firstResult); err == nil {
+			if _, hasCheckID := firstResult["check_id"]; hasCheckID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (p *SemgrepParser) Parse(data []byte) ([]Finding, error) {
