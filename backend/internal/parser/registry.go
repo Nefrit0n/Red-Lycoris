@@ -135,6 +135,10 @@ func ParseReport(scannerType string, data []byte) ([]Finding, error) {
 
 	for i := range findings {
 		findings[i].Title = strings.TrimSpace(findings[i].Title)
+		// Truncate title to 200 characters (database constraint)
+		if len(findings[i].Title) > 200 {
+			findings[i].Title = findings[i].Title[:197] + "..."
+		}
 		findings[i].Severity = normalizeSeverity(findings[i].Severity)
 		findings[i].Location = strings.TrimSpace(findings[i].Location)
 		findings[i].RuleID = strings.TrimSpace(findings[i].RuleID)

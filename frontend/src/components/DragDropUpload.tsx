@@ -488,20 +488,29 @@ const DragDropUpload = ({
           <Paper
             key={`${f.file.name}-${index}`}
             sx={{
-              p: 1,
+              p: 1.5,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              bgcolor: f.validation?.valid === false ? "error.light" : "action.hover",
+              border: "1px solid",
+              borderColor: f.validation?.valid === false ? "error.main" : "divider",
+              borderLeft: "4px solid",
+              borderLeftColor:
+                f.validation?.valid === false
+                  ? "error.main"
+                  : f.validation?.warnings?.length
+                  ? "warning.main"
+                  : "success.main",
+              bgcolor: "background.paper",
             }}
           >
             <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
               {f.validation?.valid === false ? (
-                <ErrorIcon fontSize="small" color="error" />
+                <ErrorIcon fontSize="small" sx={{ color: "error.main" }} />
               ) : f.validation?.warnings?.length ? (
-                <WarningIcon fontSize="small" color="warning" />
+                <WarningIcon fontSize="small" sx={{ color: "warning.main" }} />
               ) : (
-                <InsertDriveFileIcon fontSize="small" color="primary" />
+                <InsertDriveFileIcon fontSize="small" sx={{ color: "success.main" }} />
               )}
               <Box sx={{ minWidth: 0 }}>
                 <Typography variant="body2" noWrap>
@@ -518,7 +527,8 @@ const DragDropUpload = ({
                 <Chip
                   label={`${f.validation.preview.findingsCount}`}
                   size="small"
-                  color="primary"
+                  variant="outlined"
+                  color="success"
                   sx={{ height: 20, fontSize: "0.7rem" }}
                 />
               )}
