@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Collapse,
   Grid,
   IconButton,
@@ -32,7 +33,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ErrorIcon from "@mui/icons-material/Error";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import BatchPredictionIcon from "@mui/icons-material/BatchPrediction";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useDeferredValue } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchFindingDetail, fetchFindings } from "../api/findings";
 import { uploadScan, UploadScanResponse } from "../api/scans";
@@ -109,6 +110,7 @@ const ScanUploadPage = () => {
   const [scannerType, setScannerType] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<ScannerCategory>("SAST");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [productName, setProductName] = useState<string>("");
   const [productVersion, setProductVersion] = useState<string>("");
   const [productIdentifier, setProductIdentifier] = useState<string>("");
@@ -185,19 +187,19 @@ const ScanUploadPage = () => {
     return Boolean(file && scannerType);
   }, [file, scannerType, batchMode, files]);
 
-  // Filter scanners by search query
+  // Filter scanners by search query (use deferred value for smooth typing)
   const filteredScanners = useMemo(() => {
-    if (!searchQuery.trim()) {
+    if (!deferredSearchQuery.trim()) {
       return getScannersByCategory(selectedCategory);
     }
-    const query = searchQuery.toLowerCase();
+    const query = deferredSearchQuery.toLowerCase();
     return SCANNERS.filter(
       (s) =>
         s.name.toLowerCase().includes(query) ||
         s.description.toLowerCase().includes(query) ||
         s.id.toLowerCase().includes(query)
     );
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, deferredSearchQuery]);
 
   const selectedScanner = useMemo(() => {
     return SCANNERS.find((s) => s.id === scannerType);
@@ -845,40 +847,57 @@ const ScanUploadPage = () => {
                         <Paper
                           key={i}
                           sx={{
-                            p: 1,
-                            bgcolor:
+                            p: 1.5,
+                            border: "1px solid",
+                            borderColor:
                               r.status === "error"
-                                ? "error.light"
+                                ? "error.main"
                                 : r.status === "success"
-                                ? "success.light"
-                                : "action.hover",
+                                ? "success.main"
+                                : "divider",
+                            borderLeft: "4px solid",
+                            borderLeftColor:
+                              r.status === "error"
+                                ? "error.main"
+                                : r.status === "success"
+                                ? "success.main"
+                                : "primary.main",
+                            bgcolor: "background.paper",
                           }}
                         >
                           <Stack direction="row" justifyContent="space-between" alignItems="center">
-                            <Stack direction="row" spacing={1} alignItems="center">
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0, flex: 1 }}>
                               {r.status === "uploading" && (
-                                <LinearProgress sx={{ width: 20 }} />
+                                <LinearProgress sx={{ width: 24, height: 24, borderRadius: "50%" }} />
                               )}
                               {r.status === "success" && (
-                                <CheckCircleIcon fontSize="small" color="success" />
+                                <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
                               )}
                               {r.status === "error" && (
-                                <ErrorIcon fontSize="small" color="error" />
+                                <ErrorIcon fontSize="small" sx={{ color: "error.main" }} />
                               )}
-                              <Typography variant="body2">{r.file.name}</Typography>
+                              {r.status === "pending" && (
+                                <Box sx={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid", borderColor: "divider" }} />
+                              )}
+                              <Typography variant="body2" noWrap sx={{ flex: 1 }}>{r.file.name}</Typography>
                             </Stack>
-                            {r.result && (
-                              <Chip
-                                label={`${r.result.createdFindings} находок`}
-                                size="small"
-                                color="success"
-                              />
-                            )}
-                            {r.error && (
-                              <Typography variant="caption" color="error">
-                                {r.error}
-                              </Typography>
-                            )}
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              {r.result && (
+                                <Chip
+                                  label={`${r.result.createdFindings} находок`}
+                                  size="small"
+                                  variant="outlined"
+                                  color="success"
+                                />
+                              )}
+                              {r.error && (
+                                <Tooltip title={r.error}>
+                                  <Typography variant="caption" color="error.main" sx={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {r.error}
+                                  </Typography>
+                                </Tooltip>
+                              )}
+                            </Stack>
                           </Stack>
                         </Paper>
                       ))}

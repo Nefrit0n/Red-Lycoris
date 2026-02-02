@@ -1,21 +1,29 @@
 package parser
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"lotus-warden/backend/internal/models"
 )
 
 // GitleaksParser parses Gitleaks secret scanner output.
-// Supports native JSON format and SARIF.
+// Supports native JSON format, SARIF, and CSV.
 type GitleaksParser struct{}
 
 func (p *GitleaksParser) ScannerType() string { return "gitleaks" }
 
 func (p *GitleaksParser) CanParse(data []byte) bool {
-	// Try SARIF first
+	// Try CSV first
+	if p.isCSV(data) {
+		return true
+	}
+
+	// Try SARIF
 	if canParseSarif(data) {
 		return true
 	}
@@ -41,8 +49,45 @@ func (p *GitleaksParser) CanParse(data []byte) bool {
 	return first.RuleID != "" || first.File != "" || first.Secret != ""
 }
 
+func (p *GitleaksParser) isCSV(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+
+	// Quick check: CSV usually doesn't start with { or [
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+		return false
+	}
+
+	reader := csv.NewReader(bytes.NewReader(data))
+	headers, err := reader.Read()
+	if err != nil || len(headers) < 2 {
+		return false
+	}
+
+	// Check for gitleaks CSV headers (case-insensitive)
+	headerMap := make(map[string]bool)
+	for _, h := range headers {
+		headerMap[strings.ToLower(strings.TrimSpace(h))] = true
+	}
+
+	// Gitleaks CSV typically has these columns
+	hasRuleID := headerMap["ruleid"] || headerMap["rule_id"]
+	hasFile := headerMap["file"]
+	hasSecret := headerMap["secret"]
+	hasMatch := headerMap["match"]
+
+	return hasFile && (hasRuleID || hasSecret || hasMatch)
+}
+
 func (p *GitleaksParser) Parse(data []byte) ([]Finding, error) {
-	// Try SARIF first
+	// Try CSV first
+	if p.isCSV(data) {
+		return p.parseCSV(data)
+	}
+
+	// Try SARIF
 	if canParseSarif(data) {
 		findings, err := parseSarif(data, "gitleaks")
 		if err != nil {
@@ -71,6 +116,102 @@ func (p *GitleaksParser) Parse(data []byte) ([]Finding, error) {
 		findings = append(findings, p.buildFinding(r))
 	}
 	return findings, nil
+}
+
+func (p *GitleaksParser) parseCSV(data []byte) ([]Finding, error) {
+	reader := csv.NewReader(bytes.NewReader(data))
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse gitleaks CSV: %w", err)
+	}
+
+	if len(records) < 2 {
+		return []Finding{}, nil // Empty or header-only
+	}
+
+	// Build header index
+	headers := records[0]
+	headerIdx := make(map[string]int)
+	for i, h := range headers {
+		headerIdx[strings.ToLower(strings.TrimSpace(h))] = i
+	}
+
+	var findings []Finding
+	for _, row := range records[1:] {
+		finding := p.parseCSVRow(row, headerIdx)
+		if finding.Title != "" {
+			findings = append(findings, finding)
+		}
+	}
+
+	return findings, nil
+}
+
+func (p *GitleaksParser) parseCSVRow(row []string, headerIdx map[string]int) Finding {
+	get := func(key string) string {
+		if idx, ok := headerIdx[key]; ok && idx < len(row) {
+			return strings.TrimSpace(row[idx])
+		}
+		return ""
+	}
+
+	getInt := func(key string) int {
+		if s := get(key); s != "" {
+			if v, err := strconv.Atoi(s); err == nil {
+				return v
+			}
+		}
+		return 0
+	}
+
+	// Try different column name variants
+	ruleID := get("ruleid")
+	if ruleID == "" {
+		ruleID = get("rule_id")
+	}
+
+	description := get("description")
+	file := get("file")
+	startLine := getInt("startline")
+	if startLine == 0 {
+		startLine = getInt("start_line")
+	}
+	if startLine == 0 {
+		startLine = getInt("line")
+	}
+
+	endLine := getInt("endline")
+	if endLine == 0 {
+		endLine = getInt("end_line")
+	}
+
+	match := get("match")
+	secret := get("secret")
+	commit := get("commit")
+	author := get("author")
+	email := get("email")
+	date := get("date")
+	message := get("message")
+	fingerprint := get("fingerprint")
+
+	// Build a gitleaksResult from CSV data and use existing buildFinding
+	result := gitleaksResult{
+		RuleID:      ruleID,
+		Description: description,
+		StartLine:   startLine,
+		EndLine:     endLine,
+		Match:       match,
+		Secret:      secret,
+		File:        file,
+		Commit:      commit,
+		Author:      author,
+		Email:       email,
+		Date:        date,
+		Message:     message,
+		Fingerprint: fingerprint,
+	}
+
+	return p.buildFinding(result)
 }
 
 func (p *GitleaksParser) buildFinding(r gitleaksResult) Finding {
