@@ -96,25 +96,12 @@ const FindingsList = () => {
     onSuccess: fetchData,
   });
 
-  // drawer
-  const selectedFromUrl = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("selected");
-  }, [location.search]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    if (selectedFromUrl && filters.selectedFindingId !== selectedFromUrl) {
-      actions.setSelectedFindingId(selectedFromUrl);
-    }
-  }, [actions, filters.selectedFindingId, hydrated, selectedFromUrl]);
-
+  // drawer - selectedFindingId is already synced via useUrlFiltersSync
   const drawer = useDrawerState({
     selectedFindingId: filters.selectedFindingId,
     setSelectedFindingId: actions.setSelectedFindingId,
     selectionCount: bulk.selectionCount,
     listStateKey: LIST_STATE_KEY,
-    allowSelectionClose: !selectedFromUrl,
   });
 
   const listReturnTo = useMemo(() => {

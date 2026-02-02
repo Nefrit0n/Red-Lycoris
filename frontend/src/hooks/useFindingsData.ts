@@ -49,6 +49,7 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     );
   const productIsUuid = Boolean(filters.productId && isUuid(filters.productId));
   const filterKey = [
+    filters.page,
     filters.pageSize,
     filters.productId,
     filters.filterSeverity,
@@ -57,13 +58,13 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     filters.filterOccurrence,
     filters.filterScannerType,
     filters.filterPolicyDecision,
-    filters.searchInput,
     filters.dateFrom,
     filters.dateTo,
     filters.showRepeats,
     filters.importJobId,
     filters.sortField,
     filters.sortOrder,
+    debouncedSearch,
   ].join("|");
 
   useEffect(() => {
@@ -201,7 +202,9 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     const controller = new AbortController();
     fetchData(controller.signal);
     return () => controller.abort();
-  }, [fetchData, hydrated]);
+    // Use filterKey instead of fetchData to avoid re-fetching when callback reference changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, hydrated, productIsUuid]);
 
   useEffect(() => {
     return () => {
