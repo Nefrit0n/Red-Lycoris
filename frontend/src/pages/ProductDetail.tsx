@@ -472,6 +472,32 @@ const ProductDetailPage = () => {
   const latestScan = data.recentScans?.[0];
   const statusChip = formatIndexStatus(indexStatus);
   const transitiveChip = formatTransitiveStatus(transitiveStatus);
+  const transitiveGraph = useMemo(() => {
+    const maxNodes = 120;
+    const sorted = [...transitiveItems].sort((a, b) => {
+      const scoreA = (a.maxCvssScore ?? 0) + a.criticalCount * 4 + a.highCount * 3 + a.mediumCount * 2 + a.lowCount;
+      const scoreB = (b.maxCvssScore ?? 0) + b.criticalCount * 4 + b.highCount * 3 + b.mediumCount * 2 + b.lowCount;
+      return scoreB - scoreA;
+    });
+    const trimmed = sorted.slice(0, maxNodes);
+    const maxDistance = trimmed.reduce((acc, item) => {
+      const distance = item.minDistanceToAnyVuln ?? transitiveFilters.maxDepth;
+      return Math.max(acc, distance);
+    }, 0);
+    const ringCount = Math.min(Math.max(maxDistance, 1), 5);
+    const rings = Array.from({ length: ringCount + 1 }, () => [] as SbomTransitiveExposureItem[]);
+    trimmed.forEach((item) => {
+      const distance = item.minDistanceToAnyVuln ?? ringCount;
+      const ringIndex = Math.min(Math.max(distance, 0), ringCount);
+      rings[ringIndex].push(item);
+    });
+    return {
+      nodes: trimmed,
+      rings,
+      ringCount,
+      total: transitiveItems.length,
+    };
+  }, [transitiveItems, transitiveFilters.maxDepth]);
 
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
