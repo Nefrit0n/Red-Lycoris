@@ -1,0 +1,49 @@
+{
+  "results": [
+    {
+      "rule_id": "aws-s3-enable-bucket-encryption",
+      "long_id": "aws-s3-enable-bucket-encryption",
+      "rule_description": "S3 Bucket should have server-side encryption enabled",
+      "rule_provider": "aws",
+      "rule_service": "s3",
+      "impact": "The bucket objects could be read if compromised",
+      "resolution": "Enable server-side encryption on the S3 bucket",
+      "links": [
+        "https://aquasecurity.github.io/tfsec/latest/checks/aws/s3/enable-bucket-encryption/",
+        "https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket"
+      ],
+      "description": "Bucket does not have encryption enabled",
+      "severity": "HIGH",
+      "warning": false,
+      "status": 0,
+      "resource": "aws_s3_bucket.example",
+      "location": {
+        "filename": "/project/main.tf",
+        "start_line": 10,
+        "end_line": 15
+      }
+    },
+    {
+      "rule_id": "aws-vpc-no-public-egress-sgr",
+      "long_id": "aws-vpc-no-public-egress-sgr",
+      "rule_description": "Security group rule should not allow public egress",
+      "rule_provider": "aws",
+      "rule_service": "vpc",
+      "impact": "Traffic can be egressed to the public internet from VPC",
+      "resolution": "Restrict egress traffic to specific IP ranges",
+      "links": [
+        "https://aquasecurity.github.io/tfsec/latest/checks/aws/vpc/no-public-egress-sgr/"
+      ],
+      "description": "Security group rule allows egress to 0.0.0.0/0",
+      "severity": "MEDIUM",
+      "warning": false,
+      "status": 0,
+      "resource": "aws_security_group.web",
+      "location": {
+        "filename": "/project/network.tf",
+        "start_line": 25,
+        "end_line": 35
+      }
+    }
+  ]
+}

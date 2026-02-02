@@ -6,6 +6,7 @@ export interface UploadScanRequest {
   productName?: string;
   productVersion?: string;
   productIdentifier?: string;
+  customToolName?: string;
 }
 
 export interface UploadScanResponse {
@@ -33,6 +34,9 @@ export const uploadScan = async (
   }
   if (payload.productIdentifier) {
     formData.append("product_identifier", payload.productIdentifier);
+  }
+  if (payload.customToolName) {
+    formData.append("custom_tool_name", payload.customToolName);
   }
 
   return request<UploadScanResponse>("/api/v1/scans/upload", {
