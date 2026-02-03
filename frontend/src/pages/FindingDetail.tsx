@@ -344,12 +344,8 @@ export const FindingDetailContent = ({
       component="span"
       variant="caption"
       sx={{
-        color: primitives.night[200],
-        px: 1,
-        py: 0.25,
-        borderRadius: 1,
-        border: "1px solid",
-        borderColor: primitives.night[600],
+        color: primitives.night[300],
+        fontSize: "0.75rem",
       }}
     >
       {STATUS_LABELS[data.status] ?? data.status}
@@ -369,12 +365,11 @@ export const FindingDetailContent = ({
       </Typography>
     ) : null,
   ].filter(Boolean);
+  // Subtle panel style - no borders, just gentle background
   const panelBoxSx = {
     p: 2,
-    borderRadius: 2,
-    border: "1px solid",
-    borderColor: primitives.night[600],
-    bgcolor: alpha(primitives.night[700], 0.3),
+    borderRadius: 1.5,
+    bgcolor: alpha(primitives.night[700], 0.25),
   } as const;
 
   return (
@@ -620,16 +615,15 @@ export const FindingDetailContent = ({
                 Score
               </Typography>
               {riskScore !== null && riskBand ? (
-                <Chip
-                  size="small"
-                  label={`${RISK_BAND_LABELS[riskBand]} ${riskScore}`}
+                <Typography
+                  variant="body2"
                   sx={{
-                    fontWeight: 700,
-                    borderColor: RISK_BAND_COLORS[riskBand],
+                    fontWeight: 600,
                     color: RISK_BAND_COLORS[riskBand],
-                    border: "1px solid",
                   }}
-                />
+                >
+                  {RISK_BAND_LABELS[riskBand]} {riskScore}
+                </Typography>
               ) : (
                 <Typography variant="body2" color="text.secondary">
                   —
@@ -653,13 +647,22 @@ export const FindingDetailContent = ({
 
             {canShowFactors && (
               <Box>
-                <Button
-                  size="small"
-                  variant="outlined"
+                <Typography
+                  component="span"
+                  variant="body2"
                   onClick={() => setFactorsExpanded((prev) => !prev)}
+                  sx={{
+                    color: primitives.night[300],
+                    cursor: "pointer",
+                    fontSize: "0.8125rem",
+                    "&:hover": {
+                      color: primitives.lotus[400],
+                      textDecoration: "underline",
+                    },
+                  }}
                 >
-                  {factorsExpanded ? "Hide factors" : "Show factors"}
-                </Button>
+                  {factorsExpanded ? "← Hide factors" : "Show factors →"}
+                </Typography>
                 <Collapse in={factorsExpanded} sx={{ mt: 1.5 }}>
                   <Stack spacing={1.2}>
                     <Stack direction="row" alignItems="center" gap={1}>
@@ -808,48 +811,85 @@ export const FindingDetailContent = ({
           intelReferences.length > 0) && (
             <Section title="Vulnerability Intelligence" dense={compact}>
               {intelIdentifiers.length > 0 && (
-                <Stack spacing={1.2}>
-                  <Typography variant="caption" color="text.secondary">
+                <Stack spacing={1}>
+                  <Typography variant="caption" sx={{ color: primitives.night[400], fontSize: "0.7rem" }}>
                     Identifiers
                   </Typography>
                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     {intelIdentifiers.map((identifier) => (
-                      <Chip
+                      <Typography
                         key={identifier}
-                        label={identifier}
-                        variant="outlined"
-                        size="small"
+                        variant="body2"
                         onClick={() => handleCopyValue(identifier)}
-                        icon={<ContentCopyIcon fontSize="inherit" />}
-                        sx={{ cursor: "pointer" }}
-                      />
+                        sx={{
+                          px: 1,
+                          py: 0.25,
+                          borderRadius: 1,
+                          bgcolor: alpha(primitives.night[600], 0.4),
+                          color: primitives.night[200],
+                          cursor: "pointer",
+                          fontSize: "0.8125rem",
+                          fontFamily: "monospace",
+                          "&:hover": {
+                            bgcolor: alpha(primitives.night[600], 0.6),
+                            color: primitives.night[100],
+                          },
+                        }}
+                      >
+                        {identifier}
+                      </Typography>
                     ))}
                   </Stack>
                 </Stack>
               )}
 
               {(cvssScore !== null || epssScore !== null || kevFlag) && (
-                <Stack direction="row" spacing={2} sx={{ mt: 2, flexWrap: "wrap" }}>
+                <Stack direction="row" spacing={2} sx={{ mt: 1.5, flexWrap: "wrap" }} alignItems="center">
                   {cvssScore !== null && (
-                    <Chip
-                      label={`CVSS${cvssVersion ? ` v${cvssVersion}` : ""}: ${cvssScore.toFixed(1)}`}
-                      color={cvssScore >= 9 ? "error" : cvssScore >= 7 ? "warning" : "success"}
-                      size="small"
-                    />
+                    <Typography variant="body2" sx={{ color: primitives.night[200] }}>
+                      <Typography component="span" sx={{ color: primitives.night[400], fontSize: "0.75rem" }}>
+                        CVSS{cvssVersion ? ` v${cvssVersion}` : ""}:
+                      </Typography>{" "}
+                      <Typography
+                        component="span"
+                        sx={{
+                          fontWeight: 600,
+                          color: cvssScore >= 9
+                            ? semantic.severity.critical.base
+                            : cvssScore >= 7
+                              ? semantic.severity.high.base
+                              : primitives.night[200],
+                        }}
+                      >
+                        {cvssScore.toFixed(1)}
+                      </Typography>
+                    </Typography>
                   )}
                   {epssScore !== null && (
-                    <Chip
-                      label={`EPSS: ${(epssScore * 100).toFixed(2)}%${epssPercentile !== null
-                          ? ` (p${(epssPercentile * 100).toFixed(1)})`
-                          : ""
-                        }`}
-                      color="primary"
-                      size="small"
-                      variant="outlined"
-                    />
+                    <Typography variant="body2" sx={{ color: primitives.night[200] }}>
+                      <Typography component="span" sx={{ color: primitives.night[400], fontSize: "0.75rem" }}>
+                        EPSS:
+                      </Typography>{" "}
+                      {(epssScore * 100).toFixed(2)}%
+                      {epssPercentile !== null && (
+                        <Typography component="span" sx={{ color: primitives.night[400], fontSize: "0.75rem" }}>
+                          {" "}(p{(epssPercentile * 100).toFixed(0)})
+                        </Typography>
+                      )}
+                    </Typography>
                   )}
                   {kevFlag && (
-                    <Chip label="KEV" color="error" size="small" variant="outlined" />
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: semantic.severity.critical.base,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                      }}
+                    >
+                      KEV
+                    </Typography>
                   )}
                 </Stack>
               )}
@@ -1203,12 +1243,16 @@ export const FindingDetailContent = ({
                     <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
                       Fix state
                     </Typography>
-                    <Chip
-                      size="small"
-                      label={containerDetails.fixState}
-                      color={containerDetails.fixState === "fixed" ? "success" : "warning"}
-                      variant="outlined"
-                    />
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: containerDetails.fixState === "fixed"
+                          ? semantic.severity.low.base
+                          : primitives.night[300],
+                      }}
+                    >
+                      {containerDetails.fixState}
+                    </Typography>
                   </Stack>
                 )}
                 <Stack direction="row" gap={1} alignItems="center">
@@ -1321,7 +1365,16 @@ export const FindingDetailContent = ({
                     <Typography variant="caption" color="text.secondary" sx={{ minWidth: 150 }}>
                       Method
                     </Typography>
-                    <Chip size="small" label={dastDetails.method} variant="outlined" />
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontFamily: "monospace",
+                        fontWeight: 600,
+                        color: primitives.night[200],
+                      }}
+                    >
+                      {dastDetails.method}
+                    </Typography>
                   </Stack>
                 )}
                 {dastDetails.parameter && (
@@ -1605,17 +1658,22 @@ export const FindingDetailContent = ({
                     <Box
                       key={c.id}
                       sx={{
-                        p: 1.5,
-                        borderRadius: 2,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        bgcolor: "background.default",
+                        py: 1.5,
+                        borderBottom: "1px solid",
+                        borderColor: alpha(primitives.night[600], 0.5),
+                        "&:last-child": { borderBottom: "none" },
                       }}
                     >
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        sx={{ color: primitives.night[400], fontSize: "0.7rem" }}
+                      >
                         {c.author || "Пользователь"} · {formatDateRu(c.createdAt)}
                       </Typography>
-                      <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-line" }}>
+                      <Typography
+                        variant="body2"
+                        sx={{ mt: 0.5, whiteSpace: "pre-line", color: primitives.night[200] }}
+                      >
                         {c.body}
                       </Typography>
                     </Box>
