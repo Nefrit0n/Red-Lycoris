@@ -1,1 +1,0 @@
-export { widgetRegistry } from "./registry";
