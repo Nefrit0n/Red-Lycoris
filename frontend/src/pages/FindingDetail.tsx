@@ -2,7 +2,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Collapse,
   Container,
@@ -41,7 +40,6 @@ import { useKeyboardNavigation } from "../hooks/useKeyboardNavigation";
 import { resolveFindingDetails } from "../utils/findingDetails";
 import {
   SEVERITY_STYLES,
-  STATUS_COLORS,
   STATUS_LABELS,
   ALL_STATUSES,
   RISK_BAND_COLORS,
