@@ -14,7 +14,6 @@ import (
 	"lotus-warden/backend/internal/objectstore"
 	"lotus-warden/backend/internal/sbomindex"
 	"lotus-warden/backend/internal/storage"
-	"lotus-warden/backend/internal/transitive"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -55,9 +54,6 @@ func main() {
 		log.Fatalf("jetstream unavailable")
 	}
 
-	osvClient := transitive.NewOsvClient(transitive.OsvOptions{})
-	transitivePipeline := transitive.NewPipeline(osvClient, []int{10, 25, 50})
-
 	sub, err := js.PullSubscribe(events.SbomIndexRequestedSubject, sbomConsumer)
 	if err != nil {
 		log.Fatalf("failed to subscribe: %v", err)
@@ -73,14 +69,14 @@ func main() {
 			continue
 		}
 		for _, msg := range msgs {
-			if err := handleMessage(context.Background(), msg, db, store, transitivePipeline); err != nil {
+			if err := handleMessage(context.Background(), msg, db, store); err != nil {
 				log.Printf("sbom index failed: %v", err)
 			}
 		}
 	}
 }
 
-func handleMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objectstore.Store, transitivePipeline *transitive.Pipeline) error {
+func handleMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objectstore.Store) error {
 	var payload sbomMessage
 	if err := json.Unmarshal(msg.Data, &payload); err != nil {
 		_ = msg.Ack()
@@ -111,11 +107,6 @@ func handleMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objects
 		log.Printf("sbom index done sbom_id=%s status=%s components=%d duration=%s", sbomID.String(), status, componentCount, duration)
 	}
 
-	if err == nil && sbom != nil && sbom.IndexStatus == "done" {
-		if transitiveErr := transitivePipeline.Run(ctx, db, sbomID); transitiveErr != nil {
-			log.Printf("sbom transitive failed sbom_id=%s err=%v", sbomID.String(), transitiveErr)
-		}
-	}
 	metrics.RecordSbomIndexResult(duration, componentCount, err)
 	_ = msg.Ack()
 	return err
