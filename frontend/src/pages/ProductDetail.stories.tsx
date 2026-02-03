@@ -226,7 +226,6 @@ const ProductDetailStory = ({ state = "loaded" }: { state: "loaded" | "loading" 
             <Tabs value={0} onChange={() => undefined}>
               <Tab label="SBOM" />
               <Tab label="Components" />
-              <Tab label="Transitive" />
             </Tabs>
             <Typography variant="body2" color="text.secondary">
               SBOM management preview in Storybook.
