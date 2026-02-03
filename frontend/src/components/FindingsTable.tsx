@@ -14,8 +14,6 @@ import {
   Button,
   Checkbox,
   IconButton,
-  Menu,
-  MenuItem,
   TableBody,
   TableCell,
   TableHead,
@@ -27,7 +25,7 @@ import {
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { ReactNode, useCallback, useMemo, useState } from "react";
+import { ReactNode, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   FindingListItemDTO,
@@ -106,10 +104,7 @@ interface FindingsTableProps {
   compactMode?: boolean;
   groupByRule?: boolean;
   // Select all support
-  totalCount?: number;
-  totalKnown?: boolean;
   selectAllMatching?: boolean;
-  onSelectAllMatching?: () => void;
 }
 
 export default function FindingsTable({
@@ -132,22 +127,15 @@ export default function FindingsTable({
   onOpenDetails,
   activeFindingId,
   compactMode = false,
-  totalCount,
-  totalKnown,
   selectAllMatching,
-  onSelectAllMatching,
 }: FindingsTableProps) {
   const safeData = Array.isArray(data) ? data : [];
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const menuOpen = Boolean(menuAnchor);
 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelected =
     safeData.length > 0 && safeData.every((finding) => selectedIdSet.has(finding.id));
   const someSelected =
     safeData.some((finding) => selectedIdSet.has(finding.id)) && !allSelected;
-
-  const showSelectAllOption = totalKnown && totalCount && totalCount > safeData.length && !selectAllMatching;
 
   // Highlight search matches
   const normalizedQuery = highlightQuery.trim();
@@ -221,62 +209,21 @@ export default function FindingsTable({
           }}
         >
           <TableCell padding="checkbox" sx={{ width: COL_CHECKBOX }}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Checkbox
-                checked={allSelected || selectAllMatching}
-                indeterminate={someSelected && !selectAllMatching}
-                onChange={(e) => {
-                  if (selectAllMatching) {
-                    // If all matching selected, uncheck clears all
-                    onToggleAll(false);
-                  } else {
-                    onToggleAll(e.target.checked);
-                  }
-                }}
-                disabled={loading || Boolean(errorMessage) || safeData.length === 0}
-                inputProps={{ "aria-label": "Select all" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Show menu on click when page is selected and there are more items
-                  if (allSelected && showSelectAllOption && !selectAllMatching) {
-                    setMenuAnchor(e.currentTarget);
-                  }
-                }}
-                size="small"
-              />
-              {/* Dropdown menu for "Select all X" */}
-              <Menu
-                anchorEl={menuAnchor}
-                open={menuOpen}
-                onClose={() => setMenuAnchor(null)}
-                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                slotProps={{
-                  paper: {
-                    sx: {
-                      bgcolor: primitives.night[700],
-                      border: "1px solid",
-                      borderColor: primitives.night[600],
-                      minWidth: 180,
-                    },
-                  },
-                }}
-              >
-                <MenuItem
-                  onClick={() => {
-                    onSelectAllMatching?.();
-                    setMenuAnchor(null);
-                  }}
-                  sx={{
-                    fontSize: "0.8125rem",
-                    color: primitives.lotus[400],
-                    "&:hover": { bgcolor: alpha(primitives.lotus[500], 0.1) },
-                  }}
-                >
-                  Select all {totalCount} findings
-                </MenuItem>
-              </Menu>
-            </Box>
+            <Checkbox
+              checked={allSelected || selectAllMatching}
+              indeterminate={someSelected && !selectAllMatching}
+              onChange={(e) => {
+                if (selectAllMatching) {
+                  onToggleAll(false);
+                } else {
+                  onToggleAll(e.target.checked);
+                }
+              }}
+              disabled={loading || Boolean(errorMessage) || safeData.length === 0}
+              inputProps={{ "aria-label": "Select all" }}
+              onClick={(e) => e.stopPropagation()}
+              size="small"
+            />
           </TableCell>
 
           <TableCell sx={{ pl: 1 }}>
