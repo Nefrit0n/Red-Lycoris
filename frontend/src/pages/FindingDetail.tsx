@@ -123,6 +123,10 @@ export const FindingDetailContent = ({
   const [eventFilter, setEventFilter] = useState<EventCategory>("all");
   const [evidenceExpanded, setEvidenceExpanded] = useState(false);
   const [factorsExpanded, setFactorsExpanded] = useState(false);
+  // Collapsible sections - default closed for cleaner view
+  const [riskExpanded, setRiskExpanded] = useState(false);
+  const [slaExpanded, setSlaExpanded] = useState(false);
+  const [intelExpanded, setIntelExpanded] = useState(false);
 
   // User permissions
   const user = getCurrentUser();
@@ -318,7 +322,7 @@ export const FindingDetailContent = ({
   // Severity color from design system
   const severityColor = semantic.severity[data.severity]?.base ?? primitives.night[300];
 
-  // Build minimal header chips - only essential info
+  // Build minimal header chips - only severity badge
   const chips = [
     <Typography
       key="sev"
@@ -337,26 +341,14 @@ export const FindingDetailContent = ({
     >
       {SEVERITY_STYLES[data.severity].label}
     </Typography>,
-    <Typography
-      key="st"
-      component="span"
-      variant="caption"
-      sx={{
-        color: primitives.night[300],
-        fontSize: "0.75rem",
-      }}
-    >
-      {STATUS_LABELS[data.status] ?? data.status}
-    </Typography>,
     resolvedDetails.category ? (
       <Typography
         key="cat"
         component="span"
         variant="caption"
         sx={{
-          color: primitives.night[300],
-          px: 1,
-          py: 0.25,
+          color: primitives.night[400],
+          fontSize: "0.7rem",
         }}
       >
         {resolvedDetails.category}
@@ -380,16 +372,12 @@ export const FindingDetailContent = ({
               ← К результатам
             </Button>
           )}
+          <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap" sx={{ mb: 0.5 }}>
+            {chips}
+          </Stack>
           <Typography variant={compact ? "h6" : "h5"} sx={{ lineHeight: 1.2, wordBreak: "break-word" }}>
             {data.title}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Детали находки и управление статусом.
-          </Typography>
-
-          <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
-            {chips}
-          </Stack>
         </Box>
 
         <Stack direction="row" alignItems="center" gap={1}>
@@ -503,460 +491,338 @@ export const FindingDetailContent = ({
 
       {/* Tab: Description */}
       <TabPanel value={tab} index={descriptionIndex}>
-        <Section
-          title="Описание"
-          dense={compact}
-          right={
-            <Button
+        {/* Quick Status Action - Most important for triage */}
+        {canEdit && (
+          <Box
+            sx={{
+              mb: 2,
+              p: 1.5,
+              borderRadius: 1.5,
+              bgcolor: alpha(primitives.night[700], 0.4),
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography variant="caption" sx={{ color: primitives.night[400], minWidth: 50 }}>
+              Status
+            </Typography>
+            <TextField
+              select
+              value={statusManager.status}
+              onChange={(event) => statusManager.setStatus(event.target.value as any)}
               size="small"
-              startIcon={<LinkIcon fontSize="small" />}
-              onClick={() =>
-                handleCopyValue(
-                  new URL(navigation.buildFindingLinkWithReturn(id), window.location.origin).toString()
-                )
-              }
+              sx={{
+                minWidth: 150,
+                "& .MuiOutlinedInput-root": {
+                  bgcolor: primitives.night[700],
+                },
+              }}
             >
-              Copy link
+              {ALL_STATUSES.map((k) => (
+                <MenuItem key={k} value={k}>
+                  {STATUS_LABELS[k]}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={statusManager.handleStatusUpdate}
+              disabled={statusManager.statusState === "saving" || !statusManager.statusChanged}
+              sx={{
+                bgcolor: primitives.lotus[500],
+                "&:hover": { bgcolor: primitives.lotus[600] },
+              }}
+            >
+              {statusManager.statusState === "saving" ? "..." : "Save"}
             </Button>
-          }
-        >
-          <Typography variant="body2" sx={{ whiteSpace: "pre-line" }}>
-            {data.description || "Описание отсутствует."}
-          </Typography>
+            {statusManager.statusState === "saved" && (
+              <Typography variant="caption" sx={{ color: primitives.jade[400] }}>
+                ✓ Saved
+              </Typography>
+            )}
+            <Box sx={{ flex: 1 }} />
+            <Tooltip title="Copy link">
+              <IconButton
+                size="small"
+                onClick={() =>
+                  handleCopyValue(
+                    new URL(navigation.buildFindingLinkWithReturn(id), window.location.origin).toString()
+                  )
+                }
+                sx={{ color: primitives.night[400] }}
+              >
+                <LinkIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
 
+        {/* Description text */}
+        <Typography
+          variant="body2"
+          sx={{
+            whiteSpace: "pre-line",
+            color: primitives.night[200],
+            lineHeight: 1.6,
+          }}
+        >
+          {data.description || "Описание отсутствует."}
+        </Typography>
+
+        {/* Compact metadata - only essential info */}
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+            gap: 1.5,
+            mt: 2,
+            py: 1.5,
+            borderTop: "1px solid",
+            borderColor: alpha(primitives.night[600], 0.5),
+          }}
+        >
+          <Box>
+            <Typography variant="caption" sx={{ color: primitives.night[500], fontSize: "0.65rem" }}>
+              Category
+            </Typography>
+            <Typography variant="body2" sx={{ color: primitives.night[200] }}>
+              {resolvedDetails.category || data.category || "—"}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" sx={{ color: primitives.night[500], fontSize: "0.65rem" }}>
+              Product
+            </Typography>
+            <Typography variant="body2" sx={{ color: primitives.night[200] }}>
+              {data.productName || "—"}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" sx={{ color: primitives.night[500], fontSize: "0.65rem" }}>
+              First seen
+            </Typography>
+            <Typography variant="body2" sx={{ color: primitives.night[200] }}>
+              {data.firstSeenAt ? formatDateRu(data.firstSeenAt) : "—"}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" sx={{ color: primitives.night[500], fontSize: "0.65rem" }}>
+              Last seen
+            </Typography>
+            <Typography variant="body2" sx={{ color: primitives.night[200] }}>
+              {data.lastSeenAt ? formatDateRu(data.lastSeenAt) : "—"}
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* Collapsible Details - click to expand */}
+        <Stack spacing={0} sx={{ mt: 2 }}>
+          {/* Risk Score - compact header */}
           <Box
+            onClick={() => setRiskExpanded(!riskExpanded)}
             sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-              gap: 2,
-              mt: 2,
+              py: 1,
+              px: 1.5,
+              cursor: "pointer",
+              borderTop: "1px solid",
+              borderColor: alpha(primitives.night[600], 0.3),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              "&:hover": { bgcolor: alpha(primitives.night[700], 0.3) },
             }}
           >
-            <Box sx={panelBoxSx}>
-              <Typography variant="overline" color="text.secondary">
-                Finding ID
-              </Typography>
-              <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
-                <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
-                  {data.id}
-                </Typography>
-                <Tooltip title="Скопировать">
-                  <IconButton size="small" onClick={() => handleCopyValue(data.id)}>
-                    <ContentCopyIcon fontSize="inherit" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            </Box>
-            <Box sx={panelBoxSx}>
-              <Typography variant="overline" color="text.secondary">
-                Fingerprint
-              </Typography>
-              <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    wordBreak: "break-all",
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  }}
-                >
-                  {data.fingerprint || "—"}
-                </Typography>
-                <Tooltip title="Скопировать">
-                  <IconButton
-                    size="small"
-                    onClick={() => handleCopyValue(data.fingerprint ?? "")}
-                    disabled={!data.fingerprint}
-                  >
-                    <ContentCopyIcon fontSize="inherit" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            </Box>
-          </Box>
-
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-              gap: 2,
-              mt: 2,
-            }}
-          >
-            {primaryMetadata.map((item) => (
-              <Stack key={item.label} direction="row" alignItems="center" gap={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 110 }}>
-                  {item.label}
-                </Typography>
-                <Typography variant="body2">{item.value}</Typography>
-              </Stack>
-            ))}
-          </Box>
-        </Section>
-
-        <Section
-          title={
-            <Stack direction="row" spacing={0.5} alignItems="center">
-              <span>Risk score</span>
-              <Tooltip title="Risk = Likelihood × Impact (OWASP)">
-                <InfoOutlinedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
-              </Tooltip>
-            </Stack>
-          }
-          dense={compact}
-        >
-          <Stack spacing={1.2}>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
-                Score
+            <Stack direction="row" alignItems="center" gap={1.5}>
+              <Typography variant="caption" sx={{ color: primitives.night[400], fontSize: "0.7rem" }}>
+                Risk
               </Typography>
               {riskScore !== null && riskBand ? (
                 <Typography
                   variant="body2"
-                  sx={{
-                    fontWeight: 600,
-                    color: RISK_BAND_COLORS[riskBand],
-                  }}
+                  sx={{ fontWeight: 600, color: RISK_BAND_COLORS[riskBand], fontSize: "0.8125rem" }}
                 >
                   {RISK_BAND_LABELS[riskBand]} {riskScore}
                 </Typography>
               ) : (
-                <Typography variant="body2" color="text.secondary">
-                  —
+                <Typography variant="body2" sx={{ color: primitives.night[500] }}>—</Typography>
+              )}
+              {cvssScore !== null && (
+                <Typography variant="caption" sx={{ color: primitives.night[400] }}>
+                  CVSS {cvssScore.toFixed(1)}
+                </Typography>
+              )}
+              {kevFlag && (
+                <Typography variant="caption" sx={{ color: semantic.severity.critical.base, fontWeight: 700 }}>
+                  KEV
                 </Typography>
               )}
             </Stack>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
-                Updated at
-              </Typography>
-              <Typography variant="body2">
-                {data.riskUpdatedAt ? formatDateRu(data.riskUpdatedAt) : "—"}
-              </Typography>
-            </Stack>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
-                Model version
-              </Typography>
-              <Typography variant="body2">{data.modelVersion ?? "—"}</Typography>
-            </Stack>
-
-            {canShowFactors && (
-              <Box>
-                <Typography
-                  component="span"
-                  variant="body2"
-                  onClick={() => setFactorsExpanded((prev) => !prev)}
-                  sx={{
-                    color: primitives.night[300],
-                    cursor: "pointer",
-                    fontSize: "0.8125rem",
-                    "&:hover": {
-                      color: primitives.lotus[400],
-                      textDecoration: "underline",
-                    },
-                  }}
-                >
-                  {factorsExpanded ? "← Hide factors" : "Show factors →"}
+            <Typography variant="caption" sx={{ color: primitives.night[500] }}>
+              {riskExpanded ? "−" : "+"}
+            </Typography>
+          </Box>
+          <Collapse in={riskExpanded}>
+            <Box sx={{ px: 1.5, py: 1, bgcolor: alpha(primitives.night[700], 0.15) }}>
+              <Stack spacing={0.75}>
+                {cvssScore !== null && (
+                  <Typography variant="caption" sx={{ color: primitives.night[300] }}>
+                    CVSS{cvssVersion ? ` v${cvssVersion}` : ""}: {cvssScore.toFixed(1)}
+                  </Typography>
+                )}
+                {epssScore !== null && (
+                  <Typography variant="caption" sx={{ color: primitives.night[300] }}>
+                    EPSS: {(epssScore * 100).toFixed(2)}%
+                    {epssPercentile !== null && ` (p${(epssPercentile * 100).toFixed(0)})`}
+                  </Typography>
+                )}
+                <Typography variant="caption" sx={{ color: primitives.night[400] }}>
+                  Updated: {data.riskUpdatedAt ? formatDateRu(data.riskUpdatedAt) : "—"}
                 </Typography>
-                <Collapse in={factorsExpanded} sx={{ mt: 1.5 }}>
-                  <Stack spacing={1.2}>
-                    <Stack direction="row" alignItems="center" gap={1}>
-                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
-                        Impact
-                      </Typography>
-                      <Typography variant="body2">
-                        {typeof riskFactors?.impact?.value === "number"
-                          ? riskFactors.impact.value.toFixed(2)
-                          : "—"}
-                        {typeof riskFactors?.impact?.cvss_score === "number"
-                          ? ` · CVSS ${riskFactors.impact.cvss_score.toFixed(1)}`
-                          : ""}
-                        {riskFactors?.impact?.severity ? ` · ${riskFactors.impact.severity}` : ""}
-                      </Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" gap={1}>
-                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
-                        Likelihood
-                      </Typography>
-                      <Typography variant="body2">
-                        {(() => {
-                          const v = riskFactors?.likelihood?.value;
-                          const known =
-                            typeof riskFactors?.likelihood?.known === "boolean"
-                              ? Boolean(riskFactors.likelihood.known)
-                              : typeof riskFactors?.likelihood?.epss_score === "number" ||
-                                Boolean(riskFactors?.likelihood?.kev);
+              </Stack>
+            </Box>
+          </Collapse>
 
-                          if (!known) return "— · no EPSS/KEV intel";
-                          if (typeof v !== "number") return "—";
-                          return `${v.toFixed(4)} · ${formatPercent01(v)}`;
-                        })()}
-                        {typeof riskFactors?.likelihood?.epss_score === "number"
-                          ? ` · EPSS ${formatPercent01(riskFactors.likelihood.epss_score)}`
-                          : ""}
-                        {riskFactors?.likelihood?.kev ? " · KEV" : ""}
-                      </Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" gap={1}>
-                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
-                        Asset multiplier
-                      </Typography>
-                      <Typography variant="body2">
-                        {typeof riskFactors?.asset?.multiplier === "number"
-                          ? riskFactors.asset.multiplier.toFixed(2)
-                          : "—"}
-                        {riskFactors?.asset?.criticality
-                          ? ` · ${riskFactors.asset.criticality}`
-                          : ""}
-                        {riskFactors?.asset?.environment
-                          ? ` · ${riskFactors.asset.environment}`
-                          : ""}
-                        {riskFactors?.asset?.internet_exposed ? " · Internet exposed" : ""}
-                      </Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" gap={1}>
-                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
-                        Freshness
-                      </Typography>
-                      <Typography variant="body2">
-                        {riskFactors?.freshness?.enabled
-                          ? `Age ${riskFactors.freshness.age_days?.toFixed(0) ?? "—"}d · x${riskFactors.freshness.multiplier?.toFixed(2) ?? "—"}`
-                          : "Disabled"}
-                      </Typography>
-                    </Stack>
-                    {(cvssScore !== null || epssScore !== null || kevFlag) && (
-                      <Stack direction="row" alignItems="center" gap={1}>
-                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
-                          Intel summary
-                        </Typography>
-                        <Typography variant="body2">
-                          {cvssScore !== null
-                            ? `CVSS ${cvssScore.toFixed(1)}${cvssVersion ? ` (v${cvssVersion})` : ""}`
-                            : "CVSS —"}
-                          {epssScore !== null
-                            ? ` · EPSS ${(epssScore * 100).toFixed(1)}%`
-                            : ""}
-                          {kevFlag ? " · KEV" : ""}
-                        </Typography>
-                      </Stack>
-                    )}
-                  </Stack>
-                </Collapse>
-              </Box>
-            )}
-          </Stack>
-        </Section>
-
-        <Section title="SLA" dense={compact}>
-          <Stack spacing={1.2}>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
-                Status
+          {/* SLA - compact header */}
+          <Box
+            onClick={() => setSlaExpanded(!slaExpanded)}
+            sx={{
+              py: 1,
+              px: 1.5,
+              cursor: "pointer",
+              borderTop: "1px solid",
+              borderColor: alpha(primitives.night[600], 0.3),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              "&:hover": { bgcolor: alpha(primitives.night[700], 0.3) },
+            }}
+          >
+            <Stack direction="row" alignItems="center" gap={1.5}>
+              <Typography variant="caption" sx={{ color: primitives.night[400], fontSize: "0.7rem" }}>
+                SLA
               </Typography>
-              <Box
-                sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  px: 1,
-                  py: 0.4,
-                  borderRadius: "12px",
-                  fontWeight: 600,
-                  fontSize: "0.75rem",
-                  color: slaStatusColor,
-                  bgcolor: slaStatusBg,
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  textTransform: "uppercase",
-                }}
+              <Typography
+                variant="body2"
+                sx={{ fontWeight: 600, color: slaStatusColor, fontSize: "0.8125rem" }}
               >
                 {slaStatusLabel}
-              </Box>
-            </Stack>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
-                Due at
-              </Typography>
-              <Typography variant="body2">
-                {data.slaDueAt ? formatDateRu(data.slaDueAt) : "—"}
               </Typography>
             </Stack>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
-                Days remaining
-              </Typography>
-              <Typography variant="body2">
-                {typeof slaDaysRemaining === "number" ? slaDaysRemaining : "—"}
-              </Typography>
-            </Stack>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 120 }}>
-                Source
-              </Typography>
-              <Typography variant="body2">
-                {data.slaSource ?? "default_matrix"}
-                {data.slaProfile ? ` (${data.slaProfile})` : ""}
-              </Typography>
-            </Stack>
-          </Stack>
-        </Section>
+            <Typography variant="caption" sx={{ color: primitives.night[500] }}>
+              {slaExpanded ? "−" : "+"}
+            </Typography>
+          </Box>
+          <Collapse in={slaExpanded}>
+            <Box sx={{ px: 1.5, py: 1, bgcolor: alpha(primitives.night[700], 0.15) }}>
+              <Stack spacing={0.75}>
+                <Typography variant="caption" sx={{ color: primitives.night[300] }}>
+                  Due: {data.slaDueAt ? formatDateRu(data.slaDueAt) : "—"}
+                </Typography>
+                <Typography variant="caption" sx={{ color: primitives.night[300] }}>
+                  Days remaining: {typeof slaDaysRemaining === "number" ? slaDaysRemaining : "—"}
+                </Typography>
+              </Stack>
+            </Box>
+          </Collapse>
+        </Stack>
 
-        {(intelIdentifiers.length > 0 ||
-          cvssScore !== null ||
-          epssScore !== null ||
-          kevFlag ||
-          intelReferences.length > 0) && (
-            <Section title="Vulnerability Intelligence" dense={compact}>
+        {/* Intelligence - compact collapsible */}
+        {(intelIdentifiers.length > 0 || intelReferences.length > 0) && (
+          <Box
+            onClick={() => setIntelExpanded(!intelExpanded)}
+            sx={{
+              py: 1,
+              px: 1.5,
+              cursor: "pointer",
+              borderTop: "1px solid",
+              borderColor: alpha(primitives.night[600], 0.3),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              "&:hover": { bgcolor: alpha(primitives.night[700], 0.3) },
+            }}
+          >
+            <Stack direction="row" alignItems="center" gap={1.5}>
+              <Typography variant="caption" sx={{ color: primitives.night[400], fontSize: "0.7rem" }}>
+                Intel
+              </Typography>
               {intelIdentifiers.length > 0 && (
-                <Stack spacing={1}>
-                  <Typography variant="caption" sx={{ color: primitives.night[400], fontSize: "0.7rem" }}>
-                    Identifiers
-                  </Typography>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    {intelIdentifiers.map((identifier) => (
-                      <Typography
-                        key={identifier}
-                        variant="body2"
-                        onClick={() => handleCopyValue(identifier)}
-                        sx={{
-                          px: 1,
-                          py: 0.25,
-                          borderRadius: 1,
-                          bgcolor: alpha(primitives.night[600], 0.4),
-                          color: primitives.night[200],
-                          cursor: "pointer",
-                          fontSize: "0.8125rem",
-                          fontFamily: "monospace",
-                          "&:hover": {
-                            bgcolor: alpha(primitives.night[600], 0.6),
-                            color: primitives.night[100],
-                          },
-                        }}
-                      >
-                        {identifier}
-                      </Typography>
-                    ))}
-                  </Stack>
-                </Stack>
+                <Typography variant="caption" sx={{ color: primitives.night[300], fontFamily: "monospace" }}>
+                  {intelIdentifiers[0]}{intelIdentifiers.length > 1 && ` +${intelIdentifiers.length - 1}`}
+                </Typography>
               )}
-
-              {(cvssScore !== null || epssScore !== null || kevFlag) && (
-                <Stack direction="row" spacing={2} sx={{ mt: 1.5, flexWrap: "wrap" }} alignItems="center">
-                  {cvssScore !== null && (
-                    <Typography variant="body2" sx={{ color: primitives.night[200] }}>
-                      <Typography component="span" sx={{ color: primitives.night[400], fontSize: "0.75rem" }}>
-                        CVSS{cvssVersion ? ` v${cvssVersion}` : ""}:
-                      </Typography>{" "}
-                      <Typography
-                        component="span"
-                        sx={{
-                          fontWeight: 600,
-                          color: cvssScore >= 9
-                            ? semantic.severity.critical.base
-                            : cvssScore >= 7
-                              ? semantic.severity.high.base
-                              : primitives.night[200],
-                        }}
-                      >
-                        {cvssScore.toFixed(1)}
-                      </Typography>
-                    </Typography>
-                  )}
-                  {epssScore !== null && (
-                    <Typography variant="body2" sx={{ color: primitives.night[200] }}>
-                      <Typography component="span" sx={{ color: primitives.night[400], fontSize: "0.75rem" }}>
-                        EPSS:
-                      </Typography>{" "}
-                      {(epssScore * 100).toFixed(2)}%
-                      {epssPercentile !== null && (
-                        <Typography component="span" sx={{ color: primitives.night[400], fontSize: "0.75rem" }}>
-                          {" "}(p{(epssPercentile * 100).toFixed(0)})
-                        </Typography>
-                      )}
-                    </Typography>
-                  )}
-                  {kevFlag && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: semantic.severity.critical.base,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      KEV
-                    </Typography>
-                  )}
-                </Stack>
-              )}
-
-              {intelReferences.length > 0 && (
-                <Stack spacing={0.5} sx={{ mt: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    References
-                  </Typography>
-                  <Stack spacing={0.5}>
-                    {intelReferences.map((ref) => (
-                      <Stack key={ref.url} direction="row" alignItems="center" spacing={1}>
-                        <MuiLink href={ref.url} target="_blank" rel="noreferrer">
-                          {ref.title || ref.url}
-                        </MuiLink>
-                        <IconButton size="small" onClick={() => handleCopyValue(ref.url)}>
-                          <ContentCopyIcon fontSize="inherit" />
-                        </IconButton>
-                      </Stack>
-                    ))}
-                  </Stack>
-                </Stack>
-              )}
-            </Section>
-          )}
-
-        {canEdit && (
-          <Box sx={{ mt: 2 }}>
-            <Section title="Управление статусом" dense={compact}>
-              <TextField
-                select
-                fullWidth
-                label="Статус"
-                value={statusManager.status}
-                onChange={(event) => {
-                  statusManager.setStatus(event.target.value as any);
-                }}
-                size="small"
-              >
-                {ALL_STATUSES.map((k) => (
-                  <MenuItem key={k} value={k}>
-                    {STATUS_LABELS[k]}
-                  </MenuItem>
-                ))}
-              </TextField>
-
-              <Button
-                variant="contained"
-                fullWidth
-                sx={{ mt: 1.5 }}
-                onClick={statusManager.handleStatusUpdate}
-                disabled={statusManager.statusState === "saving" || !statusManager.statusChanged}
-              >
-                {statusManager.statusState === "saving" ? "Сохраняем..." : "Сохранить"}
-              </Button>
-
-              {statusManager.statusState === "saved" && (
-                <Alert severity="success" sx={{ mt: 1.5 }}>
-                  Сохранено
-                </Alert>
-              )}
-              {statusManager.statusState === "error" && statusManager.statusError && (
-                <Alert severity="error" sx={{ mt: 1.5 }}>
-                  {statusManager.statusError}
-                </Alert>
-              )}
-            </Section>
+            </Stack>
+            <Typography variant="caption" sx={{ color: primitives.night[500] }}>
+              {intelExpanded ? "−" : "+"}
+            </Typography>
           </Box>
         )}
+        {(intelIdentifiers.length > 0 || intelReferences.length > 0) && (
+          <Collapse in={intelExpanded}>
+            <Box sx={{ px: 1.5, py: 1, bgcolor: alpha(primitives.night[700], 0.15) }}>
+              {intelIdentifiers.length > 0 && (
+                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                  {intelIdentifiers.map((identifier) => (
+                    <Typography
+                      key={identifier}
+                      variant="caption"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyValue(identifier);
+                      }}
+                      sx={{
+                        px: 0.75,
+                        py: 0.25,
+                        borderRadius: 0.5,
+                        bgcolor: alpha(primitives.night[600], 0.3),
+                        color: primitives.night[300],
+                        cursor: "pointer",
+                        fontFamily: "monospace",
+                        fontSize: "0.7rem",
+                        "&:hover": { color: primitives.night[100] },
+                      }}
+                    >
+                      {identifier}
+                    </Typography>
+                  ))}
+                </Stack>
+              )}
+              {intelReferences.length > 0 && (
+                <Stack spacing={0.25}>
+                  {intelReferences.slice(0, 5).map((ref) => (
+                    <MuiLink
+                      key={ref.url}
+                      href={ref.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      sx={{
+                        fontSize: "0.75rem",
+                        color: primitives.night[300],
+                        textDecoration: "none",
+                        "&:hover": { color: primitives.lotus[400] },
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        display: "block",
+                      }}
+                    >
+                      {ref.title || ref.url}
+                    </MuiLink>
+                  ))}
+                  {intelReferences.length > 5 && (
+                    <Typography variant="caption" sx={{ color: primitives.night[500] }}>
+                      +{intelReferences.length - 5} more references
+                    </Typography>
+                  )}
+                </Stack>
+              )}
+            </Box>
+          </Collapse>
+        )}
+
       </TabPanel>
 
       {/* Tab: SCA */}
