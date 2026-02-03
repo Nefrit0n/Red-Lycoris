@@ -71,7 +71,7 @@ const ExecutiveDashboardCanvas = ({
             {TEMPLATE_EXECUTIVE.layout.map((placement) => {
               const widget = widgetMap.get(placement.widgetId);
               if (!widget) return null;
-              const dataState = widget.getData();
+              const dataState = { data: widget.previewData ?? null, loading: false, error: null };
               const error = mode === "error" ? "Unable to load" : dataState.error;
               const showContent = mode === "loaded";
               return (

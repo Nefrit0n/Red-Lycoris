@@ -21,6 +21,7 @@ export const Default: Story = {
       <AddWidgetDialog
         open
         widgets={widgetRegistry}
+        dataMap={{}}
         onClose={() => undefined}
         onAdd={() => undefined}
       />
