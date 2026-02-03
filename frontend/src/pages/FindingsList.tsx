@@ -1,35 +1,38 @@
+/**
+ * FindingsList - Triage-focused findings page
+ *
+ * Design principles:
+ * - Maximum space for findings table (edge-to-edge)
+ * - Compact toolbar with essential actions only
+ * - Bulk actions integrated into toolbar (not separate bar)
+ * - No distracting metrics/overview - this is a work page
+ */
+
 import {
   Alert,
   Box,
   Button,
-  Container,
-  Divider,
+  FormControl,
+  IconButton,
   InputAdornment,
+  MenuItem,
+  Select,
   Snackbar,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Tooltip,
   Typography,
   alpha,
-  useTheme,
 } from "@mui/material";
 import FilterListIcon from "@mui/icons-material/FilterList";
-import ViewListIcon from "@mui/icons-material/ViewList";
-import ViewModuleIcon from "@mui/icons-material/ViewModule";
 import SearchIcon from "@mui/icons-material/Search";
-import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
-import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
-import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
-import SecurityIcon from "@mui/icons-material/Security";
-import AssignmentLateOutlinedIcon from "@mui/icons-material/AssignmentLateOutlined";
+import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
 import { useCallback, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
-import InlineActionsBar from "../components/InlineActionsBar";
 import ExportMenu from "../components/ExportMenu";
 import { FilterChips } from "../components/FilterChips";
 import FindingsTable from "../components/FindingsTable";
@@ -37,43 +40,31 @@ import PaginationControl from "../components/PaginationControl";
 import ViewsDropdown from "../components/ViewsDropdown";
 import FilterDrawer from "../components/FilterDrawer";
 import FiltersPanel from "../components/FiltersPanel";
-import { MetricDisplay } from "../design-system/components";
+import { primitives } from "../design-system/tokens/colors";
 import { useUrlFiltersSync, FiltersState } from "../hooks/useUrlFiltersSync";
 import { useFindingsData } from "../hooks/useFindingsData";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
-import { FindingListItemDTO } from "../types/findings";
+import { FindingListItemDTO, FindingStatus } from "../types/findings";
 
 import FindingDetailsDrawer from "../components/FindingDetailsDrawer";
 
 const LIST_STATE_KEY = "lotus_warden_findings_list_state";
-const VIEW_MODE_KEY = "findingsViewMode";
 
-type ViewMode = "table" | "cards";
+type BulkAction = "set_status";
 
 const FindingsList = () => {
-  const theme = useTheme();
   const location = useLocation();
-  const navigate = useNavigate();
 
   // URL <-> state
   const [filters, actions, hydrated] = useUrlFiltersSync();
 
-  // View mode
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    const stored = localStorage.getItem(VIEW_MODE_KEY) as ViewMode;
-    return stored === "cards" ? "cards" : "table";
-  });
-
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
 
-  const handleViewChange = (_: React.MouseEvent, newView: ViewMode | null) => {
-    if (!newView) return;
-    setViewMode(newView);
-    localStorage.setItem(VIEW_MODE_KEY, newView);
-  };
+  // Bulk action state
+  const [bulkStatus, setBulkStatus] = useState<FindingStatus>("under_review");
 
   // Auto-redirect after upload
   useUploadRedirect(filters.pageSize);
@@ -205,92 +196,185 @@ const FindingsList = () => {
     [actions]
   );
 
-  const handleUploadScan = () => {
-    navigate("/scans/upload");
+  // Handle bulk apply
+  const handleBulkApply = () => {
+    bulk.handleBulkApply("set_status" as BulkAction, { status: bulkStatus });
   };
 
-  // Calculate metrics from data
-  const metrics = useMemo(() => {
-    if (loading || data.length === 0) {
-      return {
-        totalFindings: totalKnown && total ? total : null,
-        criticalCount: null,
-        highCount: null,
-        openCount: null,
-      };
-    }
-
-    const criticalCount = data.filter((f) => f.severity === "critical").length;
-    const highCount = data.filter((f) => f.severity === "high").length;
-    const openCount = data.filter(
-      (f) => f.status === "new" || f.status === "under_review" || f.status === "confirmed"
-    ).length;
-
-    return {
-      totalFindings: totalKnown && total ? total : data.length,
-      criticalCount,
-      highCount,
-      openCount,
-    };
-  }, [data, loading, total, totalKnown]);
+  // Effective selection count
+  const effectiveCount = bulk.selectAllMatching && totalKnown ? totalCount : bulk.selectedIds.length;
+  const hasSelection = effectiveCount > 0;
 
   return (
-    <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
-      <Stack spacing={4}>
-        {/* Header */}
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+      }}
+    >
+      {/* Compact Toolbar */}
+      <Box
+        sx={{
+          px: { xs: 2, md: 3 },
+          py: 1.5,
+          borderBottom: "1px solid",
+          borderColor: primitives.night[700],
+          bgcolor: primitives.night[800],
+          flexShrink: 0,
+        }}
+      >
         <Stack
-          direction={{ xs: "column", lg: "row" }}
-          spacing={3}
-          alignItems={{ xs: "flex-start", lg: "center" }}
+          direction="row"
+          alignItems="center"
           justifyContent="space-between"
+          spacing={2}
         >
-          <Box>
-            <Typography variant="h4" component="h1" gutterBottom>
-              Findings
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Security vulnerabilities and issues across all products.
-            </Typography>
-          </Box>
-
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={1.5}
-            alignItems={{ xs: "stretch", sm: "center" }}
-          >
-            <ToggleButtonGroup
-              value={viewMode}
-              exclusive
-              onChange={handleViewChange}
-              size="small"
-              aria-label="view mode"
+          {/* Left: Title + Selection info */}
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Typography
+              variant="h6"
+              component="h1"
               sx={{
-                bgcolor: alpha(theme.palette.common.white, 0.04),
-                border: "1px solid",
-                borderColor: "divider",
+                fontWeight: 600,
+                color: primitives.night[100],
+                flexShrink: 0,
               }}
             >
-              <ToggleButton value="table" aria-label="table view">
-                <ViewListIcon fontSize="small" />
-              </ToggleButton>
-              <ToggleButton value="cards" aria-label="cards view" disabled>
-                <ViewModuleIcon fontSize="small" />
-              </ToggleButton>
-            </ToggleButtonGroup>
+              Findings
+            </Typography>
+
+            {/* Selection info (when items selected) */}
+            {canBulk && hasSelection && (
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Box
+                  sx={{
+                    height: 20,
+                    width: 1,
+                    bgcolor: primitives.night[600],
+                  }}
+                />
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: primitives.lotus[400],
+                    fontWeight: 600,
+                    fontSize: "0.8125rem",
+                  }}
+                >
+                  {bulk.selectAllMatching && totalKnown
+                    ? `All ${totalCount} selected`
+                    : `${bulk.selectedIds.length} selected`}
+                </Typography>
+
+                {/* Select all prompt */}
+                {bulk.showSelectAllPrompt && !bulk.selectAllMatching && totalKnown && (
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={bulk.handleSelectAllResults}
+                    sx={{
+                      textTransform: "none",
+                      fontSize: "0.75rem",
+                      color: primitives.night[300],
+                      minWidth: "auto",
+                      px: 1,
+                      "&:hover": { color: primitives.lotus[400] },
+                    }}
+                  >
+                    Select all {totalCount}
+                  </Button>
+                )}
+              </Stack>
+            )}
+          </Stack>
+
+          {/* Right: Actions */}
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+            {/* Bulk actions (when items selected) */}
+            {canBulk && hasSelection && (
+              <>
+                <FormControl size="small" sx={{ minWidth: 130 }}>
+                  <Select
+                    value={bulkStatus}
+                    onChange={(e) => setBulkStatus(e.target.value as FindingStatus)}
+                    sx={{
+                      height: 32,
+                      fontSize: "0.8rem",
+                      bgcolor: alpha(primitives.night[700], 0.5),
+                      "& .MuiSelect-select": { py: 0.5 },
+                    }}
+                  >
+                    <MenuItem value="new">New</MenuItem>
+                    <MenuItem value="under_review">Under review</MenuItem>
+                    <MenuItem value="confirmed">Confirmed</MenuItem>
+                    <MenuItem value="false_positive">False positive</MenuItem>
+                    <MenuItem value="out_of_scope">Out of scope</MenuItem>
+                    <MenuItem value="risk_accepted">Risk accepted</MenuItem>
+                    <MenuItem value="mitigated">Mitigated</MenuItem>
+                    <MenuItem value="duplicate">Duplicate</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <Tooltip title="Apply to selected">
+                  <IconButton
+                    size="small"
+                    onClick={handleBulkApply}
+                    disabled={bulk.loading}
+                    sx={{
+                      bgcolor: primitives.lotus[500],
+                      color: "#fff",
+                      width: 32,
+                      height: 32,
+                      "&:hover": { bgcolor: primitives.lotus[600] },
+                      "&.Mui-disabled": { bgcolor: primitives.night[600] },
+                    }}
+                  >
+                    <CheckIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+
+                <Tooltip title="Clear selection">
+                  <IconButton
+                    size="small"
+                    onClick={bulk.handleClearSelection}
+                    sx={{
+                      color: primitives.night[400],
+                      "&:hover": { color: primitives.night[200] },
+                    }}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+
+                <Box sx={{ height: 20, width: 1, bgcolor: primitives.night[600], mx: 0.5 }} />
+              </>
+            )}
 
             <TextField
               value={filters.searchInput}
               onChange={(e) => actions.setSearchInput(e.target.value)}
-              placeholder="Search findings"
+              placeholder="Search"
               size="small"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
+                    <SearchIcon fontSize="small" sx={{ color: primitives.night[400] }} />
                   </InputAdornment>
                 ),
               }}
-              sx={{ minWidth: { xs: "100%", sm: 220 } }}
+              sx={{
+                width: { xs: 120, sm: 180 },
+                "& .MuiOutlinedInput-root": {
+                  height: 32,
+                  bgcolor: alpha(primitives.night[700], 0.5),
+                  "&:hover": {
+                    bgcolor: alpha(primitives.night[600], 0.5),
+                  },
+                },
+              }}
             />
 
             <ViewsDropdown currentFilters={filters} onApplyView={handleApplyView} />
@@ -312,101 +396,35 @@ const FindingsList = () => {
                 onClick={() => setFiltersDrawerOpen(true)}
                 startIcon={<FilterListIcon />}
                 sx={{
-                  minWidth: 100,
-                  ...(activeFiltersCount > 0 && {
-                    borderColor: "primary.main",
-                    color: "primary.main",
-                  }),
+                  minWidth: 80,
+                  height: 32,
+                  borderColor: activeFiltersCount > 0 ? primitives.lotus[500] : primitives.night[600],
+                  color: activeFiltersCount > 0 ? primitives.lotus[400] : primitives.night[300],
+                  "&:hover": {
+                    borderColor: primitives.lotus[500],
+                    bgcolor: alpha(primitives.lotus[500], 0.1),
+                  },
                 }}
               >
-                Filters{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ""}
+                {activeFiltersCount > 0 ? activeFiltersCount : "Filters"}
               </Button>
             </Tooltip>
-
-            <Button
-              variant="contained"
-              startIcon={<UploadFileOutlinedIcon />}
-              sx={{ whiteSpace: "nowrap" }}
-              onClick={handleUploadScan}
-            >
-              Upload scan
-            </Button>
           </Stack>
         </Stack>
+      </Box>
 
-        {/* Error Alert */}
-        {error && (
-          <Alert
-            severity="error"
-            icon={<ErrorOutlineIcon fontSize="small" />}
-            sx={{
-              borderRadius: 2,
-              border: "1px solid",
-              borderColor: "error.main",
-              bgcolor: alpha(theme.palette.error.main, 0.1),
-            }}
-          >
-            {error}
-          </Alert>
-        )}
-
-        {/* Overview Metrics */}
-        <Box>
-          <Typography variant="overline" color="text.secondary">
-            Overview
-          </Typography>
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: {
-                xs: "1fr",
-                md: "repeat(2, minmax(0, 1fr))",
-                lg: "repeat(4, minmax(0, 1fr))",
-              },
-              gap: 2,
-            }}
-          >
-            <MetricDisplay
-              title="Total Findings"
-              value={metrics.totalFindings ?? "—"}
-              loading={loading}
-              size="small"
-              variant="subtle"
-              color="default"
-              icon={<BugReportOutlinedIcon />}
-            />
-            <MetricDisplay
-              title="Critical"
-              value={metrics.criticalCount ?? "—"}
-              loading={loading}
-              size="small"
-              variant="subtle"
-              color="error"
-              icon={<SecurityIcon />}
-            />
-            <MetricDisplay
-              title="High"
-              value={metrics.highCount ?? "—"}
-              loading={loading}
-              size="small"
-              variant="subtle"
-              color="warning"
-              icon={<WarningAmberOutlinedIcon />}
-            />
-            <MetricDisplay
-              title="Requires Action"
-              value={metrics.openCount ?? "—"}
-              loading={loading}
-              size="small"
-              variant="subtle"
-              color="lotus"
-              icon={<AssignmentLateOutlinedIcon />}
-            />
-          </Box>
-        </Box>
-
-        {/* Active Filter Chips */}
-        {activeFiltersCount > 0 && (
+      {/* Filter Chips (if active) */}
+      {activeFiltersCount > 0 && (
+        <Box
+          sx={{
+            px: { xs: 2, md: 3 },
+            py: 1,
+            borderBottom: "1px solid",
+            borderColor: primitives.night[700],
+            bgcolor: alpha(primitives.night[750], 0.5),
+            flexShrink: 0,
+          }}
+        >
           <FilterChips
             productId={filters.productId}
             productLabel={filters.productId}
@@ -433,68 +451,77 @@ const FindingsList = () => {
             onShowRepeatsChange={actions.setShowRepeats}
             onResetAll={actions.resetFilters}
           />
-        )}
+        </Box>
+      )}
 
-        <Divider sx={{ borderColor: alpha(theme.palette.common.white, 0.08) }} />
-
-        {/* Bulk Actions Bar */}
-        {canBulk && (
-          <InlineActionsBar
-            selectedCount={bulk.selectedIds.length}
-            totalCount={totalCount}
-            totalKnown={totalKnown}
-            selectAllMatching={bulk.selectAllMatching}
-            showSelectAllPrompt={bulk.showSelectAllPrompt}
-            onApply={bulk.handleBulkApply}
-            onClearSelection={bulk.handleClearSelection}
-            onSelectAllResults={bulk.handleSelectAllResults}
-            loading={bulk.loading}
-          />
-        )}
-
-        {/* Table */}
-        <Box
+      {/* Error Alert */}
+      {error && (
+        <Alert
+          severity="error"
+          icon={<ErrorOutlineIcon fontSize="small" />}
           sx={{
-            borderRadius: 2,
-            border: "1px solid",
-            borderColor: "divider",
-            bgcolor: alpha(theme.palette.common.white, 0.02),
-            overflow: "hidden",
+            mx: { xs: 2, md: 3 },
+            mt: 1,
+            borderRadius: 1,
+            flexShrink: 0,
           }}
         >
-          <FindingsTable
-            data={data}
-            selectedIds={bulk.selectedIds}
-            sortField={filters.sortField}
-            sortOrder={filters.sortOrder}
-            onToggleAll={bulk.handleToggleAll}
-            onToggleOne={bulk.handleToggleOne}
-            onSortChange={handleSortChange}
-            loading={loading || bulk.loading}
-            errorMessage={error || bulk.error}
-            onRetry={handleRetry}
-            onResetFilters={actions.resetFilters}
-            batchMode={bulk.selectionCount > 0}
-            highlightQuery={debouncedSearch}
-            rowCount={filters.pageSize}
-            onOpenDetails={(id) => drawer.openDrawer(id)}
-            activeFindingId={filters.selectedFindingId}
-            returnTo={listReturnTo}
-            onNavigateToDetail={handleNavigateToDetail}
-            compactMode
-          />
-        </Box>
+          {error}
+        </Alert>
+      )}
 
-        {/* Pagination */}
+      {/* Table - Takes all remaining space */}
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflow: "auto",
+        }}
+      >
+        <FindingsTable
+          data={data}
+          selectedIds={bulk.selectedIds}
+          sortField={filters.sortField}
+          sortOrder={filters.sortOrder}
+          onToggleAll={bulk.handleToggleAll}
+          onToggleOne={bulk.handleToggleOne}
+          onSortChange={handleSortChange}
+          loading={loading || bulk.loading}
+          errorMessage={error || bulk.error}
+          onRetry={handleRetry}
+          onResetFilters={actions.resetFilters}
+          batchMode={bulk.selectionCount > 0}
+          highlightQuery={debouncedSearch}
+          rowCount={filters.pageSize}
+          onOpenDetails={(id) => drawer.openDrawer(id)}
+          activeFindingId={filters.selectedFindingId}
+          returnTo={listReturnTo}
+          onNavigateToDetail={handleNavigateToDetail}
+          compactMode
+        />
+      </Box>
+
+      {/* Pagination Footer */}
+      <Box
+        sx={{
+          px: { xs: 2, md: 3 },
+          py: 1,
+          borderTop: "1px solid",
+          borderColor: primitives.night[700],
+          bgcolor: primitives.night[800],
+          flexShrink: 0,
+        }}
+      >
         <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
           {!totalKnown && (
             <Button
               size="small"
-              variant="outlined"
+              variant="text"
               onClick={loadStats}
               disabled={statsLoading || loading}
+              sx={{ color: primitives.night[400] }}
             >
-              {statsLoading ? "Loading stats..." : "Load statistics"}
+              {statsLoading ? "Loading..." : "Load total count"}
             </Button>
           )}
           <Box sx={{ flex: 1 }}>
@@ -515,7 +542,7 @@ const FindingsList = () => {
             />
           </Box>
         </Stack>
-      </Stack>
+      </Box>
 
       {/* Snackbar for bulk operations */}
       <Snackbar
@@ -581,7 +608,7 @@ const FindingsList = () => {
           showChips={false}
         />
       </FilterDrawer>
-    </Container>
+    </Box>
   );
 };
 
