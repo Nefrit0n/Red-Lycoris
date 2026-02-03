@@ -1,14 +1,15 @@
-import { Box, TablePagination, Typography } from "@mui/material";
+import { Box, CircularProgress, TablePagination, Typography } from "@mui/material";
 import { useEffect, useMemo } from "react";
 
 interface PaginationControlProps {
-  page: number; // 0-based (как в MUI TablePagination) :contentReference[oaicite:2]{index=2}
+  page: number; // 0-based (как в MUI TablePagination)
   pageSize: number;
   total?: number | null; // общее число результатов (count)
   hasNextPage?: boolean;
   currentCount?: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
+  loading?: boolean;
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -22,6 +23,7 @@ const PaginationControl = ({
   currentCount,
   onPageChange,
   onPageSizeChange,
+  loading = false,
 }: PaginationControlProps) => {
   const totalKnown = typeof total === "number" && Number.isFinite(total) && total >= 0;
   const safeTotal = totalKnown ? total : 0;
@@ -71,9 +73,16 @@ const PaginationControl = ({
       gap={2}
       sx={{ mt: 2 }}
     >
-      <Typography variant="body2" color="text.secondary">
-        {totalKnown ? `Показано ${from}-${to} из ${safeTotal}` : `Показано ${from}-${to}`}
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Typography variant="body2" color="text.secondary">
+          {totalKnown
+            ? `Показано ${from}-${to} из ${safeTotal}`
+            : loading
+              ? `Показано ${from}-${to}`
+              : `Показано ${from}-${to}`}
+        </Typography>
+        {loading && <CircularProgress size={14} sx={{ color: "text.secondary" }} />}
+      </Box>
 
       <TablePagination
         component="div"
