@@ -23,6 +23,7 @@ interface DataTableProps {
   size?: "small" | "medium";
   tableLayout?: "auto" | "fixed";
   maxHeight?: number | string;
+  borderless?: boolean;
 }
 
 const DataTable = ({
@@ -33,16 +34,17 @@ const DataTable = ({
   size = "small",
   tableLayout = "fixed",
   maxHeight = "70vh",
+  borderless = false,
 }: DataTableProps) => (
   <TableContainer
     sx={{
-      borderRadius: 2,
-      border: "1px solid",
-      borderColor: "divider",
+      borderRadius: borderless ? 0 : 2,
+      border: borderless ? "none" : "1px solid",
+      borderColor: borderless ? "transparent" : "divider",
       overflowX: "auto",
       overflowY: "auto",
       maxHeight,
-      backgroundColor: "background.paper",
+      backgroundColor: borderless ? "transparent" : "background.paper",
       "& .MuiTableCell-head": {
         backgroundColor: tableStyles.headerBg,
         color: tableStyles.headerText,
