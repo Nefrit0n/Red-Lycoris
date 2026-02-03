@@ -3,27 +3,27 @@ export const executiveKpis = {
   criticalHigh: 72,
   productsAtRisk: 14,
   scanFreshnessMinutes: 18,
-  scanFreshnessLabel: "Updated 18 min ago",
+  scanFreshnessLabel: "Обновлено 18 мин назад",
 };
 
 export const executiveRiskTrend = [
-  { label: "Week 1", value: 62 },
-  { label: "Week 2", value: 58 },
-  { label: "Week 3", value: 64 },
-  { label: "Week 4", value: 69 },
-  { label: "Week 5", value: 65 },
-  { label: "Week 6", value: 72 },
-  { label: "Week 7", value: 68 },
-  { label: "Week 8", value: 70 },
+  { label: "Неделя 1", value: 62 },
+  { label: "Неделя 2", value: 58 },
+  { label: "Неделя 3", value: 64 },
+  { label: "Неделя 4", value: 69 },
+  { label: "Неделя 5", value: 65 },
+  { label: "Неделя 6", value: 72 },
+  { label: "Неделя 7", value: 68 },
+  { label: "Неделя 8", value: 70 },
 ];
 
 export const riskTrend = [
-  { label: "Jan", value: 60 },
-  { label: "Feb", value: 58 },
-  { label: "Mar", value: 63 },
-  { label: "Apr", value: 67 },
-  { label: "May", value: 64 },
-  { label: "Jun", value: 71 },
+  { label: "Янв", value: 60 },
+  { label: "Фев", value: 58 },
+  { label: "Мар", value: 63 },
+  { label: "Апр", value: 67 },
+  { label: "Май", value: 64 },
+  { label: "Июн", value: 71 },
 ];
 
 export const topRiskyProducts = [
@@ -34,50 +34,50 @@ export const topRiskyProducts = [
 ];
 
 export const topRisks = [
-  { title: "Credential exposure in CI", severity: "High", owner: "Platform" },
-  { title: "Legacy auth flow gap", severity: "High", owner: "Identity" },
-  { title: "S3 bucket misconfiguration", severity: "Medium", owner: "Infra" },
-  { title: "Unsigned container images", severity: "Medium", owner: "DevSecOps" },
+  { title: "Утечка учётных данных в CI", severity: "High", owner: "Platform" },
+  { title: "Пробел в legacy auth flow", severity: "High", owner: "Identity" },
+  { title: "Неверная настройка S3", severity: "Medium", owner: "Infra" },
+  { title: "Неподписанные контейнеры", severity: "Medium", owner: "DevSecOps" },
 ];
 
 export const slaBreaches = {
   total: 6,
   breakdown: [
-    { label: "Critical SLA", value: 2 },
-    { label: "High SLA", value: 4 },
+    { label: "Критический SLA", value: 2 },
+    { label: "Высокий SLA", value: 4 },
   ],
 };
 
 export const recentCriticalActivity = [
-  { title: "Credential exposure detected", product: "Payments API", severity: "Critical", time: "18m ago" },
-  { title: "Privilege escalation path", product: "Identity Gateway", severity: "High", time: "2h ago" },
-  { title: "Public storage bucket", product: "Core Platform", severity: "High", time: "5h ago" },
-  { title: "Unsigned image deployed", product: "Mobile Wallet", severity: "Critical", time: "1d ago" },
+  { title: "Обнаружена утечка учётных данных", product: "Payments API", severity: "Critical", time: "18 мин назад" },
+  { title: "Путь эскалации привилегий", product: "Identity Gateway", severity: "High", time: "2 ч назад" },
+  { title: "Публичное хранилище", product: "Core Platform", severity: "High", time: "5 ч назад" },
+  { title: "Развернут неподписанный образ", product: "Mobile Wallet", severity: "Critical", time: "1 дн назад" },
 ];
 
 export const coverageSnapshot = [
-  { label: "Fresh scans", value: 78 },
-  { label: "SBOM coverage", value: 64 },
-  { label: "Policy enforcement", value: 71 },
+  { label: "Свежие сканы", value: 78 },
+  { label: "Покрытие SBOM", value: 64 },
+  { label: "Применение политик", value: 71 },
 ];
 
 export const appsecKpis = {
   newFindings: 34,
   newFindingsDelta: 8,
   mttrDays: 12.6,
-  mttrLabel: "Median time to remediate",
+  mttrLabel: "Медианное время до исправления",
   coveragePercent: 83,
   policyPassRate: 91,
 };
 
 export const findingsFlow = [
-  { label: "Mon", opened: 12, triaged: 8, fixed: 5 },
-  { label: "Tue", opened: 18, triaged: 14, fixed: 9 },
-  { label: "Wed", opened: 22, triaged: 16, fixed: 12 },
-  { label: "Thu", opened: 15, triaged: 12, fixed: 10 },
-  { label: "Fri", opened: 19, triaged: 15, fixed: 11 },
-  { label: "Sat", opened: 10, triaged: 9, fixed: 8 },
-  { label: "Sun", opened: 8, triaged: 7, fixed: 6 },
+  { label: "Пн", opened: 12, triaged: 8, fixed: 5 },
+  { label: "Вт", opened: 18, triaged: 14, fixed: 9 },
+  { label: "Ср", opened: 22, triaged: 16, fixed: 12 },
+  { label: "Чт", opened: 15, triaged: 12, fixed: 10 },
+  { label: "Пт", opened: 19, triaged: 15, fixed: 11 },
+  { label: "Сб", opened: 10, triaged: 9, fixed: 8 },
+  { label: "Вс", opened: 8, triaged: 7, fixed: 6 },
 ];
 
 export const severityStatusMatrix = [
@@ -100,19 +100,19 @@ export const severityStatusMatrix = [
 ];
 
 export const coverageFreshness = [
-  { product: "Payments API", lastScan: "2h ago", freshnessScore: 92 },
-  { product: "Identity Gateway", lastScan: "6h ago", freshnessScore: 84 },
-  { product: "Core Platform", lastScan: "1d ago", freshnessScore: 68 },
-  { product: "Mobile Wallet", lastScan: "3d ago", freshnessScore: 54 },
+  { product: "Payments API", lastScan: "2 ч назад", freshnessScore: 92 },
+  { product: "Identity Gateway", lastScan: "6 ч назад", freshnessScore: 84 },
+  { product: "Core Platform", lastScan: "1 дн назад", freshnessScore: 68 },
+  { product: "Mobile Wallet", lastScan: "3 дн назад", freshnessScore: 54 },
 ];
 
 export const policyGateSummary = {
   passRate: 91,
   failRate: 9,
   topFailures: [
-    { label: "Secrets detected", value: 12 },
-    { label: "IaC misconfig", value: 9 },
-    { label: "SAST critical", value: 7 },
+    { label: "Обнаружены секреты", value: 12 },
+    { label: "Ошибки IaC", value: 9 },
+    { label: "SAST критические", value: 7 },
   ],
 };
 
@@ -130,31 +130,31 @@ export const topNoisyRules = [
 ];
 
 export const pipelineHealth = [
-  { source: "CI Pipeline", lastRun: "45m ago", status: "Passing" },
-  { source: "Container Scan", lastRun: "2h ago", status: "At risk" },
-  { source: "IaC Scan", lastRun: "6h ago", status: "Passing" },
-  { source: "DAST Weekly", lastRun: "2d ago", status: "Delayed" },
+  { source: "CI Pipeline", lastRun: "45 мин назад", status: "Passing" },
+  { source: "Container Scan", lastRun: "2 ч назад", status: "At risk" },
+  { source: "IaC Scan", lastRun: "6 ч назад", status: "Passing" },
+  { source: "DAST Weekly", lastRun: "2 дн назад", status: "Delayed" },
 ];
 
 export const workloadFlow = {
   backlog: [
-    { label: "New", value: 42 },
-    { label: "Triaged", value: 31 },
-    { label: "In progress", value: 24 },
-    { label: "Fixed", value: 18 },
+    { label: "Новые", value: 42 },
+    { label: "Триаж", value: 31 },
+    { label: "В работе", value: 24 },
+    { label: "Исправлено", value: 18 },
   ],
   trend: [
-    { label: "Week 1", value: 110 },
-    { label: "Week 2", value: 104 },
-    { label: "Week 3", value: 98 },
-    { label: "Week 4", value: 92 },
+    { label: "Неделя 1", value: 110 },
+    { label: "Неделя 2", value: 104 },
+    { label: "Неделя 3", value: 98 },
+    { label: "Неделя 4", value: 92 },
   ],
 };
 
 export const devDeliveryMetrics = {
   configured: false,
   leadTimeDays: 4.2,
-  deploymentFrequency: "Weekly",
+  deploymentFrequency: "Еженедельно",
   changeFailureRate: 12,
   mttrHours: 6.4,
 };
@@ -168,51 +168,51 @@ export const developerKpis = {
 export const developerQueue = [
   {
     id: "find-101",
-    title: "Hardcoded token in payment adapter",
+    title: "Жёстко заданный токен в адаптере платежей",
     product: "Payments API",
     severity: "Critical",
     age: "2d",
-    status: "New",
+    status: "Новые",
   },
   {
     id: "find-102",
-    title: "Unsanitized user input in search",
+    title: "Неочищенный ввод пользователя в поиске",
     product: "Core Platform",
     severity: "High",
     age: "4d",
-    status: "Triaged",
+    status: "Триаж",
   },
   {
     id: "find-103",
-    title: "Weak hash algorithm usage",
+    title: "Использование слабого хэша",
     product: "Identity Gateway",
     severity: "Medium",
     age: "5d",
-    status: "In progress",
+    status: "В работе",
   },
   {
     id: "find-104",
-    title: "Outdated dependency with CVE",
+    title: "Устаревшая зависимость с CVE",
     product: "Mobile Wallet",
     severity: "High",
     age: "6d",
-    status: "New",
+    status: "Новые",
   },
   {
     id: "find-105",
-    title: "Missing auth check on endpoint",
+    title: "Отсутствует проверка авторизации на эндпоинте",
     product: "Payments API",
     severity: "Critical",
     age: "7d",
-    status: "Triaged",
+    status: "Триаж",
   },
   {
     id: "find-106",
-    title: "Secrets in config file",
+    title: "Секреты в конфиге",
     product: "Core Platform",
     severity: "High",
     age: "9d",
-    status: "New",
+    status: "Новые",
   },
   {
     id: "find-107",

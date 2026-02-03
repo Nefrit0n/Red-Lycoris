@@ -69,10 +69,10 @@ const DashboardShell = ({
             onChange={(event) => onTimeRangeChange(event.target.value)}
             sx={{ minWidth: 160 }}
           >
-            <MenuItem value="7d">Last 7 days</MenuItem>
-            <MenuItem value="30d">Last 30 days</MenuItem>
-            <MenuItem value="90d">Last 90 days</MenuItem>
-            <MenuItem value="365d">Last 12 months</MenuItem>
+            <MenuItem value="7d">Последние 7 дней</MenuItem>
+            <MenuItem value="30d">Последние 30 дней</MenuItem>
+            <MenuItem value="90d">Последние 90 дней</MenuItem>
+            <MenuItem value="365d">Последние 12 месяцев</MenuItem>
           </Select>
           {filters}
 
@@ -81,27 +81,27 @@ const DashboardShell = ({
             startIcon={<Tune />}
             onClick={onOpenTemplates}
           >
-            Templates
+            Шаблоны
           </Button>
 
           {isEditing ? (
             <Stack direction="row" spacing={1} alignItems="center">
               <Button variant="outlined" startIcon={<Add />} onClick={onOpenAddWidget}>
-                Add widget
+                Добавить виджет
               </Button>
               <Button variant="contained" startIcon={<Save />} onClick={onSave}>
-                Save
+                Сохранить
               </Button>
               <Button variant="text" onClick={onCancel}>
-                Cancel
+                Отмена
               </Button>
               <Button variant="text" color="inherit" startIcon={<Restore />} onClick={onReset}>
-                Reset
+                Сбросить
               </Button>
             </Stack>
           ) : (
             <Button variant="contained" startIcon={<Edit />} onClick={onEdit}>
-              Edit mode
+              Редактировать
             </Button>
           )}
         </Stack>

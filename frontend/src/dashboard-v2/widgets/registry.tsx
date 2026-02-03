@@ -86,8 +86,9 @@ const findingsLink = (params: Record<string, string>) => {
   return `/findings?${query.toString()}`;
 };
 
-const RiskTrendWidget = ({ data }: { data: typeof riskTrend }) => {
+const RiskTrendWidget = ({ data }: { data: typeof riskTrend | null }) => {
   const theme = useTheme();
+  if (!data?.length) return null;
   return (
     <Box sx={{ width: "100%", height: "100%" }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -120,8 +121,9 @@ const RiskTrendWidget = ({ data }: { data: typeof riskTrend }) => {
   );
 };
 
-const ExecutiveRiskTrendWidget = ({ data }: { data: typeof executiveRiskTrend }) => {
+const ExecutiveRiskTrendWidget = ({ data }: { data: typeof executiveRiskTrend | null }) => {
   const theme = useTheme();
+  if (!data?.length) return null;
   return (
     <Box sx={{ width: "100%", height: "100%" }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -160,8 +162,9 @@ const ExecutiveRiskTrendWidget = ({ data }: { data: typeof executiveRiskTrend })
   );
 };
 
-const FindingsFlowWidget = ({ data }: { data: typeof findingsFlow }) => {
+const FindingsFlowWidget = ({ data }: { data: typeof findingsFlow | null }) => {
   const theme = useTheme();
+  if (!data?.length) return null;
   return (
     <Box sx={{ width: "100%", height: "100%" }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -201,32 +204,43 @@ const FindingsFlowWidget = ({ data }: { data: typeof findingsFlow }) => {
   );
 };
 
-const SeverityStatusMatrixWidget = ({ data }: { data: typeof severityStatusMatrix }) => {
-  const severities = ["Critical", "High", "Medium", "Low"];
-  const statuses = ["New", "Triaged", "In progress", "Fixed"];
+const SeverityStatusMatrixWidget = ({ data }: { data: typeof severityStatusMatrix | null }) => {
+  if (!data?.length) return null;
+  const severities = [
+    { key: "Critical", label: "Критические" },
+    { key: "High", label: "Высокие" },
+    { key: "Medium", label: "Средние" },
+    { key: "Low", label: "Низкие" },
+  ];
+  const statuses = [
+    { key: "New", label: "Новые" },
+    { key: "Triaged", label: "Триаж" },
+    { key: "In progress", label: "В работе" },
+    { key: "Fixed", label: "Исправлено" },
+  ];
   const maxValue = Math.max(...data.map((entry) => entry.value));
 
   return (
     <Box sx={{ display: "grid", gridTemplateColumns: `repeat(${statuses.length + 1}, 1fr)`, gap: 1 }}>
       <Box />
       {statuses.map((status) => (
-        <Typography key={status} variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
-          {status}
+        <Typography key={status.key} variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
+          {status.label}
         </Typography>
       ))}
       {severities.map((severity) => (
-        <Box key={severity} sx={{ display: "contents" }}>
+        <Box key={severity.key} sx={{ display: "contents" }}>
           <Typography variant="caption" color="text.secondary">
-            {severity}
+            {severity.label}
           </Typography>
           {statuses.map((status) => {
             const entry = data.find(
-              (item) => item.severity === severity && item.status === status
+              (item) => item.severity === severity.key && item.status === status.key
             );
             const intensity = entry ? entry.value / maxValue : 0;
             return (
               <Box
-                key={`${severity}-${status}`}
+                key={`${severity.key}-${status.key}`}
                 sx={{
                   height: 28,
                   borderRadius: 1,
@@ -248,16 +262,22 @@ const SeverityStatusMatrixWidget = ({ data }: { data: typeof severityStatusMatri
   );
 };
 
-const SeverityStatusDistributionWidget = ({ data }: { data: typeof severityStatusMatrix }) => {
+const SeverityStatusDistributionWidget = ({ data }: { data: typeof severityStatusMatrix | null }) => {
   const theme = useTheme();
-  const distribution = ["Critical", "High", "Medium", "Low"].map((severity) => {
-    const entries = data.filter((entry) => entry.severity === severity);
+  if (!data?.length) return null;
+  const distribution = [
+    { key: "Critical", label: "Критические" },
+    { key: "High", label: "Высокие" },
+    { key: "Medium", label: "Средние" },
+    { key: "Low", label: "Низкие" },
+  ].map((severity) => {
+    const entries = data.filter((entry) => entry.severity === severity.key);
     return {
-      severity,
-      New: entries.find((entry) => entry.status === "New")?.value ?? 0,
-      Triaged: entries.find((entry) => entry.status === "Triaged")?.value ?? 0,
-      "In progress": entries.find((entry) => entry.status === "In progress")?.value ?? 0,
-      Fixed: entries.find((entry) => entry.status === "Fixed")?.value ?? 0,
+      severity: severity.label,
+      Новые: entries.find((entry) => entry.status === "New")?.value ?? 0,
+      "Триаж": entries.find((entry) => entry.status === "Triaged")?.value ?? 0,
+      "В работе": entries.find((entry) => entry.status === "In progress")?.value ?? 0,
+      Исправлено: entries.find((entry) => entry.status === "Fixed")?.value ?? 0,
     };
   });
 
@@ -276,132 +296,150 @@ const SeverityStatusDistributionWidget = ({ data }: { data: typeof severityStatu
             color: theme.palette.text.primary,
           }}
         />
-        <Bar dataKey="New" stackId="a" fill={primitives.lotus[400]} />
-        <Bar dataKey="Triaged" stackId="a" fill={primitives.petal[400]} />
-        <Bar dataKey="In progress" stackId="a" fill={primitives.gold[400]} />
-        <Bar dataKey="Fixed" stackId="a" fill={primitives.jade[400]} />
+        <Bar dataKey="Новые" stackId="a" fill={primitives.lotus[400]} />
+        <Bar dataKey="Триаж" stackId="a" fill={primitives.petal[400]} />
+        <Bar dataKey="В работе" stackId="a" fill={primitives.gold[400]} />
+        <Bar dataKey="Исправлено" stackId="a" fill={primitives.jade[400]} />
       </BarChart>
     </ResponsiveContainer>
   );
 };
 
-const CoverageFreshnessWidget = ({ data }: { data: typeof coverageFreshness }) => (
-  <Stack spacing={2}>
-    {data.map((item) => (
-      <Box key={item.product}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-          <Typography variant="subtitle2">{item.product}</Typography>
+const CoverageFreshnessWidget = ({ data }: { data: typeof coverageFreshness | null }) => {
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={2} sx={{ maxHeight: 240, overflowY: "auto", pr: 1 }}>
+      {data.map((item) => (
+        <Box key={item.product}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+            <Typography variant="subtitle2">{item.product}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {item.lastScan}
+            </Typography>
+          </Stack>
+          <LinearProgress
+            variant="determinate"
+            value={item.freshnessScore}
+            sx={{
+              height: 6,
+              borderRadius: 999,
+              bgcolor: "rgba(255,255,255,0.06)",
+              "& .MuiLinearProgress-bar": {
+                bgcolor: item.freshnessScore > 70 ? primitives.jade[400] : primitives.petal[400],
+                borderRadius: 999,
+              },
+            }}
+          />
+        </Box>
+      ))}
+    </Stack>
+  );
+};
+
+const PolicyGatesSummaryWidget = ({ data }: { data: typeof policyGateSummary | null }) => {
+  if (!data) return null;
+  return (
+    <Stack spacing={2}>
+      <Stack direction="row" spacing={3}>
+        <Stack>
           <Typography variant="caption" color="text.secondary">
-            {item.lastScan}
+            Проходят
+          </Typography>
+          <Typography sx={textStyles.heading.h4} color={primitives.jade[300]}>
+            {data.passRate}%
           </Typography>
         </Stack>
-        <LinearProgress
-          variant="determinate"
-          value={item.freshnessScore}
-          sx={{
-            height: 6,
-            borderRadius: 999,
-            bgcolor: "rgba(255,255,255,0.06)",
-            "& .MuiLinearProgress-bar": {
-              bgcolor: item.freshnessScore > 70 ? primitives.jade[400] : primitives.petal[400],
-              borderRadius: 999,
-            },
-          }}
-        />
-      </Box>
-    ))}
-  </Stack>
-);
-
-const PolicyGatesSummaryWidget = ({ data }: { data: typeof policyGateSummary }) => (
-  <Stack spacing={2}>
-    <Stack direction="row" spacing={3}>
-      <Stack>
-        <Typography variant="caption" color="text.secondary">
-          Pass rate
-        </Typography>
-        <Typography sx={textStyles.heading.h4} color={primitives.jade[300]}>
-          {data.passRate}%
-        </Typography>
+        <Stack>
+          <Typography variant="caption" color="text.secondary">
+            Падают
+          </Typography>
+          <Typography sx={textStyles.heading.h4} color={primitives.lotus[300]}>
+            {data.failRate}%
+          </Typography>
+        </Stack>
       </Stack>
-      <Stack>
-        <Typography variant="caption" color="text.secondary">
-          Fail rate
-        </Typography>
-        <Typography sx={textStyles.heading.h4} color={primitives.lotus[300]}>
-          {data.failRate}%
-        </Typography>
+      <Stack spacing={1}>
+        {data.topFailures.map((item) => (
+          <Stack key={item.label} direction="row" justifyContent="space-between">
+            <Typography variant="caption" color="text.secondary">
+              {item.label}
+            </Typography>
+            <Typography variant="caption" color="text.primary">
+              {item.value}
+            </Typography>
+          </Stack>
+        ))}
       </Stack>
     </Stack>
-    <Stack spacing={1}>
-      {data.topFailures.map((item) => (
-        <Stack key={item.label} direction="row" justifyContent="space-between">
-          <Typography variant="caption" color="text.secondary">
-            {item.label}
-          </Typography>
+  );
+};
+
+const TopNoisyRulesWidget = ({ data }: { data: typeof topNoisyRules | null }) => {
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={1.5} sx={{ maxHeight: 240, overflowY: "auto", pr: 1 }}>
+      {data.map((rule) => (
+        <Stack key={rule.ruleId} direction="row" alignItems="center" spacing={2}>
+          <Box flex={1}>
+            <Typography variant="subtitle2">{rule.ruleId}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Медиана: {rule.medianSeverity}
+            </Typography>
+          </Box>
           <Typography variant="caption" color="text.primary">
-            {item.value}
+            {rule.count}
           </Typography>
         </Stack>
       ))}
     </Stack>
-  </Stack>
-);
+  );
+};
 
-const TopNoisyRulesWidget = ({ data }: { data: typeof topNoisyRules }) => (
-  <Stack spacing={1.5}>
-    {data.map((rule) => (
-      <Stack key={rule.ruleId} direction="row" alignItems="center" spacing={2}>
-        <Box flex={1}>
-          <Typography variant="subtitle2">{rule.ruleId}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Median: {rule.medianSeverity}
-          </Typography>
-        </Box>
-        <Typography variant="caption" color="text.primary">
-          {rule.count}
-        </Typography>
-      </Stack>
-    ))}
-  </Stack>
-);
+const PipelineHealthWidget = ({ data }: { data: typeof pipelineHealth | null }) => {
+  if (!data?.length) return null;
+  const statusLabels: Record<string, string> = {
+    Passing: "Проходит",
+    "At risk": "Риск",
+    Unknown: "Неизвестно",
+  };
+  return (
+    <Stack spacing={1.5} sx={{ maxHeight: 240, overflowY: "auto", pr: 1 }}>
+      {data.map((item) => (
+        <Stack key={item.source} direction="row" justifyContent="space-between" alignItems="center">
+          <Box>
+            <Typography variant="subtitle2">{item.source}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {item.lastRun}
+            </Typography>
+          </Box>
+          <Chip
+            label={statusLabels[item.status] ?? item.status}
+            size="small"
+            sx={{
+              bgcolor:
+                item.status === "Passing"
+                  ? "rgba(16, 185, 129, 0.16)"
+                  : item.status === "At risk"
+                  ? "rgba(245, 158, 11, 0.2)"
+                  : "rgba(148, 163, 184, 0.2)",
+              color:
+                item.status === "Passing"
+                  ? "#10b981"
+                  : item.status === "At risk"
+                  ? "#f59e0b"
+                  : "#94a3b8",
+              fontWeight: 600,
+            }}
+          />
+        </Stack>
+      ))}
+    </Stack>
+  );
+};
 
-const PipelineHealthWidget = ({ data }: { data: typeof pipelineHealth }) => (
-  <Stack spacing={1.5}>
-    {data.map((item) => (
-      <Stack key={item.source} direction="row" justifyContent="space-between" alignItems="center">
-        <Box>
-          <Typography variant="subtitle2">{item.source}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {item.lastRun}
-          </Typography>
-        </Box>
-        <Chip
-          label={item.status}
-          size="small"
-          sx={{
-            bgcolor:
-              item.status === "Passing"
-                ? "rgba(16, 185, 129, 0.16)"
-                : item.status === "At risk"
-                ? "rgba(245, 158, 11, 0.2)"
-                : "rgba(148, 163, 184, 0.2)",
-            color:
-              item.status === "Passing"
-                ? "#10b981"
-                : item.status === "At risk"
-                ? "#f59e0b"
-                : "#94a3b8",
-            fontWeight: 600,
-          }}
-        />
-      </Stack>
-    ))}
-  </Stack>
-);
-
-const WorkloadFlowWidget = ({ data }: { data: typeof workloadFlow }) => {
+const WorkloadFlowWidget = ({ data }: { data: typeof workloadFlow | null }) => {
   const theme = useTheme();
+  if (!data) return null;
   return (
     <Stack spacing={2}>
       <Stack spacing={1.5}>
@@ -457,7 +495,8 @@ const WorkloadFlowWidget = ({ data }: { data: typeof workloadFlow }) => {
   );
 };
 
-const DevDeliveryMetricsWidget = ({ data }: { data: typeof devDeliveryMetrics }) => {
+const DevDeliveryMetricsWidget = ({ data }: { data: typeof devDeliveryMetrics | null }) => {
+  if (!data) return null;
   if (!data.configured) {
     return (
       <Box
@@ -469,7 +508,7 @@ const DevDeliveryMetricsWidget = ({ data }: { data: typeof devDeliveryMetrics })
           color: "text.secondary",
         }}
       >
-        DORA metrics not configured yet.
+        Метрики DORA ещё не настроены.
       </Box>
     );
   }
@@ -479,13 +518,13 @@ const DevDeliveryMetricsWidget = ({ data }: { data: typeof devDeliveryMetrics })
       <Stack direction="row" spacing={3}>
         <Stack>
           <Typography variant="caption" color="text.secondary">
-            Lead time
+            Время цикла
           </Typography>
           <Typography sx={textStyles.heading.h5}>{data.leadTimeDays}d</Typography>
         </Stack>
         <Stack>
           <Typography variant="caption" color="text.secondary">
-            Deploy freq
+            Частота деплоя
           </Typography>
           <Typography sx={textStyles.heading.h5}>{data.deploymentFrequency}</Typography>
         </Stack>
@@ -493,7 +532,7 @@ const DevDeliveryMetricsWidget = ({ data }: { data: typeof devDeliveryMetrics })
       <Stack direction="row" spacing={3}>
         <Stack>
           <Typography variant="caption" color="text.secondary">
-            Change fail rate
+            Доля неудачных изменений
           </Typography>
           <Typography sx={textStyles.heading.h5}>{data.changeFailureRate}%</Typography>
         </Stack>
@@ -510,7 +549,7 @@ const DevDeliveryMetricsWidget = ({ data }: { data: typeof devDeliveryMetrics })
 
 const DeveloperQuickFiltersWidget = () => (
   <Stack direction="row" spacing={1} flexWrap="wrap">
-    {["Critical", "Secrets", "SCA", "SAST", "New"].map((label) => (
+    {["Критические", "Секреты", "SCA", "SAST", "Новые"].map((label) => (
       <Chip
         key={label}
         label={label}
@@ -523,7 +562,8 @@ const DeveloperQuickFiltersWidget = () => (
   </Stack>
 );
 
-const DeveloperQueueWidget = ({ data }: { data: typeof developerQueue }) => {
+const DeveloperQueueWidget = ({ data }: { data: typeof developerQueue | null }) => {
+  if (!data?.length) return null;
   const severityStyles: Record<string, { color: string; bg: string }> = {
     Critical: { color: primitives.lotus[400], bg: "rgba(225, 29, 72, 0.18)" },
     High: { color: primitives.petal[400], bg: "rgba(233, 69, 50, 0.18)" },
@@ -532,7 +572,7 @@ const DeveloperQueueWidget = ({ data }: { data: typeof developerQueue }) => {
   };
 
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} sx={{ maxHeight: 320, overflowY: "auto", pr: 1 }}>
       {data.map((item) => {
         const style = severityStyles[item.severity] ?? severityStyles.Medium;
         return (
@@ -561,14 +601,14 @@ const DeveloperQueueWidget = ({ data }: { data: typeof developerQueue }) => {
               </Stack>
               <Stack direction="row" spacing={2} alignItems="center">
                 <Typography variant="caption" color="text.secondary">
-                  Age: {item.age}
+                  Возраст: {item.age}
                 </Typography>
                 <Stack direction="row" spacing={1}>
                   <Button size="small" variant="text" color="inherit">
-                    Mark FP
+                    Отметить FP
                   </Button>
                   <Button size="small" variant="text" color="inherit">
-                    Set status
+                    Статус
                   </Button>
                   <Button
                     size="small"
@@ -576,7 +616,7 @@ const DeveloperQueueWidget = ({ data }: { data: typeof developerQueue }) => {
                     component={Link}
                     to={`/findings/${item.id}`}
                   >
-                    Open details
+                    Открыть детали
                   </Button>
                 </Stack>
               </Stack>
@@ -588,22 +628,25 @@ const DeveloperQueueWidget = ({ data }: { data: typeof developerQueue }) => {
   );
 };
 
-const DeveloperGuidanceWidget = ({ data }: { data: typeof developerRemediation }) => (
-  <Stack spacing={2}>
-    <RemediationGuidance
-      evidence={data.evidence}
-      title={data.title}
-      severity={data.severity}
-    />
-    <CodeBlock code={data.snippet} language="typescript" maxHeight={220} />
-    <Button variant="contained" size="small">
-      Fix now
-    </Button>
-  </Stack>
-);
+const DeveloperGuidanceWidget = ({ data }: { data: typeof developerRemediation | null }) => {
+  if (!data) return null;
+  return (
+    <Stack spacing={2}>
+      <RemediationGuidance
+        evidence={data.evidence}
+        title={data.title}
+        severity={data.severity}
+      />
+      <CodeBlock code={data.snippet} language="typescript" maxHeight={220} />
+      <Button variant="contained" size="small">
+        Исправить сейчас
+      </Button>
+    </Stack>
+  );
+};
 
-const DeveloperHotspotsWidget = ({ data }: { data: typeof developerHotspots }) => {
-  if (!data.configured || data.items.length === 0) {
+const DeveloperHotspotsWidget = ({ data }: { data: typeof developerHotspots | null }) => {
+  if (!data || !data.configured || data.items.length === 0) {
     return (
       <Box
         sx={{
@@ -613,13 +656,13 @@ const DeveloperHotspotsWidget = ({ data }: { data: typeof developerHotspots }) =
           color: "text.secondary",
         }}
       >
-        Connect repo to enable hotspots.
+        Подключите репозиторий, чтобы включить горячие зоны.
       </Box>
     );
   }
 
   return (
-    <Stack spacing={1.5}>
+    <Stack spacing={1.5} sx={{ maxHeight: 220, overflowY: "auto", pr: 1 }}>
       {data.items.map((item) => (
         <Stack key={item.label} direction="row" justifyContent="space-between">
           <Typography variant="caption" color="text.secondary">
@@ -637,35 +680,39 @@ const DeveloperHotspotsWidget = ({ data }: { data: typeof developerHotspots }) =
 const DeveloperRecentlyIntroducedWidget = ({
   data,
 }: {
-  data: typeof developerRecentIntroduced;
-}) => (
-  <Stack spacing={1.5}>
-    {data.map((item) => (
-      <Stack key={item.title} direction="row" spacing={2} alignItems="center">
-        <Box flex={1}>
-          <Typography variant="subtitle2">{item.title}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {item.product} • {item.time}
-          </Typography>
-        </Box>
-        <Chip
-          label={item.severity}
-          size="small"
-          sx={{
-            bgcolor: item.severity === "Critical" ? "rgba(225, 29, 72, 0.18)" : "rgba(233, 69, 50, 0.18)",
-            color: item.severity === "Critical" ? primitives.lotus[400] : primitives.petal[400],
-            fontWeight: 600,
-          }}
-        />
-      </Stack>
-    ))}
-  </Stack>
-);
-
-const TopRiskyProductsWidget = ({ data }: { data: typeof topRiskyProducts }) => {
-  const theme = useTheme();
+  data: typeof developerRecentIntroduced | null;
+}) => {
+  if (!data?.length) return null;
   return (
-    <Stack spacing={2}>
+    <Stack spacing={1.5} sx={{ maxHeight: 240, overflowY: "auto", pr: 1 }}>
+      {data.map((item) => (
+        <Stack key={item.title} direction="row" spacing={2} alignItems="center">
+          <Box flex={1}>
+            <Typography variant="subtitle2">{item.title}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {item.product} • {item.time}
+            </Typography>
+          </Box>
+          <Chip
+            label={item.severity}
+            size="small"
+            sx={{
+              bgcolor: item.severity === "Critical" ? "rgba(225, 29, 72, 0.18)" : "rgba(233, 69, 50, 0.18)",
+              color: item.severity === "Critical" ? primitives.lotus[400] : primitives.petal[400],
+              fontWeight: 600,
+            }}
+          />
+        </Stack>
+      ))}
+    </Stack>
+  );
+};
+
+const TopRiskyProductsWidget = ({ data }: { data: typeof topRiskyProducts | null }) => {
+  const theme = useTheme();
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={2} sx={{ maxHeight: 260, overflowY: "auto", pr: 1 }}>
       {data.map((product) => (
         <Box key={product.name}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
@@ -705,8 +752,9 @@ const TopRiskyProductsWidget = ({ data }: { data: typeof topRiskyProducts }) => 
   );
 };
 
-const SlaBreachesWidget = ({ data }: { data: typeof slaBreaches }) => {
+const SlaBreachesWidget = ({ data }: { data: typeof slaBreaches | null }) => {
   const theme = useTheme();
+  if (!data) return null;
   return (
     <Stack spacing={2}>
       <Stack direction="row" alignItems="baseline" spacing={1}>
@@ -714,7 +762,7 @@ const SlaBreachesWidget = ({ data }: { data: typeof slaBreaches }) => {
           {data.total}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          SLA breaches this month
+          Нарушения SLA за месяц
         </Typography>
       </Stack>
       <ResponsiveContainer width="100%" height={120}>
@@ -734,608 +782,667 @@ const SlaBreachesWidget = ({ data }: { data: typeof slaBreaches }) => {
   );
 };
 
-const RecentCriticalActivityWidget = ({ data }: { data: typeof recentCriticalActivity }) => (
-  <Stack spacing={2}>
-    {data.map((item) => (
-      <Stack key={item.title} direction="row" spacing={2} alignItems="center">
-        <Box
-          sx={{
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
-            bgcolor: item.severity === "Critical" ? primitives.lotus[500] : primitives.petal[500],
-          }}
-        />
-        <Box flex={1}>
-          <Typography variant="subtitle2">{item.title}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {item.product}
-          </Typography>
-        </Box>
-        <Chip
-          label={item.severity}
-          size="small"
-          sx={{
-            bgcolor: item.severity === "Critical" ? "rgba(225, 29, 72, 0.18)" : "rgba(233, 69, 50, 0.18)",
-            color: item.severity === "Critical" ? primitives.lotus[400] : primitives.petal[400],
-            fontWeight: 600,
-          }}
-        />
-        <Typography variant="caption" color="text.secondary">
-          {item.time}
-        </Typography>
-      </Stack>
-    ))}
-  </Stack>
-);
-
-const CoverageSnapshotWidget = ({ data }: { data: typeof coverageSnapshot }) => (
-  <Stack spacing={2.5}>
-    {data.map((item) => (
-      <Box key={item.label}>
-        <Stack direction="row" justifyContent="space-between" mb={1}>
-          <Typography variant="caption" color="text.secondary">
-            {item.label}
-          </Typography>
-          <Typography variant="caption" color="text.primary">
-            {item.value}%
-          </Typography>
-        </Stack>
-        <LinearProgress
-          variant="determinate"
-          value={item.value}
-          sx={{
-            height: 6,
-            borderRadius: 999,
-            bgcolor: "rgba(255,255,255,0.06)",
-            "& .MuiLinearProgress-bar": {
-              bgcolor: primitives.jade[400],
-              borderRadius: 999,
-            },
-          }}
-        />
-      </Box>
-    ))}
-  </Stack>
-);
-
-const TopRisksWidget = ({ data }: { data: typeof topRisks }) => (
-  <Stack spacing={2}>
-    {data.map((risk) => (
-      <Stack key={risk.title} direction="row" spacing={2} alignItems="center">
-        <Box
-          sx={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            bgcolor: risk.severity === "High" ? primitives.lotus[500] : primitives.petal[500],
-          }}
-        />
-        <Box flex={1}>
-          <Typography variant="subtitle2">{risk.title}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {risk.owner}
-          </Typography>
-        </Box>
-        <Chip
-          label={risk.severity}
-          size="small"
-          sx={{
-            bgcolor: "rgba(225, 29, 72, 0.12)",
-            color: primitives.lotus[400],
-            fontWeight: 600,
-          }}
-        />
-      </Stack>
-    ))}
-  </Stack>
-);
-
-const CoverageWidget = ({ data }: { data: typeof coverageByDomain }) => (
-  <Stack spacing={2.5}>
-    {data.map((item) => (
-      <Box key={item.label}>
-        <Stack direction="row" justifyContent="space-between" mb={1}>
-          <Typography variant="caption" color="text.secondary">
-            {item.label}
-          </Typography>
-          <Typography variant="caption" color="text.primary">
-            {item.value}%
-          </Typography>
-        </Stack>
-        <LinearProgress
-          variant="determinate"
-          value={item.value}
-          sx={{
-            height: 6,
-            borderRadius: 999,
-            bgcolor: "rgba(255,255,255,0.06)",
-            "& .MuiLinearProgress-bar": {
-              bgcolor: primitives.jade[400],
-              borderRadius: 999,
-            },
-          }}
-        />
-      </Box>
-    ))}
-  </Stack>
-);
-
-const PipelineGatesWidget = ({ data }: { data: typeof pipelineGates }) => (
-  <Stack spacing={2.5}>
-    {data.map((gate) => (
-      <Box key={gate.label}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-          <Typography variant="subtitle2">{gate.label}</Typography>
+const RecentCriticalActivityWidget = ({ data }: { data: typeof recentCriticalActivity | null }) => {
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={2} sx={{ maxHeight: 260, overflowY: "auto", pr: 1 }}>
+      {data.map((item) => (
+        <Stack key={item.title} direction="row" spacing={2} alignItems="center">
+          <Box
+            sx={{
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              bgcolor: item.severity === "Critical" ? primitives.lotus[500] : primitives.petal[500],
+            }}
+          />
+          <Box flex={1}>
+            <Typography variant="subtitle2">{item.title}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {item.product}
+            </Typography>
+          </Box>
           <Chip
-            label={gate.status}
+            label={item.severity}
             size="small"
             sx={{
-              bgcolor: gate.status === "Passing" ? "rgba(16, 185, 129, 0.16)" : "rgba(245, 158, 11, 0.2)",
-              color: gate.status === "Passing" ? "#10b981" : "#f59e0b",
+              bgcolor: item.severity === "Critical" ? "rgba(225, 29, 72, 0.18)" : "rgba(233, 69, 50, 0.18)",
+              color: item.severity === "Critical" ? primitives.lotus[400] : primitives.petal[400],
+              fontWeight: 600,
+            }}
+          />
+          <Typography variant="caption" color="text.secondary">
+            {item.time}
+          </Typography>
+        </Stack>
+      ))}
+    </Stack>
+  );
+};
+
+const CoverageSnapshotWidget = ({ data }: { data: typeof coverageSnapshot | null }) => {
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={2.5}>
+      {data.map((item) => (
+        <Box key={item.label}>
+          <Stack direction="row" justifyContent="space-between" mb={1}>
+            <Typography variant="caption" color="text.secondary">
+              {item.label}
+            </Typography>
+            <Typography variant="caption" color="text.primary">
+              {item.value}%
+            </Typography>
+          </Stack>
+          <LinearProgress
+            variant="determinate"
+            value={item.value}
+            sx={{
+              height: 6,
+              borderRadius: 999,
+              bgcolor: "rgba(255,255,255,0.06)",
+              "& .MuiLinearProgress-bar": {
+                bgcolor: primitives.jade[400],
+                borderRadius: 999,
+              },
+            }}
+          />
+        </Box>
+      ))}
+    </Stack>
+  );
+};
+
+const TopRisksWidget = ({ data }: { data: typeof topRisks | null }) => {
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={2} sx={{ maxHeight: 260, overflowY: "auto", pr: 1 }}>
+      {data.map((risk) => (
+        <Stack key={risk.title} direction="row" spacing={2} alignItems="center">
+          <Box
+            sx={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              bgcolor: risk.severity === "High" ? primitives.lotus[500] : primitives.petal[500],
+            }}
+          />
+          <Box flex={1}>
+            <Typography variant="subtitle2">{risk.title}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {risk.owner}
+            </Typography>
+          </Box>
+          <Chip
+            label={risk.severity}
+            size="small"
+            sx={{
+              bgcolor: "rgba(225, 29, 72, 0.12)",
+              color: primitives.lotus[400],
               fontWeight: 600,
             }}
           />
         </Stack>
-        <LinearProgress
-          variant="determinate"
-          value={gate.rate}
-          sx={{
-            height: 6,
-            borderRadius: 999,
-            bgcolor: "rgba(255,255,255,0.06)",
-            "& .MuiLinearProgress-bar": {
-              bgcolor: gate.status === "Passing" ? "#10b981" : "#f59e0b",
-              borderRadius: 999,
-            },
-          }}
-        />
-      </Box>
-    ))}
-  </Stack>
-);
+      ))}
+    </Stack>
+  );
+};
 
-const PolicyHealthWidget = ({ data }: { data: typeof policyHealth }) => (
-  <Stack spacing={2.5}>
-    {data.map((policy) => (
-      <Box key={policy.label}>
-        <Stack direction="row" justifyContent="space-between" mb={1}>
+const CoverageWidget = ({ data }: { data: typeof coverageByDomain | null }) => {
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={2.5} sx={{ maxHeight: 260, overflowY: "auto", pr: 1 }}>
+      {data.map((item) => (
+        <Box key={item.label}>
+          <Stack direction="row" justifyContent="space-between" mb={1}>
+            <Typography variant="caption" color="text.secondary">
+              {item.label}
+            </Typography>
+            <Typography variant="caption" color="text.primary">
+              {item.value}%
+            </Typography>
+          </Stack>
+          <LinearProgress
+            variant="determinate"
+            value={item.value}
+            sx={{
+              height: 6,
+              borderRadius: 999,
+              bgcolor: "rgba(255,255,255,0.06)",
+              "& .MuiLinearProgress-bar": {
+                bgcolor: primitives.jade[400],
+                borderRadius: 999,
+              },
+            }}
+          />
+        </Box>
+      ))}
+    </Stack>
+  );
+};
+
+const PipelineGatesWidget = ({ data }: { data: typeof pipelineGates | null }) => {
+  if (!data?.length) return null;
+  const statusLabels: Record<string, string> = {
+    Passing: "Проходит",
+    "At risk": "Риск",
+  };
+  return (
+    <Stack spacing={2.5} sx={{ maxHeight: 260, overflowY: "auto", pr: 1 }}>
+      {data.map((gate) => (
+        <Box key={gate.label}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+            <Typography variant="subtitle2">{gate.label}</Typography>
+            <Chip
+              label={statusLabels[gate.status] ?? gate.status}
+              size="small"
+              sx={{
+                bgcolor: gate.status === "Passing" ? "rgba(16, 185, 129, 0.16)" : "rgba(245, 158, 11, 0.2)",
+                color: gate.status === "Passing" ? "#10b981" : "#f59e0b",
+                fontWeight: 600,
+              }}
+            />
+          </Stack>
+          <LinearProgress
+            variant="determinate"
+            value={gate.rate}
+            sx={{
+              height: 6,
+              borderRadius: 999,
+              bgcolor: "rgba(255,255,255,0.06)",
+              "& .MuiLinearProgress-bar": {
+                bgcolor: gate.status === "Passing" ? "#10b981" : "#f59e0b",
+                borderRadius: 999,
+              },
+            }}
+          />
+        </Box>
+      ))}
+    </Stack>
+  );
+};
+
+const PolicyHealthWidget = ({ data }: { data: typeof policyHealth | null }) => {
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={2.5} sx={{ maxHeight: 260, overflowY: "auto", pr: 1 }}>
+      {data.map((policy) => (
+        <Box key={policy.label}>
+          <Stack direction="row" justifyContent="space-between" mb={1}>
+            <Typography variant="caption" color="text.secondary">
+              {policy.label}
+            </Typography>
+            <Typography variant="caption" color="text.primary">
+              {policy.value}%
+            </Typography>
+          </Stack>
+          <LinearProgress
+            variant="determinate"
+            value={policy.value}
+            sx={{
+              height: 6,
+              borderRadius: 999,
+              bgcolor: "rgba(255,255,255,0.06)",
+              "& .MuiLinearProgress-bar": {
+                bgcolor: primitives.petal[400],
+                borderRadius: 999,
+              },
+            }}
+          />
+        </Box>
+      ))}
+    </Stack>
+  );
+};
+
+const RecentActivityWidget = ({ data }: { data: typeof recentActivity | null }) => {
+  if (!data?.length) return null;
+  return (
+    <Stack spacing={2} sx={{ maxHeight: 260, overflowY: "auto", pr: 1 }}>
+      {data.map((item) => (
+        <Box key={item.title}>
+          <Typography variant="subtitle2">{item.title}</Typography>
           <Typography variant="caption" color="text.secondary">
-            {policy.label}
+            {item.meta}
           </Typography>
-          <Typography variant="caption" color="text.primary">
-            {policy.value}%
-          </Typography>
-        </Stack>
-        <LinearProgress
-          variant="determinate"
-          value={policy.value}
-          sx={{
-            height: 6,
-            borderRadius: 999,
-            bgcolor: "rgba(255,255,255,0.06)",
-            "& .MuiLinearProgress-bar": {
-              bgcolor: primitives.petal[400],
-              borderRadius: 999,
-            },
-          }}
-        />
-      </Box>
-    ))}
-  </Stack>
-);
-
-const RecentActivityWidget = ({ data }: { data: typeof recentActivity }) => (
-  <Stack spacing={2}>
-    {data.map((item) => (
-      <Box key={item.title}>
-        <Typography variant="subtitle2">{item.title}</Typography>
-        <Typography variant="caption" color="text.secondary">
-          {item.meta}
-        </Typography>
-      </Box>
-    ))}
-  </Stack>
-);
+        </Box>
+      ))}
+    </Stack>
+  );
+};
 
 export const widgetRegistry: WidgetDefinition[] = [
   {
     id: "kpi-open-findings",
-    title: "Open findings",
-    description: "Total open findings across the program",
+    title: "Открытые находки",
+    description: "Всего открытых находок по программе",
     category: "Executive",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     getData: () => useStaticData(selectExecutiveKpis()),
-    render: (data: typeof executiveKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">Open findings</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.night[50]}>
-          {data.openFindings}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Active backlog
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof executiveKpis | null) => {
+      if (!data) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Открытые находки</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.night[50]}>
+            {data.openFindings}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Активный бэклог
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ status: "open" }),
   },
   {
     id: "kpi-critical-high",
-    title: "Critical + High",
-    description: "Critical/high severity findings",
+    title: "Критические + высокие",
+    description: "Критические и высокие по серьёзности",
     category: "Executive",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     getData: () => useStaticData(selectExecutiveKpis()),
-    render: (data: typeof executiveKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">Critical + High</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.lotus[300]}>
-          {data.criticalHigh}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Highest urgency items
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof executiveKpis | null) => {
+      if (!data) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Критические + высокие</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.lotus[300]}>
+            {data.criticalHigh}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Самые срочные
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ severity: "critical,high" }),
   },
   {
     id: "kpi-products-risk",
-    title: "Products at risk",
-    description: "Products with elevated risk",
+    title: "Продукты в риске",
+    description: "Продукты с повышенным риском",
     category: "Executive",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     getData: () => useStaticData(selectExecutiveKpis()),
-    render: (data: typeof executiveKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">Products at risk</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.petal[300]}>
-          {data.productsAtRisk}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Require attention
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof executiveKpis | null) => {
+      if (!data || data.productsAtRisk === null) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Продукты в риске</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.petal[300]}>
+            {data.productsAtRisk}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Требуют внимания
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ view: "products-risk" }),
   },
   {
     id: "kpi-scan-freshness",
-    title: "Scan freshness",
-    description: "Latest scan recency",
+    title: "Свежесть сканов",
+    description: "Давность последнего скана",
     category: "Executive",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     getData: () => useStaticData(selectExecutiveKpis()),
-    render: (data: typeof executiveKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">Scan freshness</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.jade[300]}>
-          {data.scanFreshnessMinutes}m
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {data.scanFreshnessLabel}
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof executiveKpis | null) => {
+      if (!data || data.scanFreshnessMinutes === null) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Свежесть сканов</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.jade[300]}>
+            {data.scanFreshnessMinutes}м
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {data.scanFreshnessLabel}
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ view: "freshness" }),
   },
   {
     id: "exec-risk-trend",
-    title: "Risk trend",
-    description: "30/90 day risk movement",
+    title: "Тренд риска",
+    description: "Динамика риска за 30/90 дней",
     category: "Executive",
     defaultSize: { w: 7, h: 4 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectExecutiveRiskTrend()),
-    render: (data: typeof executiveRiskTrend) => <ExecutiveRiskTrendWidget data={data} />,
+    render: (data: typeof executiveRiskTrend | null) => <ExecutiveRiskTrendWidget data={data} />,
     linkTo: findingsLink({ view: "risk-trend" }),
   },
   {
     id: "exec-top-risky-products",
-    title: "Top risky products",
-    description: "Highest risk exposure by product",
+    title: "Топ рискованных продуктов",
+    description: "Самый высокий риск по продуктам",
     category: "Executive",
     defaultSize: { w: 5, h: 4 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectTopRiskyProducts()),
-    render: (data: typeof topRiskyProducts) => <TopRiskyProductsWidget data={data} />,
+    render: (data: typeof topRiskyProducts | null) => <TopRiskyProductsWidget data={data} />,
     linkTo: findingsLink({ view: "top-risky-products" }),
   },
   {
     id: "exec-sla-breaches",
-    title: "SLA breaches",
-    description: "SLA or gate breaches",
+    title: "Нарушения SLA",
+    description: "Нарушения SLA или гейтов",
     category: "Executive",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectSlaBreaches()),
-    render: (data: typeof slaBreaches) => <SlaBreachesWidget data={data} />,
+    render: (data: typeof slaBreaches | null) => <SlaBreachesWidget data={data} />,
     linkTo: findingsLink({ view: "sla" }),
     pinnable: true,
   },
   {
     id: "exec-critical-activity",
-    title: "Recent critical activity",
-    description: "Hot issues needing attention",
+    title: "Критическая активность",
+    description: "Горячие проблемы, требующие внимания",
     category: "Executive",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectRecentCriticalActivity()),
-    render: (data: typeof recentCriticalActivity) => <RecentCriticalActivityWidget data={data} />,
+    render: (data: typeof recentCriticalActivity | null) => <RecentCriticalActivityWidget data={data} />,
     linkTo: findingsLink({ severity: "critical" }),
     pinnable: true,
   },
   {
     id: "exec-coverage-snapshot",
-    title: "Coverage snapshot",
-    description: "Scan and policy coverage",
+    title: "Снимок покрытия",
+    description: "Покрытие сканами и политиками",
     category: "Executive",
     defaultSize: { w: 12, h: 3 },
     minSize: { w: 6, h: 3 },
     getData: () => useStaticData(selectCoverageSnapshot()),
-    render: (data: typeof coverageSnapshot) => <CoverageSnapshotWidget data={data} />,
+    render: (data: typeof coverageSnapshot | null) => <CoverageSnapshotWidget data={data} />,
     linkTo: findingsLink({ view: "coverage" }),
   },
   {
     id: "kpi-new-findings",
-    title: "New findings",
-    description: "New findings in the last 7 days",
+    title: "Новые находки",
+    description: "Новые находки за последние 7 дней",
     category: "AppSec",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     getData: () => useStaticData(selectAppsecKpis()),
-    render: (data: typeof appsecKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">New findings</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.petal[300]}>
-          {data.newFindings}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          +{data.newFindingsDelta} vs last week
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof appsecKpis | null) => {
+      if (!data || data.newFindings === null || data.newFindingsDelta === null) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Новые находки</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.petal[300]}>
+            {data.newFindings}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {data.newFindingsDelta >= 0 ? "+" : ""}
+            {data.newFindingsDelta} к прошлой неделе
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ status: "new", window: "7d" }),
   },
   {
     id: "kpi-mttr",
-    title: "MTTR / aging",
-    description: "Median time to remediation",
+    title: "MTTR / старение",
+    description: "Медианное время до исправления",
     category: "AppSec",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     getData: () => useStaticData(selectAppsecKpis()),
-    render: (data: typeof appsecKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">MTTR</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.gold[300]}>
-          {data.mttrDays ? `${data.mttrDays}d` : "Not set"}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {data.mttrLabel}
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof appsecKpis | null) => {
+      if (!data || data.mttrDays === null) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">MTTR</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.gold[300]}>
+            {data.mttrDays ? `${data.mttrDays}д` : "Не задано"}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {data.mttrLabel}
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ sort: "age" }),
   },
   {
     id: "kpi-coverage",
-    title: "Coverage",
-    description: "Products with recent scans",
+    title: "Покрытие",
+    description: "Продукты со свежими сканами",
     category: "DevSecOps",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     getData: () => useStaticData(selectAppsecKpis()),
-    render: (data: typeof appsecKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">Coverage</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.jade[300]}>
-          {data.coveragePercent}%
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Products scanned in 7 days
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof appsecKpis | null) => {
+      if (!data || data.coveragePercent === null) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Покрытие</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.jade[300]}>
+            {data.coveragePercent}%
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Продукты со сканами за 7 дней
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ view: "coverage", window: "7d" }),
   },
   {
     id: "kpi-policy-pass",
-    title: "Policy gate pass",
-    description: "Policy gate pass rate",
+    title: "Прохождение гейтов",
+    description: "Доля прохождения политик",
     category: "DevSecOps",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     getData: () => useStaticData(selectAppsecKpis()),
-    render: (data: typeof appsecKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">Policy pass</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.jade[300]}>
-          {data.policyPassRate}%
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Gate pass rate
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof appsecKpis | null) => {
+      if (!data || data.policyPassRate === null) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Прохождение политик</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.jade[300]}>
+            {data.policyPassRate}%
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Доля прохождения гейтов
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ status: "failed", view: "gates" }),
   },
   {
     id: "findings-flow",
-    title: "Findings flow",
-    description: "Opened, triaged, fixed trend",
+    title: "Поток находок",
+    description: "Открыто, триаж, исправлено",
     category: "AppSec",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectFindingsFlow()),
-    render: (data: typeof findingsFlow) => <FindingsFlowWidget data={data} />,
+    render: (data: typeof findingsFlow | null) => <FindingsFlowWidget data={data} />,
     linkTo: findingsLink({ view: "flow" }),
     pinnable: true,
   },
   {
     id: "severity-status-matrix",
-    title: "Severity x status",
-    description: "Heatmap of workload distribution",
+    title: "Серьёзность × статус",
+    description: "Тепловая карта распределения нагрузки",
     category: "AppSec",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectSeverityStatusMatrix()),
-    render: (data: typeof severityStatusMatrix) => <SeverityStatusMatrixWidget data={data} />,
+    render: (data: typeof severityStatusMatrix | null) => <SeverityStatusMatrixWidget data={data} />,
     linkTo: findingsLink({ view: "matrix" }),
     pinnable: true,
   },
   {
     id: "severity-status-distribution",
-    title: "Severity / status distribution",
-    description: "Stacked view of severity vs status",
+    title: "Распределение серьёзности/статуса",
+    description: "Стек по серьёзности и статусу",
     category: "AppSec",
     defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
     getData: () => useStaticData(selectSeverityStatusMatrix()),
-    render: (data: typeof severityStatusMatrix) => <SeverityStatusDistributionWidget data={data} />,
+    render: (data: typeof severityStatusMatrix | null) => <SeverityStatusDistributionWidget data={data} />,
     linkTo: findingsLink({ view: "distribution" }),
     pinnable: true,
   },
   {
     id: "coverage-freshness",
-    title: "Coverage & freshness",
-    description: "Products with latest scan age",
+    title: "Покрытие и свежесть",
+    description: "Продукты с давностью последнего скана",
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectCoverageFreshness()),
-    render: (data: typeof coverageFreshness) => <CoverageFreshnessWidget data={data} />,
+    render: (data: typeof coverageFreshness | null) => <CoverageFreshnessWidget data={data} />,
     linkTo: findingsLink({ view: "freshness" }),
   },
   {
     id: "policy-gates-summary",
-    title: "Policy / gates summary",
-    description: "Pass vs fail and top causes",
+    title: "Сводка по политикам и гейтам",
+    description: "Проходят/падают и основные причины",
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectPolicyGateSummary()),
-    render: (data: typeof policyGateSummary) => <PolicyGatesSummaryWidget data={data} />,
+    render: (data: typeof policyGateSummary | null) => <PolicyGatesSummaryWidget data={data} />,
     linkTo: findingsLink({ status: "failed", view: "policy" }),
     pinnable: true,
   },
   {
     id: "top-noisy-rules",
-    title: "Top noisy rules",
-    description: "Recurring rules and families",
+    title: "Самые шумные правила",
+    description: "Частые правила и семейства",
     category: "AppSec",
     defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
     getData: () => useStaticData(selectTopNoisyRules()),
-    render: (data: typeof topNoisyRules) => <TopNoisyRulesWidget data={data} />,
+    render: (data: typeof topNoisyRules | null) => <TopNoisyRulesWidget data={data} />,
     linkTo: findingsLink({ view: "rules" }),
   },
   {
     id: "pipeline-health",
-    title: "Pipeline health",
-    description: "Latest scans and pipeline status",
+    title: "Состояние пайплайна",
+    description: "Последние сканы и статус пайплайна",
     category: "DevSecOps",
     defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
     getData: () => useStaticData(selectPipelineHealth()),
-    render: (data: typeof pipelineHealth) => <PipelineHealthWidget data={data} />,
+    render: (data: typeof pipelineHealth | null) => <PipelineHealthWidget data={data} />,
     linkTo: findingsLink({ view: "pipeline" }),
     pinnable: true,
   },
   {
     id: "workload-flow",
-    title: "Workload & flow",
-    description: "Backlog by status and trend",
+    title: "Нагрузка и поток",
+    description: "Бэклог по статусам и тренд",
     category: "AppSec",
     defaultSize: { w: 12, h: 3 },
     minSize: { w: 6, h: 3 },
     getData: () => useStaticData(selectWorkloadFlow()),
-    render: (data: typeof workloadFlow) => <WorkloadFlowWidget data={data} />,
+    render: (data: typeof workloadFlow | null) => <WorkloadFlowWidget data={data} />,
     linkTo: findingsLink({ view: "backlog" }),
     pinnable: true,
   },
   {
     id: "dev-delivery-metrics",
-    title: "Dev delivery metrics",
-    description: "DORA Four Keys snapshot",
+    title: "Метрики поставки",
+    description: "Снимок DORA Four Keys",
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectDevDeliveryMetrics()),
-    render: (data: typeof devDeliveryMetrics) => <DevDeliveryMetricsWidget data={data} />,
+    render: (data: typeof devDeliveryMetrics | null) => <DevDeliveryMetricsWidget data={data} />,
     linkTo: findingsLink({ view: "dora" }),
   },
   {
     id: "kpi-assigned",
-    title: "Assigned to me",
-    description: "Findings assigned to you",
+    title: "Назначено мне",
+    description: "Находки, назначенные вам",
     category: "Engineering",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
     getData: () => useStaticData(selectDeveloperKpis()),
-    render: (data: typeof developerKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">Assigned to me</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.night[50]}>
-          {data.assignedToMe}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          In your queue
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof developerKpis | null) => {
+      if (!data) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Назначено мне</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.night[50]}>
+            {data.assignedToMe}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            В вашей очереди
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ assignee: "me" }),
   },
   {
     id: "kpi-needs-attention",
-    title: "Needs attention",
-    description: "Critical and high severity",
+    title: "Требуют внимания",
+    description: "Критические и высокие по серьёзности",
     category: "Engineering",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
     getData: () => useStaticData(selectDeveloperKpis()),
-    render: (data: typeof developerKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">Needs attention</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.lotus[300]}>
-          {data.needsAttention}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Critical & high
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof developerKpis | null) => {
+      if (!data) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Требуют внимания</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.lotus[300]}>
+            {data.needsAttention}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Критические и высокие
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ severity: "critical,high", assignee: "me" }),
   },
   {
     id: "kpi-new-since",
-    title: "New since last visit",
-    description: "Fresh findings added",
+    title: "Новые с прошлого визита",
+    description: "Добавленные свежие находки",
     category: "Engineering",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
     getData: () => useStaticData(selectDeveloperKpis()),
-    render: (data: typeof developerKpis) => (
-      <Stack spacing={1.5}>
-        <Typography variant="subtitle2">New since last visit</Typography>
-        <Typography sx={textStyles.heading.h3} color={primitives.petal[300]}>
-          {data.newSinceLastVisit}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Requires review
-        </Typography>
-      </Stack>
-    ),
+    render: (data: typeof developerKpis | null) => {
+      if (!data) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Typography variant="subtitle2">Новые с прошлого визита</Typography>
+          <Typography sx={textStyles.heading.h3} color={primitives.petal[300]}>
+            {data.newSinceLastVisit}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Требуют просмотра
+          </Typography>
+        </Stack>
+      );
+    },
     linkTo: findingsLink({ status: "new", assignee: "me" }),
   },
   {
     id: "dev-quick-filters",
-    title: "Quick filters",
-    description: "Jump to key slices",
+    title: "Быстрые фильтры",
+    description: "Переход к ключевым срезам",
     category: "Engineering",
     defaultSize: { w: 12, h: 2 },
     minSize: { w: 6, h: 2 },
@@ -1345,48 +1452,48 @@ export const widgetRegistry: WidgetDefinition[] = [
   },
   {
     id: "dev-my-queue",
-    title: "My queue",
-    description: "Findings assigned to you",
+    title: "Моя очередь",
+    description: "Находки, назначенные вам",
     category: "Engineering",
     defaultSize: { w: 7, h: 7 },
     minSize: { w: 6, h: 4 },
     getData: () => useStaticData(selectDeveloperQueue()),
-    render: (data: typeof developerQueue) => <DeveloperQueueWidget data={data} />,
+    render: (data: typeof developerQueue | null) => <DeveloperQueueWidget data={data} />,
     linkTo: findingsLink({ assignee: "me" }),
     pinnable: true,
   },
   {
     id: "dev-fix-guidance",
-    title: "Fix guidance",
-    description: "Suggested remediation",
+    title: "Рекомендации по исправлению",
+    description: "Предлагаемое исправление",
     category: "Engineering",
     defaultSize: { w: 5, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(selectDeveloperRemediation()),
-    render: (data: typeof developerRemediation) => <DeveloperGuidanceWidget data={data} />,
+    render: (data: typeof developerRemediation | null) => <DeveloperGuidanceWidget data={data} />,
     linkTo: findingsLink({ view: "guidance" }),
     pinnable: true,
   },
   {
     id: "dev-hotspots",
-    title: "Top hotspots",
-    description: "Modules with repeated issues",
+    title: "Горячие зоны",
+    description: "Модули с повторяющимися проблемами",
     category: "Engineering",
     defaultSize: { w: 5, h: 2 },
     minSize: { w: 4, h: 2 },
     getData: () => useStaticData(selectDeveloperHotspots()),
-    render: (data: typeof developerHotspots) => <DeveloperHotspotsWidget data={data} />,
+    render: (data: typeof developerHotspots | null) => <DeveloperHotspotsWidget data={data} />,
     linkTo: findingsLink({ view: "hotspots" }),
   },
   {
     id: "dev-recently-introduced",
-    title: "Recently introduced",
-    description: "Latest events in your scope",
+    title: "Недавно появившиеся",
+    description: "Последние события в вашей области",
     category: "Engineering",
     defaultSize: { w: 5, h: 2 },
     minSize: { w: 4, h: 2 },
     getData: () => useStaticData(selectDeveloperRecentIntroduced()),
-    render: (data: typeof developerRecentIntroduced) => (
+    render: (data: typeof developerRecentIntroduced | null) => (
       <DeveloperRecentlyIntroducedWidget data={data} />
     ),
     linkTo: findingsLink({ view: "recent" }),
@@ -1394,82 +1501,84 @@ export const widgetRegistry: WidgetDefinition[] = [
   },
   {
     id: "risk-trend",
-    title: "Risk trend",
-    description: "Posture movement",
+    title: "Тренд риска",
+    description: "Динамика устойчивости",
     category: "Risk",
     defaultSize: { w: 8, h: 4 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(riskTrend),
-    render: (data: typeof riskTrend) => <RiskTrendWidget data={data} />,
+    render: (data: typeof riskTrend | null) => <RiskTrendWidget data={data} />,
     linkTo: findingsLink({ view: "risk-trend" }),
   },
   {
     id: "top-risks",
-    title: "Top risk drivers",
-    description: "Highest impact items",
+    title: "Главные драйверы риска",
+    description: "Самые влияющие элементы",
     category: "Risk",
     defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
     getData: () => useStaticData(topRisks),
-    render: (data: typeof topRisks) => <TopRisksWidget data={data} />,
+    render: (data: typeof topRisks | null) => <TopRisksWidget data={data} />,
     linkTo: findingsLink({ view: "top-risks" }),
   },
   {
     id: "coverage-domains",
-    title: "Coverage by domain",
-    description: "Coverage progress",
+    title: "Покрытие по доменам",
+    description: "Прогресс покрытия",
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(coverageByDomain),
-    render: (data: typeof coverageByDomain) => <CoverageWidget data={data} />,
+    render: (data: typeof coverageByDomain | null) => <CoverageWidget data={data} />,
     linkTo: findingsLink({ view: "coverage" }),
   },
   {
     id: "pipeline-gates",
-    title: "Pipeline gates",
-    description: "Delivery controls",
+    title: "Гейты пайплайна",
+    description: "Контроль поставки",
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(pipelineGates),
-    render: (data: typeof pipelineGates) => <PipelineGatesWidget data={data} />,
+    render: (data: typeof pipelineGates | null) => <PipelineGatesWidget data={data} />,
     linkTo: findingsLink({ view: "gates" }),
   },
   {
     id: "policy-health",
-    title: "Policy health",
-    description: "Guardrail compliance",
+    title: "Здоровье политик",
+    description: "Соблюдение гардрейлов",
     category: "AppSec",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
     getData: () => useStaticData(policyHealth),
-    render: (data: typeof policyHealth) => <PolicyHealthWidget data={data} />,
+    render: (data: typeof policyHealth | null) => <PolicyHealthWidget data={data} />,
     linkTo: findingsLink({ view: "policy" }),
   },
   {
     id: "recent-activity",
-    title: "Recent activity",
-    description: "Latest updates",
+    title: "Недавняя активность",
+    description: "Последние обновления",
     category: "Operations",
     defaultSize: { w: 4, h: 3 },
     minSize: { w: 3, h: 3 },
     getData: () => useStaticData(recentActivity),
-    render: (data: typeof recentActivity) => <RecentActivityWidget data={data} />,
+    render: (data: typeof recentActivity | null) => <RecentActivityWidget data={data} />,
     linkTo: findingsLink({ view: "activity" }),
   },
   {
     id: "risk-focus",
-    title: "Risk focus",
-    description: "Focus areas for the week",
+    title: "Фокус по рискам",
+    description: "Зоны фокуса на неделю",
     category: "Risk",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
     getData: () =>
       useStaticData({
-        message: "3 high-impact streams need attention",
+        message: "3 критических направления требуют внимания",
       }),
-    render: (data: { message: string }) => (
+    render: (data: { message: string } | null) => {
+      if (!data) return null;
+      return (
       <Box
         sx={{
           display: "flex",
@@ -1493,37 +1602,41 @@ export const widgetRegistry: WidgetDefinition[] = [
           <TrendingUp />
         </Box>
         <Box>
-          <Typography sx={textStyles.heading.h6}>Prioritize now</Typography>
+          <Typography sx={textStyles.heading.h6}>Приоритет сейчас</Typography>
           <Typography variant="body2" color="text.secondary">
             {data.message}
           </Typography>
         </Box>
       </Box>
-    ),
+      );
+    },
     linkTo: findingsLink({ view: "focus" }),
   },
   {
     id: "engineering-health",
-    title: "Engineering signal",
-    description: "SLA, remediation, and quality",
+    title: "Сигнал инженерии",
+    description: "SLA, исправление и качество",
     category: "Engineering",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
     getData: () => useStaticData({ rate: 91, label: "Remediation SLA" }),
-    render: (data: { rate: number; label: string }) => (
-      <Stack spacing={1.5}>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <AccountTree fontSize="small" />
-          <Typography variant="subtitle2">{data.label}</Typography>
+    render: (data: { rate: number; label: string } | null) => {
+      if (!data) return null;
+      return (
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <AccountTree fontSize="small" />
+            <Typography variant="subtitle2">{data.label}</Typography>
+          </Stack>
+          <Typography sx={{ ...textStyles.heading.h3, color: primitives.night[50] }}>
+            {data.rate}%
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Команды соблюдают SLA по критическим исправлениям.
+          </Typography>
         </Stack>
-        <Typography sx={{ ...textStyles.heading.h3, color: primitives.night[50] }}>
-          {data.rate}%
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Teams are meeting SLA targets for critical fixes.
-        </Typography>
-      </Stack>
-    ),
+      );
+    },
     linkTo: findingsLink({ view: "engineering" }),
   },
 ];

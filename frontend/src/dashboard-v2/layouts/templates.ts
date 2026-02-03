@@ -2,8 +2,8 @@ import type { DashboardTemplate } from "../types";
 
 export const TEMPLATE_EXECUTIVE: DashboardTemplate = {
   id: "executive",
-  role: "Executive / CISO",
-  description: "Executive pulse: risk, products at risk, SLA health, and critical activity.",
+  role: "Экзекьютив / CISO",
+  description: "Сводка: риск, продукты в риске, SLA и критическая активность.",
   layout: [
     { widgetId: "kpi-open-findings", x: 0, y: 0, w: 3, h: 2 },
     { widgetId: "kpi-critical-high", x: 3, y: 0, w: 3, h: 2 },
@@ -19,8 +19,8 @@ export const TEMPLATE_EXECUTIVE: DashboardTemplate = {
 
 export const TEMPLATE_DEVELOPER: DashboardTemplate = {
   id: "developer",
-  role: "Developer",
-  description: "Personal workbench with queue, guidance, and hotspots.",
+  role: "Разработчик",
+  description: "Личный рабочий стол: очередь, рекомендации и горячие зоны.",
   layout: [
     { widgetId: "kpi-assigned", x: 0, y: 0, w: 4, h: 2 },
     { widgetId: "kpi-needs-attention", x: 4, y: 0, w: 4, h: 2 },
@@ -38,7 +38,7 @@ export const dashboardTemplates: DashboardTemplate[] = [
   {
     id: "appsec-devsecops",
     role: "AppSec Lead / DevSecOps",
-    description: "Command center for findings flow, coverage, policy, and pipeline health.",
+    description: "Командный центр: поток находок, покрытие, политики и состояние пайплайна.",
     layout: [
       { widgetId: "kpi-new-findings", x: 0, y: 0, w: 3, h: 2 },
       { widgetId: "kpi-mttr", x: 3, y: 0, w: 3, h: 2 },
@@ -57,7 +57,7 @@ export const dashboardTemplates: DashboardTemplate[] = [
   {
     id: "appsec",
     role: "AppSec Lead",
-    description: "Backlog prioritization, program coverage, and top risks.",
+    description: "Приоритизация бэклога, покрытие программы и топ рисков.",
     layout: [
       { widgetId: "kpi-open-findings", x: 0, y: 0, w: 4, h: 2 },
       { widgetId: "top-risks", x: 4, y: 0, w: 4, h: 3 },
@@ -70,7 +70,7 @@ export const dashboardTemplates: DashboardTemplate[] = [
   {
     id: "devsecops",
     role: "DevSecOps",
-    description: "Pipeline gates, coverage, and policy compliance signals.",
+    description: "Гейты пайплайна, покрытие и соблюдение политик.",
     layout: [
       { widgetId: "pipeline-gates", x: 0, y: 0, w: 6, h: 3 },
       { widgetId: "coverage-domains", x: 6, y: 0, w: 6, h: 3 },
