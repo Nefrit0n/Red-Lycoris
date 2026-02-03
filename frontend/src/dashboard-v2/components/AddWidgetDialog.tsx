@@ -20,6 +20,7 @@ import { bordersDark, radius } from "../../design-system/tokens";
 interface AddWidgetDialogProps {
   open: boolean;
   widgets: WidgetDefinition[];
+  dataMap: Record<string, { data: unknown | null; loading: boolean; error: string | null }>;
   onClose: () => void;
   onAdd: (widgetId: string) => void;
 }
@@ -34,7 +35,17 @@ const categoryOptions: Array<"All" | WidgetCategory> = [
   "DevSecOps",
 ];
 
-const AddWidgetDialog = ({ open, widgets, onClose, onAdd }: AddWidgetDialogProps) => {
+const categoryLabels: Record<(typeof categoryOptions)[number], string> = {
+  All: "Все",
+  Executive: "Экзекьютив",
+  Risk: "Риски",
+  Engineering: "Инженерия",
+  Operations: "Операции",
+  AppSec: "AppSec",
+  DevSecOps: "DevSecOps",
+};
+
+const AddWidgetDialog = ({ open, widgets, dataMap, onClose, onAdd }: AddWidgetDialogProps) => {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<(typeof categoryOptions)[number]>("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -51,7 +62,7 @@ const AddWidgetDialog = ({ open, widgets, onClose, onAdd }: AddWidgetDialogProps
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      <DialogTitle>Add a widget</DialogTitle>
+      <DialogTitle>Добавить виджет</DialogTitle>
       <DialogContent>
         <Stack direction={{ xs: "column", md: "row" }} spacing={3} mt={1}>
           <Stack spacing={2} flex={1}>
@@ -60,7 +71,7 @@ const AddWidgetDialog = ({ open, widgets, onClose, onAdd }: AddWidgetDialogProps
                 size="small"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search widgets"
+                placeholder="Поиск виджетов"
                 fullWidth
               />
               <Select
@@ -71,7 +82,7 @@ const AddWidgetDialog = ({ open, widgets, onClose, onAdd }: AddWidgetDialogProps
               >
                 {categoryOptions.map((option) => (
                   <MenuItem key={option} value={option}>
-                    {option}
+                    {categoryLabels[option]}
                   </MenuItem>
                 ))}
               </Select>
@@ -105,9 +116,14 @@ const AddWidgetDialog = ({ open, widgets, onClose, onAdd }: AddWidgetDialogProps
               <WidgetCard
                 title={selectedWidget.title}
                 subtitle={selectedWidget.description}
-                emptyMessage="Preview unavailable"
+                emptyMessage="Предпросмотр недоступен"
               >
-                {selectedWidget.render(selectedWidget.getData().data)}
+                {selectedWidget.render(
+                  (dataMap[selectedWidget.id]?.data ??
+                    selectedWidget.previewData ??
+                    selectedWidget.getData?.().data ??
+                    null) as any
+                )}
               </WidgetCard>
             ) : (
               <Box
@@ -118,7 +134,7 @@ const AddWidgetDialog = ({ open, widgets, onClose, onAdd }: AddWidgetDialogProps
                 }}
               >
                 <Typography variant="body2" color="text.secondary">
-                  No widgets match your search.
+                  Нет виджетов по вашему запросу.
                 </Typography>
               </Box>
             )}
@@ -126,13 +142,13 @@ const AddWidgetDialog = ({ open, widgets, onClose, onAdd }: AddWidgetDialogProps
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>Отмена</Button>
         <Button
           variant="contained"
           onClick={() => selectedWidget && onAdd(selectedWidget.id)}
           disabled={!selectedWidget}
         >
-          Add widget
+          Добавить виджет
         </Button>
       </DialogActions>
     </Dialog>

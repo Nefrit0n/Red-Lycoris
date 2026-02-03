@@ -8,16 +8,23 @@ import {
 } from "@mui/icons-material";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import GridLayout, { Layout } from "react-grid-layout";
+import { WidthProvider } from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 import AddWidgetDialog from "./components/AddWidgetDialog";
 import DashboardShell from "./components/DashboardShell";
 import TemplatePicker from "./components/TemplatePicker";
 import WidgetCard from "./components/WidgetCard";
-import { glass, primitives, space, textStyles } from "../design-system/tokens";
+import { glass, primitives, textStyles } from "../design-system/tokens";
 import { widgetRegistry } from "./widgets/registry";
 import { useDashboardLayout } from "./state/useDashboardLayout";
+import { useDashboardData } from "./data/useDashboardData";
 
 const columns = 12;
 const rowHeight = 96;
+const gridGapPx = 24;
+const AutoGridLayout = WidthProvider(GridLayout);
 
 const DashboardV2 = () => {
   const {
@@ -33,13 +40,14 @@ const DashboardV2 = () => {
     updateLayout,
   } = useDashboardLayout();
   const [timeRange, setTimeRange] = useState("30d");
-  const [productFilter, setProductFilter] = useState("All products");
-  const [environmentFilter, setEnvironmentFilter] = useState("All environments");
+  const [productFilter, setProductFilter] = useState("Все продукты");
+  const [environmentFilter, setEnvironmentFilter] = useState("Все окружения");
   const [developerRepo, setDeveloperRepo] = useState("Payments API");
   const [developerBranch, setDeveloperBranch] = useState("main");
-  const [developerEnv, setDeveloperEnv] = useState("Production");
+  const [developerEnv, setDeveloperEnv] = useState("Прод");
   const [isTemplateOpen, setIsTemplateOpen] = useState(false);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
+  const { dataMap } = useDashboardData();
 
   const widgetMap = useMemo(() => {
     return new Map(widgetRegistry.map((widget) => [widget.id, widget]));
@@ -109,8 +117,8 @@ const DashboardV2 = () => {
       }}
     >
       <DashboardShell
-        title="Security Command Center"
-        subtitle={`Template: ${selectedTemplate.role}`}
+        title="Центр управления безопасностью"
+        subtitle={`Шаблон: ${selectedTemplate.role}`}
         timeRange={timeRange}
         onTimeRangeChange={setTimeRange}
         filters={
@@ -122,7 +130,7 @@ const DashboardV2 = () => {
                 onChange={(event) => setProductFilter(event.target.value)}
                 sx={{ minWidth: 180 }}
               >
-                <MenuItem value="All products">All products</MenuItem>
+                <MenuItem value="Все продукты">Все продукты</MenuItem>
                 <MenuItem value="Payments API">Payments API</MenuItem>
                 <MenuItem value="Identity Gateway">Identity Gateway</MenuItem>
                 <MenuItem value="Core Platform">Core Platform</MenuItem>
@@ -134,16 +142,16 @@ const DashboardV2 = () => {
                 onChange={(event) => setEnvironmentFilter(event.target.value)}
                 sx={{ minWidth: 170 }}
               >
-                <MenuItem value="All environments">All environments</MenuItem>
-                <MenuItem value="Production">Production</MenuItem>
-                <MenuItem value="Staging">Staging</MenuItem>
-                <MenuItem value="Development">Development</MenuItem>
+                <MenuItem value="Все окружения">Все окружения</MenuItem>
+                <MenuItem value="Прод">Прод</MenuItem>
+                <MenuItem value="Стадия">Стадия</MenuItem>
+                <MenuItem value="Разработка">Разработка</MenuItem>
               </Select>
             </>
           ) : selectedTemplate.id === "developer" ? (
             <>
               <Typography variant="caption" color="text.secondary">
-                My scope
+                Моя область
               </Typography>
               <Select
                 size="small"
@@ -172,16 +180,16 @@ const DashboardV2 = () => {
                 onChange={(event) => setDeveloperEnv(event.target.value)}
                 sx={{ minWidth: 140 }}
               >
-                <MenuItem value="Production">Production</MenuItem>
-                <MenuItem value="Staging">Staging</MenuItem>
-                <MenuItem value="Development">Development</MenuItem>
+                <MenuItem value="Прод">Прод</MenuItem>
+                <MenuItem value="Стадия">Стадия</MenuItem>
+                <MenuItem value="Разработка">Разработка</MenuItem>
               </Select>
               <Button
                 variant="contained"
                 component={Link}
                 to="/findings?assignee=me"
               >
-                Open findings
+                Открыть находки
               </Button>
             </>
           ) : null
@@ -211,7 +219,7 @@ const DashboardV2 = () => {
             >
               <GridView fontSize="small" />
               <Typography variant="body2" color="text.secondary">
-                Edit mode enabled. Use the arrows to reorder or remove widgets.
+                Режим редактирования включён. Перетаскивайте виджеты и меняйте размер рамки.
               </Typography>
             </Box>
           )}
@@ -226,30 +234,56 @@ const DashboardV2 = () => {
                 ...glass.subtle,
               }}
             >
-              <Typography sx={textStyles.heading.h5}>No widgets yet</Typography>
+              <Typography sx={textStyles.heading.h5}>Виджеты отсутствуют</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Pick a template or add widgets to build your workspace.
+                Выберите шаблон или добавьте виджеты для настройки рабочего пространства.
               </Typography>
             </Box>
           ) : (
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                gridAutoRows: `${rowHeight}px`,
-                gap: space[6],
+            <AutoGridLayout
+              cols={columns}
+              rowHeight={rowHeight}
+              margin={[gridGapPx, gridGapPx]}
+              containerPadding={[0, 0]}
+              layout={layout.map((item) => ({ ...item, i: item.widgetId }))}
+              isDraggable={isEditing}
+              isResizable={isEditing}
+              resizeHandles={["se", "e", "s"]}
+              draggableHandle=".widget-drag-handle"
+              onLayoutChange={(nextLayout: Layout[]) => {
+                updateLayout(
+                  nextLayout.map((item) => ({
+                    widgetId: item.i,
+                    x: item.x,
+                    y: item.y,
+                    w: item.w,
+                    h: item.h,
+                  }))
+                );
               }}
             >
               {placedWidgets.map(({ placement, definition }) => {
                 if (!definition) return null;
-                const dataState = definition.getData();
+                const dataState = dataMap[definition.id] ?? {
+                  data: null,
+                  loading: false,
+                  error: null,
+                };
                 return (
                   <Box
                     key={definition.id}
                     sx={{
-                      gridColumn: `${placement.x + 1} / span ${placement.w}`,
-                      gridRow: `${placement.y + 1} / span ${placement.h}`,
                       minWidth: 0,
+                      display: "flex",
+                    }}
+                    data-grid={{
+                      i: placement.widgetId,
+                      x: placement.x,
+                      y: placement.y,
+                      w: placement.w,
+                      h: placement.h,
+                      minW: definition.minSize.w,
+                      minH: definition.minSize.h,
                     }}
                   >
                     <WidgetCard
@@ -257,7 +291,7 @@ const DashboardV2 = () => {
                       subtitle={definition.description}
                       loading={dataState.loading}
                       error={dataState.error}
-                      emptyMessage="No data available"
+                      emptyMessage="Данные не найдены"
                       isEditing={isEditing}
                       actions={
                         <Stack direction="row" spacing={1} alignItems="center">
@@ -268,7 +302,7 @@ const DashboardV2 = () => {
                               size="small"
                               variant="text"
                             >
-                              View in Findings
+                              Посмотреть в находках
                             </Button>
                           )}
                           {isEditing && (
@@ -276,7 +310,7 @@ const DashboardV2 = () => {
                               {definition.pinnable && (
                                 <IconButton
                                   size="small"
-                                  aria-label="Pin widget to top"
+                                  aria-label="Закрепить виджет сверху"
                                   onClick={() => handlePin(definition.id)}
                                 >
                                   <PushPin fontSize="inherit" />
@@ -284,21 +318,21 @@ const DashboardV2 = () => {
                               )}
                               <IconButton
                                 size="small"
-                                aria-label="Move widget up"
+                                aria-label="Поднять виджет"
                                 onClick={() => handleMove(definition.id, "up")}
                               >
                                 <ArrowUpward fontSize="inherit" />
                               </IconButton>
                               <IconButton
                                 size="small"
-                                aria-label="Move widget down"
+                                aria-label="Опустить виджет"
                                 onClick={() => handleMove(definition.id, "down")}
                               >
                                 <ArrowDownward fontSize="inherit" />
                               </IconButton>
                               <IconButton
                                 size="small"
-                                aria-label="Remove widget"
+                                aria-label="Удалить виджет"
                                 onClick={() => handleRemove(definition.id)}
                               >
                                 <Close fontSize="inherit" />
@@ -313,7 +347,7 @@ const DashboardV2 = () => {
                   </Box>
                 );
               })}
-            </Box>
+            </AutoGridLayout>
           )}
         </Stack>
       </Box>
@@ -332,6 +366,7 @@ const DashboardV2 = () => {
       <AddWidgetDialog
         open={isAddWidgetOpen}
         widgets={widgetRegistry}
+        dataMap={dataMap}
         onClose={() => setIsAddWidgetOpen(false)}
         onAdd={handleAddWidget}
       />

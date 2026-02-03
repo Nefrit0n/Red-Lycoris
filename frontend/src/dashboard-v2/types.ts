@@ -20,7 +20,7 @@ export interface WidgetPlacement extends WidgetSize {
 }
 
 export interface WidgetDataState<T> {
-  data: T;
+  data: T | null;
   loading: boolean;
   error: string | null;
 }
@@ -32,8 +32,9 @@ export interface WidgetDefinition<T = unknown> {
   category: WidgetCategory;
   defaultSize: WidgetSize;
   minSize: WidgetSize;
-  getData: () => WidgetDataState<T>;
-  render: (data: T) => ReactNode;
+  getData?: () => WidgetDataState<T>;
+  render: (data: T | null) => ReactNode;
+  previewData?: T | null;
   linkTo?: string;
   pinnable?: boolean;
 }

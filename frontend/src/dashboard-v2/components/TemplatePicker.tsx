@@ -29,7 +29,7 @@ const TemplatePicker = ({
 }: TemplatePickerProps) => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Choose a template</DialogTitle>
+      <DialogTitle>Выберите шаблон</DialogTitle>
       <DialogContent>
         <Stack spacing={2} mt={1}>
           {templates.map((template) => (
@@ -57,7 +57,7 @@ const TemplatePicker = ({
                   </Typography>
                 </Box>
                 <Typography variant="caption" color="text.secondary">
-                  {template.layout.length} widgets
+                  {template.layout.length} виджетов
                 </Typography>
               </Stack>
             </GlassCard>
@@ -65,7 +65,7 @@ const TemplatePicker = ({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose}>Закрыть</Button>
       </DialogActions>
     </Dialog>
   );
