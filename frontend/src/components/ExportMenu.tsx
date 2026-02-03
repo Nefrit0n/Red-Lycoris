@@ -1,7 +1,6 @@
 import {
   Button,
   CircularProgress,
-  Divider,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -14,8 +13,6 @@ import {
   TableChart as CsvIcon,
   Code as JsonIcon,
   CloudDownload as CloudDownloadIcon,
-  Description as ReportIcon,
-  Security as SecurityIcon,
 } from "@mui/icons-material";
 import { useState } from "react";
 import { FindingListItemDTO } from "../types/findings";
@@ -38,7 +35,7 @@ interface ExportMenuProps {
   debouncedSearch?: string;
 }
 
-type ExportFormat = "csv" | "json" | "sarif" | "cyclonedx" | "summary";
+type ExportFormat = "csv" | "json";
 
 /**
  * Build export URL with all current filters
@@ -70,8 +67,7 @@ const buildExportUrl = (
   params.set("canonicalOnly", String(!filters.showRepeats));
   params.set("includeRepeats", String(filters.showRepeats));
 
-  if (filters.sortField) params.set("sortField", String(filters.sortField));
-  if (filters.sortOrder) params.set("sortOrder", filters.sortOrder);
+  // Note: backend export doesn't support sorting, so we don't include sortField/sortOrder
 
   return `/api/v1/findings/export?${params.toString()}`;
 };
@@ -148,24 +144,13 @@ const ExportMenu = ({
     const mimeTypes: Record<ExportFormat, string> = {
       csv: "text/csv;charset=utf-8;",
       json: "application/json;charset=utf-8;",
-      sarif: "application/sarif+json;charset=utf-8;",
-      cyclonedx: "application/vnd.cyclonedx+json;charset=utf-8;",
-      summary: "text/plain;charset=utf-8;",
-    };
-
-    const extensions: Record<ExportFormat, string> = {
-      csv: "csv",
-      json: "json",
-      sarif: "sarif.json",
-      cyclonedx: "cdx.json",
-      summary: "txt",
     };
 
     const blob = new Blob([content], { type: mimeTypes[format] });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.${extensions[format]}`;
+    link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.${format}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -174,7 +159,6 @@ const ExportMenu = ({
 
   /**
    * Export using server-side streaming (for "select all matching" mode)
-   * Uses fetch with auth headers to fix 401 error
    */
   const handleServerExport = async (format: ExportFormat) => {
     if (!filters) return;
@@ -183,32 +167,23 @@ const ExportMenu = ({
     try {
       const url = buildExportUrl(format, filters, debouncedSearch);
 
-      // Use fetch with auth headers
       const response = await fetch(url, {
         method: "GET",
         headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Export failed:", response.status, errorText);
         throw new Error(`Export failed: ${response.status}`);
       }
 
-      // Get the blob and trigger download
       const blob = await response.blob();
       const downloadUrl = URL.createObjectURL(blob);
 
       const link = document.createElement("a");
       link.href = downloadUrl;
-
-      // Determine file extension based on format
-      const extensions: Record<ExportFormat, string> = {
-        csv: "csv",
-        json: "json",
-        sarif: "sarif.json",
-        cyclonedx: "cdx.json",
-        summary: "txt",
-      };
-      link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.${extensions[format]}`;
+      link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.${format}`;
 
       document.body.appendChild(link);
       link.click();
@@ -216,7 +191,6 @@ const ExportMenu = ({
       URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error("Export error:", err);
-      // Could add toast notification here
     } finally {
       setTimeout(() => {
         setExporting(false);
@@ -282,12 +256,11 @@ const ExportMenu = ({
           <Box sx={{ px: 2, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
             <Typography variant="caption" color="primary" sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
               <CloudDownloadIcon sx={{ fontSize: 14 }} />
-              Export all {totalCount} findings
+              Exporting all {totalCount} findings
             </Typography>
           </Box>
         )}
 
-        {/* Basic formats */}
         <MenuItem onClick={() => handleExport("csv")}>
           <ListItemIcon>
             <CsvIcon fontSize="small" />
@@ -305,54 +278,6 @@ const ExportMenu = ({
           <ListItemText
             primary="JSON"
             secondary="Raw data export"
-            secondaryTypographyProps={{ variant: "caption" }}
-          />
-        </MenuItem>
-
-        <Divider sx={{ my: 0.5 }} />
-
-        {/* Standard formats */}
-        <Box sx={{ px: 2, py: 0.5 }}>
-          <Typography variant="caption" color="text.secondary">
-            Security Standards
-          </Typography>
-        </Box>
-        <MenuItem onClick={() => handleExport("sarif")} disabled={!isServerExport}>
-          <ListItemIcon>
-            <SecurityIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="SARIF"
-            secondary="Static Analysis Results (OASIS)"
-            secondaryTypographyProps={{ variant: "caption" }}
-          />
-        </MenuItem>
-        <MenuItem onClick={() => handleExport("cyclonedx")} disabled={!isServerExport}>
-          <ListItemIcon>
-            <SecurityIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="CycloneDX"
-            secondary="Software Bill of Materials"
-            secondaryTypographyProps={{ variant: "caption" }}
-          />
-        </MenuItem>
-
-        <Divider sx={{ my: 0.5 }} />
-
-        {/* Reports */}
-        <Box sx={{ px: 2, py: 0.5 }}>
-          <Typography variant="caption" color="text.secondary">
-            Reports
-          </Typography>
-        </Box>
-        <MenuItem onClick={() => handleExport("summary")} disabled={!isServerExport}>
-          <ListItemIcon>
-            <ReportIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Executive Summary"
-            secondary="PDF-ready text report"
             secondaryTypographyProps={{ variant: "caption" }}
           />
         </MenuItem>
