@@ -232,8 +232,8 @@ const FindingsList = () => {
           justifyContent="space-between"
           spacing={2}
         >
-          {/* Left: Title + Selection info */}
-          <Stack direction="row" alignItems="center" spacing={2}>
+          {/* Left: Title + Selection info (always reserve space) */}
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 200 }}>
             <Typography
               variant="h6"
               component="h1"
@@ -246,48 +246,24 @@ const FindingsList = () => {
               Findings
             </Typography>
 
-            {/* Selection info (when items selected) */}
-            {canBulk && hasSelection && (
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <Box
-                  sx={{
-                    height: 20,
-                    width: 1,
-                    bgcolor: primitives.night[600],
-                  }}
-                />
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: primitives.lotus[400],
-                    fontWeight: 600,
-                    fontSize: "0.8125rem",
-                  }}
-                >
-                  {bulk.selectAllMatching && totalKnown
-                    ? `All ${totalCount} selected`
-                    : `${bulk.selectedIds.length} selected`}
-                </Typography>
-
-                {/* Select all prompt */}
-                {bulk.showSelectAllPrompt && !bulk.selectAllMatching && totalKnown && (
-                  <Button
-                    size="small"
-                    variant="text"
-                    onClick={bulk.handleSelectAllResults}
-                    sx={{
-                      textTransform: "none",
-                      fontSize: "0.75rem",
-                      color: primitives.night[300],
-                      minWidth: "auto",
-                      px: 1,
-                      "&:hover": { color: primitives.lotus[400] },
-                    }}
-                  >
-                    Select all {totalCount}
-                  </Button>
-                )}
-              </Stack>
+            {/* Selection count - always show when canBulk, just change visibility */}
+            {canBulk && (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: hasSelection ? primitives.lotus[400] : "transparent",
+                  fontWeight: 600,
+                  fontSize: "0.8125rem",
+                  transition: "color 0.15s ease",
+                  minWidth: 80,
+                }}
+              >
+                {hasSelection
+                  ? bulk.selectAllMatching && totalKnown
+                    ? `${totalCount} selected`
+                    : `${bulk.selectedIds.length} selected`
+                  : "—"}
+              </Typography>
             )}
           </Stack>
 
@@ -498,6 +474,10 @@ const FindingsList = () => {
           returnTo={listReturnTo}
           onNavigateToDetail={handleNavigateToDetail}
           compactMode
+          totalCount={totalCount}
+          totalKnown={totalKnown}
+          selectAllMatching={bulk.selectAllMatching}
+          onSelectAllMatching={bulk.handleSelectAllResults}
         />
       </Box>
 
@@ -512,36 +492,22 @@ const FindingsList = () => {
           flexShrink: 0,
         }}
       >
-        <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-          {!totalKnown && (
-            <Button
-              size="small"
-              variant="text"
-              onClick={loadStats}
-              disabled={statsLoading || loading}
-              sx={{ color: primitives.night[400] }}
-            >
-              {statsLoading ? "Loading..." : "Load total count"}
-            </Button>
-          )}
-          <Box sx={{ flex: 1 }}>
-            <PaginationControl
-              page={filters.page}
-              pageSize={filters.pageSize}
-              total={totalKnown ? totalCount : null}
-              hasNextPage={hasNextPage}
-              currentCount={data.length}
-              onPageChange={(nextPage) => {
-                if (nextPage > filters.page && !hasNextPage) return;
-                actions.setPage(nextPage);
-              }}
-              onPageSizeChange={(v) => {
-                actions.setPageSize(v);
-                bulk.handleClearSelection();
-              }}
-            />
-          </Box>
-        </Stack>
+        <PaginationControl
+          page={filters.page}
+          pageSize={filters.pageSize}
+          total={totalKnown ? totalCount : null}
+          hasNextPage={hasNextPage}
+          currentCount={data.length}
+          onPageChange={(nextPage) => {
+            if (nextPage > filters.page && !hasNextPage) return;
+            actions.setPage(nextPage);
+          }}
+          onPageSizeChange={(v) => {
+            actions.setPageSize(v);
+            bulk.handleClearSelection();
+          }}
+          loading={statsLoading}
+        />
       </Box>
 
       {/* Snackbar for bulk operations */}
