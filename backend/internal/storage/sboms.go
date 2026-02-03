@@ -196,13 +196,6 @@ type SbomIndexStatus struct {
 	EdgeCount      int
 }
 
-type SbomTransitiveStatus struct {
-	SbomID     uuid.UUID
-	Status     string
-	UpdatedAt  sql.NullTime
-	Error      sql.NullString
-}
-
 func UpdateSbomIndexStatus(ctx context.Context, db *sql.DB, sbomID uuid.UUID, status string, indexedAt *time.Time, indexError *string, componentCount int, edgeCount int) error {
 	_, err := db.ExecContext(
 		ctx,
@@ -226,48 +219,6 @@ func UpdateSbomIndexStatus(ctx context.Context, db *sql.DB, sbomID uuid.UUID, st
 	return nil
 }
 
-func UpdateSbomTransitiveStatus(ctx context.Context, db *sql.DB, sbomID uuid.UUID, status string, updatedAt *time.Time, transitiveError *string) error {
-	_, err := db.ExecContext(
-		ctx,
-		`UPDATE sboms
-		 SET transitive_status = $2,
-		     transitive_updated_at = $3,
-		     transitive_error = $4
-		 WHERE id = $1`,
-		sbomID,
-		status,
-		nullTimePtr(updatedAt),
-		nullStringPtr(transitiveError),
-	)
-	if err != nil {
-		return fmt.Errorf("update sbom transitive status failed: %w", err)
-	}
-	return nil
-}
-
-func GetSbomTransitiveStatus(ctx context.Context, db *sql.DB, sbomID uuid.UUID) (*SbomTransitiveStatus, error) {
-	row := db.QueryRowContext(
-		ctx,
-		`SELECT id, transitive_status, transitive_updated_at, transitive_error
-		 FROM sboms
-		 WHERE id = $1`,
-		sbomID,
-	)
-
-	var item SbomTransitiveStatus
-	if err := row.Scan(
-		&item.SbomID,
-		&item.Status,
-		&item.UpdatedAt,
-		&item.Error,
-	); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("get sbom transitive status failed: %w", err)
-	}
-	return &item, nil
-}
 
 func GetLatestSbomByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) (*SbomItem, error) {
 	row := db.QueryRowContext(

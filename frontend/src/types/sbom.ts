@@ -37,39 +37,6 @@ export interface SbomIndexStatus {
   indexedAt?: string | null;
 }
 
-export interface SbomTransitiveStatus {
-  status: string;
-  error?: string | null;
-  updatedAt?: string | null;
-}
-
-export type SbomTransitiveExposureItem = {
-  id: string;
-  purl?: string | null;
-  name: string;
-  version?: string | null;
-  ecosystem?: string | null;
-
-  criticalCount: number;
-  highCount: number;
-  mediumCount: number;
-  lowCount: number;
-
-  maxCvssScore?: number | null;
-  maxEpssScore?: number | null;
-  minDistanceToAnyVuln?: number | null;
-};
-
-export type SbomTransitiveExposureResponse = {
-  success: boolean;
-  status: SbomTransitiveStatus;
-  data: {
-    items: SbomTransitiveExposureItem[];
-    total: number;
-    maxDepth: number;
-  };
-};
-
 export type SbomPathNode = {
   id: string;
   purl?: string | null;
