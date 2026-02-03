@@ -4,15 +4,19 @@
  * Design principles:
  * - Maximum space for findings table (edge-to-edge)
  * - Compact toolbar with essential actions only
+ * - Bulk actions integrated into toolbar (not separate bar)
  * - No distracting metrics/overview - this is a work page
- * - Sticky table header for long lists
  */
 
 import {
   Alert,
   Box,
   Button,
+  FormControl,
+  IconButton,
   InputAdornment,
+  MenuItem,
+  Select,
   Snackbar,
   Stack,
   TextField,
@@ -23,11 +27,12 @@ import {
 import FilterListIcon from "@mui/icons-material/FilterList";
 import SearchIcon from "@mui/icons-material/Search";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
-import InlineActionsBar from "../components/InlineActionsBar";
 import ExportMenu from "../components/ExportMenu";
 import { FilterChips } from "../components/FilterChips";
 import FindingsTable from "../components/FindingsTable";
@@ -42,11 +47,13 @@ import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
-import { FindingListItemDTO } from "../types/findings";
+import { FindingListItemDTO, FindingStatus } from "../types/findings";
 
 import FindingDetailsDrawer from "../components/FindingDetailsDrawer";
 
 const LIST_STATE_KEY = "lotus_warden_findings_list_state";
+
+type BulkAction = "set_status";
 
 const FindingsList = () => {
   const location = useLocation();
@@ -55,6 +62,9 @@ const FindingsList = () => {
   const [filters, actions, hydrated] = useUrlFiltersSync();
 
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
+
+  // Bulk action state
+  const [bulkStatus, setBulkStatus] = useState<FindingStatus>("under_review");
 
   // Auto-redirect after upload
   useUploadRedirect(filters.pageSize);
@@ -186,6 +196,15 @@ const FindingsList = () => {
     [actions]
   );
 
+  // Handle bulk apply
+  const handleBulkApply = () => {
+    bulk.handleBulkApply("set_status" as BulkAction, { status: bulkStatus });
+  };
+
+  // Effective selection count
+  const effectiveCount = bulk.selectAllMatching && totalKnown ? totalCount : bulk.selectedIds.length;
+  const hasSelection = effectiveCount > 0;
+
   return (
     <Box
       sx={{
@@ -213,25 +232,131 @@ const FindingsList = () => {
           justifyContent="space-between"
           spacing={2}
         >
-          {/* Left: Title */}
-          <Typography
-            variant="h6"
-            component="h1"
-            sx={{
-              fontWeight: 600,
-              color: primitives.night[100],
-              flexShrink: 0,
-            }}
-          >
-            Findings
-          </Typography>
+          {/* Left: Title + Selection info */}
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Typography
+              variant="h6"
+              component="h1"
+              sx={{
+                fontWeight: 600,
+                color: primitives.night[100],
+                flexShrink: 0,
+              }}
+            >
+              Findings
+            </Typography>
+
+            {/* Selection info (when items selected) */}
+            {canBulk && hasSelection && (
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Box
+                  sx={{
+                    height: 20,
+                    width: 1,
+                    bgcolor: primitives.night[600],
+                  }}
+                />
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: primitives.lotus[400],
+                    fontWeight: 600,
+                    fontSize: "0.8125rem",
+                  }}
+                >
+                  {bulk.selectAllMatching && totalKnown
+                    ? `All ${totalCount} selected`
+                    : `${bulk.selectedIds.length} selected`}
+                </Typography>
+
+                {/* Select all prompt */}
+                {bulk.showSelectAllPrompt && !bulk.selectAllMatching && totalKnown && (
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={bulk.handleSelectAllResults}
+                    sx={{
+                      textTransform: "none",
+                      fontSize: "0.75rem",
+                      color: primitives.night[300],
+                      minWidth: "auto",
+                      px: 1,
+                      "&:hover": { color: primitives.lotus[400] },
+                    }}
+                  >
+                    Select all {totalCount}
+                  </Button>
+                )}
+              </Stack>
+            )}
+          </Stack>
 
           {/* Right: Actions */}
           <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+            {/* Bulk actions (when items selected) */}
+            {canBulk && hasSelection && (
+              <>
+                <FormControl size="small" sx={{ minWidth: 130 }}>
+                  <Select
+                    value={bulkStatus}
+                    onChange={(e) => setBulkStatus(e.target.value as FindingStatus)}
+                    sx={{
+                      height: 32,
+                      fontSize: "0.8rem",
+                      bgcolor: alpha(primitives.night[700], 0.5),
+                      "& .MuiSelect-select": { py: 0.5 },
+                    }}
+                  >
+                    <MenuItem value="new">New</MenuItem>
+                    <MenuItem value="under_review">Under review</MenuItem>
+                    <MenuItem value="confirmed">Confirmed</MenuItem>
+                    <MenuItem value="false_positive">False positive</MenuItem>
+                    <MenuItem value="out_of_scope">Out of scope</MenuItem>
+                    <MenuItem value="risk_accepted">Risk accepted</MenuItem>
+                    <MenuItem value="mitigated">Mitigated</MenuItem>
+                    <MenuItem value="duplicate">Duplicate</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <Tooltip title="Apply to selected">
+                  <IconButton
+                    size="small"
+                    onClick={handleBulkApply}
+                    disabled={bulk.loading}
+                    sx={{
+                      bgcolor: primitives.lotus[500],
+                      color: "#fff",
+                      width: 32,
+                      height: 32,
+                      "&:hover": { bgcolor: primitives.lotus[600] },
+                      "&.Mui-disabled": { bgcolor: primitives.night[600] },
+                    }}
+                  >
+                    <CheckIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+
+                <Tooltip title="Clear selection">
+                  <IconButton
+                    size="small"
+                    onClick={bulk.handleClearSelection}
+                    sx={{
+                      color: primitives.night[400],
+                      "&:hover": { color: primitives.night[200] },
+                    }}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+
+                <Box sx={{ height: 20, width: 1, bgcolor: primitives.night[600], mx: 0.5 }} />
+              </>
+            )}
+
             <TextField
               value={filters.searchInput}
               onChange={(e) => actions.setSearchInput(e.target.value)}
-              placeholder="Search findings"
+              placeholder="Search"
               size="small"
               InputProps={{
                 startAdornment: (
@@ -241,8 +366,9 @@ const FindingsList = () => {
                 ),
               }}
               sx={{
-                width: { xs: 160, sm: 220 },
+                width: { xs: 120, sm: 180 },
                 "& .MuiOutlinedInput-root": {
+                  height: 32,
                   bgcolor: alpha(primitives.night[700], 0.5),
                   "&:hover": {
                     bgcolor: alpha(primitives.night[600], 0.5),
@@ -270,7 +396,8 @@ const FindingsList = () => {
                 onClick={() => setFiltersDrawerOpen(true)}
                 startIcon={<FilterListIcon />}
                 sx={{
-                  minWidth: 90,
+                  minWidth: 80,
+                  height: 32,
                   borderColor: activeFiltersCount > 0 ? primitives.lotus[500] : primitives.night[600],
                   color: activeFiltersCount > 0 ? primitives.lotus[400] : primitives.night[300],
                   "&:hover": {
@@ -279,7 +406,7 @@ const FindingsList = () => {
                   },
                 }}
               >
-                Filters{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ""}
+                {activeFiltersCount > 0 ? activeFiltersCount : "Filters"}
               </Button>
             </Tooltip>
           </Stack>
@@ -341,32 +468,6 @@ const FindingsList = () => {
         >
           {error}
         </Alert>
-      )}
-
-      {/* Bulk Actions Bar (temporary - will be redesigned in Phase 2) */}
-      {canBulk && bulk.selectionCount > 0 && (
-        <Box
-          sx={{
-            px: { xs: 2, md: 3 },
-            py: 1,
-            borderBottom: "1px solid",
-            borderColor: primitives.night[700],
-            bgcolor: alpha(primitives.lotus[500], 0.08),
-            flexShrink: 0,
-          }}
-        >
-          <InlineActionsBar
-            selectedCount={bulk.selectedIds.length}
-            totalCount={totalCount}
-            totalKnown={totalKnown}
-            selectAllMatching={bulk.selectAllMatching}
-            showSelectAllPrompt={bulk.showSelectAllPrompt}
-            onApply={bulk.handleBulkApply}
-            onClearSelection={bulk.handleClearSelection}
-            onSelectAllResults={bulk.handleSelectAllResults}
-            loading={bulk.loading}
-          />
-        </Box>
       )}
 
       {/* Table - Takes all remaining space */}
