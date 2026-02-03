@@ -7,7 +7,6 @@ import {
   Container,
   FormControlLabel,
   Grid,
-  MenuItem,
   Stack,
   Switch,
   Tab,
@@ -24,7 +23,7 @@ import ErrorIcon from "@mui/icons-material/Error";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import SecurityIcon from "@mui/icons-material/Security";
 import WarningIcon from "@mui/icons-material/Warning";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   PieChart,
@@ -38,17 +37,11 @@ import {
   Tooltip as RechartsTooltip,
 } from "recharts";
 import { fetchProductDetail } from "../api/products";
-import { downloadSbom, listProductComponents, listSboms, uploadSbom, listSbomTransitiveExposure } from "../api/sbom";
+import { downloadSbom, listProductComponents, listSboms, uploadSbom } from "../api/sbom";
 import { ChartContainer, ChartTooltip, GlassCard, MetricDisplay } from "../design-system/components";
 import { tableStyles } from "../design-system/utils/tableStyles";
 import { ProductDetail as ProductDetailType } from "../types/products";
-import {
-  SbomComponentItem,
-  SbomIndexStatus,
-  SbomItem,
-  SbomTransitiveExposureItem,
-  SbomTransitiveStatus,
-} from "../types/sbom";
+import { SbomComponentItem, SbomIndexStatus, SbomItem } from "../types/sbom";
 import { semantic } from "../design-system/tokens";
 import { calculateHealthScore } from "../utils/productHealth";
 
@@ -85,22 +78,6 @@ const buildSeverityData = (breakdown?: ProductDetailType["severityBreakdown"]) =
     { name: "Low", value: breakdown.low, color: SEVERITY_COLORS.low },
     { name: "Info", value: breakdown.info, color: SEVERITY_COLORS.info },
   ];
-};
-
-const getTransitiveSeverityColor = (item: SbomTransitiveExposureItem) => {
-  if (item.criticalCount > 0) return SEVERITY_COLORS.critical;
-  if (item.highCount > 0) return SEVERITY_COLORS.high;
-  if (item.mediumCount > 0) return SEVERITY_COLORS.medium;
-  if (item.lowCount > 0) return SEVERITY_COLORS.low;
-  return SEVERITY_COLORS.info;
-};
-
-const getTransitiveSeverityLabel = (item: SbomTransitiveExposureItem) => {
-  if (item.criticalCount > 0) return "Critical";
-  if (item.highCount > 0) return "High";
-  if (item.mediumCount > 0) return "Medium";
-  if (item.lowCount > 0) return "Low";
-  return "Info";
 };
 
 const RecentScansTimeline = ({ scans }: { scans?: ProductDetailType["recentScans"] }) => {
@@ -185,25 +162,6 @@ const formatIndexStatus = (
   }
 };
 
-const formatTransitiveStatus = (
-  status?: SbomTransitiveStatus | null
-): { label: string; color: "default" | "success" | "warning" | "error" } => {
-  if (!status) return { label: "нет данных", color: "default" };
-
-  switch (status.status) {
-    case "done":
-      return { label: "ready", color: "success" };
-    case "processing":
-      return { label: "processing", color: "warning" };
-    case "pending":
-      return { label: "queued", color: "warning" };
-    case "failed":
-      return { label: "failed", color: "error" };
-    default:
-      return { label: status.status || "unknown", color: "default" };
-  }
-};
-
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -228,54 +186,6 @@ const ProductDetailPage = () => {
     q: "",
   });
   const [indexStatus, setIndexStatus] = useState<SbomIndexStatus | null>(null);
-  const [transitiveSbom, setTransitiveSbom] = useState<SbomItem | null>(null);
-  const [transitiveStatus, setTransitiveStatus] = useState<SbomTransitiveStatus | null>(null);
-  const [transitiveFilters, setTransitiveFilters] = useState({
-    q: "",
-    maxDepth: 25,
-  });
-
-  const [transitiveItems, setTransitiveItems] = useState<SbomTransitiveExposureItem[]>([]);
-  const [transitiveTotal, setTransitiveTotal] = useState(0);
-  const [transitiveLoading, setTransitiveLoading] = useState(false);
-  const [transitiveError, setTransitiveError] = useState<string | null>(null);
-  const [showTransitiveTable, setShowTransitiveTable] = useState(false);
-  const transitiveGraph = useMemo(() => {
-    const maxNodes = 120;
-    const sorted = [...transitiveItems].sort((a, b) => {
-      const scoreA =
-        (a.maxCvssScore ?? 0) +
-        a.criticalCount * 4 +
-        a.highCount * 3 +
-        a.mediumCount * 2 +
-        a.lowCount;
-      const scoreB =
-        (b.maxCvssScore ?? 0) +
-        b.criticalCount * 4 +
-        b.highCount * 3 +
-        b.mediumCount * 2 +
-        b.lowCount;
-      return scoreB - scoreA;
-    });
-    const trimmed = sorted.slice(0, maxNodes);
-    const maxDistance = trimmed.reduce((acc, item) => {
-      const distance = item.minDistanceToAnyVuln ?? transitiveFilters.maxDepth;
-      return Math.max(acc, distance);
-    }, 0);
-    const ringCount = Math.min(Math.max(maxDistance, 1), 5);
-    const rings = Array.from({ length: ringCount + 1 }, () => [] as SbomTransitiveExposureItem[]);
-    trimmed.forEach((item) => {
-      const distance = item.minDistanceToAnyVuln ?? ringCount;
-      const ringIndex = Math.min(Math.max(distance, 0), ringCount);
-      rings[ringIndex].push(item);
-    });
-    return {
-      nodes: trimmed,
-      rings,
-      ringCount,
-      total: transitiveItems.length,
-    };
-  }, [transitiveItems, transitiveFilters.maxDepth]);
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
@@ -309,14 +219,6 @@ const ProductDetailPage = () => {
     try {
       const items = await listSboms(id);
       setSboms(items);
-      const latestIndexed =
-        items.find((x) => x.indexStatus === "done" || x.indexStatus === "indexed") ?? null;
-      setTransitiveSbom((prev) => {
-        if (!latestIndexed) return null;
-        if (!prev) return latestIndexed;
-        if (prev.id === latestIndexed.id) return prev;
-        return latestIndexed;
-      });
     } catch (err) {
       setSbomError(err instanceof Error ? err.message : "Не удалось загрузить SBOM");
     } finally {
@@ -325,31 +227,9 @@ const ProductDetailPage = () => {
   }, [id]);
 
   useEffect(() => {
-    if (tabIndex !== 0 && tabIndex !== 2) return;
+    if (tabIndex !== 0) return;
     fetchSboms();
   }, [fetchSboms, tabIndex]);
-
-  const fetchTransitiveExposure = useCallback(async () => {
-    if (!transitiveSbom) return;
-
-    setTransitiveLoading(true);
-    setTransitiveError(null);
-    try {
-      const resp = await listSbomTransitiveExposure(transitiveSbom.id, {
-        maxDepth: transitiveFilters.maxDepth,
-        q: transitiveFilters.q || undefined,
-        limit: 200,
-        offset: 0,
-      });
-      setTransitiveStatus(resp.status);
-      setTransitiveItems(resp.data.items);
-      setTransitiveTotal(resp.data.total);
-    } catch (e) {
-      setTransitiveError(e instanceof Error ? e.message : "Не удалось загрузить transitive риск");
-    } finally {
-      setTransitiveLoading(false);
-    }
-  }, [transitiveSbom, transitiveFilters]);
 
   const fetchComponents = useCallback(async () => {
     if (!id) return;
@@ -392,26 +272,6 @@ const ProductDetailPage = () => {
 
     return () => window.clearInterval(interval);
   }, [tabIndex, indexStatus?.status, fetchComponents]);
-
-  useEffect(() => {
-    if (tabIndex !== 2) return;
-    if (!transitiveSbom) return;
-    fetchTransitiveExposure();
-  }, [tabIndex, transitiveSbom, transitiveFilters, fetchTransitiveExposure]);
-
-  useEffect(() => {
-    if (tabIndex !== 2) return;
-    if (!transitiveStatus) return;
-
-    const status = transitiveStatus.status;
-    if (status !== "pending" && status !== "processing") return;
-
-    const interval = window.setInterval(() => {
-      if (!document.hidden) fetchTransitiveExposure();
-    }, 2000);
-
-    return () => window.clearInterval(interval);
-  }, [tabIndex, transitiveStatus?.status, fetchTransitiveExposure]);
 
   const handleSbomUpload = async (file: File) => {
     if (!id) return;
@@ -481,8 +341,6 @@ const ProductDetailPage = () => {
   const hasSeverityData = severityData.some((item) => item.value > 0);
   const latestScan = data.recentScans?.[0];
   const statusChip = formatIndexStatus(indexStatus);
-  const transitiveChip = formatTransitiveStatus(transitiveStatus);
-
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
       <Stack spacing={4}>
@@ -699,7 +557,7 @@ const ProductDetailPage = () => {
             <Box>
               <Typography variant="h6">SBOM & Components</Typography>
               <Typography variant="body2" color="text.secondary">
-                Manage SBOMs, indexed components, and transitive exposure.
+                Manage SBOMs and indexed components.
               </Typography>
             </Box>
             <Tabs
@@ -709,7 +567,6 @@ const ProductDetailPage = () => {
             >
               <Tab label="SBOM" />
               <Tab label="Components" />
-              <Tab label="Transitive" />
             </Tabs>
             {tabIndex === 0 && (
               <Stack spacing={2}>
@@ -963,328 +820,6 @@ const ProductDetailPage = () => {
                       Total: {componentsTotal}
                     </Typography>
                   </Box>
-                )}
-              </Stack>
-            )}
-            {tabIndex === 2 && (
-              <Stack spacing={2}>
-                {!transitiveSbom ? (
-                  <Alert severity="info">No indexed SBOM available for transitive risk.</Alert>
-                ) : (
-                  <>
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
-                      <Chip label={`Status: ${transitiveChip.label}`} color={transitiveChip.color} />
-                      {transitiveStatus?.updatedAt && (
-                        <Typography variant="body2" color="text.secondary">
-                          Updated: {formatScanDate(transitiveStatus.updatedAt)}
-                        </Typography>
-                      )}
-                      <Typography variant="body2" color="text.secondary">
-                        SBOM: {transitiveSbom.originalFilename}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Total: {transitiveTotal}
-                      </Typography>
-                    </Stack>
-
-                    {transitiveStatus?.error && <Alert severity="error">{transitiveStatus.error}</Alert>}
-
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
-                      <TextField
-                        select
-                        label="Max depth"
-                        size="small"
-                        value={transitiveFilters.maxDepth}
-                        onChange={(event) =>
-                          setTransitiveFilters((prev) => ({
-                            ...prev,
-                            maxDepth: Number(event.target.value) || 25,
-                          }))
-                        }
-                        sx={{ width: 140 }}
-                      >
-                        {[10, 25, 50].map((depth) => (
-                          <MenuItem key={depth} value={depth}>
-                            {depth}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-
-                      <TextField
-                        label="Search"
-                        size="small"
-                        value={transitiveFilters.q}
-                        onChange={(event) =>
-                          setTransitiveFilters((prev) => ({ ...prev, q: event.target.value }))
-                        }
-                      />
-
-                      <Button variant="outlined" onClick={fetchTransitiveExposure} disabled={transitiveLoading}>
-                        Refresh
-                      </Button>
-
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={showTransitiveTable}
-                            onChange={(event) => setShowTransitiveTable(event.target.checked)}
-                          />
-                        }
-                        label="Table view"
-                      />
-                    </Stack>
-
-                    {transitiveError && <Alert severity="error">{transitiveError}</Alert>}
-
-                    {transitiveLoading ? (
-                      <Box display="flex" justifyContent="center" py={2}>
-                        <CircularProgress size={20} />
-                      </Box>
-                    ) : transitiveItems.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        No transitive risk exposure found.
-                      </Typography>
-                    ) : (
-                      <Stack spacing={2}>
-                        <Grid container spacing={2}>
-                          <Grid item xs={12} lg={8}>
-                            <Box
-                              sx={{
-                                borderRadius: 2,
-                                border: "1px solid",
-                                borderColor: "divider",
-                                bgcolor: "background.paper",
-                                p: 2,
-                                minHeight: 480,
-                              }}
-                            >
-                              <Stack spacing={1} sx={{ mb: 1.5 }}>
-                                <Typography variant="subtitle1" fontWeight={600}>
-                                  Transitive exposure map
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  Showing {transitiveGraph.nodes.length} of {transitiveGraph.total} packages. Rings show
-                                  distance from vulnerable packages.
-                                </Typography>
-                              </Stack>
-                              <Box sx={{ width: "100%", height: 420 }}>
-                                <svg width="100%" height="100%" viewBox="0 0 800 520">
-                                  {Array.from({ length: transitiveGraph.ringCount + 1 }, (_, idx) => (
-                                    <circle
-                                      key={`ring-${idx}`}
-                                      cx={400}
-                                      cy={260}
-                                      r={90 + idx * 70}
-                                      fill="none"
-                                      stroke="rgba(148, 163, 184, 0.2)"
-                                      strokeDasharray="4 6"
-                                    />
-                                  ))}
-                                  <g>
-                                    <circle cx={400} cy={260} r={36} fill={SEVERITY_COLORS.critical} opacity={0.95} />
-                                    <text
-                                      x={400}
-                                      y={255}
-                                      textAnchor="middle"
-                                      fontSize="10"
-                                      fontWeight="700"
-                                      fill="#fff"
-                                    >
-                                      Vulnerable
-                                    </text>
-                                    <text x={400} y={270} textAnchor="middle" fontSize="10" fill="#fff">
-                                      packages
-                                    </text>
-                                  </g>
-                                  {transitiveGraph.rings.map((ringItems, ringIndex) => {
-                                    const radius = 90 + ringIndex * 70;
-                                    const step = ringItems.length > 0 ? (Math.PI * 2) / ringItems.length : 0;
-                                    const offset = ringIndex * 0.6;
-                                    return ringItems.map((item, itemIndex) => {
-                                      const angle = itemIndex * step + offset;
-                                      const x = 400 + radius * Math.cos(angle);
-                                      const y = 260 + radius * Math.sin(angle);
-                                      const nodeRadius = 6 + Math.min(10, Math.round((item.maxCvssScore ?? 0) / 2));
-                                      const fill = getTransitiveSeverityColor(item);
-                                      return (
-                                        <g key={item.id}>
-                                          <line
-                                            x1={400}
-                                            y1={260}
-                                            x2={x}
-                                            y2={y}
-                                            stroke="rgba(148, 163, 184, 0.3)"
-                                            strokeWidth={1}
-                                          />
-                                          <circle cx={x} cy={y} r={nodeRadius} fill={fill} opacity={0.9}>
-                                            <title>
-                                              {item.name}
-                                              {item.version ? `@${item.version}` : ""} • {getTransitiveSeverityLabel(item)}
-                                              {item.minDistanceToAnyVuln != null
-                                                ? ` • distance ${item.minDistanceToAnyVuln}`
-                                                : ""}
-                                            </title>
-                                          </circle>
-                                        </g>
-                                      );
-                                    });
-                                  })}
-                                </svg>
-                              </Box>
-                            </Box>
-                          </Grid>
-                          <Grid item xs={12} lg={4}>
-                            <Stack spacing={2}>
-                              <Box
-                                sx={{
-                                  borderRadius: 2,
-                                  border: "1px solid",
-                                  borderColor: "divider",
-                                  bgcolor: "background.paper",
-                                  p: 2,
-                                }}
-                              >
-                                <Stack spacing={1}>
-                                  <Typography variant="subtitle1" fontWeight={600}>
-                                    Highlights
-                                  </Typography>
-                                  {transitiveGraph.nodes.slice(0, 6).map((item) => (
-                                    <Stack key={item.id} spacing={0.25}>
-                                      <Stack direction="row" spacing={1} alignItems="center">
-                                        <Box
-                                          sx={{
-                                            width: 10,
-                                            height: 10,
-                                            borderRadius: "50%",
-                                            bgcolor: getTransitiveSeverityColor(item),
-                                          }}
-                                        />
-                                        <Typography variant="body2" fontWeight={600}>
-                                          {item.name}
-                                        </Typography>
-                                      </Stack>
-                                      <Typography variant="caption" color="text.secondary">
-                                        {item.version || "—"} • {item.ecosystem || "unknown"} •{" "}
-                                        {getTransitiveSeverityLabel(item)}
-                                      </Typography>
-                                      <Typography variant="caption" color="text.secondary">
-                                        CVSS {item.maxCvssScore == null ? "—" : item.maxCvssScore.toFixed(1)} •
-                                        Distance {item.minDistanceToAnyVuln ?? "—"}
-                                      </Typography>
-                                    </Stack>
-                                  ))}
-                                </Stack>
-                              </Box>
-                              <Box
-                                sx={{
-                                  borderRadius: 2,
-                                  border: "1px solid",
-                                  borderColor: "divider",
-                                  bgcolor: "background.paper",
-                                  p: 2,
-                                }}
-                              >
-                                <Stack spacing={1}>
-                                  <Typography variant="subtitle1" fontWeight={600}>
-                                    Legend
-                                  </Typography>
-                                  {[
-                                    { label: "Critical exposure", color: SEVERITY_COLORS.critical },
-                                    { label: "High exposure", color: SEVERITY_COLORS.high },
-                                    { label: "Medium exposure", color: SEVERITY_COLORS.medium },
-                                    { label: "Low exposure", color: SEVERITY_COLORS.low },
-                                    { label: "No CVE counts", color: SEVERITY_COLORS.info },
-                                  ].map((entry) => (
-                                    <Stack key={entry.label} direction="row" spacing={1} alignItems="center">
-                                      <Box
-                                        sx={{
-                                          width: 10,
-                                          height: 10,
-                                          borderRadius: "50%",
-                                          bgcolor: entry.color,
-                                        }}
-                                      />
-                                      <Typography variant="caption" color="text.secondary">
-                                        {entry.label}
-                                      </Typography>
-                                    </Stack>
-                                  ))}
-                                </Stack>
-                              </Box>
-                            </Stack>
-                          </Grid>
-                        </Grid>
-
-                        {showTransitiveTable && (
-                          <Box sx={{ overflowX: "auto" }}>
-                            <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
-                              <Box component="thead">
-                                <Box component="tr">
-                                  {["Name", "Version", "Ecosystem", "C/H/M/L", "Max CVSS", "Min distance"].map(
-                                    (label) => (
-                                      <Box
-                                        key={label}
-                                        component="th"
-                                        style={{
-                                          fontWeight: 600,
-                                          fontSize: 12,
-                                          padding: "10px 8px",
-                                          color: tableStyles.headerText,
-                                          borderBottom: `1px solid ${tableStyles.cellBorder}`,
-                                          background: tableStyles.headerBg,
-                                        }}
-                                      >
-                                        {label}
-                                      </Box>
-                                    )
-                                  )}
-                                </Box>
-                              </Box>
-
-                              <Box component="tbody">
-                                {transitiveItems.map((it) => (
-                                  <Box key={it.id} component="tr">
-                                    <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                                      <Stack spacing={0.25}>
-                                        <Typography variant="body2">{it.name}</Typography>
-                                        {it.purl && (
-                                          <Typography variant="caption" color="text.secondary">
-                                            {it.purl}
-                                          </Typography>
-                                        )}
-                                      </Stack>
-                                    </Box>
-
-                                    <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                                      {it.version || "—"}
-                                    </Box>
-
-                                    <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                                      {it.ecosystem || "—"}
-                                    </Box>
-
-                                    <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                                      <Typography variant="body2">
-                                        {it.criticalCount}/{it.highCount}/{it.mediumCount}/{it.lowCount}
-                                      </Typography>
-                                    </Box>
-
-                                    <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                                      {it.maxCvssScore == null ? "—" : it.maxCvssScore.toFixed(1)}
-                                    </Box>
-
-                                    <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
-                                      {it.minDistanceToAnyVuln ?? "—"}
-                                    </Box>
-                                  </Box>
-                                ))}
-                              </Box>
-                            </Box>
-                          </Box>
-                        )}
-                      </Stack>
-                    )}
-                  </>
                 )}
               </Stack>
             )}

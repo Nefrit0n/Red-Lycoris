@@ -1,5 +1,5 @@
-import { request, requestBlob, requestWithMeta } from "./client";
-import { SbomComponentItem, SbomIndexStatus, SbomItem, SbomTransitiveExposureResponse } from "../types/sbom";
+import { request, requestBlob } from "./client";
+import { SbomComponentItem, SbomIndexStatus, SbomItem } from "../types/sbom";
 
 export const listSboms = async (productId: string): Promise<SbomItem[]> => {
   return request<SbomItem[]>("/api/v1/sbom", {
@@ -63,17 +63,3 @@ export const listProductComponents = async (
       query: params,
     }
   );
-export const listSbomTransitiveExposure = async (
-  sbomId: string,
-  params: {
-    maxDepth?: number;
-    q?: string;
-    limit?: number;
-    offset?: number;
-  }
-): Promise<SbomTransitiveExposureResponse> =>
-  requestWithMeta<SbomTransitiveExposureResponse>(`/api/v1/sbom/${sbomId}/transitive`, {
-    query: {
-      ...params,
-    },
-  });
