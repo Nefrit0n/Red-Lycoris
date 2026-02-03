@@ -150,8 +150,8 @@ const StyledPaper = styled(Paper, {
       selected
         ? alpha(glowValue || primitives.lotus[500], 0.5)
         : glassVariant === 'solid'
-          ? primitives.night[600]
-          : 'rgba(255, 255, 255, 0.08)'
+          ? alpha(primitives.night[600], 0.4)
+          : 'rgba(255, 255, 255, 0.06)'
     }`,
     padding: paddingPresets[paddingPreset],
     transition: `all ${duration.normal} ${easing.smooth}`,
