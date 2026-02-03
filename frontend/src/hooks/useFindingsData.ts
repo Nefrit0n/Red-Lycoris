@@ -9,6 +9,7 @@ import useDebouncedValue from './useDebouncedValue';
 interface UseFindingsDataOptions {
   filters: FiltersState;
   hydrated: boolean;
+  autoLoadTotal?: boolean;
 }
 
 interface UseFindingsDataResult {
@@ -28,7 +29,7 @@ interface UseFindingsDataResult {
  * Custom hook for fetching findings data based on filters
  * Handles loading, error states, and debounced search
  */
-export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): UseFindingsDataResult {
+export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: UseFindingsDataOptions): UseFindingsDataResult {
   const [data, setData] = useState<FindingListItemDTO[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [totalKnown, setTotalKnown] = useState(false);
@@ -205,6 +206,15 @@ export function useFindingsData({ filters, hydrated }: UseFindingsDataOptions): 
     // Use filterKey instead of fetchData to avoid re-fetching when callback reference changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey, hydrated, productIsUuid]);
+
+  // Auto-load total count after initial data loads
+  useEffect(() => {
+    if (autoLoadTotal && hydrated && !totalKnown && !loading && !statsLoading && data.length > 0) {
+      loadStats();
+    }
+    // Only run when data first loads or filters change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoadTotal, hydrated, loading, data.length > 0]);
 
   useEffect(() => {
     return () => {
