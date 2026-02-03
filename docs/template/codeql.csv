@@ -1,4 +1,0 @@
-Name,Description,Severity,Message,Path,Start line,Start column,End line,End column
-"Inefficient regular expression","A regular expression that may take exponential time on certain inputs.",error,"This part of the regular expression may cause exponential backtracking.","/vendor/codemirror/markdown.js",617,32,617,64
-"SQL injection","Data from an untrusted source reaches a SQL query without sanitization.",error,"User-controlled data is used in a SQL query.","/src/db/users.ts",88,15,88,42
-"Hard-coded credentials","Hard-coded password or token detected in source code.",warning,"Possible hard-coded credential found.","/src/config/auth.go",41,5,41,28
