@@ -17,7 +17,7 @@ type Story = StoryObj;
 const renderWidget = (widgetId: string, width = 360, height?: number) => {
   const widget = widgetRegistry.find((item) => item.id === widgetId);
   if (!widget) return null;
-  const dataState = widget.getData();
+  const dataState = { data: widget.previewData ?? null, loading: false, error: null };
   return (
     <Box sx={{ width, height }}>
       <WidgetCard

@@ -41,7 +41,14 @@ const WidgetCard = ({
       }}
     >
       <Stack spacing={2} sx={{ height: "100%" }}>
-        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={2}>
+        <Stack
+          direction="row"
+          alignItems="flex-start"
+          justifyContent="space-between"
+          spacing={2}
+          className="widget-drag-handle"
+          sx={{ cursor: isEditing ? "grab" : "default" }}
+        >
           <Box>
             <Typography variant="subtitle1">{title}</Typography>
             {subtitle && (
