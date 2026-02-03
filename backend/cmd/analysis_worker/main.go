@@ -27,7 +27,6 @@ import (
 	"lotus-warden/backend/internal/scanners"
 	"lotus-warden/backend/internal/sla"
 	"lotus-warden/backend/internal/storage"
-	"lotus-warden/backend/internal/transitive"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -107,9 +106,6 @@ func main() {
 	if js == nil {
 		log.Fatalf("jetstream unavailable")
 	}
-
-	osvClient := transitive.NewOsvClient(transitive.OsvOptions{})
-	transitivePipeline := transitive.NewPipeline(osvClient, []int{10, 25, 50})
 
 	roles := parseWorkerRoles(os.Getenv("WORKER_ROLES"))
 	var analysisSub *nats.Subscription
@@ -261,7 +257,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			runPullLoop(ctx, "sbom", sbomSub, func(c context.Context, m *nats.Msg) error {
-				return handleSbomIndexMessage(c, m, db, store, transitivePipeline)
+				return handleSbomIndexMessage(c, m, db, store)
 			})
 		}()
 	}
@@ -622,7 +618,7 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
    - статус/ошибки пишутся в sboms.index_status/index_error самим indexer'ом
 --------------------------- */
 
-func handleSbomIndexMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objectstore.Store, transitivePipeline *transitive.Pipeline) error {
+func handleSbomIndexMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store objectstore.Store) error {
 	var payload sbomIndexMessage
 	if err := json.Unmarshal(msg.Data, &payload); err != nil {
 		return permanent(fmt.Errorf("invalid sbom payload: %w", err))
@@ -663,12 +659,6 @@ func handleSbomIndexMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, stor
 
 	log.Printf("[sbom] index done sbom_id=%s status=%s components=%d edges=%d duration=%s",
 		sbomID.String(), status, componentCount, edgeCount, duration)
-
-	if sbom != nil && sbom.IndexStatus == "done" {
-		if transitiveErr := transitivePipeline.Run(ctx, db, sbomID); transitiveErr != nil {
-			log.Printf("[sbom] transitive failed sbom_id=%s err=%v", sbomID.String(), transitiveErr)
-		}
-	}
 
 	return nil
 }
