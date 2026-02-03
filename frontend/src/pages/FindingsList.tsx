@@ -3,8 +3,8 @@
  *
  * Design principles:
  * - Maximum space for findings table (edge-to-edge)
- * - Compact toolbar with essential actions only
- * - Bulk actions integrated into toolbar (not separate bar)
+ * - Compact single-row toolbar (never shifts)
+ * - Selection bar as fixed bottom overlay
  * - No distracting metrics/overview - this is a work page
  */
 
@@ -18,6 +18,7 @@ import {
   MenuItem,
   Select,
   Snackbar,
+  Slide,
   Stack,
   TextField,
   Tooltip,
@@ -215,7 +216,7 @@ const FindingsList = () => {
         overflow: "hidden",
       }}
     >
-      {/* Compact Toolbar */}
+      {/* Compact Toolbar - Single row, never shifts */}
       <Box
         sx={{
           px: { xs: 2, md: 3 },
@@ -232,8 +233,8 @@ const FindingsList = () => {
           justifyContent="space-between"
           spacing={2}
         >
-          {/* Left: Title + Selection info (always reserve space) */}
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 200 }}>
+          {/* Left: Title + count */}
+          <Stack direction="row" alignItems="center" spacing={1.5}>
             <Typography
               variant="h6"
               component="h1"
@@ -245,90 +246,15 @@ const FindingsList = () => {
             >
               Findings
             </Typography>
-
-            {/* Selection count - always show when canBulk, just change visibility */}
-            {canBulk && (
-              <Typography
-                variant="body2"
-                sx={{
-                  color: hasSelection ? primitives.lotus[400] : "transparent",
-                  fontWeight: 600,
-                  fontSize: "0.8125rem",
-                  transition: "color 0.15s ease",
-                  minWidth: 80,
-                }}
-              >
-                {hasSelection
-                  ? bulk.selectAllMatching && totalKnown
-                    ? `${totalCount} selected`
-                    : `${bulk.selectedIds.length} selected`
-                  : "—"}
+            {totalKnown && (
+              <Typography variant="caption" sx={{ color: primitives.night[500] }}>
+                {totalCount}
               </Typography>
             )}
           </Stack>
 
           {/* Right: Actions */}
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
-            {/* Bulk actions (when items selected) */}
-            {canBulk && hasSelection && (
-              <>
-                <FormControl size="small" sx={{ minWidth: 130 }}>
-                  <Select
-                    value={bulkStatus}
-                    onChange={(e) => setBulkStatus(e.target.value as FindingStatus)}
-                    sx={{
-                      height: 32,
-                      fontSize: "0.8rem",
-                      bgcolor: alpha(primitives.night[700], 0.5),
-                      "& .MuiSelect-select": { py: 0.5 },
-                    }}
-                  >
-                    <MenuItem value="new">New</MenuItem>
-                    <MenuItem value="under_review">Under review</MenuItem>
-                    <MenuItem value="confirmed">Confirmed</MenuItem>
-                    <MenuItem value="false_positive">False positive</MenuItem>
-                    <MenuItem value="out_of_scope">Out of scope</MenuItem>
-                    <MenuItem value="risk_accepted">Risk accepted</MenuItem>
-                    <MenuItem value="mitigated">Mitigated</MenuItem>
-                    <MenuItem value="duplicate">Duplicate</MenuItem>
-                  </Select>
-                </FormControl>
-
-                <Tooltip title="Apply to selected">
-                  <IconButton
-                    size="small"
-                    onClick={handleBulkApply}
-                    disabled={bulk.loading}
-                    sx={{
-                      bgcolor: primitives.lotus[500],
-                      color: "#fff",
-                      width: 32,
-                      height: 32,
-                      "&:hover": { bgcolor: primitives.lotus[600] },
-                      "&.Mui-disabled": { bgcolor: primitives.night[600] },
-                    }}
-                  >
-                    <CheckIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-
-                <Tooltip title="Clear selection">
-                  <IconButton
-                    size="small"
-                    onClick={bulk.handleClearSelection}
-                    sx={{
-                      color: primitives.night[400],
-                      "&:hover": { color: primitives.night[200] },
-                    }}
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-
-                <Box sx={{ height: 20, width: 1, bgcolor: primitives.night[600], mx: 0.5 }} />
-              </>
-            )}
-
+          <Stack direction="row" spacing={1} alignItems="center">
             <TextField
               value={filters.searchInput}
               onChange={(e) => actions.setSearchInput(e.target.value)}
@@ -474,10 +400,7 @@ const FindingsList = () => {
           returnTo={listReturnTo}
           onNavigateToDetail={handleNavigateToDetail}
           compactMode
-          totalCount={totalCount}
-          totalKnown={totalKnown}
           selectAllMatching={bulk.selectAllMatching}
-          onSelectAllMatching={bulk.handleSelectAllResults}
         />
       </Box>
 
@@ -510,12 +433,125 @@ const FindingsList = () => {
         />
       </Box>
 
+      {/* Fixed Bottom Selection Bar - slides up when items selected */}
+      <Slide direction="up" in={canBulk && hasSelection} mountOnEnter unmountOnExit>
+        <Box
+          sx={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1200,
+            bgcolor: primitives.night[800],
+            borderTop: "1px solid",
+            borderColor: primitives.night[600],
+            boxShadow: "0 -4px 20px rgba(0,0,0,0.3)",
+          }}
+        >
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="center"
+            spacing={3}
+            sx={{ px: 3, py: 1.5 }}
+          >
+            {/* Selection count */}
+            <Typography
+              variant="body2"
+              sx={{
+                color: primitives.lotus[400],
+                fontWeight: 600,
+              }}
+            >
+              {bulk.selectAllMatching && totalKnown
+                ? `${totalCount} selected`
+                : `${bulk.selectedIds.length} selected`}
+            </Typography>
+
+            {/* Select all link */}
+            {bulk.showSelectAllPrompt && !bulk.selectAllMatching && totalKnown && totalCount > data.length && (
+              <Typography
+                component="span"
+                variant="body2"
+                onClick={bulk.handleSelectAllResults}
+                sx={{
+                  color: primitives.night[300],
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  "&:hover": { color: primitives.lotus[400] },
+                }}
+              >
+                Select all {totalCount}
+              </Typography>
+            )}
+
+            <Box sx={{ height: 24, width: 1, bgcolor: primitives.night[600] }} />
+
+            {/* Status selector */}
+            <FormControl size="small">
+              <Select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value as FindingStatus)}
+                sx={{
+                  height: 36,
+                  minWidth: 150,
+                  bgcolor: primitives.night[700],
+                  "& .MuiSelect-select": { py: 0.75 },
+                }}
+              >
+                <MenuItem value="new">New</MenuItem>
+                <MenuItem value="under_review">Under review</MenuItem>
+                <MenuItem value="confirmed">Confirmed</MenuItem>
+                <MenuItem value="false_positive">False positive</MenuItem>
+                <MenuItem value="out_of_scope">Out of scope</MenuItem>
+                <MenuItem value="risk_accepted">Risk accepted</MenuItem>
+                <MenuItem value="mitigated">Mitigated</MenuItem>
+                <MenuItem value="duplicate">Duplicate</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Apply button */}
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleBulkApply}
+              disabled={bulk.loading}
+              startIcon={<CheckIcon />}
+              sx={{
+                bgcolor: primitives.lotus[500],
+                color: "#fff",
+                height: 36,
+                "&:hover": { bgcolor: primitives.lotus[600] },
+                "&.Mui-disabled": { bgcolor: primitives.night[600] },
+              }}
+            >
+              Apply
+            </Button>
+
+            {/* Clear selection */}
+            <Tooltip title="Clear selection">
+              <IconButton
+                size="small"
+                onClick={bulk.handleClearSelection}
+                sx={{
+                  color: primitives.night[400],
+                  "&:hover": { color: primitives.night[200], bgcolor: alpha(primitives.night[600], 0.5) },
+                }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+      </Slide>
+
       {/* Snackbar for bulk operations */}
       <Snackbar
         open={bulk.undoToastOpen}
         autoHideDuration={8000}
         onClose={() => bulk.setUndoToastOpen(false)}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        sx={{ mb: hasSelection ? 8 : 0 }} // Move up when selection bar is visible
       >
         <Alert
           severity="success"

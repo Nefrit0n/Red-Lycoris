@@ -19,6 +19,7 @@ import { FindingListItemDTO } from "../types/findings";
 import { SEVERITY_STYLES, STATUS_LABELS } from "../utils/findingConstants";
 import { FiltersState } from "../hooks/useUrlFiltersSync";
 import { normalizeDateFrom, normalizeDateTo } from "../utils/urlHelpers";
+import { getAuthHeaders } from "../api/http";
 
 interface ExportMenuProps {
   data: FindingListItemDTO[];
@@ -66,8 +67,7 @@ const buildExportUrl = (
   params.set("canonicalOnly", String(!filters.showRepeats));
   params.set("includeRepeats", String(filters.showRepeats));
 
-  if (filters.sortField) params.set("sortField", String(filters.sortField));
-  if (filters.sortOrder) params.set("sortOrder", filters.sortOrder);
+  // Note: backend export doesn't support sorting, so we don't include sortField/sortOrder
 
   return `/api/v1/findings/export?${params.toString()}`;
 };
@@ -167,19 +167,35 @@ const ExportMenu = ({
     try {
       const url = buildExportUrl(format, filters, debouncedSearch);
 
-      // Create hidden link and trigger download
+      const response = await fetch(url, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Export failed:", response.status, errorText);
+        throw new Error(`Export failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+
       const link = document.createElement("a");
-      link.href = url;
+      link.href = downloadUrl;
       link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.${format}`;
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error("Export error:", err);
     } finally {
-      // Small delay to show loading state
       setTimeout(() => {
         setExporting(false);
         handleCloseMenu();
-      }, 500);
+      }, 300);
     }
   };
 
@@ -240,17 +256,18 @@ const ExportMenu = ({
           <Box sx={{ px: 2, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
             <Typography variant="caption" color="primary" sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
               <CloudDownloadIcon sx={{ fontSize: 14 }} />
-              Экспорт всех {totalCount} результатов
+              Exporting all {totalCount} findings
             </Typography>
           </Box>
         )}
+
         <MenuItem onClick={() => handleExport("csv")}>
           <ListItemIcon>
             <CsvIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary="Export as CSV"
-            secondary={`${exportCount} findings`}
+            primary="CSV"
+            secondary="Spreadsheet format"
             secondaryTypographyProps={{ variant: "caption" }}
           />
         </MenuItem>
@@ -259,8 +276,8 @@ const ExportMenu = ({
             <JsonIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary="Export as JSON"
-            secondary={`${exportCount} findings`}
+            primary="JSON"
+            secondary="Raw data export"
             secondaryTypographyProps={{ variant: "caption" }}
           />
         </MenuItem>
