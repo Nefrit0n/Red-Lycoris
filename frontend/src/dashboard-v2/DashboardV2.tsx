@@ -1,4 +1,17 @@
-import { Box, Button, IconButton, MenuItem, Select, Stack, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  IconButton,
+  MenuItem,
+  Select,
+  Stack,
+  Typography,
+} from "@mui/material";
 import {
   ArrowDownward,
   ArrowUpward,
@@ -47,7 +60,17 @@ const DashboardV2 = () => {
   const [developerEnv, setDeveloperEnv] = useState("Прод");
   const [isTemplateOpen, setIsTemplateOpen] = useState(false);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const { dataMap } = useDashboardData();
+
+  const handleResetClick = () => {
+    setIsResetConfirmOpen(true);
+  };
+
+  const handleResetConfirm = () => {
+    resetLayout();
+    setIsResetConfirmOpen(false);
+  };
 
   const widgetMap = useMemo(() => {
     return new Map(widgetRegistry.map((widget) => [widget.id, widget]));
@@ -79,14 +102,13 @@ const DashboardV2 = () => {
   const handlePin = (widgetId: string) => {
     const target = layout.find((item) => item.widgetId === widgetId);
     if (!target) return;
+    // Move target to top and shift all other widgets down by target's height
     const nextLayout = layout.map((item) => {
       if (item.widgetId === widgetId) {
         return { ...item, y: 0 };
       }
-      if (item.y < target.h) {
-        return { ...item, y: item.y + target.h };
-      }
-      return item;
+      // Shift all other widgets down to make room for pinned widget
+      return { ...item, y: item.y + target.h };
     });
     updateLayout(nextLayout);
   };
@@ -94,6 +116,8 @@ const DashboardV2 = () => {
   const handleAddWidget = (widgetId: string) => {
     const widget = widgetMap.get(widgetId);
     if (!widget) return;
+    // Prevent adding duplicate widgets
+    if (layout.some((item) => item.widgetId === widgetId)) return;
     const nextY = layout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
     updateLayout([
       ...layout,
@@ -198,7 +222,7 @@ const DashboardV2 = () => {
         onEdit={startEditing}
         onSave={saveLayout}
         onCancel={cancelEditing}
-        onReset={resetLayout}
+        onReset={handleResetClick}
         onOpenTemplates={() => setIsTemplateOpen(true)}
         onOpenAddWidget={() => setIsAddWidgetOpen(true)}
       />
@@ -370,6 +394,25 @@ const DashboardV2 = () => {
         onClose={() => setIsAddWidgetOpen(false)}
         onAdd={handleAddWidget}
       />
+
+      <Dialog
+        open={isResetConfirmOpen}
+        onClose={() => setIsResetConfirmOpen(false)}
+        aria-labelledby="reset-dialog-title"
+      >
+        <DialogTitle id="reset-dialog-title">Сбросить дашборд?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Все ваши изменения layout будут потеряны, и дашборд вернётся к шаблону по умолчанию.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsResetConfirmOpen(false)}>Отмена</Button>
+          <Button onClick={handleResetConfirm} color="error" variant="contained">
+            Сбросить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

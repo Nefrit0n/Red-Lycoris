@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchFindings } from "../../api/findings";
 import { fetchProductsWithStats } from "../../api/products";
 import type { FindingListItemDTO } from "../../types/findings";
@@ -57,17 +57,28 @@ const buildCriticalActivity = (items: FindingListItemDTO[]) =>
     time: formatRelativeTime(finding.createdAt) ?? "—",
   }));
 
+const REFRESH_INTERVAL_MS = 60_000; // Auto-refresh every 60 seconds
+
 export const useDashboardData = () => {
   const [dataMap, setDataMap] = useState<Record<string, WidgetDataState<any>>>({});
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const controllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const setWidgetState = useCallback(<T,>(id: string, state: WidgetDataState<T>) => {
+    setDataMap((prev) => ({ ...prev, [id]: state }));
+  }, []);
 
-    const setWidgetState = <T,>(id: string, state: WidgetDataState<T>) => {
-      setDataMap((prev) => ({ ...prev, [id]: state }));
-    };
+  const load = useCallback(async (isInitial = false) => {
+    // Abort any in-flight request
+    controllerRef.current?.abort();
+    controllerRef.current = new AbortController();
+    const controller = controllerRef.current;
 
-    const load = async () => {
+    if (!isInitial) {
+      setIsRefreshing(true);
+    } else {
+      // Only show loading skeleton on initial load
       const loadingState = { data: null, loading: true, error: null };
       [
         "kpi-open-findings",
@@ -80,9 +91,10 @@ export const useDashboardData = () => {
         "recent-activity",
         "top-risks",
       ].forEach((id) => setWidgetState(id, loadingState));
+    }
 
-      try {
-        const findingsResponse = await fetchFindings(
+    try {
+      const findingsResponse = await fetchFindings(
           {
             limit: 1,
             offset: 0,
@@ -133,12 +145,15 @@ export const useDashboardData = () => {
             .sort()
             .pop();
           if (latestScan) {
-            const diffMinutes = Math.max(
-              1,
-              Math.round((Date.now() - Date.parse(latestScan)) / 60000)
-            );
-            scanFreshnessMinutes = diffMinutes;
-            scanFreshnessLabel = `Обновлено ${formatRelativeTime(latestScan) ?? ""}`.trim();
+            const parsedTime = Date.parse(latestScan);
+            if (!Number.isNaN(parsedTime)) {
+              const diffMinutes = Math.max(
+                1,
+                Math.round((Date.now() - parsedTime) / 60000)
+              );
+              scanFreshnessMinutes = diffMinutes;
+              scanFreshnessLabel = `Обновлено ${formatRelativeTime(latestScan) ?? ""}`.trim();
+            }
           }
         } catch {
           productsAtRisk = null;
@@ -275,7 +290,13 @@ export const useDashboardData = () => {
           loading: false,
           error: null,
         });
-      } catch {
+
+        setLastUpdated(new Date());
+      } catch (error) {
+        // Don't reset state if request was aborted (component unmounted)
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
         [
           "kpi-open-findings",
           "kpi-critical-high",
@@ -287,15 +308,37 @@ export const useDashboardData = () => {
           "recent-activity",
           "top-risks",
         ].forEach((id) => setWidgetState(id, emptyState()));
+      } finally {
+        setIsRefreshing(false);
       }
+  }, [setWidgetState]);
+
+  // Initial load
+  useEffect(() => {
+    load(true);
+
+    return () => {
+      controllerRef.current?.abort();
     };
+  }, [load]);
 
-    load();
+  // Auto-refresh interval
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      load(false);
+    }, REFRESH_INTERVAL_MS);
 
-    return () => controller.abort();
-  }, []);
+    return () => clearInterval(intervalId);
+  }, [load]);
+
+  const refresh = useCallback(() => {
+    load(false);
+  }, [load]);
 
   return {
     dataMap,
+    lastUpdated,
+    isRefreshing,
+    refresh,
   };
 };
