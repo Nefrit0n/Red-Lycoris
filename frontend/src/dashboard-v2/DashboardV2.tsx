@@ -19,7 +19,7 @@ import {
   GridView,
   PushPin,
 } from "@mui/icons-material";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import GridLayout, { Layout } from "react-grid-layout";
 import { WidthProvider } from "react-grid-layout";
@@ -33,6 +33,7 @@ import { glass, primitives, textStyles } from "../design-system/tokens";
 import { widgetRegistry } from "./widgets/registry";
 import { useDashboardLayout } from "./state/useDashboardLayout";
 import { useDashboardData } from "./data/useDashboardData";
+import { fetchProductsWithStats } from "../api/products";
 
 const columns = 12;
 const rowHeight = 96;
@@ -61,7 +62,22 @@ const DashboardV2 = () => {
   const [isTemplateOpen, setIsTemplateOpen] = useState(false);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
-  const { dataMap } = useDashboardData();
+  const [productOptions, setProductOptions] = useState<string[]>([]);
+  const { dataMap, lastUpdated, isRefreshing, refresh } = useDashboardData({ timeRange });
+
+  // Load product options from API
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchProductsWithStats(50, 0, controller.signal)
+      .then((response) => {
+        const names = response.data.map((p) => p.name).sort();
+        setProductOptions(names);
+      })
+      .catch(() => {
+        // Ignore errors, use empty list
+      });
+    return () => controller.abort();
+  }, []);
 
   const handleResetClick = () => {
     setIsResetConfirmOpen(true);
@@ -155,10 +171,9 @@ const DashboardV2 = () => {
                 sx={{ minWidth: 180 }}
               >
                 <MenuItem value="Все продукты">Все продукты</MenuItem>
-                <MenuItem value="Payments API">Payments API</MenuItem>
-                <MenuItem value="Identity Gateway">Identity Gateway</MenuItem>
-                <MenuItem value="Core Platform">Core Platform</MenuItem>
-                <MenuItem value="Mobile Wallet">Mobile Wallet</MenuItem>
+                {productOptions.map((name) => (
+                  <MenuItem key={name} value={name}>{name}</MenuItem>
+                ))}
               </Select>
               <Select
                 size="small"
@@ -183,10 +198,13 @@ const DashboardV2 = () => {
                 onChange={(event) => setDeveloperRepo(event.target.value)}
                 sx={{ minWidth: 180 }}
               >
-                <MenuItem value="Payments API">Payments API</MenuItem>
-                <MenuItem value="Identity Gateway">Identity Gateway</MenuItem>
-                <MenuItem value="Core Platform">Core Platform</MenuItem>
-                <MenuItem value="Mobile Wallet">Mobile Wallet</MenuItem>
+                {productOptions.length > 0 ? (
+                  productOptions.map((name) => (
+                    <MenuItem key={name} value={name}>{name}</MenuItem>
+                  ))
+                ) : (
+                  <MenuItem value={developerRepo}>{developerRepo}</MenuItem>
+                )}
               </Select>
               <Select
                 size="small"
@@ -225,6 +243,9 @@ const DashboardV2 = () => {
         onReset={handleResetClick}
         onOpenTemplates={() => setIsTemplateOpen(true)}
         onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+        lastUpdated={lastUpdated}
+        isRefreshing={isRefreshing}
+        onRefresh={refresh}
       />
 
       <Box sx={{ px: { xs: 3, md: 6, xl: 8 }, py: 4 }}>
