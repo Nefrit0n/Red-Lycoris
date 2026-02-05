@@ -1,32 +1,58 @@
-import { Box, Chip, Stack, alpha } from "@mui/material";
-import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision, RiskBand } from "../types/findings";
-import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS, RISK_BAND_LABELS } from "../utils/findingConstants";
+import { Box, Chip, Stack, Tooltip, alpha } from "@mui/material";
+import {
+  FindingCategory,
+  FindingOccurrenceStatus,
+  FindingSeverity,
+  FindingStatus,
+  PolicyDecision,
+  RiskBand,
+} from "../types/findings";
+import { DatePreset } from "../types/filters";
+import {
+  SEVERITY_STYLES,
+  STATUS_LABELS,
+  OCCURRENCE_LABELS,
+  RISK_BAND_LABELS,
+} from "../utils/findingConstants";
 import { primitives } from "../design-system/tokens/colors";
+import { CATEGORY_LABELS, DATE_PRESET_LABELS } from "../features/filters/labels";
+
+const DATE_PRESET_OVERRIDES: Partial<Record<DatePreset, string>> = {
+  "24h": "Последние 24 часа",
+  "7d": "Последние 7 дней",
+  "30d": "Последние 30 дней",
+  "90d": "Последние 90 дней",
+};
 
 interface FilterChipsProps {
-  productId: string;
-  productLabel: string;
+  productIds: string[];
   search: string;
-  filterSeverity: FindingSeverity | "";
-  filterStatus: FindingStatus | "";
-  filterRiskBand: RiskBand | "";
-  filterOccurrence: FindingOccurrenceStatus | "";
-  filterScannerType: string;
-  filterPolicyDecision: PolicyDecision | "";
+  severities: FindingSeverity[];
+  statuses: FindingStatus[];
+  riskBands: RiskBand[];
+  occurrences: FindingOccurrenceStatus[];
+  scannerTypes: string[];
+  policyDecisions: PolicyDecision[];
+  categories: FindingCategory[];
+  datePreset: DatePreset;
   dateFrom: string;
   dateTo: string;
   showRepeats: boolean;
-  onProductIdChange: (value: string) => void;
+  onProductIdsChange: (value: string[]) => void;
   onSearchChange: (value: string) => void;
-  onSeverityChange: (value: FindingSeverity | "") => void;
-  onStatusChange: (value: FindingStatus | "") => void;
-  onRiskBandChange: (value: RiskBand | "") => void;
-  onOccurrenceChange: (value: FindingOccurrenceStatus | "") => void;
-  onScannerTypeChange: (value: string) => void;
-  onPolicyDecisionChange: (value: PolicyDecision | "") => void;
+  onSeveritiesChange: (value: FindingSeverity[]) => void;
+  onStatusesChange: (value: FindingStatus[]) => void;
+  onRiskBandsChange: (value: RiskBand[]) => void;
+  onOccurrencesChange: (value: FindingOccurrenceStatus[]) => void;
+  onScannerTypesChange: (value: string[]) => void;
+  onPolicyDecisionsChange: (value: PolicyDecision[]) => void;
+  onCategoriesChange: (value: FindingCategory[]) => void;
+  onDatePresetChange: (value: DatePreset) => void;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
   onShowRepeatsChange: (value: boolean) => void;
+  maxVisible?: number;
+  onExpand?: () => void;
   onResetAll?: () => void;
 }
 
@@ -34,29 +60,34 @@ interface FilterChipsProps {
  * FilterChips component - displays active filters as removable chips
  */
 export const FilterChips = ({
-  productId,
-  productLabel,
+  productIds,
   search,
-  filterSeverity,
-  filterStatus,
-  filterRiskBand,
-  filterOccurrence,
-  filterScannerType,
-  filterPolicyDecision,
+  severities,
+  statuses,
+  riskBands,
+  occurrences,
+  scannerTypes,
+  policyDecisions,
+  categories,
+  datePreset,
   dateFrom,
   dateTo,
   showRepeats,
-  onProductIdChange,
+  onProductIdsChange,
   onSearchChange,
-  onSeverityChange,
-  onStatusChange,
-  onRiskBandChange,
-  onOccurrenceChange,
-  onScannerTypeChange,
-  onPolicyDecisionChange,
+  onSeveritiesChange,
+  onStatusesChange,
+  onRiskBandsChange,
+  onOccurrencesChange,
+  onScannerTypesChange,
+  onPolicyDecisionsChange,
+  onCategoriesChange,
+  onDatePresetChange,
   onDateFromChange,
   onDateToChange,
   onShowRepeatsChange,
+  maxVisible,
+  onExpand,
   onResetAll,
 }: FilterChipsProps) => {
   const chips: Array<{
@@ -65,73 +96,89 @@ export const FilterChips = ({
     onDelete: () => void;
   }> = [];
 
-  if (productId) {
+  productIds.forEach((productId) => {
     chips.push({
-      key: "product",
-      label: `Продукт: ${productLabel || productId}`,
-      onDelete: () => onProductIdChange(""),
+      key: `product-${productId}`,
+      label: `Продукт: ${productId}`,
+      onDelete: () => onProductIdsChange(productIds.filter((id) => id !== productId)),
     });
-  }
+  });
 
-  if (filterSeverity) {
+  severities.forEach((severity) => {
     chips.push({
-      key: "severity",
-      label: `Критичность: ${SEVERITY_STYLES[filterSeverity].label}`,
-      onDelete: () => onSeverityChange(""),
+      key: `severity-${severity}`,
+      label: `Критичность: ${SEVERITY_STYLES[severity].label}`,
+      onDelete: () => onSeveritiesChange(severities.filter((value) => value !== severity)),
     });
-  }
+  });
 
-  if (filterStatus) {
+  statuses.forEach((status) => {
     chips.push({
-      key: "status",
-      label: `Статус: ${STATUS_LABELS[filterStatus]}`,
-      onDelete: () => onStatusChange(""),
+      key: `status-${status}`,
+      label: `Статус: ${STATUS_LABELS[status]}`,
+      onDelete: () => onStatusesChange(statuses.filter((value) => value !== status)),
     });
-  }
+  });
 
-  if (filterRiskBand) {
+  riskBands.forEach((riskBand) => {
     chips.push({
-      key: "riskBand",
-      label: `Риск: ${RISK_BAND_LABELS[filterRiskBand]}`,
-      onDelete: () => onRiskBandChange(""),
+      key: `riskBand-${riskBand}`,
+      label: `Риск: ${RISK_BAND_LABELS[riskBand]}`,
+      onDelete: () => onRiskBandsChange(riskBands.filter((value) => value !== riskBand)),
     });
-  }
+  });
 
-  if (filterOccurrence) {
+  occurrences.forEach((occurrence) => {
     chips.push({
-      key: "occurrence",
-      label: `Повторяемость: ${OCCURRENCE_LABELS[filterOccurrence]}`,
-      onDelete: () => onOccurrenceChange(""),
+      key: `occurrence-${occurrence}`,
+      label: `Повторяемость: ${OCCURRENCE_LABELS[occurrence]}`,
+      onDelete: () =>
+        onOccurrencesChange(occurrences.filter((value) => value !== occurrence)),
     });
-  }
+  });
 
-  if (filterScannerType) {
+  scannerTypes.forEach((scanner) => {
     chips.push({
-      key: "scanner",
-      label: `Сканер: ${filterScannerType}`,
-      onDelete: () => onScannerTypeChange(""),
+      key: `scanner-${scanner}`,
+      label: `Сканер: ${scanner}`,
+      onDelete: () => onScannerTypesChange(scannerTypes.filter((value) => value !== scanner)),
     });
-  }
+  });
 
-  if (filterPolicyDecision) {
+  policyDecisions.forEach((decision) => {
     chips.push({
-      key: "policyDecision",
-      label: `Политика: ${filterPolicyDecision.toUpperCase()}`,
-      onDelete: () => onPolicyDecisionChange(""),
+      key: `policy-${decision}`,
+      label: `Политика: ${decision.toUpperCase()}`,
+      onDelete: () =>
+        onPolicyDecisionsChange(policyDecisions.filter((value) => value !== decision)),
     });
-  }
+  });
 
-  if (dateFrom || dateTo) {
+  categories.forEach((category) => {
+    chips.push({
+      key: `category-${category}`,
+      label: `Категория: ${CATEGORY_LABELS[category] ?? category}`,
+      onDelete: () => onCategoriesChange(categories.filter((value) => value !== category)),
+    });
+  });
+
+  if (datePreset || dateFrom || dateTo) {
+    const presetLabel = datePreset
+      ? DATE_PRESET_OVERRIDES[datePreset] ?? DATE_PRESET_LABELS[datePreset]
+      : "";
     const rangeLabel =
       dateFrom && dateTo
         ? `Период: с ${dateFrom} по ${dateTo}`
         : dateFrom
           ? `Период: с ${dateFrom}`
-          : `Период: до ${dateTo}`;
+          : dateTo
+            ? `Период: до ${dateTo}`
+            : "";
     chips.push({
       key: "period",
-      label: rangeLabel,
+      label: presetLabel || rangeLabel || "Период",
       onDelete: () => {
+        onDatePresetChange("");
         onDateFromChange("");
         onDateToChange("");
       },
@@ -158,6 +205,10 @@ export const FilterChips = ({
     return null;
   }
 
+  const visibleChips = typeof maxVisible === "number" ? chips.slice(0, maxVisible) : chips;
+  const remainingCount =
+    typeof maxVisible === "number" ? Math.max(0, chips.length - maxVisible) : 0;
+
   return (
     <Stack
       direction="row"
@@ -167,25 +218,60 @@ export const FilterChips = ({
       useFlexGap
       sx={{ rowGap: 1 }}
     >
-      {chips.map((chip) => (
+      {visibleChips.map((chip) => {
+        const labelContent = (
+          <Box
+            component="span"
+            sx={{
+              display: "block",
+              maxWidth: 220,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {chip.label}
+          </Box>
+        );
+
+        return (
+          <Tooltip key={chip.key} title={chip.label} arrow>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={labelContent}
+              onDelete={chip.onDelete}
+              sx={{
+                borderColor: alpha(primitives.night[500], 0.7),
+                bgcolor: alpha(primitives.night[700], 0.4),
+                color: primitives.night[100],
+                "& .MuiChip-label": { px: 1.25, py: 0.25 },
+                "& .MuiChip-deleteIcon": {
+                  color: alpha(primitives.night[300], 0.9),
+                  "&:hover": { color: primitives.lotus[300] },
+                },
+              }}
+            />
+          </Tooltip>
+        );
+      })}
+      {remainingCount > 0 ? (
         <Chip
-          key={chip.key}
           size="small"
           variant="outlined"
-          label={chip.label}
-          onDelete={chip.onDelete}
+          label={`ещё +${remainingCount}`}
+          onClick={onExpand}
           sx={{
             borderColor: alpha(primitives.night[500], 0.7),
             bgcolor: alpha(primitives.night[700], 0.4),
             color: primitives.night[100],
-            "& .MuiChip-label": { px: 1.25, py: 0.25 },
-            "& .MuiChip-deleteIcon": {
-              color: alpha(primitives.night[300], 0.9),
-              "&:hover": { color: primitives.lotus[300] },
+            "&:hover": {
+              borderColor: primitives.lotus[400],
+              bgcolor: alpha(primitives.lotus[500], 0.12),
             },
           }}
         />
-      ))}
+      ) : null}
       {onResetAll ? (
         <Box sx={{ ml: { xs: 0, md: "auto" } }}>
           <Chip

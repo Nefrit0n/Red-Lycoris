@@ -3,15 +3,16 @@ import { useState, type ComponentProps } from "react";
 import FilterDrawer, { DraftFiltersState } from "./FilterDrawer";
 
 const baseDraft: DraftFiltersState = {
-  productId: "",
-  productLabel: "",
+  productIds: [],
   search: "",
-  filterSeverity: "",
-  filterStatus: "",
-  filterRiskBand: "",
-  filterOccurrence: "",
-  filterScannerType: "",
-  filterPolicyDecision: "",
+  severities: [],
+  statuses: [],
+  riskBands: [],
+  occurrences: [],
+  scannerTypes: [],
+  policyDecisions: [],
+  categories: [],
+  datePreset: "",
   dateFrom: "",
   dateTo: "",
   showRepeats: false,
@@ -24,13 +25,7 @@ type DemoProps = Omit<ComponentProps<typeof FilterDrawer>, "draftFilters" | "set
 const Demo = (props: DemoProps) => {
   const [draft, setDraft] = useState<DraftFiltersState>(props.draftFilters ?? baseDraft);
 
-  return (
-    <FilterDrawer
-      {...props}
-      draftFilters={draft}
-      setDraftFilters={setDraft}
-    />
-  );
+  return <FilterDrawer {...props} draftFilters={draft} setDraftFilters={setDraft} />;
 };
 
 const meta: Meta<typeof FilterDrawer> = {
@@ -44,7 +39,6 @@ const meta: Meta<typeof FilterDrawer> = {
     draftFilters: baseDraft,
     setDraftFilters: () => undefined,
     activeCount: 0,
-    onSaveView: () => undefined,
   },
   render: (args) => {
     const { setDraftFilters: _unused, ...rest } = args;
@@ -69,10 +63,10 @@ export const Filled: Story = {
     draftFilters: {
       ...baseDraft,
       search: "jwt",
-      filterSeverity: "high",
-      filterStatus: "under_review",
-      filterScannerType: "Trivy",
-      filterPolicyDecision: "warn",
+      severities: ["high"],
+      statuses: ["under_review"],
+      scannerTypes: ["Trivy"],
+      policyDecisions: ["warn"],
       dateFrom: "2024-03-01",
     },
   },
@@ -83,9 +77,9 @@ export const WithPresets: Story = {
     activeCount: 3,
     draftFilters: {
       ...baseDraft,
-      filterStatus: "new",
-      filterSeverity: "critical",
-      filterScannerType: "SAST",
+      statuses: ["new"],
+      severities: ["critical"],
+      categories: ["SAST"],
     },
   },
 };

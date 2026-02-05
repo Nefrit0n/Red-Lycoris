@@ -3,7 +3,7 @@ import { fetchFindings } from "../api/findings";
 import { ApiError } from "../api/client";
 import { FindingListItemDTO } from "../types/findings";
 import { normalizeDateFrom, normalizeDateTo } from '../utils/urlHelpers';
-import { FiltersState } from './useUrlFiltersSync';
+import { FiltersState } from '../types/filters';
 import useDebouncedValue from './useDebouncedValue';
 
 interface UseFindingsDataOptions {
@@ -47,22 +47,26 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
   const retryTimeoutRef = useRef<number | null>(null);
   const retryAttemptsRef = useRef(0);
 
-  const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
+  const debouncedSearch = useDebouncedValue(filters.search, 400);
   const isUuid = (value: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       value
     );
-  const productIsUuid = Boolean(filters.productId && isUuid(filters.productId));
+  const productIds = filters.productIds;
+  const productUuidIds = productIds.filter((id) => isUuid(id));
+  const productKeys = productIds.filter((id) => !isUuid(id));
   const filterKey = [
     filters.page,
     filters.pageSize,
-    filters.productId,
-    filters.filterSeverity,
-    filters.filterStatus,
-    filters.filterRiskBand,
-    filters.filterOccurrence,
-    filters.filterScannerType,
-    filters.filterPolicyDecision,
+    filters.productIds.join(","),
+    filters.severities.join(","),
+    filters.statuses.join(","),
+    filters.riskBands.join(","),
+    filters.occurrences.join(","),
+    filters.scannerTypes.join(","),
+    filters.policyDecisions.join(","),
+    filters.categories.join(","),
+    filters.datePreset,
     filters.dateFrom,
     filters.dateTo,
     filters.showRepeats,
@@ -85,14 +89,15 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
       const params = {
         limit: filters.pageSize,
         offset: filters.page * filters.pageSize,
-        filterProductId: productIsUuid ? filters.productId : undefined,
-        filterProduct: productIsUuid ? undefined : filters.productId,
-        filterSeverity: filters.filterSeverity,
-        filterStatus: filters.filterStatus,
-        filterRiskBand: filters.filterRiskBand,
-        filterOccurrence: filters.filterOccurrence,
-        filterScannerType: filters.filterScannerType,
-        filterPolicyDecision: filters.filterPolicyDecision,
+        filterProductId: productUuidIds.length ? productUuidIds : undefined,
+        filterProduct: productKeys.length ? productKeys : undefined,
+        filterSeverity: filters.severities,
+        filterStatus: filters.statuses,
+        filterRiskBand: filters.riskBands,
+        filterOccurrence: filters.occurrences,
+        filterScannerType: filters.scannerTypes,
+        filterPolicyDecision: filters.policyDecisions,
+        filterCategory: filters.categories,
         search: debouncedSearch,
         dateFrom: normalizeDateFrom(filters.dateFrom),
         dateTo: normalizeDateTo(filters.dateTo),
@@ -186,13 +191,15 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     [
       filters.page,
       filters.pageSize,
-      filters.productId,
-      filters.filterSeverity,
-      filters.filterStatus,
-      filters.filterRiskBand,
-      filters.filterOccurrence,
-      filters.filterScannerType,
-      filters.filterPolicyDecision,
+      filters.productIds,
+      filters.severities,
+      filters.statuses,
+      filters.riskBands,
+      filters.occurrences,
+      filters.scannerTypes,
+      filters.policyDecisions,
+      filters.categories,
+      filters.datePreset,
       filters.dateFrom,
       filters.dateTo,
       filters.showRepeats,
@@ -200,7 +207,8 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
       filters.sortField,
       filters.sortOrder,
       debouncedSearch,
-      productIsUuid,
+      productUuidIds,
+      productKeys,
     ]
   );
 
@@ -211,7 +219,7 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     return () => controller.abort();
     // Use filterKey instead of fetchData to avoid re-fetching when callback reference changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey, hydrated, productIsUuid]);
+  }, [filterKey, hydrated]);
 
   // Auto-load total count after initial data loads
   useEffect(() => {
@@ -245,14 +253,15 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
           limit: filters.pageSize,
           offset: filters.page * filters.pageSize,
           includeMeta: true,
-          filterProductId: productIsUuid ? filters.productId : undefined,
-          filterProduct: productIsUuid ? undefined : filters.productId,
-          filterSeverity: filters.filterSeverity,
-          filterStatus: filters.filterStatus,
-          filterRiskBand: filters.filterRiskBand,
-          filterOccurrence: filters.filterOccurrence,
-          filterScannerType: filters.filterScannerType,
-          filterPolicyDecision: filters.filterPolicyDecision,
+          filterProductId: productUuidIds.length ? productUuidIds : undefined,
+          filterProduct: productKeys.length ? productKeys : undefined,
+          filterSeverity: filters.severities,
+          filterStatus: filters.statuses,
+          filterRiskBand: filters.riskBands,
+          filterOccurrence: filters.occurrences,
+          filterScannerType: filters.scannerTypes,
+          filterPolicyDecision: filters.policyDecisions,
+          filterCategory: filters.categories,
           search: debouncedSearch,
           dateFrom: normalizeDateFrom(filters.dateFrom),
           dateTo: normalizeDateTo(filters.dateTo),
@@ -284,13 +293,15 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     statsLoading,
     filters.page,
     filters.pageSize,
-    filters.productId,
-    filters.filterSeverity,
-    filters.filterStatus,
-    filters.filterRiskBand,
-    filters.filterOccurrence,
-    filters.filterScannerType,
-    filters.filterPolicyDecision,
+    filters.productIds,
+    filters.severities,
+    filters.statuses,
+    filters.riskBands,
+    filters.occurrences,
+    filters.scannerTypes,
+    filters.policyDecisions,
+    filters.categories,
+    filters.datePreset,
     filters.dateFrom,
     filters.dateTo,
     filters.showRepeats,
@@ -298,7 +309,8 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     filters.sortField,
     filters.sortOrder,
     debouncedSearch,
-    productIsUuid,
+    productUuidIds,
+    productKeys,
   ]);
 
   return {
