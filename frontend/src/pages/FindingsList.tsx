@@ -329,7 +329,7 @@ const FindingsList = () => {
         >
           <FilterChips
             productId={filters.productId}
-            productLabel={filters.productId}
+            productLabel={filters.productLabel}
             search={filters.searchInput}
             filterSeverity={filters.filterSeverity}
             filterStatus={filters.filterStatus}
@@ -584,6 +584,7 @@ const FindingsList = () => {
       >
         <FiltersPanel
           productId={filters.productId}
+          productLabel={filters.productLabel}
           search={filters.searchInput}
           filterSeverity={filters.filterSeverity}
           filterStatus={filters.filterStatus}
@@ -595,6 +596,7 @@ const FindingsList = () => {
           dateTo={filters.dateTo}
           showRepeats={filters.showRepeats}
           onProductIdChange={actions.setProductId}
+          onProductLabelChange={actions.setProductLabel}
           onSearchChange={actions.setSearchInput}
           onSeverityChange={actions.setFilterSeverity}
           onStatusChange={actions.setFilterStatus}

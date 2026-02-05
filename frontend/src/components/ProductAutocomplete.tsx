@@ -6,13 +6,14 @@ import { ProductListItemDTO } from "../types/products";
 interface ProductAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
+  onLabelChange?: (label: string) => void;
 }
 
 /**
  * Reusable ProductAutocomplete component
  * Handles product selection with autocomplete functionality
  */
-export const ProductAutocomplete = ({ value, onChange }: ProductAutocompleteProps) => {
+export const ProductAutocomplete = ({ value, onChange, onLabelChange }: ProductAutocompleteProps) => {
   const [products, setProducts] = useState<ProductListItemDTO[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productInput, setProductInput] = useState("");
@@ -62,6 +63,10 @@ export const ProductAutocomplete = ({ value, onChange }: ProductAutocompleteProp
   useEffect(() => {
     setProductInput(productLabel);
   }, [productLabel]);
+
+  useEffect(() => {
+    onLabelChange?.(productLabel);
+  }, [productLabel, onLabelChange]);
 
   return (
     <Autocomplete<ProductListItemDTO, false, false, true>
