@@ -30,7 +30,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
@@ -47,6 +47,7 @@ import { useFindingsData } from "../hooks/useFindingsData";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
+import { useProductLabel } from "../hooks/useProductLabel";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import { FindingListItemDTO, FindingStatus } from "../types/findings";
 
@@ -76,6 +77,8 @@ const FindingsList = () => {
     total,
     totalKnown,
     hasNextPage,
+    severityCounts,
+    statusCounts,
     loading,
     error,
     statsLoading,
@@ -175,6 +178,29 @@ const FindingsList = () => {
     filters.dateFrom,
     filters.dateTo,
     filters.showRepeats,
+  ]);
+
+  const { productLabel: resolvedProductLabel, hasMatch: hasProductMatch } = useProductLabel(
+    filters.productId
+  );
+
+  useEffect(() => {
+    if (!filters.productId) {
+      if (filters.productLabel) {
+        actions.setProductLabel("");
+      }
+      return;
+    }
+
+    if (hasProductMatch && resolvedProductLabel !== filters.productLabel) {
+      actions.setProductLabel(resolvedProductLabel);
+    }
+  }, [
+    actions,
+    filters.productId,
+    filters.productLabel,
+    hasProductMatch,
+    resolvedProductLabel,
   ]);
 
   // Apply saved view filters
@@ -595,6 +621,8 @@ const FindingsList = () => {
           dateFrom={filters.dateFrom}
           dateTo={filters.dateTo}
           showRepeats={filters.showRepeats}
+          severityCounts={severityCounts}
+          statusCounts={statusCounts}
           onProductIdChange={actions.setProductId}
           onProductLabelChange={actions.setProductLabel}
           onSearchChange={actions.setSearchInput}
