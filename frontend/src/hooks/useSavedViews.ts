@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
-import { FiltersState } from "./useUrlFiltersSync";
+import { FiltersState } from "../types/filters";
 
 export interface SavedView {
   id: string;
@@ -17,8 +17,8 @@ const BUILT_IN_VIEWS: SavedView[] = [
     id: "critical-high",
     name: "Критичные и высокие",
     filters: {
-      filterSeverity: "",
-      filterStatus: "new",
+      severities: ["critical", "high"],
+      statuses: ["new"],
     },
     isBuiltIn: true,
     createdAt: "",
@@ -27,8 +27,7 @@ const BUILT_IN_VIEWS: SavedView[] = [
     id: "needs-triage",
     name: "Нужен триаж",
     filters: {
-      filterStatus: "new",
-      filterSeverity: "",
+      statuses: ["new"],
     },
     isBuiltIn: true,
     createdAt: "",
@@ -37,7 +36,7 @@ const BUILT_IN_VIEWS: SavedView[] = [
     id: "false-positives",
     name: "Ложные срабатывания",
     filters: {
-      filterStatus: "false_positive",
+      statuses: ["false_positive"],
     },
     isBuiltIn: true,
     createdAt: "",
@@ -46,7 +45,7 @@ const BUILT_IN_VIEWS: SavedView[] = [
     id: "mitigated",
     name: "Митигированы",
     filters: {
-      filterStatus: "mitigated",
+      statuses: ["mitigated"],
     },
     isBuiltIn: true,
     createdAt: "",
@@ -55,7 +54,8 @@ const BUILT_IN_VIEWS: SavedView[] = [
 
 // Update built-in views with proper filters
 BUILT_IN_VIEWS[0].filters = {
-  filterStatus: "new",
+  statuses: ["new"],
+  severities: ["critical", "high"],
 };
 
 function loadSavedViews(): SavedView[] {
@@ -100,16 +100,18 @@ export function useSavedViews(): UseSavedViewsReturn {
       id: `custom-${Date.now()}`,
       name,
       filters: {
-        productId: filters.productId,
-        searchInput: filters.searchInput,
-        filterSeverity: filters.filterSeverity,
-        filterStatus: filters.filterStatus,
-        filterRiskBand: filters.filterRiskBand,
-        filterOccurrence: filters.filterOccurrence,
-        filterScannerType: filters.filterScannerType,
-        filterPolicyDecision: filters.filterPolicyDecision,
+        productIds: filters.productIds,
+        search: filters.search,
+        severities: filters.severities,
+        statuses: filters.statuses,
+        riskBands: filters.riskBands,
+        occurrences: filters.occurrences,
+        scannerTypes: filters.scannerTypes,
+        policyDecisions: filters.policyDecisions,
+        categories: filters.categories,
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
+        datePreset: filters.datePreset,
         showRepeats: filters.showRepeats,
       },
       isBuiltIn: false,
@@ -132,16 +134,18 @@ export function useSavedViews(): UseSavedViewsReturn {
               ...v,
               name,
               filters: {
-                productId: filters.productId,
-                searchInput: filters.searchInput,
-                filterSeverity: filters.filterSeverity,
-                filterStatus: filters.filterStatus,
-                filterRiskBand: filters.filterRiskBand,
-                filterOccurrence: filters.filterOccurrence,
-                filterScannerType: filters.filterScannerType,
-                filterPolicyDecision: filters.filterPolicyDecision,
+                productIds: filters.productIds,
+                search: filters.search,
+                severities: filters.severities,
+                statuses: filters.statuses,
+                riskBands: filters.riskBands,
+                occurrences: filters.occurrences,
+                scannerTypes: filters.scannerTypes,
+                policyDecisions: filters.policyDecisions,
+                categories: filters.categories,
                 dateFrom: filters.dateFrom,
                 dateTo: filters.dateTo,
+                datePreset: filters.datePreset,
                 showRepeats: filters.showRepeats,
               },
             }

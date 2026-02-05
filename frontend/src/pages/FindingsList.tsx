@@ -33,16 +33,18 @@ import { getCurrentUser } from "../api/auth";
 import ExportMenu from "../components/ExportMenu";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
-import FiltersPanel from "../components/FiltersPanel";
+import FiltersBar from "../components/FiltersBar";
+import FilterDrawer, { DraftFiltersState } from "../components/FilterDrawer";
 import { primitives } from "../design-system/tokens/colors";
-import { useUrlFiltersSync } from "../hooks/useUrlFiltersSync";
+import { useFiltersState } from "../hooks/useFiltersState";
 import { useFindingsData } from "../hooks/useFindingsData";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
-import { useProductLabel } from "../hooks/useProductLabel";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import { FindingListItemDTO, FindingStatus } from "../types/findings";
+import { FiltersState } from "../types/filters";
+import { countActiveFilters } from "../utils/filters";
 
 import FindingDetailsDrawer from "../components/FindingDetailsDrawer";
 
@@ -54,7 +56,7 @@ const FindingsList = () => {
   const location = useLocation();
 
   // URL <-> state
-  const [filters, actions, hydrated] = useUrlFiltersSync();
+  const [filters, actions, hydrated] = useFiltersState();
 
   // Bulk action state
   const [bulkStatus, setBulkStatus] = useState<FindingStatus>("under_review");
@@ -82,7 +84,7 @@ const FindingsList = () => {
   });
 
   // Debounced search for highlighting
-  const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
+  const debouncedSearch = useDebouncedValue(filters.search, 400);
 
   // Bulk actions
   const totalCount = totalKnown ? total ?? 0 : data.length;
@@ -102,6 +104,110 @@ const FindingsList = () => {
     selectionCount: bulk.selectionCount,
     listStateKey: LIST_STATE_KEY,
   });
+
+  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
+
+  const activeFiltersDraft: DraftFiltersState = useMemo(
+    () => ({
+      productIds: filters.productIds,
+      search: filters.search,
+      severities: filters.severities,
+      statuses: filters.statuses,
+      riskBands: filters.riskBands,
+      occurrences: filters.occurrences,
+      scannerTypes: filters.scannerTypes,
+      policyDecisions: filters.policyDecisions,
+      categories: filters.categories,
+      datePreset: filters.datePreset,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      showRepeats: filters.showRepeats,
+    }),
+    [
+      filters.productIds,
+      filters.search,
+      filters.severities,
+      filters.statuses,
+      filters.riskBands,
+      filters.occurrences,
+      filters.scannerTypes,
+      filters.policyDecisions,
+      filters.categories,
+      filters.datePreset,
+      filters.dateFrom,
+      filters.dateTo,
+      filters.showRepeats,
+    ]
+  );
+
+  const [draftFilters, setDraftFilters] = useState<DraftFiltersState>(activeFiltersDraft);
+
+  useEffect(() => {
+    if (!filtersDrawerOpen) {
+      setDraftFilters(activeFiltersDraft);
+    }
+  }, [activeFiltersDraft, filtersDrawerOpen]);
+
+  const handleOpenFilters = () => {
+    setDraftFilters(activeFiltersDraft);
+    setFiltersDrawerOpen(true);
+  };
+
+  const handleCloseFilters = () => {
+    setDraftFilters(activeFiltersDraft);
+    setFiltersDrawerOpen(false);
+  };
+
+  const handleApplyFilters = () => {
+    actions.setProductIds(draftFilters.productIds);
+    actions.setSearch(draftFilters.search);
+    actions.setSeverities(draftFilters.severities);
+    actions.setStatuses(draftFilters.statuses);
+    actions.setRiskBands(draftFilters.riskBands);
+    actions.setOccurrences(draftFilters.occurrences);
+    actions.setScannerTypes(draftFilters.scannerTypes);
+    actions.setPolicyDecisions(draftFilters.policyDecisions);
+    actions.setCategories(draftFilters.categories);
+    actions.setDatePreset(draftFilters.datePreset);
+    actions.setDateFrom(draftFilters.dateFrom);
+    actions.setDateTo(draftFilters.dateTo);
+    actions.setShowRepeats(draftFilters.showRepeats);
+    setFiltersDrawerOpen(false);
+  };
+
+  const handleResetDraft = () => {
+    setDraftFilters({
+      productIds: [],
+      search: "",
+      severities: [],
+      statuses: [],
+      riskBands: [],
+      occurrences: [],
+      scannerTypes: [],
+      policyDecisions: [],
+      categories: [],
+      datePreset: "",
+      dateFrom: "",
+      dateTo: "",
+      showRepeats: false,
+    });
+  };
+
+  const handleApplyView = (partial: Partial<FiltersState>) => {
+    if (partial.productIds) actions.setProductIds(partial.productIds);
+    if (partial.search !== undefined) actions.setSearch(partial.search);
+    if (partial.severities) actions.setSeverities(partial.severities);
+    if (partial.statuses) actions.setStatuses(partial.statuses);
+    if (partial.riskBands) actions.setRiskBands(partial.riskBands);
+    if (partial.occurrences) actions.setOccurrences(partial.occurrences);
+    if (partial.scannerTypes) actions.setScannerTypes(partial.scannerTypes);
+    if (partial.policyDecisions) actions.setPolicyDecisions(partial.policyDecisions);
+    if (partial.categories) actions.setCategories(partial.categories);
+    if (partial.datePreset !== undefined) actions.setDatePreset(partial.datePreset);
+    if (partial.dateFrom !== undefined) actions.setDateFrom(partial.dateFrom);
+    if (partial.dateTo !== undefined) actions.setDateTo(partial.dateTo);
+    if (partial.showRepeats !== undefined) actions.setShowRepeats(partial.showRepeats);
+  };
 
   const listReturnTo = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -141,29 +247,6 @@ const FindingsList = () => {
       JSON.stringify({ path: listPath, scrollY: window.scrollY })
     );
   }, [location.pathname, location.search]);
-
-  const { productLabel: resolvedProductLabel, hasMatch: hasProductMatch } = useProductLabel(
-    filters.productId
-  );
-
-  useEffect(() => {
-    if (!filters.productId) {
-      if (filters.productLabel) {
-        actions.setProductLabel("");
-      }
-      return;
-    }
-
-    if (hasProductMatch && resolvedProductLabel !== filters.productLabel) {
-      actions.setProductLabel(resolvedProductLabel);
-    }
-  }, [
-    actions,
-    filters.productId,
-    filters.productLabel,
-    hasProductMatch,
-    resolvedProductLabel,
-  ]);
 
   // Handle bulk apply
   const handleBulkApply = () => {
@@ -237,37 +320,39 @@ const FindingsList = () => {
       </Box>
 
       <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
-        <FiltersPanel
-          productId={filters.productId}
-          productLabel={filters.productLabel}
-          search={filters.searchInput}
-          filterSeverity={filters.filterSeverity}
-          filterStatus={filters.filterStatus}
-          filterRiskBand={filters.filterRiskBand}
-          filterOccurrence={filters.filterOccurrence}
-          filterScannerType={filters.filterScannerType}
-          filterPolicyDecision={filters.filterPolicyDecision}
-          dateFrom={filters.dateFrom}
-          dateTo={filters.dateTo}
-          showRepeats={filters.showRepeats}
-          severityCounts={severityCounts}
-          statusCounts={statusCounts}
-          onProductIdChange={actions.setProductId}
-          onProductLabelChange={actions.setProductLabel}
-          onSearchChange={actions.setSearchInput}
-          onSeverityChange={actions.setFilterSeverity}
-          onStatusChange={actions.setFilterStatus}
-          onRiskBandChange={actions.setFilterRiskBand}
-          onOccurrenceChange={actions.setFilterOccurrence}
-          onScannerTypeChange={actions.setFilterScannerType}
-          onPolicyDecisionChange={actions.setFilterPolicyDecision}
+        <FiltersBar
+          filters={filters}
+          onSearchChange={actions.setSearch}
+          onOpenFilters={handleOpenFilters}
+          onResetFilters={actions.resetAll}
+          onApplyPreset={actions.applyPreset}
+          onApplyView={handleApplyView}
+          onProductIdsChange={actions.setProductIds}
+          onSeveritiesChange={actions.setSeverities}
+          onStatusesChange={actions.setStatuses}
+          onRiskBandsChange={actions.setRiskBands}
+          onOccurrencesChange={actions.setOccurrences}
+          onScannerTypesChange={actions.setScannerTypes}
+          onPolicyDecisionsChange={actions.setPolicyDecisions}
+          onCategoriesChange={actions.setCategories}
+          onDatePresetChange={actions.setDatePreset}
           onDateFromChange={actions.setDateFrom}
           onDateToChange={actions.setDateTo}
           onShowRepeatsChange={actions.setShowRepeats}
-          onReset={actions.resetFilters}
-          showChips
         />
       </Box>
+
+      <FilterDrawer
+        open={filtersDrawerOpen}
+        onClose={handleCloseFilters}
+        onReset={handleResetDraft}
+        onApply={handleApplyFilters}
+        draftFilters={draftFilters}
+        setDraftFilters={setDraftFilters}
+        severityCounts={severityCounts}
+        statusCounts={statusCounts}
+        activeCount={countActiveFilters(filters)}
+      />
 
       {/* Error Alert */}
       {error && (
