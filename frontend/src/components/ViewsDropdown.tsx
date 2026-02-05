@@ -25,7 +25,7 @@ import {
 } from "@mui/icons-material";
 import { useState } from "react";
 import { useSavedViews, SavedView } from "../hooks/useSavedViews";
-import { FiltersState } from "../hooks/useUrlFiltersSync";
+import { FiltersState } from "../types/filters";
 
 interface ViewsDropdownProps {
   currentFilters: FiltersState;
@@ -89,14 +89,16 @@ const ViewsDropdown = ({ currentFilters, onApplyView }: ViewsDropdownProps) => {
   };
 
   const hasActiveFilters = Boolean(
-    currentFilters.productId ||
-      currentFilters.searchInput ||
-      currentFilters.filterSeverity ||
-      currentFilters.filterStatus ||
-      currentFilters.filterRiskBand ||
-      currentFilters.filterOccurrence ||
-      currentFilters.filterScannerType ||
-      currentFilters.filterPolicyDecision ||
+    currentFilters.productIds.length ||
+      currentFilters.search ||
+      currentFilters.severities.length ||
+      currentFilters.statuses.length ||
+      currentFilters.riskBands.length ||
+      currentFilters.occurrences.length ||
+      currentFilters.scannerTypes.length ||
+      currentFilters.policyDecisions.length ||
+      currentFilters.categories.length ||
+      currentFilters.datePreset ||
       currentFilters.dateFrom ||
       currentFilters.dateTo ||
       currentFilters.showRepeats
@@ -202,17 +204,8 @@ const ViewsDropdown = ({ currentFilters, onApplyView }: ViewsDropdownProps) => {
             label="Название вида"
             fullWidth
             value={newViewName}
-            onChange={(e) => setNewViewName(e.target.value)}
-            placeholder="Например, Критичные за неделю"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSaveView();
-              }
-            }}
+            onChange={(event) => setNewViewName(event.target.value)}
           />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-            Текущие фильтры будут сохранены в этом виде.
-          </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSaveDialogOpen(false)}>Отмена</Button>
@@ -231,12 +224,7 @@ const ViewsDropdown = ({ currentFilters, onApplyView }: ViewsDropdownProps) => {
             label="Новое название"
             fullWidth
             value={newViewName}
-            onChange={(e) => setNewViewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleRenameView();
-              }
-            }}
+            onChange={(event) => setNewViewName(event.target.value)}
           />
         </DialogContent>
         <DialogActions>
