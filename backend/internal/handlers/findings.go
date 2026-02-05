@@ -242,11 +242,20 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings status stats"})
 		}
+		categoryCounts, err := storage.CountFindingsByCategory(
+			c.Context(),
+			h.db,
+			filterParams.toStorageFilters(1, 0),
+		)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings category stats"})
+		}
 		if total != nil {
 			meta["total"] = *total
 		}
 		meta["severityCounts"] = severityCounts
 		meta["statusCounts"] = statusCounts
+		meta["categoryCounts"] = categoryCounts
 	}
 
 	return c.Status(http.StatusOK).JSON(resp)

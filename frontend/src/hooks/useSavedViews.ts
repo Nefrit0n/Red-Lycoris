@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
-import { FiltersState } from "../types/filters";
+import { FiltersState } from "../features/filters/types";
 
 export interface SavedView {
   id: string;
