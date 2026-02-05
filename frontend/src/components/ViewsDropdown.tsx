@@ -25,7 +25,7 @@ import {
 } from "@mui/icons-material";
 import { useState } from "react";
 import { useSavedViews, SavedView } from "../hooks/useSavedViews";
-import { FiltersState } from "../types/filters";
+import { FiltersState } from "../features/filters/types";
 
 interface ViewsDropdownProps {
   currentFilters: FiltersState;

@@ -1,18 +1,18 @@
-import { DatePreset } from "../../types/filters";
-import { FindingCategory } from "../../types/findings";
+import { DatePreset } from "./types";
 
-export const CATEGORY_LABELS: Record<FindingCategory, string> = {
+export type FilterCategory = "SAST" | "SCA" | "DAST" | "SECRETS" | "IAC" | "CONTAINER";
+
+export const CATEGORY_LABELS: Record<FilterCategory, string> = {
   SAST: "SAST",
   SCA: "SCA",
-  SECRETS: "Секреты",
   DAST: "DAST",
-  CONFIG: "Конфигурации",
+  SECRETS: "Секреты",
   IAC: "IaC",
-  CONTAINER: "Контейнеры",
+  CONTAINER: "Container",
 };
 
-export const CATEGORY_OPTIONS: Array<{ value: FindingCategory; label: string }> = (
-  Object.entries(CATEGORY_LABELS) as Array<[FindingCategory, string]>
+export const CATEGORY_OPTIONS: Array<{ value: FilterCategory; label: string }> = (
+  Object.entries(CATEGORY_LABELS) as Array<[FilterCategory, string]>
 ).map(([value, label]) => ({ value, label }));
 
 export const DATE_PRESET_OPTIONS: Array<{ id: DatePreset; label: string; days: number }> = [

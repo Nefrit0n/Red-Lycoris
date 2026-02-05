@@ -7,7 +7,44 @@ import {
   FindingStatus,
   FindingsListResponse,
 } from "../types/findings";
+import { FiltersState } from "../features/filters/types";
+import { normalizeDateFrom, normalizeDateTo } from "../features/filters/api";
 import { request, requestWithMeta } from "./client";
+
+const isUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+
+export const buildFindingsParamsFromFilters = (
+  filters: FiltersState,
+  options?: { includeMeta?: boolean; searchOverride?: string }
+): FetchFindingsParams => {
+  const productUuidIds = filters.productIds.filter((id) => isUuid(id));
+  const productKeys = filters.productIds.filter((id) => !isUuid(id));
+
+  return {
+    limit: filters.pageSize,
+    offset: filters.page * filters.pageSize,
+    includeMeta: options?.includeMeta,
+    filterProductId: productUuidIds.length ? productUuidIds : undefined,
+    filterProduct: productKeys.length ? productKeys : undefined,
+    filterSeverity: filters.severities,
+    filterStatus: filters.statuses,
+    filterRiskBand: filters.riskBands,
+    filterOccurrence: filters.occurrences,
+    filterScannerType: filters.scannerTypes,
+    filterPolicyDecision: filters.policyDecisions,
+    filterCategory: filters.categories,
+    search: options?.searchOverride ?? filters.search,
+    dateFrom: normalizeDateFrom(filters.dateFrom),
+    dateTo: normalizeDateTo(filters.dateTo),
+    canonicalOnly: !filters.showRepeats,
+    includeRepeats: filters.showRepeats,
+    sortField: filters.sortField,
+    sortOrder: filters.sortOrder,
+  };
+};
 
 export const fetchFindings = async (
   params: FetchFindingsParams,
@@ -66,6 +103,7 @@ export const fetchFindings = async (
       total?: number;
       severityCounts?: Record<string, number>;
       statusCounts?: Record<string, number>;
+      categoryCounts?: Array<{ category: string; count: number }>;
     };
   }>("/api/v1/findings", {
     signal,

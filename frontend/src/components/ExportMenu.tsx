@@ -17,8 +17,8 @@ import {
 import { useState } from "react";
 import { FindingListItemDTO } from "../types/findings";
 import { SEVERITY_STYLES, STATUS_LABELS } from "../utils/findingConstants";
-import { FiltersState } from "../types/filters";
-import { normalizeDateFrom, normalizeDateTo } from "../utils/urlHelpers";
+import { FiltersState } from "../features/filters/types";
+import { mapFiltersToApiParams } from "../features/filters/api";
 import { getAuthHeaders } from "../api/http";
 
 interface ExportMenuProps {
@@ -45,32 +45,12 @@ const buildExportUrl = (
   filters: FiltersState,
   debouncedSearch: string
 ): string => {
-  const params = new URLSearchParams();
+  const params = mapFiltersToApiParams({
+    ...filters,
+    search: debouncedSearch,
+  });
   params.set("format", format);
   params.set("limit", "20000"); // Max allowed by backend
-
-  const appendArray = (key: string, values: string[]) => {
-    values.forEach((value) => params.append(key, value));
-  };
-
-  if (filters.productIds.length) appendArray("product", filters.productIds);
-  if (filters.severities.length) appendArray("severity", filters.severities);
-  if (filters.statuses.length) appendArray("status", filters.statuses);
-  if (filters.riskBands.length) appendArray("riskBand", filters.riskBands);
-  if (filters.occurrences.length) appendArray("occurrenceStatus", filters.occurrences);
-  if (filters.scannerTypes.length) appendArray("scannerType", filters.scannerTypes);
-  if (filters.policyDecisions.length) appendArray("policyDecision", filters.policyDecisions);
-  if (filters.categories.length) appendArray("category", filters.categories);
-  if (debouncedSearch) params.set("search", debouncedSearch);
-  if (filters.importJobId) params.set("import_job_id", filters.importJobId);
-
-  const dateFrom = normalizeDateFrom(filters.dateFrom);
-  const dateTo = normalizeDateTo(filters.dateTo);
-  if (dateFrom) params.set("dateFrom", dateFrom);
-  if (dateTo) params.set("dateTo", dateTo);
-
-  params.set("canonicalOnly", String(!filters.showRepeats));
-  params.set("includeRepeats", String(filters.showRepeats));
 
   // Note: backend export doesn't support sorting, so we don't include sortField/sortOrder
 
