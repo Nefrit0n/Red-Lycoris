@@ -31,6 +31,12 @@ cp .env.example .env
 docker compose up --build
 ```
 
+Для фонового запуска можно добавить `-d`, а для остановки всех сервисов используйте:
+
+```bash
+docker compose down
+```
+
 Доступные сервисы:
 
 - Frontend (Vite dev): `http://localhost:5173`
