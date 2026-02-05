@@ -26,15 +26,12 @@ import {
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
-import ExportMenu from "../components/ExportMenu";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
-import FiltersBar from "../components/FiltersBar";
-import FilterDrawer, { DraftFiltersState } from "../components/FilterDrawer";
 import { primitives } from "../design-system/tokens/colors";
 import { useFiltersState } from "../hooks/useFiltersState";
 import { useFindingsData } from "../hooks/useFindingsData";
@@ -43,8 +40,8 @@ import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import { FindingListItemDTO, FindingStatus } from "../types/findings";
-import { FiltersState } from "../types/filters";
-import { countActiveFilters } from "../utils/filters";
+import { FiltersState } from "../features/filters/types";
+import FindingsTopBar from "../features/findings/toolbar/FindingsTopBar";
 
 import FindingDetailsDrawer from "../components/FindingDetailsDrawer";
 
@@ -56,7 +53,9 @@ const FindingsList = () => {
   const location = useLocation();
 
   // URL <-> state
-  const [filters, actions, hydrated] = useFiltersState();
+  const { state: filters, setPartial, resetAll } = useFiltersState();
+
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
 
   // Bulk action state
   const [bulkStatus, setBulkStatus] = useState<FindingStatus>("under_review");
@@ -70,8 +69,6 @@ const FindingsList = () => {
     total,
     totalKnown,
     hasNextPage,
-    severityCounts,
-    statusCounts,
     loading,
     error,
     statsLoading,
@@ -80,7 +77,6 @@ const FindingsList = () => {
     handleRetry,
   } = useFindingsData({
     filters,
-    hydrated,
   });
 
   // Debounced search for highlighting
@@ -99,115 +95,11 @@ const FindingsList = () => {
 
   // Drawer state
   const drawer = useDrawerState({
-    selectedFindingId: filters.selectedFindingId,
-    setSelectedFindingId: actions.setSelectedFindingId,
+    selectedFindingId,
+    setSelectedFindingId,
     selectionCount: bulk.selectionCount,
     listStateKey: LIST_STATE_KEY,
   });
-
-  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
-
-  const activeFiltersDraft: DraftFiltersState = useMemo(
-    () => ({
-      productIds: filters.productIds,
-      search: filters.search,
-      severities: filters.severities,
-      statuses: filters.statuses,
-      riskBands: filters.riskBands,
-      occurrences: filters.occurrences,
-      scannerTypes: filters.scannerTypes,
-      policyDecisions: filters.policyDecisions,
-      categories: filters.categories,
-      datePreset: filters.datePreset,
-      dateFrom: filters.dateFrom,
-      dateTo: filters.dateTo,
-      showRepeats: filters.showRepeats,
-    }),
-    [
-      filters.productIds,
-      filters.search,
-      filters.severities,
-      filters.statuses,
-      filters.riskBands,
-      filters.occurrences,
-      filters.scannerTypes,
-      filters.policyDecisions,
-      filters.categories,
-      filters.datePreset,
-      filters.dateFrom,
-      filters.dateTo,
-      filters.showRepeats,
-    ]
-  );
-
-  const [draftFilters, setDraftFilters] = useState<DraftFiltersState>(activeFiltersDraft);
-
-  useEffect(() => {
-    if (!filtersDrawerOpen) {
-      setDraftFilters(activeFiltersDraft);
-    }
-  }, [activeFiltersDraft, filtersDrawerOpen]);
-
-  const handleOpenFilters = () => {
-    setDraftFilters(activeFiltersDraft);
-    setFiltersDrawerOpen(true);
-  };
-
-  const handleCloseFilters = () => {
-    setDraftFilters(activeFiltersDraft);
-    setFiltersDrawerOpen(false);
-  };
-
-  const handleApplyFilters = () => {
-    actions.setProductIds(draftFilters.productIds);
-    actions.setSearch(draftFilters.search);
-    actions.setSeverities(draftFilters.severities);
-    actions.setStatuses(draftFilters.statuses);
-    actions.setRiskBands(draftFilters.riskBands);
-    actions.setOccurrences(draftFilters.occurrences);
-    actions.setScannerTypes(draftFilters.scannerTypes);
-    actions.setPolicyDecisions(draftFilters.policyDecisions);
-    actions.setCategories(draftFilters.categories);
-    actions.setDatePreset(draftFilters.datePreset);
-    actions.setDateFrom(draftFilters.dateFrom);
-    actions.setDateTo(draftFilters.dateTo);
-    actions.setShowRepeats(draftFilters.showRepeats);
-    setFiltersDrawerOpen(false);
-  };
-
-  const handleResetDraft = () => {
-    setDraftFilters({
-      productIds: [],
-      search: "",
-      severities: [],
-      statuses: [],
-      riskBands: [],
-      occurrences: [],
-      scannerTypes: [],
-      policyDecisions: [],
-      categories: [],
-      datePreset: "",
-      dateFrom: "",
-      dateTo: "",
-      showRepeats: false,
-    });
-  };
-
-  const handleApplyView = (partial: Partial<FiltersState>) => {
-    if (partial.productIds) actions.setProductIds(partial.productIds);
-    if (partial.search !== undefined) actions.setSearch(partial.search);
-    if (partial.severities) actions.setSeverities(partial.severities);
-    if (partial.statuses) actions.setStatuses(partial.statuses);
-    if (partial.riskBands) actions.setRiskBands(partial.riskBands);
-    if (partial.occurrences) actions.setOccurrences(partial.occurrences);
-    if (partial.scannerTypes) actions.setScannerTypes(partial.scannerTypes);
-    if (partial.policyDecisions) actions.setPolicyDecisions(partial.policyDecisions);
-    if (partial.categories) actions.setCategories(partial.categories);
-    if (partial.datePreset !== undefined) actions.setDatePreset(partial.datePreset);
-    if (partial.dateFrom !== undefined) actions.setDateFrom(partial.dateFrom);
-    if (partial.dateTo !== undefined) actions.setDateTo(partial.dateTo);
-    if (partial.showRepeats !== undefined) actions.setShowRepeats(partial.showRepeats);
-  };
 
   const listReturnTo = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -216,12 +108,18 @@ const FindingsList = () => {
     return `${location.pathname}${qs ? `?${qs}` : ""}`;
   }, [location.pathname, location.search]);
 
+  const handleApplyView = useCallback(
+    (partial: Partial<FiltersState>) => {
+      setPartial({ ...partial, page: 0 });
+    },
+    [setPartial]
+  );
+
   const handleSortChange = useCallback(
     (field: keyof FindingListItemDTO) => {
       if (filters.sortField === field) {
-        actions.setSortOrder(filters.sortOrder === "asc" ? "desc" : "asc");
+        setPartial({ sortOrder: filters.sortOrder === "asc" ? "desc" : "asc" });
       } else {
-        actions.setSortField(field);
         const defaultOrder: "asc" | "desc" =
           field === "severity" ||
           field === "riskScore" ||
@@ -230,11 +128,11 @@ const FindingsList = () => {
           field === "updatedAt"
             ? "desc"
             : "asc";
-        actions.setSortOrder(defaultOrder);
+        setPartial({ sortField: field, sortOrder: defaultOrder });
       }
-      actions.setPage(0);
+      setPartial({ page: 0 });
     },
-    [actions, filters.sortField, filters.sortOrder]
+    [filters.sortField, filters.sortOrder, setPartial]
   );
 
   const user = getCurrentUser();
@@ -267,91 +165,17 @@ const FindingsList = () => {
         overflow: "hidden",
       }}
     >
-      {/* Compact Toolbar - Single row, never shifts */}
-      <Box
-        sx={{
-          px: { xs: 2, md: 3 },
-          py: 1.5,
-          borderBottom: "1px solid",
-          borderColor: primitives.night[700],
-          bgcolor: primitives.night[800],
-          flexShrink: 0,
-        }}
-      >
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          spacing={2}
-        >
-          {/* Left: Title + count */}
-          <Stack direction="row" alignItems="center" spacing={1.5}>
-            <Typography
-              variant="h6"
-              component="h1"
-              sx={{
-                fontWeight: 600,
-                color: primitives.night[100],
-                flexShrink: 0,
-              }}
-            >
-              Findings
-            </Typography>
-            {totalKnown && (
-              <Typography variant="caption" sx={{ color: primitives.night[500] }}>
-                {totalCount}
-              </Typography>
-            )}
-          </Stack>
-
-          {/* Right: Actions */}
-          <Stack direction="row" spacing={1} alignItems="center">
-            <ExportMenu
-              data={data}
-              filename="findings"
-              disabled={loading}
-              totalCount={totalCount}
-              selectAllMatching={bulk.selectAllMatching}
-              filters={filters}
-              debouncedSearch={debouncedSearch}
-            />
-          </Stack>
-        </Stack>
-      </Box>
-
-      <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
-        <FiltersBar
-          filters={filters}
-          onSearchChange={actions.setSearch}
-          onOpenFilters={handleOpenFilters}
-          onResetFilters={actions.resetAll}
-          onApplyPreset={actions.applyPreset}
-          onApplyView={handleApplyView}
-          onProductIdsChange={actions.setProductIds}
-          onSeveritiesChange={actions.setSeverities}
-          onStatusesChange={actions.setStatuses}
-          onRiskBandsChange={actions.setRiskBands}
-          onOccurrencesChange={actions.setOccurrences}
-          onScannerTypesChange={actions.setScannerTypes}
-          onPolicyDecisionsChange={actions.setPolicyDecisions}
-          onCategoriesChange={actions.setCategories}
-          onDatePresetChange={actions.setDatePreset}
-          onDateFromChange={actions.setDateFrom}
-          onDateToChange={actions.setDateTo}
-          onShowRepeatsChange={actions.setShowRepeats}
-        />
-      </Box>
-
-      <FilterDrawer
-        open={filtersDrawerOpen}
-        onClose={handleCloseFilters}
-        onReset={handleResetDraft}
-        onApply={handleApplyFilters}
-        draftFilters={draftFilters}
-        setDraftFilters={setDraftFilters}
-        severityCounts={severityCounts}
-        statusCounts={statusCounts}
-        activeCount={countActiveFilters(filters)}
+      <FindingsTopBar
+        totalCount={totalCount}
+        totalKnown={totalKnown}
+        filters={filters}
+        onSearchChange={(value) => setPartial({ search: value, page: 0 })}
+        onApplyView={handleApplyView}
+        exportData={data}
+        exportDisabled={loading}
+        exportTotalCount={totalCount}
+        exportSelectAllMatching={bulk.selectAllMatching}
+        debouncedSearch={debouncedSearch}
       />
 
       {/* Error Alert */}
@@ -389,12 +213,12 @@ const FindingsList = () => {
           loading={loading || bulk.loading}
           errorMessage={error || bulk.error}
           onRetry={handleRetry}
-          onResetFilters={actions.resetAll}
+          onResetFilters={resetAll}
           batchMode={bulk.selectionCount > 0}
           highlightQuery={debouncedSearch}
           rowCount={filters.pageSize}
           onOpenDetails={(id) => drawer.openDrawer(id)}
-          activeFindingId={filters.selectedFindingId}
+          activeFindingId={selectedFindingId}
           returnTo={listReturnTo}
           onNavigateToDetail={handleNavigateToDetail}
           compactMode
@@ -421,10 +245,10 @@ const FindingsList = () => {
           currentCount={data.length}
           onPageChange={(nextPage) => {
             if (nextPage > filters.page && !hasNextPage) return;
-            actions.setPage(nextPage);
+            setPartial({ page: nextPage });
           }}
           onPageSizeChange={(v) => {
-            actions.setPageSize(v);
+            setPartial({ pageSize: v, page: 0 });
             bulk.handleClearSelection();
           }}
           loading={statsLoading}
@@ -568,7 +392,7 @@ const FindingsList = () => {
 
       {/* Finding Details Drawer */}
       <FindingDetailsDrawer
-        findingId={filters.selectedFindingId}
+        findingId={selectedFindingId}
         returnTo={listReturnTo}
         onClose={drawer.closeDrawer}
       />

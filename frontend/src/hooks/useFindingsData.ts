@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchFindings } from "../api/findings";
+import { buildFindingsParamsFromFilters, fetchFindings } from "../api/findings";
 import { ApiError } from "../api/client";
 import { FindingListItemDTO } from "../types/findings";
-import { normalizeDateFrom, normalizeDateTo } from '../utils/urlHelpers';
-import { FiltersState } from '../types/filters';
+import { FiltersState } from '../features/filters/types';
 import useDebouncedValue from './useDebouncedValue';
 
 interface UseFindingsDataOptions {
   filters: FiltersState;
-  hydrated: boolean;
   autoLoadTotal?: boolean;
 }
 
@@ -31,7 +29,10 @@ interface UseFindingsDataResult {
  * Custom hook for fetching findings data based on filters
  * Handles loading, error states, and debounced search
  */
-export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: UseFindingsDataOptions): UseFindingsDataResult {
+export function useFindingsData({
+  filters,
+  autoLoadTotal = true,
+}: UseFindingsDataOptions): UseFindingsDataResult {
   const [data, setData] = useState<FindingListItemDTO[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [totalKnown, setTotalKnown] = useState(false);
@@ -48,13 +49,6 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
   const retryAttemptsRef = useRef(0);
 
   const debouncedSearch = useDebouncedValue(filters.search, 400);
-  const isUuid = (value: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      value
-    );
-  const productIds = filters.productIds;
-  const productUuidIds = productIds.filter((id) => isUuid(id));
-  const productKeys = productIds.filter((id) => !isUuid(id));
   const filterKey = [
     filters.page,
     filters.pageSize,
@@ -70,7 +64,6 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     filters.dateFrom,
     filters.dateTo,
     filters.showRepeats,
-    filters.importJobId,
     filters.sortField,
     filters.sortOrder,
     debouncedSearch,
@@ -86,27 +79,9 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
 
   const fetchData = useCallback(
     async (signal?: AbortSignal) => {
-      const params = {
-        limit: filters.pageSize,
-        offset: filters.page * filters.pageSize,
-        filterProductId: productUuidIds.length ? productUuidIds : undefined,
-        filterProduct: productKeys.length ? productKeys : undefined,
-        filterSeverity: filters.severities,
-        filterStatus: filters.statuses,
-        filterRiskBand: filters.riskBands,
-        filterOccurrence: filters.occurrences,
-        filterScannerType: filters.scannerTypes,
-        filterPolicyDecision: filters.policyDecisions,
-        filterCategory: filters.categories,
-        search: debouncedSearch,
-        dateFrom: normalizeDateFrom(filters.dateFrom),
-        dateTo: normalizeDateTo(filters.dateTo),
-        canonicalOnly: !filters.showRepeats,
-        includeRepeats: filters.showRepeats,
-        importJobId: filters.importJobId,
-        sortField: filters.sortField,
-        sortOrder: filters.sortOrder,
-      };
+      const params = buildFindingsParamsFromFilters(filters, {
+        searchOverride: debouncedSearch,
+      });
       const requestKey = JSON.stringify(params);
 
       const isAutoRequest = Boolean(signal);
@@ -203,32 +178,28 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
       filters.dateFrom,
       filters.dateTo,
       filters.showRepeats,
-      filters.importJobId,
       filters.sortField,
       filters.sortOrder,
       debouncedSearch,
-      productUuidIds,
-      productKeys,
     ]
   );
 
   useEffect(() => {
-    if (!hydrated) return;
     const controller = new AbortController();
     fetchData(controller.signal);
     return () => controller.abort();
     // Use filterKey instead of fetchData to avoid re-fetching when callback reference changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey, hydrated]);
+  }, [filterKey]);
 
   // Auto-load total count after initial data loads
   useEffect(() => {
-    if (autoLoadTotal && hydrated && !totalKnown && !loading && !statsLoading && data.length > 0) {
+    if (autoLoadTotal && !totalKnown && !loading && !statsLoading && data.length > 0) {
       loadStats();
     }
     // Only run when data first loads or filters change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLoadTotal, hydrated, loading, data.length > 0]);
+  }, [autoLoadTotal, loading, data.length > 0]);
 
   useEffect(() => {
     return () => {
@@ -249,28 +220,10 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     setError(null);
     try {
       const response = await fetchFindings(
-        {
-          limit: filters.pageSize,
-          offset: filters.page * filters.pageSize,
+        buildFindingsParamsFromFilters(filters, {
           includeMeta: true,
-          filterProductId: productUuidIds.length ? productUuidIds : undefined,
-          filterProduct: productKeys.length ? productKeys : undefined,
-          filterSeverity: filters.severities,
-          filterStatus: filters.statuses,
-          filterRiskBand: filters.riskBands,
-          filterOccurrence: filters.occurrences,
-          filterScannerType: filters.scannerTypes,
-          filterPolicyDecision: filters.policyDecisions,
-          filterCategory: filters.categories,
-          search: debouncedSearch,
-          dateFrom: normalizeDateFrom(filters.dateFrom),
-          dateTo: normalizeDateTo(filters.dateTo),
-          canonicalOnly: !filters.showRepeats,
-          includeRepeats: filters.showRepeats,
-          importJobId: filters.importJobId,
-          sortField: filters.sortField,
-          sortOrder: filters.sortOrder,
-        }
+          searchOverride: debouncedSearch,
+        })
       );
       if (response.meta?.severityCounts) {
         setSeverityCounts(response.meta.severityCounts);
@@ -305,12 +258,9 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     filters.dateFrom,
     filters.dateTo,
     filters.showRepeats,
-    filters.importJobId,
     filters.sortField,
     filters.sortOrder,
     debouncedSearch,
-    productUuidIds,
-    productKeys,
   ]);
 
   return {

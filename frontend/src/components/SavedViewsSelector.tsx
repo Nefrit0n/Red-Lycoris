@@ -23,7 +23,7 @@ import {
 } from "@mui/icons-material";
 import { useState } from "react";
 import { SavedView, useSavedViews } from "../hooks/useSavedViews";
-import { FiltersState } from "../types/filters";
+import { FiltersState } from "../features/filters/types";
 
 interface SavedViewsSelectorProps {
   currentFilters: FiltersState;
