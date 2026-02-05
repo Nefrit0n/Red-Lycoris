@@ -187,7 +187,7 @@ export const useDashboardData = () => {
           {
             limit: 8,
             offset: 0,
-            filterSeverity: "critical",
+            filterSeverity: ["critical"],
             sortField: "createdAt",
             sortOrder: "desc",
           },
