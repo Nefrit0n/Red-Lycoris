@@ -17,7 +17,7 @@ import {
 import { useState } from "react";
 import { FindingListItemDTO } from "../types/findings";
 import { SEVERITY_STYLES, STATUS_LABELS } from "../utils/findingConstants";
-import { FiltersState } from "../hooks/useUrlFiltersSync";
+import { FiltersState } from "../types/filters";
 import { normalizeDateFrom, normalizeDateTo } from "../utils/urlHelpers";
 import { getAuthHeaders } from "../api/http";
 
@@ -49,13 +49,18 @@ const buildExportUrl = (
   params.set("format", format);
   params.set("limit", "20000"); // Max allowed by backend
 
-  if (filters.productId) params.set("product", filters.productId);
-  if (filters.filterSeverity) params.set("severity", filters.filterSeverity);
-  if (filters.filterStatus) params.set("status", filters.filterStatus);
-  if (filters.filterRiskBand) params.set("riskBand", filters.filterRiskBand);
-  if (filters.filterOccurrence) params.set("occurrenceStatus", filters.filterOccurrence);
-  if (filters.filterScannerType) params.set("scannerType", filters.filterScannerType);
-  if (filters.filterPolicyDecision) params.set("policyDecision", filters.filterPolicyDecision);
+  const appendArray = (key: string, values: string[]) => {
+    values.forEach((value) => params.append(key, value));
+  };
+
+  if (filters.productIds.length) appendArray("product", filters.productIds);
+  if (filters.severities.length) appendArray("severity", filters.severities);
+  if (filters.statuses.length) appendArray("status", filters.statuses);
+  if (filters.riskBands.length) appendArray("riskBand", filters.riskBands);
+  if (filters.occurrences.length) appendArray("occurrenceStatus", filters.occurrences);
+  if (filters.scannerTypes.length) appendArray("scannerType", filters.scannerTypes);
+  if (filters.policyDecisions.length) appendArray("policyDecision", filters.policyDecisions);
+  if (filters.categories.length) appendArray("category", filters.categories);
   if (debouncedSearch) params.set("search", debouncedSearch);
   if (filters.importJobId) params.set("import_job_id", filters.importJobId);
 
