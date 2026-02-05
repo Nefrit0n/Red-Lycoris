@@ -389,7 +389,7 @@ const FindingsList = () => {
           loading={loading || bulk.loading}
           errorMessage={error || bulk.error}
           onRetry={handleRetry}
-          onResetFilters={actions.resetFilters}
+          onResetFilters={actions.resetAll}
           batchMode={bulk.selectionCount > 0}
           highlightQuery={debouncedSearch}
           rowCount={filters.pageSize}

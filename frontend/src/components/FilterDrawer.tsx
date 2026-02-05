@@ -1,4 +1,4 @@
-import { Box, Button, Drawer, Stack, Typography, alpha } from "@mui/material";
+import { Box, Button, Drawer, IconButton, Stack, Typography, alpha } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { focusRing } from "../design-system/tokens";
 import { primitives } from "../design-system/tokens/colors";
