@@ -7,6 +7,7 @@ import {
   Grid,
   InputLabel,
   MenuItem,
+  Autocomplete,
   Select,
   SelectChangeEvent,
   Stack,
@@ -20,9 +21,11 @@ import { FindingOccurrenceStatus, FindingSeverity, FindingStatus, PolicyDecision
 import { ProductAutocomplete } from "./ProductAutocomplete";
 import { FilterChips } from "./FilterChips";
 import { SEVERITY_STYLES, STATUS_LABELS, OCCURRENCE_LABELS, RISK_BAND_LABELS } from "../utils/findingConstants";
+import { SCANNER_TYPE_OPTIONS } from "../utils/scannerTypes";
 
 interface FiltersPanelProps {
   productId: string;
+  productLabel: string;
   search: string;
   filterSeverity: FindingSeverity | "";
   filterStatus: FindingStatus | "";
@@ -34,6 +37,7 @@ interface FiltersPanelProps {
   dateTo: string;
   showRepeats: boolean;
   onProductIdChange: (value: string) => void;
+  onProductLabelChange: (value: string) => void;
   onSearchChange: (value: string) => void;
   onSeverityChange: (value: FindingSeverity | "") => void;
   onStatusChange: (value: FindingStatus | "") => void;
@@ -51,6 +55,7 @@ interface FiltersPanelProps {
 
 const FiltersPanel = ({
   productId,
+  productLabel,
   search,
   filterSeverity,
   filterStatus,
@@ -62,6 +67,7 @@ const FiltersPanel = ({
   dateTo,
   showRepeats,
   onProductIdChange,
+  onProductLabelChange,
   onSearchChange,
   onSeverityChange,
   onStatusChange,
@@ -92,13 +98,22 @@ const FiltersPanel = ({
     onRiskBandChange(event.target.value as RiskBand | "");
   };
 
-  const handleScannerChange = (event: SelectChangeEvent) => {
-    onScannerTypeChange(event.target.value);
-  };
-
   const handlePolicyDecisionChange = (event: SelectChangeEvent) => {
     onPolicyDecisionChange(event.target.value as PolicyDecision | "");
   };
+
+  const scannerOptions = useMemo(() => {
+    const hasScanner = Boolean(filterScannerType);
+    const hasMatch = SCANNER_TYPE_OPTIONS.some((option) => option.value === filterScannerType);
+    if (!hasScanner || hasMatch) return SCANNER_TYPE_OPTIONS;
+    return [
+      { value: filterScannerType, label: filterScannerType },
+      ...SCANNER_TYPE_OPTIONS,
+    ];
+  }, [filterScannerType]);
+
+  const selectedScanner =
+    scannerOptions.find((option) => option.value === filterScannerType) || null;
 
   const hasActiveFilters =
     Boolean(productId) ||
@@ -141,15 +156,10 @@ const FiltersPanel = ({
             Основные
           </Typography>
           <Stack spacing={1.5}>
-            <ProductAutocomplete value={productId} onChange={onProductIdChange} />
-            <TextField
-              label="Поиск"
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              size="small"
-              fullWidth
-              placeholder="Название / CVE / правило / fingerprint"
-              inputProps={{ "aria-label": "Поиск по находкам" }}
+            <ProductAutocomplete
+              value={productId}
+              onChange={onProductIdChange}
+              onLabelChange={onProductLabelChange}
             />
           </Stack>
         </Box>
@@ -223,22 +233,35 @@ const FiltersPanel = ({
               </FormControl>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
-              <FormControl size="small" fullWidth>
-                <InputLabel id="filter-scanner-label">Сканер</InputLabel>
-                <Select
-                  labelId="filter-scanner-label"
-                  label="Сканер"
-                  value={filterScannerType}
-                  onChange={handleScannerChange}
-                >
-                  <MenuItem value="">
-                    <em>Все</em>
-                  </MenuItem>
-                  <MenuItem value="trivy">Trivy</MenuItem>
-                  <MenuItem value="zap">ZAP</MenuItem>
-                  <MenuItem value="semgrep">Semgrep</MenuItem>
-                </Select>
-              </FormControl>
+              <Autocomplete
+                options={scannerOptions}
+                value={selectedScanner}
+                freeSolo
+                onChange={(_, value) => {
+                  if (typeof value === "string") {
+                    onScannerTypeChange(value.trim());
+                    return;
+                  }
+                  onScannerTypeChange(value?.value ?? "");
+                }}
+                onInputChange={(_, value) => {
+                  if (value === "" && filterScannerType) {
+                    onScannerTypeChange("");
+                  }
+                }}
+                getOptionLabel={(option) => {
+                  if (typeof option === "string") return option;
+                  return option.label;
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Сканер"
+                    placeholder="Все"
+                    size="small"
+                  />
+                )}
+              />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
               <FormControl size="small" fullWidth>
@@ -294,7 +317,7 @@ const FiltersPanel = ({
                     color="primary"
                   />
                 }
-                label="Только повторы"
+                label="Показывать повторы"
                 sx={{ userSelect: "none" }}
               />
             </Grid>
@@ -339,7 +362,7 @@ const FiltersPanel = ({
         hasActiveFilters ? (
           <FilterChips
             productId={productId}
-            productLabel={productId}
+            productLabel={productLabel}
             search={search}
             filterSeverity={filterSeverity}
             filterStatus={filterStatus}
