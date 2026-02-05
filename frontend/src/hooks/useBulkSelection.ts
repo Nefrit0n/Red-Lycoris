@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { bulkUpdateFindings } from "../api/findings";
 import { Finding, FindingStatus } from '../types/findings';
-import { FiltersState } from '../types/filters';
-import { normalizeDateFrom, normalizeDateTo } from '../utils/urlHelpers';
+import { FiltersState } from '../features/filters/types';
+import { normalizeDateFrom, normalizeDateTo } from '../features/filters/api';
 
 type BulkUndoItem = {
   id: string;
@@ -86,7 +86,6 @@ export function useBulkSelection({
     filters.dateTo,
     filters.showRepeats,
     filters.search,
-    filters.importJobId,
     filters.sortField,
     filters.sortOrder,
   ]);
@@ -158,7 +157,6 @@ export function useBulkSelection({
                 policyDecision: toBulkFilter(filters.policyDecisions),
                 category: toBulkFilter(filters.categories),
                 q: debouncedSearch || undefined,
-                import_job_id: filters.importJobId || undefined,
                 dateFrom: normalizeDateFrom(filters.dateFrom),
                 dateTo: normalizeDateTo(filters.dateTo),
                 canonicalOnly: !filters.showRepeats,
