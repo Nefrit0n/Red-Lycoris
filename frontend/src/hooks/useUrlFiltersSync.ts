@@ -31,6 +31,7 @@ export interface FiltersState {
 
   // Filters
   productId: string;
+  productLabel: string;
   searchInput: string;
   importJobId: string;
   filterSeverity: FindingSeverity | '';
@@ -55,6 +56,7 @@ export interface FiltersActions {
   setPage: (page: number) => void;
   setPageSize: (pageSize: number) => void;
   setProductId: (value: string) => void;
+  setProductLabel: (value: string) => void;
   setSearchInput: (value: string) => void;
   setImportJobId: (value: string) => void;
   setFilterSeverity: (value: FindingSeverity | '') => void;
@@ -76,6 +78,7 @@ const defaultFilters: FiltersState = {
   page: 0,
   pageSize: 20,
   productId: '',
+  productLabel: '',
   searchInput: '',
   importJobId: '',
   filterSeverity: '',
@@ -109,6 +112,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     left.page === right.page &&
     left.pageSize === right.pageSize &&
     left.productId === right.productId &&
+    left.productLabel === right.productLabel &&
     left.searchInput === right.searchInput &&
     left.importJobId === right.importJobId &&
     left.filterSeverity === right.filterSeverity &&
@@ -237,6 +241,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       page,
       pageSize,
       productId: productIdParam,
+      productLabel: '',
       searchInput,
       importJobId,
       filterSeverity: severityOptions.includes(severity as FindingSeverity)
@@ -259,7 +264,10 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
       selectedFindingId,
     };
 
-    setFilters((prev) => (areFiltersEqual(prev, nextFilters) ? prev : nextFilters));
+    setFilters((prev) => {
+      const nextWithLabel = { ...nextFilters, productLabel: prev.productLabel };
+      return areFiltersEqual(prev, nextWithLabel) ? prev : nextWithLabel;
+    });
 
     setHydrated(true);
   }, [location.search]);
@@ -306,7 +314,17 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
   // Memoize all action callbacks to prevent unnecessary re-renders
   const setPage = useCallback((page: number) => setFilters((prev) => ({ ...prev, page })), []);
   const setPageSize = useCallback((pageSize: number) => setFilters((prev) => ({ ...prev, pageSize, page: 0 })), []);
-  const setProductId = useCallback((productId: string) => setFilters((prev) => ({ ...prev, productId, page: 0 })), []);
+  const setProductId = useCallback(
+    (productId: string) =>
+      setFilters((prev) => ({
+        ...prev,
+        productId,
+        productLabel: productId === prev.productId ? prev.productLabel : '',
+        page: 0,
+      })),
+    []
+  );
+  const setProductLabel = useCallback((productLabel: string) => setFilters((prev) => ({ ...prev, productLabel })), []);
   const setSearchInput = useCallback((searchInput: string) => setFilters((prev) => ({ ...prev, searchInput, page: 0 })), []);
   const setImportJobId = useCallback((importJobId: string) => setFilters((prev) => ({ ...prev, importJobId, page: 0 })), []);
   const setFilterSeverity = useCallback((filterSeverity: FindingSeverity | '') => setFilters((prev) => ({ ...prev, filterSeverity, page: 0 })), []);
@@ -328,6 +346,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     setPage,
     setPageSize,
     setProductId,
+    setProductLabel,
     setSearchInput,
     setImportJobId,
     setFilterSeverity,
@@ -350,6 +369,7 @@ export function useUrlFiltersSync(): [FiltersState, FiltersActions, boolean] {
     setPage,
     setPageSize,
     setProductId,
+    setProductLabel,
     setSearchInput,
     setImportJobId,
     setFilterSeverity,
