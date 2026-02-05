@@ -17,6 +17,8 @@ interface UseFindingsDataResult {
   total: number | null;
   totalKnown: boolean;
   hasNextPage: boolean;
+  severityCounts?: Record<string, number>;
+  statusCounts?: Record<string, number>;
   loading: boolean;
   error: string | null;
   statsLoading: boolean;
@@ -34,6 +36,8 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
   const [total, setTotal] = useState<number | null>(null);
   const [totalKnown, setTotalKnown] = useState(false);
   const [hasNextPage, setHasNextPage] = useState(false);
+  const [severityCounts, setSeverityCounts] = useState<Record<string, number> | undefined>();
+  const [statusCounts, setStatusCounts] = useState<Record<string, number> | undefined>();
   const [statsLoading, setStatsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +76,8 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     setHasNextPage(false);
     setTotal(null);
     setTotalKnown(false);
+    setSeverityCounts(undefined);
+    setStatusCounts(undefined);
   }, [filterKey]);
 
   const fetchData = useCallback(
@@ -257,6 +263,12 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
           sortOrder: filters.sortOrder,
         }
       );
+      if (response.meta?.severityCounts) {
+        setSeverityCounts(response.meta.severityCounts);
+      }
+      if (response.meta?.statusCounts) {
+        setStatusCounts(response.meta.statusCounts);
+      }
       if (typeof response.total === "number") {
         setTotal(response.total);
         setTotalKnown(true);
@@ -294,6 +306,8 @@ export function useFindingsData({ filters, hydrated, autoLoadTotal = true }: Use
     total,
     totalKnown,
     hasNextPage,
+    severityCounts,
+    statusCounts,
     loading,
     error,
     statsLoading,
