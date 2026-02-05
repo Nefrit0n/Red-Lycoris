@@ -14,19 +14,15 @@ import {
   Button,
   FormControl,
   IconButton,
-  InputAdornment,
   MenuItem,
   Select,
   Snackbar,
   Slide,
   Stack,
-  TextField,
   Tooltip,
   Typography,
   alpha,
 } from "@mui/material";
-import FilterListIcon from "@mui/icons-material/FilterList";
-import SearchIcon from "@mui/icons-material/Search";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
@@ -35,14 +31,11 @@ import { useLocation } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
 import ExportMenu from "../components/ExportMenu";
-import { FilterChips } from "../components/FilterChips";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
-import ViewsDropdown from "../components/ViewsDropdown";
-import FilterDrawer from "../components/FilterDrawer";
 import FiltersPanel from "../components/FiltersPanel";
 import { primitives } from "../design-system/tokens/colors";
-import { useUrlFiltersSync, FiltersState } from "../hooks/useUrlFiltersSync";
+import { useUrlFiltersSync } from "../hooks/useUrlFiltersSync";
 import { useFindingsData } from "../hooks/useFindingsData";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
@@ -62,8 +55,6 @@ const FindingsList = () => {
 
   // URL <-> state
   const [filters, actions, hydrated] = useUrlFiltersSync();
-
-  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
 
   // Bulk action state
   const [bulkStatus, setBulkStatus] = useState<FindingStatus>("under_review");
@@ -151,35 +142,6 @@ const FindingsList = () => {
     );
   }, [location.pathname, location.search]);
 
-  const activeFiltersCount = useMemo(() => {
-    const countable = [
-      filters.productId,
-      filters.searchInput.trim(),
-      filters.filterSeverity,
-      filters.filterStatus,
-      filters.filterRiskBand,
-      filters.filterOccurrence,
-      filters.filterScannerType,
-      filters.filterPolicyDecision,
-      filters.dateFrom,
-      filters.dateTo,
-    ];
-    const baseCount = countable.filter(Boolean).length;
-    return filters.showRepeats ? baseCount + 1 : baseCount;
-  }, [
-    filters.productId,
-    filters.searchInput,
-    filters.filterSeverity,
-    filters.filterStatus,
-    filters.filterRiskBand,
-    filters.filterOccurrence,
-    filters.filterScannerType,
-    filters.filterPolicyDecision,
-    filters.dateFrom,
-    filters.dateTo,
-    filters.showRepeats,
-  ]);
-
   const { productLabel: resolvedProductLabel, hasMatch: hasProductMatch } = useProductLabel(
     filters.productId
   );
@@ -202,26 +164,6 @@ const FindingsList = () => {
     hasProductMatch,
     resolvedProductLabel,
   ]);
-
-  // Apply saved view filters
-  const handleApplyView = useCallback(
-    (viewFilters: Partial<FiltersState>) => {
-      if (viewFilters.productId !== undefined) actions.setProductId(viewFilters.productId);
-      if (viewFilters.searchInput !== undefined) actions.setSearchInput(viewFilters.searchInput);
-      if (viewFilters.filterSeverity !== undefined) actions.setFilterSeverity(viewFilters.filterSeverity);
-      if (viewFilters.filterStatus !== undefined) actions.setFilterStatus(viewFilters.filterStatus);
-      if (viewFilters.filterRiskBand !== undefined) actions.setFilterRiskBand(viewFilters.filterRiskBand);
-      if (viewFilters.filterOccurrence !== undefined) actions.setFilterOccurrence(viewFilters.filterOccurrence);
-      if (viewFilters.filterScannerType !== undefined) actions.setFilterScannerType(viewFilters.filterScannerType);
-      if (viewFilters.filterPolicyDecision !== undefined) {
-        actions.setFilterPolicyDecision(viewFilters.filterPolicyDecision);
-      }
-      if (viewFilters.dateFrom !== undefined) actions.setDateFrom(viewFilters.dateFrom);
-      if (viewFilters.dateTo !== undefined) actions.setDateTo(viewFilters.dateTo);
-      if (viewFilters.showRepeats !== undefined) actions.setShowRepeats(viewFilters.showRepeats);
-    },
-    [actions]
-  );
 
   // Handle bulk apply
   const handleBulkApply = () => {
@@ -281,32 +223,6 @@ const FindingsList = () => {
 
           {/* Right: Actions */}
           <Stack direction="row" spacing={1} alignItems="center">
-            <TextField
-              value={filters.searchInput}
-              onChange={(e) => actions.setSearchInput(e.target.value)}
-              placeholder="Search"
-              size="small"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" sx={{ color: primitives.night[400] }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                width: { xs: 120, sm: 180 },
-                "& .MuiOutlinedInput-root": {
-                  height: 32,
-                  bgcolor: alpha(primitives.night[700], 0.5),
-                  "&:hover": {
-                    bgcolor: alpha(primitives.night[600], 0.5),
-                  },
-                },
-              }}
-            />
-
-            <ViewsDropdown currentFilters={filters} onApplyView={handleApplyView} />
-
             <ExportMenu
               data={data}
               filename="findings"
@@ -316,71 +232,42 @@ const FindingsList = () => {
               filters={filters}
               debouncedSearch={debouncedSearch}
             />
-
-            <Tooltip title={`Filters${activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ""}`}>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => setFiltersDrawerOpen(true)}
-                startIcon={<FilterListIcon />}
-                sx={{
-                  minWidth: 80,
-                  height: 32,
-                  borderColor: activeFiltersCount > 0 ? primitives.lotus[500] : primitives.night[600],
-                  color: activeFiltersCount > 0 ? primitives.lotus[400] : primitives.night[300],
-                  "&:hover": {
-                    borderColor: primitives.lotus[500],
-                    bgcolor: alpha(primitives.lotus[500], 0.1),
-                  },
-                }}
-              >
-                {activeFiltersCount > 0 ? activeFiltersCount : "Filters"}
-              </Button>
-            </Tooltip>
           </Stack>
         </Stack>
       </Box>
 
-      {/* Filter Chips (if active) */}
-      {activeFiltersCount > 0 && (
-        <Box
-          sx={{
-            px: { xs: 2, md: 3 },
-            py: 1,
-            borderBottom: "1px solid",
-            borderColor: primitives.night[700],
-            bgcolor: alpha(primitives.night[750], 0.5),
-            flexShrink: 0,
-          }}
-        >
-          <FilterChips
-            productId={filters.productId}
-            productLabel={filters.productLabel}
-            search={filters.searchInput}
-            filterSeverity={filters.filterSeverity}
-            filterStatus={filters.filterStatus}
-            filterRiskBand={filters.filterRiskBand}
-            filterOccurrence={filters.filterOccurrence}
-            filterScannerType={filters.filterScannerType}
-            filterPolicyDecision={filters.filterPolicyDecision}
-            dateFrom={filters.dateFrom}
-            dateTo={filters.dateTo}
-            showRepeats={filters.showRepeats}
-            onProductIdChange={actions.setProductId}
-            onSearchChange={actions.setSearchInput}
-            onSeverityChange={actions.setFilterSeverity}
-            onStatusChange={actions.setFilterStatus}
-            onRiskBandChange={actions.setFilterRiskBand}
-            onOccurrenceChange={actions.setFilterOccurrence}
-            onScannerTypeChange={actions.setFilterScannerType}
-            onPolicyDecisionChange={actions.setFilterPolicyDecision}
-            onDateFromChange={actions.setDateFrom}
-            onDateToChange={actions.setDateTo}
-            onShowRepeatsChange={actions.setShowRepeats}
-            onResetAll={actions.resetFilters}
-          />
-        </Box>
-      )}
+      <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
+        <FiltersPanel
+          productId={filters.productId}
+          productLabel={filters.productLabel}
+          search={filters.searchInput}
+          filterSeverity={filters.filterSeverity}
+          filterStatus={filters.filterStatus}
+          filterRiskBand={filters.filterRiskBand}
+          filterOccurrence={filters.filterOccurrence}
+          filterScannerType={filters.filterScannerType}
+          filterPolicyDecision={filters.filterPolicyDecision}
+          dateFrom={filters.dateFrom}
+          dateTo={filters.dateTo}
+          showRepeats={filters.showRepeats}
+          severityCounts={severityCounts}
+          statusCounts={statusCounts}
+          onProductIdChange={actions.setProductId}
+          onProductLabelChange={actions.setProductLabel}
+          onSearchChange={actions.setSearchInput}
+          onSeverityChange={actions.setFilterSeverity}
+          onStatusChange={actions.setFilterStatus}
+          onRiskBandChange={actions.setFilterRiskBand}
+          onOccurrenceChange={actions.setFilterOccurrence}
+          onScannerTypeChange={actions.setFilterScannerType}
+          onPolicyDecisionChange={actions.setFilterPolicyDecision}
+          onDateFromChange={actions.setDateFrom}
+          onDateToChange={actions.setDateTo}
+          onShowRepeatsChange={actions.setShowRepeats}
+          onReset={actions.resetFilters}
+          showChips
+        />
+      </Box>
 
       {/* Error Alert */}
       {error && (
@@ -601,45 +488,6 @@ const FindingsList = () => {
         onClose={drawer.closeDrawer}
       />
 
-      {/* Filters Drawer */}
-      <FilterDrawer
-        open={filtersDrawerOpen}
-        onClose={() => setFiltersDrawerOpen(false)}
-        onReset={actions.resetFilters}
-        width={{ xs: "100vw", md: 420 }}
-      >
-        <FiltersPanel
-          productId={filters.productId}
-          productLabel={filters.productLabel}
-          search={filters.searchInput}
-          filterSeverity={filters.filterSeverity}
-          filterStatus={filters.filterStatus}
-          filterRiskBand={filters.filterRiskBand}
-          filterOccurrence={filters.filterOccurrence}
-          filterScannerType={filters.filterScannerType}
-          filterPolicyDecision={filters.filterPolicyDecision}
-          dateFrom={filters.dateFrom}
-          dateTo={filters.dateTo}
-          showRepeats={filters.showRepeats}
-          severityCounts={severityCounts}
-          statusCounts={statusCounts}
-          onProductIdChange={actions.setProductId}
-          onProductLabelChange={actions.setProductLabel}
-          onSearchChange={actions.setSearchInput}
-          onSeverityChange={actions.setFilterSeverity}
-          onStatusChange={actions.setFilterStatus}
-          onRiskBandChange={actions.setFilterRiskBand}
-          onOccurrenceChange={actions.setFilterOccurrence}
-          onScannerTypeChange={actions.setFilterScannerType}
-          onPolicyDecisionChange={actions.setFilterPolicyDecision}
-          onDateFromChange={actions.setDateFrom}
-          onDateToChange={actions.setDateTo}
-          onShowRepeatsChange={actions.setShowRepeats}
-          onReset={actions.resetFilters}
-          showHeader={false}
-          showChips={false}
-        />
-      </FilterDrawer>
     </Box>
   );
 };
