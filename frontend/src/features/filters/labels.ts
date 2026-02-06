@@ -15,6 +15,28 @@ export const CATEGORY_OPTIONS: Array<{ value: FilterCategory; label: string }> =
   Object.entries(CATEGORY_LABELS) as Array<[FilterCategory, string]>
 ).map(([value, label]) => ({ value, label }));
 
+export const LANGUAGE_LABELS: Record<string, string> = {
+  javascript: "JavaScript",
+  typescript: "TypeScript",
+  python: "Python",
+  java: "Java",
+  go: "Go",
+  ruby: "Ruby",
+  php: "PHP",
+  csharp: "C#",
+  kotlin: "Kotlin",
+  swift: "Swift",
+  sql: "SQL",
+  yaml: "YAML",
+  json: "JSON",
+  bash: "Bash",
+};
+
+export const LANGUAGE_OPTIONS = Object.entries(LANGUAGE_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}));
+
 export const DATE_PRESET_OPTIONS: Array<{ id: DatePreset; label: string; days: number }> = [
   { id: "24h", label: "24 часа", days: 1 },
   { id: "7d", label: "7 дней", days: 7 },
