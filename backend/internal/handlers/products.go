@@ -138,7 +138,7 @@ func (h *ProductsHandler) Stats(c *fiber.Ctx) error {
 
 	filters := storage.FindingFilters{
 		TenantID:       tenantID,
-		ProductID:      &id,
+		ProductIDs:     []uuid.UUID{id},
 		CanonicalOnly:  true,
 		IncludeRepeats: false,
 	}
@@ -160,7 +160,7 @@ func (h *ProductsHandler) Stats(c *fiber.Ctx) error {
 
 	severityCounts := make(map[string]int)
 	for _, status := range openStatuses {
-		filters.Status = status
+		filters.Statuses = []string{status}
 		counts, err := storage.CountFindingsBySeverity(c.Context(), h.db, filters)
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings severity stats"})

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -226,10 +227,16 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 
 	if includeMeta {
 		meta := resp["meta"].(fiber.Map)
+		baseFilters := filterParams.toStorageFilters(1, 0)
+		categoryFilters := baseFilters
+		categoryFilters.Categories = nil
+		scannerFilters := baseFilters
+		scannerFilters.ScannerTypes = nil
+
 		severityCounts, err := storage.CountFindingsBySeverity(
 			c.Context(),
 			h.db,
-			filterParams.toStorageFilters(1, 0),
+			baseFilters,
 		)
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings stats"})
@@ -237,7 +244,7 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		statusCounts, err := storage.CountFindingsByStatus(
 			c.Context(),
 			h.db,
-			filterParams.toStorageFilters(1, 0),
+			baseFilters,
 		)
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings status stats"})
@@ -245,10 +252,18 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		categoryCounts, err := storage.CountFindingsByCategory(
 			c.Context(),
 			h.db,
-			filterParams.toStorageFilters(1, 0),
+			categoryFilters,
 		)
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings category stats"})
+		}
+		scannerCounts, err := storage.CountFindingsByScanner(
+			c.Context(),
+			h.db,
+			scannerFilters,
+		)
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings scanner stats"})
 		}
 		if total != nil {
 			meta["total"] = *total
@@ -256,6 +271,7 @@ func (h *FindingsHandler) List(c *fiber.Ctx) error {
 		meta["severityCounts"] = severityCounts
 		meta["statusCounts"] = statusCounts
 		meta["categoryCounts"] = categoryCounts
+		meta["scannerCounts"] = scannerCounts
 	}
 
 	return c.Status(http.StatusOK).JSON(resp)
@@ -551,42 +567,48 @@ func encodeFindingCursor(payload findingCursorPayload, cursor storage.FindingLis
 
 func buildFindingFiltersHash(params *FindingFilterParams) string {
 	type hashPayload struct {
-		TenantID         string `json:"tenantId"`
-		ProductID        string `json:"productId"`
-		ImportJobID      string `json:"importJobId"`
-		PolicyID         string `json:"policyId"`
-		PolicyDecision   string `json:"policyDecision"`
-		DateFrom         string `json:"dateFrom"`
-		DateTo           string `json:"dateTo"`
-		Severity         string `json:"severity"`
-		Status           string `json:"status"`
-		RiskBand         string `json:"riskBand"`
-		OccurrenceStatus string `json:"occurrenceStatus"`
-		ScannerType      string `json:"scannerType"`
-		SourceType       string `json:"sourceType"`
-		Query            string `json:"query"`
-		CanonicalOnly    bool   `json:"canonicalOnly"`
-		IncludeRepeats   bool   `json:"includeRepeats"`
+		TenantID         string   `json:"tenantId"`
+		ProductIDs       []string `json:"productIds"`
+		ImportJobID      string   `json:"importJobId"`
+		PolicyID         string   `json:"policyId"`
+		PolicyDecisions  []string `json:"policyDecisions"`
+		DateFrom         string   `json:"dateFrom"`
+		DateTo           string   `json:"dateTo"`
+		Severities       []string `json:"severities"`
+		Statuses         []string `json:"statuses"`
+		RiskBands        []string `json:"riskBands"`
+		OccurrenceStatus []string `json:"occurrenceStatus"`
+		ScannerTypes     []string `json:"scannerTypes"`
+		Categories       []string `json:"categories"`
+		SourceType       string   `json:"sourceType"`
+		Query            string   `json:"query"`
+		CanonicalOnly    bool     `json:"canonicalOnly"`
+		IncludeRepeats   bool     `json:"includeRepeats"`
 	}
 
 	payload := hashPayload{
-		Severity:         params.Severity,
-		Status:           params.Status,
-		RiskBand:         params.RiskBand,
-		OccurrenceStatus: params.OccurrenceStatus,
-		ScannerType:      params.ScannerType,
+		Severities:       sortStrings(params.Severities),
+		Statuses:         sortStrings(params.Statuses),
+		RiskBands:        sortStrings(params.RiskBands),
+		OccurrenceStatus: sortStrings(params.OccurrenceStatus),
+		ScannerTypes:     sortStrings(params.ScannerTypes),
+		Categories:       sortStrings(params.Categories),
 		SourceType:       params.SourceType,
 		Query:            params.Query,
 		CanonicalOnly:    params.CanonicalOnly,
 		IncludeRepeats:   params.IncludeRepeats,
-		PolicyDecision:   params.PolicyDecision,
+		PolicyDecisions:  sortStrings(params.PolicyDecisions),
 	}
 
 	if params.TenantID != nil {
 		payload.TenantID = params.TenantID.String()
 	}
-	if params.ProductID != nil {
-		payload.ProductID = params.ProductID.String()
+	if len(params.ProductIDs) > 0 {
+		productIDs := make([]string, 0, len(params.ProductIDs))
+		for _, id := range params.ProductIDs {
+			productIDs = append(productIDs, id.String())
+		}
+		payload.ProductIDs = sortStrings(productIDs)
 	}
 	if params.ImportJobID != nil {
 		payload.ImportJobID = params.ImportJobID.String()
@@ -610,6 +632,16 @@ func sha256Sum(data []byte) string {
 	hash := sha256.Sum256(data)
 	encoded := base64.RawURLEncoding.EncodeToString(hash[:])
 	return encoded
+}
+
+func sortStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	sorted := make([]string, len(values))
+	copy(sorted, values)
+	sort.Strings(sorted)
+	return sorted
 }
 
 // Update updates a finding by ID
