@@ -34,6 +34,7 @@ export const buildFindingsParamsFromFilters = (
     filterRiskBand: filters.riskBands,
     filterOccurrence: filters.occurrences,
     filterScannerType: filters.scannerTypes,
+    filterLanguage: filters.languages,
     filterPolicyDecision: filters.policyDecisions,
     filterCategory: filters.categories,
     search: options?.searchOverride ?? filters.search,
@@ -75,6 +76,7 @@ export const fetchFindings = async (
   appendArrayParam("riskBand", params.filterRiskBand);
   appendArrayParam("occurrenceStatus", params.filterOccurrence);
   appendArrayParam("scannerType", params.filterScannerType);
+  appendArrayParam("language", params.filterLanguage);
   appendArrayParam("policyDecision", params.filterPolicyDecision);
   appendArrayParam("category", params.filterCategory);
 
