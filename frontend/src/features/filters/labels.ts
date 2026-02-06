@@ -8,7 +8,7 @@ export const CATEGORY_LABELS: Record<FilterCategory, string> = {
   DAST: "DAST",
   SECRETS: "Секреты",
   IAC: "IaC",
-  CONTAINER: "Container",
+  CONTAINER: "Контейнеры",
 };
 
 export const CATEGORY_OPTIONS: Array<{ value: FilterCategory; label: string }> = (
