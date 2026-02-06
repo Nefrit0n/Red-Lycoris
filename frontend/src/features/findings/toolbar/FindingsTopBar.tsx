@@ -13,12 +13,10 @@ import { FiltersState } from "../../filters/types";
 import { countActiveFilters } from "../../filters/url";
 import { CATEGORY_LABELS } from "../../filters/labels";
 import { SEVERITY_STYLES, STATUS_LABELS } from "../../../utils/findingConstants";
-import ActiveFilterPills from "./ActiveFilterPills";
 import SavedViewsSelector from "../../../components/SavedViewsSelector";
 import ExportMenu from "../../../components/ExportMenu";
 import { FindingListItemDTO } from "../../../types/findings";
 import { primitives } from "../../../design-system/tokens/colors";
-import TypesMenu from "./TypesMenu";
 import FiltersPopover from "./FiltersPopover";
 import TypeStrip from "./TypeStrip";
 import { useCategoryFacets } from "./hooks";
@@ -58,11 +56,6 @@ const FindingsTopBar = ({
     : facets.length
       ? facets.map((facet) => ({ category: facet.category, count: facet.count }))
       : filters.categories.map((category) => ({ category }));
-
-  const categoryOptions = categoryItems.map((item) => ({
-    value: item.category,
-    label: CATEGORY_LABELS[item.category as keyof typeof CATEGORY_LABELS] ?? item.category,
-  }));
 
   const summaryParts = [
     filters.categories.length
@@ -154,10 +147,6 @@ const FindingsTopBar = ({
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 1 }}>
-            <ActiveFilterPills
-              filters={filters}
-              onRemove={(next) => onApplyView({ ...next, page: 0 })}
-            />
             {summaryText && (
               <Tooltip title={summaryText}>
                 <Typography
@@ -180,17 +169,12 @@ const FindingsTopBar = ({
         <Stack direction="row" spacing={1} alignItems="center">
           <SavedViewsSelector currentFilters={filters} onApplyView={onApplyView} />
 
-          <TypesMenu
-            value={filters.categories}
-            onChange={(next) => onApplyView({ categories: next })}
-            options={categoryOptions}
-          />
-
           <FiltersPopover
             filters={filters}
             activeCount={activeCount}
             onApply={(next) => onApplyView(next)}
             onClear={(next) => onApplyView(next)}
+            debouncedSearch={debouncedSearch}
           />
 
           <ExportMenu
