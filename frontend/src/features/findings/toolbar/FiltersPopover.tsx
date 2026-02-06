@@ -14,6 +14,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import BoltIcon from "@mui/icons-material/Bolt";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
 import StarRoundedIcon from "@mui/icons-material/StarRounded";
 import { useEffect, useMemo, useRef, useState } from "react";
