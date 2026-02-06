@@ -75,6 +75,7 @@ const SavedViewsSelector = ({ currentFilters, onApplyView }: SavedViewsSelectorP
       currentFilters.statuses.length ||
       currentFilters.occurrences.length ||
       currentFilters.scannerTypes.length ||
+      currentFilters.languages.length ||
       currentFilters.policyDecisions.length ||
       currentFilters.riskBands.length ||
       currentFilters.categories.length ||

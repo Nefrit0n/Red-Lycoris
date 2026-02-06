@@ -22,6 +22,22 @@ const occurrenceOptions: FindingOccurrenceStatus[] = ["NEW", "REPEAT"];
 const riskBandOptions: RiskBand[] = ["low", "medium", "high", "critical"];
 const policyDecisionOptions: PolicyDecision[] = ["pass", "fail", "warn"];
 const categoryOptions = ["SAST", "SCA", "DAST", "SECRETS", "IAC", "CONTAINER"];
+const languageOptions = [
+  "javascript",
+  "typescript",
+  "python",
+  "java",
+  "go",
+  "ruby",
+  "php",
+  "csharp",
+  "kotlin",
+  "swift",
+  "sql",
+  "yaml",
+  "json",
+  "bash",
+];
 const datePresetOptions: DatePreset[] = ["24h", "7d", "30d", "90d", ""];
 
 const uniq = <T,>(items: T[]): T[] => Array.from(new Set(items));
@@ -61,6 +77,7 @@ export const filtersToQuery = (state: FiltersState): URLSearchParams => {
   toArrayParam(params, "status", state.statuses);
   toArrayParam(params, "category", state.categories);
   toArrayParam(params, "scannerType", state.scannerTypes);
+  toArrayParam(params, "language", state.languages);
   toArrayParam(params, "occurrenceStatus", state.occurrences);
   toArrayParam(params, "riskBand", state.riskBands);
   toArrayParam(params, "policyDecision", state.policyDecisions);
@@ -90,6 +107,7 @@ export const queryToFilters = (params: URLSearchParams, base: FiltersState): Fil
   const statuses = normalizeArray(readArrayParam(params, "status"), statusOptions);
   const categories = normalizeArray(readArrayParam(params, "category"), categoryOptions);
   const scannerTypes = uniq(readArrayParam(params, "scannerType"));
+  const languages = normalizeArray(readArrayParam(params, "language"), languageOptions);
   const occurrences = normalizeArray(
     readArrayParam(params, "occurrenceStatus"),
     occurrenceOptions
@@ -123,6 +141,7 @@ export const queryToFilters = (params: URLSearchParams, base: FiltersState): Fil
     statuses,
     categories,
     scannerTypes,
+    languages,
     occurrences,
     riskBands,
     policyDecisions,
@@ -150,6 +169,7 @@ export const filtersAreEqual = (left: FiltersState, right: FiltersState): boolea
     arraysEqual(left.statuses, right.statuses) &&
     arraysEqual(left.categories, right.categories) &&
     arraysEqual(left.scannerTypes, right.scannerTypes) &&
+    arraysEqual(left.languages, right.languages) &&
     arraysEqual(left.occurrences, right.occurrences) &&
     arraysEqual(left.riskBands, right.riskBands) &&
     arraysEqual(left.policyDecisions, right.policyDecisions) &&
@@ -178,6 +198,7 @@ export const normalizeFilters = (state: FiltersState): FiltersState => {
     statuses: sortValues(normalizeArray(normalize(state.statuses), statusOptions)),
     categories: sortValues(normalizeArray(normalize(state.categories), categoryOptions)),
     scannerTypes: sortValues(uniq(normalize(state.scannerTypes))),
+    languages: sortValues(normalizeArray(normalize(state.languages), languageOptions)),
     occurrences: sortValues(
       normalizeArray(normalize(state.occurrences), occurrenceOptions)
     ),
@@ -195,6 +216,7 @@ export const countActiveFilters = (state: FiltersState): number => {
     state.severities.length +
     state.statuses.length +
     state.scannerTypes.length +
+    state.languages.length +
     state.policyDecisions.length +
     state.occurrences.length +
     state.riskBands.length +

@@ -76,6 +76,7 @@ export interface FetchFindingsParams {
   filterRiskBand?: RiskBand[];
   filterOccurrence?: FindingOccurrenceStatus[];
   filterScannerType?: string[];
+  filterLanguage?: string[];
   filterPolicyDecision?: PolicyDecision[];
   filterCategory?: FindingCategory[];
   search?: string;
