@@ -104,6 +104,7 @@ export const fetchFindings = async (
       severityCounts?: Record<string, number>;
       statusCounts?: Record<string, number>;
       categoryCounts?: Array<{ category: string; count: number }>;
+      scannerCounts?: Record<string, number>;
     };
   }>("/api/v1/findings", {
     signal,

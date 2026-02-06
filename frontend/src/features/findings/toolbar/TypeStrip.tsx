@@ -32,9 +32,11 @@ const TypeStrip = ({ items, value, onChange }: TypeStripProps) => {
       <ToggleButtonGroup
         value={value}
         onChange={(_, next) => onChange(next ?? [])}
+        exclusive={false}
         size="small"
         sx={{
           display: "inline-flex",
+          flexWrap: "nowrap",
           gap: 0.75,
           "& .MuiToggleButtonGroup-grouped": {
             border: `1px solid ${primitives.night[600]}`,

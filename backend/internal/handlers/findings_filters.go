@@ -16,17 +16,18 @@ import (
 // FindingFilterParams holds common filter parameters parsed from query string
 type FindingFilterParams struct {
 	TenantID         *uuid.UUID
-	ProductID        *uuid.UUID
+	ProductIDs       []uuid.UUID
 	ImportJobID      *uuid.UUID
 	PolicyID         *uuid.UUID
-	PolicyDecision   string
+	PolicyDecisions  []string
 	DateFrom         *time.Time
 	DateTo           *time.Time
-	Severity         string
-	Status           string
-	RiskBand         string
-	OccurrenceStatus string
-	ScannerType      string
+	Severities       []string
+	Statuses         []string
+	RiskBands        []string
+	OccurrenceStatus []string
+	ScannerTypes     []string
+	Categories       []string
 	SourceType       string
 	Query            string
 	CanonicalOnly    bool
@@ -35,22 +36,91 @@ type FindingFilterParams struct {
 	SortOrder        string
 }
 
+func readQueryValues(c *fiber.Ctx, key string) []string {
+	args := c.Context().QueryArgs()
+	rawValues := args.PeekMulti(key)
+	values := make([]string, 0, len(rawValues))
+	for _, raw := range rawValues {
+		values = append(values, string(raw))
+	}
+	if len(values) == 0 {
+		if fallback := strings.TrimSpace(c.Query(key)); fallback != "" {
+			values = append(values, fallback)
+		}
+	}
+
+	resolved := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				resolved = append(resolved, trimmed)
+			}
+		}
+	}
+	return resolved
+}
+
+func toOptionalSlice(value string) []string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return []string{trimmed}
+}
+
 // parseFindingFiltersFromQuery parses common finding filters from fiber context query params
 // This eliminates duplication between List() and Neighbors() handlers
 func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParams, error) {
+	severities := readQueryValues(c, "severity")
+	for _, value := range severities {
+		if err := validateFindingSeverity(value); err != nil {
+			return nil, err
+		}
+	}
+
+	statuses := readQueryValues(c, "status")
+	for _, value := range statuses {
+		if err := validateFindingStatus(value); err != nil {
+			return nil, err
+		}
+	}
+
+	riskBands := readQueryValues(c, "riskBand")
+	for _, value := range riskBands {
+		if !isValidRiskBand(value) {
+			return nil, fmt.Errorf("invalid riskBand")
+		}
+	}
+
+	policyDecisions := readQueryValues(c, "policyDecision")
+	for _, value := range policyDecisions {
+		if !isValidPolicyDecision(value) {
+			return nil, fmt.Errorf("invalid policyDecision")
+		}
+	}
+
+	categories := readQueryValues(c, "category")
+	for _, value := range categories {
+		if err := validateFindingCategory(value); err != nil {
+			return nil, err
+		}
+	}
+
 	params := &FindingFilterParams{
-		Severity:         strings.TrimSpace(c.Query("severity")),
-		Status:           strings.TrimSpace(c.Query("status")),
-		RiskBand:         strings.TrimSpace(c.Query("riskBand")),
-		OccurrenceStatus: strings.TrimSpace(c.Query("occurrenceStatus")),
-		ScannerType:      strings.TrimSpace(c.Query("scannerType")),
+		Severities:       severities,
+		Statuses:         statuses,
+		RiskBands:        riskBands,
+		OccurrenceStatus: readQueryValues(c, "occurrenceStatus"),
+		ScannerTypes:     readQueryValues(c, "scannerType"),
+		Categories:       categories,
 		SourceType:       strings.TrimSpace(c.Query("sourceType")),
 		Query:            firstNonEmpty(strings.TrimSpace(c.Query("search")), strings.TrimSpace(c.Query("q"))),
 		CanonicalOnly:    parseBoolWithDefault(c.Query("canonicalOnly"), true),
 		IncludeRepeats:   parseBoolWithDefault(c.Query("includeRepeats"), false),
 		SortField:        strings.TrimSpace(c.Query("sortField")),
 		SortOrder:        strings.TrimSpace(c.Query("sortOrder")),
-		PolicyDecision:   strings.TrimSpace(c.Query("policyDecision")),
+		PolicyDecisions:  policyDecisions,
 	}
 
 	if raw := strings.TrimSpace(c.Query("tenantId")); raw != "" {
@@ -75,16 +145,13 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 	}
 
 	// Resolve product filter
-	productID, err := resolveProductFilter(
-		c.Context(),
-		db,
-		strings.TrimSpace(c.Query("productId")),
-		strings.TrimSpace(c.Query("product")),
-	)
+	productIDValues := readQueryValues(c, "productId")
+	productValues := readQueryValues(c, "product")
+	productIDs, err := resolveProductFilters(c.Context(), db, productIDValues, productValues)
 	if err != nil {
 		return nil, err
 	}
-	params.ProductID = productID
+	params.ProductIDs = productIDs
 
 	// Parse import job ID
 	if importJobParam := strings.TrimSpace(c.Query("import_job_id")); importJobParam != "" {
@@ -101,14 +168,6 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 			return nil, fmt.Errorf("invalid policyId")
 		}
 		params.PolicyID = &parsed
-	}
-
-	if params.PolicyDecision != "" && !isValidPolicyDecision(params.PolicyDecision) {
-		return nil, fmt.Errorf("invalid policyDecision")
-	}
-
-	if params.RiskBand != "" && !isValidRiskBand(params.RiskBand) {
-		return nil, fmt.Errorf("invalid riskBand")
 	}
 
 	// Parse date range
@@ -134,16 +193,17 @@ func parseFindingFiltersFromQuery(c *fiber.Ctx, db *sql.DB) (*FindingFilterParam
 func (p *FindingFilterParams) toStorageFilters(limit, offset int) storage.FindingFilters {
 	return storage.FindingFilters{
 		TenantID:         p.TenantID,
-		Severity:         p.Severity,
-		Status:           p.Status,
-		RiskBand:         p.RiskBand,
+		Severities:       p.Severities,
+		Statuses:         p.Statuses,
+		RiskBands:        p.RiskBands,
 		OccurrenceStatus: p.OccurrenceStatus,
-		ScannerType:      p.ScannerType,
+		ScannerTypes:     p.ScannerTypes,
+		Categories:       p.Categories,
 		SourceType:       p.SourceType,
-		ProductID:        p.ProductID,
+		ProductIDs:       p.ProductIDs,
 		ImportJobID:      p.ImportJobID,
 		PolicyID:         p.PolicyID,
-		PolicyDecision:   p.PolicyDecision,
+		PolicyDecisions:  p.PolicyDecisions,
 		Query:            p.Query,
 		DateFrom:         p.DateFrom,
 		DateTo:           p.DateTo,
@@ -217,21 +277,24 @@ func parseBulkFilters(c *fiber.Ctx, db *sql.DB, filterInput *BulkActionFilters) 
 		filters.TenantID = &parsed
 	}
 
-	var productIDParam string
-	var productParam string
+	var productIDParam []string
+	var productParam []string
 	if filterInput.ProductID != nil {
-		productIDParam = strings.TrimSpace(*filterInput.ProductID)
+		productIDParam = []string{strings.TrimSpace(*filterInput.ProductID)}
 	}
 	if filterInput.Product != nil {
-		productParam = strings.TrimSpace(*filterInput.Product)
+		productParam = []string{strings.TrimSpace(*filterInput.Product)}
 	}
 
-	filters.Severity = strings.TrimSpace(filterInput.Severity)
-	filters.Status = strings.TrimSpace(filterInput.Status)
-	filters.OccurrenceStatus = strings.TrimSpace(filterInput.OccurrenceStatus)
-	filters.ScannerType = strings.TrimSpace(filterInput.ScannerType)
+	filters.Severities = toOptionalSlice(filterInput.Severity)
+	filters.Statuses = toOptionalSlice(filterInput.Status)
+	filters.OccurrenceStatus = toOptionalSlice(filterInput.OccurrenceStatus)
+	filters.ScannerTypes = toOptionalSlice(filterInput.ScannerType)
 	filters.SourceType = strings.TrimSpace(filterInput.SourceType)
 	filters.Query = strings.TrimSpace(filterInput.Query)
+	filters.PolicyDecisions = nil
+	filters.RiskBands = nil
+	filters.Categories = nil
 
 	if filterInput.DateFrom != nil && strings.TrimSpace(*filterInput.DateFrom) != "" {
 		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*filterInput.DateFrom))
@@ -256,11 +319,11 @@ func parseBulkFilters(c *fiber.Ctx, db *sql.DB, filterInput *BulkActionFilters) 
 		filters.IncludeRepeats = *filterInput.IncludeRepeats
 	}
 
-	productID, err := resolveProductFilter(c.Context(), db, productIDParam, productParam)
+	productIDs, err := resolveProductFilters(c.Context(), db, productIDParam, productParam)
 	if err != nil {
 		return filters, err
 	}
-	filters.ProductID = productID
+	filters.ProductIDs = productIDs
 
 	if filterInput.ImportJobID != nil && strings.TrimSpace(*filterInput.ImportJobID) != "" {
 		parsed, err := uuid.Parse(strings.TrimSpace(*filterInput.ImportJobID))
