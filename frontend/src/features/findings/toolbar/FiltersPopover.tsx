@@ -200,6 +200,7 @@ const FiltersPopover = ({
           open={openMenu}
           anchorEl={anchor}
           onClose={handleClose}
+          disablePortal
           MenuListProps={{ dense: true, disablePadding: true }}
           anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
           transformOrigin={{ vertical: "top", horizontal: "left" }}
@@ -317,7 +318,13 @@ const FiltersPopover = ({
             open={open}
             anchorEl={anchorEl}
             placement="bottom-end"
-            modifiers={[{ name: "offset", options: { offset: [0, 8] } }]}
+            strategy="fixed"
+            sx={{ zIndex: (theme) => theme.zIndex.modal + 1 }}
+            modifiers={[
+              { name: "offset", options: { offset: [0, 8] } },
+              { name: "flip", options: { padding: 8 } },
+              { name: "preventOverflow", options: { boundary: "viewport", padding: 8 } },
+            ]}
           >
             <Grow in={open} style={{ transformOrigin: "top right" }}>
               <Paper
@@ -329,6 +336,8 @@ const FiltersPopover = ({
                   border: `1px solid ${primitives.night[600]}`,
                   boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
                 }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.stopPropagation();
