@@ -20,6 +20,7 @@ export interface FiltersState {
   categories: string[];
   scannerTypes: string[];
   productIds: string[];
+  languages: string[];
   occurrences: FindingOccurrenceStatus[];
   riskBands: RiskBand[];
   policyDecisions: PolicyDecision[];
@@ -41,6 +42,7 @@ export const DEFAULT_FILTERS_STATE: FiltersState = {
   categories: [],
   scannerTypes: [],
   productIds: [],
+  languages: [],
   occurrences: [],
   riskBands: [],
   policyDecisions: [],
