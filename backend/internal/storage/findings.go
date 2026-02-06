@@ -75,17 +75,17 @@ type FindingListCursor struct {
 
 type FindingFilters struct {
 	TenantID         *uuid.UUID
-	Severity         string
-	Status           string
-	ProductID        *uuid.UUID
+	Severities       []string
+	Statuses         []string
+	ProductIDs       []uuid.UUID
 	ImportJobID      *uuid.UUID
 	PolicyID         *uuid.UUID
-	PolicyDecision   string
-	RiskBand         string
+	PolicyDecisions  []string
+	RiskBands        []string
 	Query            string
-	ScannerType      string
+	ScannerTypes     []string
 	SourceType       string
-	OccurrenceStatus string // "NEW" or "REPEAT"
+	OccurrenceStatus []string // "NEW" or "REPEAT"
 	DateFrom         *time.Time
 	DateTo           *time.Time
 	Limit            int
@@ -94,6 +94,7 @@ type FindingFilters struct {
 	SortOrder        string
 	CanonicalOnly    bool
 	IncludeRepeats   bool
+	Categories       []string
 }
 
 type UpdateFindingParams struct {
@@ -111,40 +112,41 @@ type UpdateFindingParams struct {
 }
 
 // findingFilterWhereClause contains the common WHERE conditions for finding queries.
-// Placeholder order (1..15):
-// 1 tenant_id, 2 severity, 3 status, 4 product_id, 5 import_job_id,
-// 6 policy_id, 7 policy_decision, 8 risk_band,
-// 9 query_pattern, 10 scanner, 11 source_type,
+// Placeholder order (1..16):
+// 1 tenant_id, 2 severities, 3 statuses, 4 product_ids, 5 import_job_id,
+// 6 policy_id, 7 policy_decisions, 8 risk_bands,
+// 9 query_pattern, 10 scanner_types, 11 source_type,
 // 12 occurrence_status, 13 date_from, 14 date_to,
-// 15 canonical_only_flag.
+// 15 canonical_only_flag, 16 categories.
 const findingFilterWhereClause = `
 f.deleted_at IS NULL
   AND (f.tenant_id = $1)
-  AND ($2::text IS NULL OR f.severity = $2)
-  AND ($3::text IS NULL OR f.status = $3)
-  AND ($4::uuid IS NULL OR f.product_id = $4)
+  AND ($2::text[] IS NULL OR f.severity = ANY($2))
+  AND ($3::text[] IS NULL OR f.status = ANY($3))
+  AND ($4::uuid[] IS NULL OR f.product_id = ANY($4))
   AND ($5::uuid IS NULL OR f.import_job_id = $5)
   AND ($6::uuid IS NULL OR EXISTS (
 		SELECT 1 FROM policy_results pr
 		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $6
 	))
-  AND ($7::text IS NULL OR (
+  AND ($7::text[] IS NULL OR (
 		SELECT pr.decision FROM policy_results pr
 		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
 		ORDER BY pr.evaluated_at DESC
 		LIMIT 1
-	) = $7)
-  AND ($8::text IS NULL OR fr.risk_band = $8)
+	) = ANY($7))
+  AND ($8::text[] IS NULL OR fr.risk_band = ANY($8))
   AND ($9::text IS NULL OR (f.title ILIKE $9 OR f.description ILIKE $9 OR f.fingerprint ILIKE $9 OR p.identifier ILIKE $9 OR p.name ILIKE $9))
-  AND ($10::text IS NULL OR sr.scanner = $10)
+  AND ($10::text[] IS NULL OR sr.scanner = ANY($10))
   AND ($11::text IS NULL OR f.source_type = $11)
-  AND ($12::text IS NULL OR (
-		($12 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
-		OR ($12 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
+  AND ($12::text[] IS NULL OR (
+		(f.duplicate_id IS NULL AND f.repeat_count = 0 AND 'NEW' = ANY($12))
+		OR ((f.repeat_count > 0 OR f.duplicate_id IS NOT NULL) AND 'REPEAT' = ANY($12))
 	))
   AND ($13::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $13)
   AND ($14::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $14)
-  AND ($15::bool = FALSE OR f.duplicate_id IS NULL)`
+  AND ($15::bool = FALSE OR f.duplicate_id IS NULL)
+  AND ($16::text[] IS NULL OR f.category = ANY($16))`
 
 // findingBaseJoins contains the common JOIN clauses for finding queries.
 const findingBaseJoins = `
@@ -408,9 +410,9 @@ func buildFindingFilterArgs(filters FindingFilters) []any {
 		tenant = *filters.TenantID
 	}
 
-	var product any
-	if filters.ProductID != nil {
-		product = *filters.ProductID
+	var products any
+	if len(filters.ProductIDs) > 0 {
+		products = pq.Array(filters.ProductIDs)
 	}
 
 	var importJob any
@@ -433,31 +435,51 @@ func buildFindingFilterArgs(filters FindingFilters) []any {
 		dateTo = *filters.DateTo
 	}
 
-	occ := strings.ToUpper(strings.TrimSpace(filters.OccurrenceStatus))
+	occValues := make([]string, 0, len(filters.OccurrenceStatus))
+	for _, value := range filters.OccurrenceStatus {
+		normalized := strings.ToUpper(strings.TrimSpace(value))
+		if normalized == "NEW" || normalized == "REPEAT" {
+			occValues = append(occValues, normalized)
+		}
+	}
 	var occAny any
-	if occ == "NEW" || occ == "REPEAT" {
-		occAny = occ
+	if len(occValues) > 0 {
+		occAny = pq.Array(occValues)
 	}
 
 	canonicalOnly := filters.CanonicalOnly || !filters.IncludeRepeats
 
 	return []any{
 		tenant,
-		nilIfEmpty(filters.Severity),
-		nilIfEmpty(filters.Status),
-		product,
+		stringSliceOrNil(filters.Severities),
+		stringSliceOrNil(filters.Statuses),
+		products,
 		importJob,
 		policyID,
-		nilIfEmpty(filters.PolicyDecision),
-		nilIfEmpty(filters.RiskBand),
+		stringSliceOrNil(filters.PolicyDecisions),
+		stringSliceOrNil(filters.RiskBands),
 		likePatternOrNil(filters.Query),
-		nilIfEmpty(filters.ScannerType),
+		stringSliceOrNil(filters.ScannerTypes),
 		nilIfEmpty(filters.SourceType),
 		occAny,
 		dateFrom,
 		dateTo,
 		canonicalOnly,
+		stringSliceOrNil(filters.Categories),
 	}
+}
+
+func stringSliceOrNil(values []string) any {
+	trimmed := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			trimmed = append(trimmed, strings.TrimSpace(value))
+		}
+	}
+	if len(trimmed) == 0 {
+		return nil
+	}
+	return pq.Array(trimmed)
 }
 
 // findingScanFields is the list of fields to scan from a finding query result.

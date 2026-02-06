@@ -88,7 +88,7 @@ func QueryFindingsExport(ctx context.Context, db *sql.DB, filters FindingFilters
 			intel.epss_score,
 			intel.kev`
 
-	query := fmt.Sprintf(`%s %s WHERE %s %s LIMIT $16 OFFSET $17`,
+	query := fmt.Sprintf(`%s %s WHERE %s %s LIMIT $17 OFFSET $18`,
 		selectFields,
 		findingExportJoins,
 		findingFilterWhereClause,
