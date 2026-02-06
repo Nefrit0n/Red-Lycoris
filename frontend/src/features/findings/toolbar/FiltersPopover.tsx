@@ -302,34 +302,33 @@ const FiltersPopover = ({
         </IconButton>
       </Badge>
 
-      <Popper
-        open={open}
-        anchorEl={anchorEl}
-        placement="bottom-end"
-        modifiers={[{ name: "offset", options: { offset: [0, 8] } }]}
+      <ClickAwayListener
+        disableReactTree
+        onClickAway={(event) => {
+          if (buttonRef.current && buttonRef.current.contains(event.target as Node)) {
+            return;
+          }
+          setAnchorEl(null);
+          buttonRef.current?.focus();
+        }}
       >
-        <Grow in={open} style={{ transformOrigin: "top right" }}>
-          <ClickAwayListener
-            onClickAway={(event) => {
-              if (buttonRef.current && buttonRef.current.contains(event.target as Node)) {
-                return;
-              }
-              setAnchorEl(null);
-              buttonRef.current?.focus();
-            }}
+        <Box>
+          <Popper
+            open={open}
+            anchorEl={anchorEl}
+            placement="bottom-end"
+            modifiers={[{ name: "offset", options: { offset: [0, 8] } }]}
           >
-            <Paper
-              sx={{
-                width: 380,
-                bgcolor: primitives.night[700],
-                color: primitives.night[50],
-                p: 1.5,
-                border: `1px solid ${primitives.night[600]}`,
-                boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
-              }}
-            >
-              <Stack
-                spacing={1}
+            <Grow in={open} style={{ transformOrigin: "top right" }}>
+              <Paper
+                sx={{
+                  width: 380,
+                  bgcolor: primitives.night[700],
+                  color: primitives.night[50],
+                  p: 1.5,
+                  border: `1px solid ${primitives.night[600]}`,
+                  boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.stopPropagation();
@@ -338,53 +337,9 @@ const FiltersPopover = ({
                   }
                 }}
               >
-                <Typography variant="subtitle2">Фильтры</Typography>
+                <Stack spacing={1}>
+                  <Typography variant="subtitle2">Фильтры</Typography>
 
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                    gap: 1,
-                  }}
-                >
-                  <PillMultiSelect
-                    label="Критичность"
-                    options={severityOptions}
-                    values={draft.severities}
-                    onChange={(next) => setDraft((prev) => ({ ...prev, severities: next }))}
-                    summary={buildSummary(draft.severities, severityLabelMap)}
-                  />
-
-                  <PillMultiSelect
-                    label="Статус"
-                    options={statusOptions}
-                    values={draft.statuses}
-                    onChange={(next) => setDraft((prev) => ({ ...prev, statuses: next }))}
-                    summary={buildSummary(draft.statuses, statusLabelMap)}
-                  />
-
-                  <PillMultiSelect
-                    label="Инструменты"
-                    options={scannerOptions}
-                    values={draft.scannerTypes}
-                    loading={scannersLoading}
-                    searchable
-                    onChange={(next) => setDraft((prev) => ({ ...prev, scannerTypes: next }))}
-                    summary={buildSummary(draft.scannerTypes, scannerLabelMap)}
-                  />
-
-                  <PillMultiSelect
-                    label="Продукты"
-                    options={productOptions}
-                    values={draft.productIds}
-                    loading={productsLoading}
-                    searchable
-                    onChange={(next) => setDraft((prev) => ({ ...prev, productIds: next }))}
-                    summary={buildSummary(draft.productIds, productLabelMap)}
-                  />
-                </Box>
-
-                <Stack spacing={0.75}>
                   <Box
                     sx={{
                       display: "grid",
@@ -392,155 +347,198 @@ const FiltersPopover = ({
                       gap: 1,
                     }}
                   >
-                    {DATE_PRESET_OPTIONS.map((preset) => (
+                    <PillMultiSelect
+                      label="Критичность"
+                      options={severityOptions}
+                      values={draft.severities}
+                      onChange={(next) => setDraft((prev) => ({ ...prev, severities: next }))}
+                      summary={buildSummary(draft.severities, severityLabelMap)}
+                    />
+                    <PillMultiSelect
+                      label="Статус"
+                      options={statusOptions}
+                      values={draft.statuses}
+                      onChange={(next) => setDraft((prev) => ({ ...prev, statuses: next }))}
+                      summary={buildSummary(draft.statuses, statusLabelMap)}
+                    />
+                    <PillMultiSelect
+                      label="Инструменты"
+                      options={scannerOptions}
+                      values={draft.scannerTypes}
+                      loading={scannersLoading}
+                      searchable
+                      onChange={(next) => setDraft((prev) => ({ ...prev, scannerTypes: next }))}
+                      summary={buildSummary(draft.scannerTypes, scannerLabelMap)}
+                    />
+                    <PillMultiSelect
+                      label="Продукты"
+                      options={productOptions}
+                      values={draft.productIds}
+                      loading={productsLoading}
+                      searchable
+                      onChange={(next) => setDraft((prev) => ({ ...prev, productIds: next }))}
+                      summary={buildSummary(draft.productIds, productLabelMap)}
+                    />
+                  </Box>
+
+                  <Stack spacing={0.75}>
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 1,
+                      }}
+                    >
+                      {DATE_PRESET_OPTIONS.map((preset) => (
+                        <Button
+                          key={preset.id}
+                          size="small"
+                          variant={draft.datePreset === preset.id ? "contained" : "outlined"}
+                          onClick={() => {
+                            setDraft((prev) => ({
+                              ...prev,
+                              datePreset: preset.id as FiltersState["datePreset"],
+                              dateFrom: "",
+                              dateTo: "",
+                            }));
+                            setShowCustomDates(false);
+                          }}
+                          onFocus={() => setShowCustomDates(false)}
+                          onMouseDown={() => setShowCustomDates(false)}
+                          sx={{
+                            borderRadius: "999px",
+                            height: 36,
+                            textTransform: "none",
+                            fontSize: 12,
+                            borderColor: primitives.night[600],
+                            color:
+                              draft.datePreset === preset.id
+                                ? primitives.night[50]
+                                : primitives.night[50],
+                            bgcolor:
+                              draft.datePreset === preset.id
+                                ? primitives.lotus[500]
+                                : "transparent",
+                            "&:hover": {
+                              borderColor: primitives.lotus[400],
+                              bgcolor:
+                                draft.datePreset === preset.id
+                                  ? primitives.lotus[400]
+                                  : "rgba(225, 29, 72, 0.08)",
+                            },
+                          }}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
                       <Button
-                        key={preset.id}
                         size="small"
-                        variant={draft.datePreset === preset.id ? "contained" : "outlined"}
+                        variant={showCustomDates ? "contained" : "outlined"}
                         onClick={() => {
-                          setDraft((prev) => ({
-                            ...prev,
-                            datePreset: preset.id as FiltersState["datePreset"],
-                            dateFrom: "",
-                            dateTo: "",
-                          }));
-                          setShowCustomDates(false);
+                          setDraft((prev) => ({ ...prev, datePreset: "" }));
+                          setShowCustomDates(true);
                         }}
-                        onFocus={() => setShowCustomDates(false)}
-                        onMouseDown={() => setShowCustomDates(false)}
+                        onFocus={() => setShowCustomDates(true)}
                         sx={{
                           borderRadius: "999px",
                           height: 36,
                           textTransform: "none",
                           fontSize: 12,
                           borderColor: primitives.night[600],
-                          color:
-                            draft.datePreset === preset.id
-                              ? primitives.night[50]
-                              : primitives.night[50],
-                          bgcolor:
-                            draft.datePreset === preset.id
-                              ? primitives.lotus[500]
-                              : "transparent",
+                          color: primitives.night[50],
+                          bgcolor: showCustomDates ? primitives.lotus[500] : "transparent",
                           "&:hover": {
                             borderColor: primitives.lotus[400],
-                            bgcolor:
-                              draft.datePreset === preset.id
-                                ? primitives.lotus[400]
-                                : "rgba(225, 29, 72, 0.08)",
+                            bgcolor: showCustomDates
+                              ? primitives.lotus[400]
+                              : "rgba(225, 29, 72, 0.08)",
                           },
                         }}
                       >
-                        {preset.label}
+                        Кастом
                       </Button>
-                    ))}
-                    <Button
-                      size="small"
-                      variant={showCustomDates ? "contained" : "outlined"}
-                      onClick={() => {
-                        setDraft((prev) => ({ ...prev, datePreset: "" }));
-                        setShowCustomDates(true);
-                      }}
-                      onFocus={() => setShowCustomDates(true)}
-                      sx={{
-                        borderRadius: "999px",
-                        height: 36,
-                        textTransform: "none",
-                        fontSize: 12,
-                        borderColor: primitives.night[600],
-                        color: primitives.night[50],
-                        bgcolor: showCustomDates ? primitives.lotus[500] : "transparent",
-                        "&:hover": {
-                          borderColor: primitives.lotus[400],
-                          bgcolor: showCustomDates
-                            ? primitives.lotus[400]
-                            : "rgba(225, 29, 72, 0.08)",
-                        },
-                      }}
-                    >
-                      Кастом
-                    </Button>
-                  </Box>
+                    </Box>
 
-                  {showCustomDates && (
-                    <Stack direction="row" spacing={1}>
-                      <TextField
-                        type="date"
+                    {showCustomDates && (
+                      <Stack direction="row" spacing={1}>
+                        <TextField
+                          type="date"
+                          size="small"
+                          label="С"
+                          value={draft.dateFrom}
+                          onChange={(event) =>
+                            setDraft((prev) => ({ ...prev, dateFrom: event.target.value }))
+                          }
+                          InputLabelProps={{ shrink: true }}
+                          sx={{ flex: 1 }}
+                        />
+                        <TextField
+                          type="date"
+                          size="small"
+                          label="По"
+                          value={draft.dateTo}
+                          onChange={(event) =>
+                            setDraft((prev) => ({ ...prev, dateTo: event.target.value }))
+                          }
+                          InputLabelProps={{ shrink: true }}
+                          sx={{ flex: 1 }}
+                        />
+                      </Stack>
+                    )}
+                  </Stack>
+
+                  <FormControlLabel
+                    sx={{ m: 0, alignItems: "center" }}
+                    control={
+                      <Switch
                         size="small"
-                        label="С"
-                        value={draft.dateFrom}
+                        checked={draft.showRepeats}
                         onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, dateFrom: event.target.value }))
+                          setDraft((prev) => ({ ...prev, showRepeats: event.target.checked }))
                         }
-                        InputLabelProps={{ shrink: true }}
-                        sx={{ flex: 1 }}
                       />
-                      <TextField
-                        type="date"
+                    }
+                    label={
+                      <Typography variant="body2" sx={{ color: primitives.night[100] }}>
+                        Показывать повторы
+                      </Typography>
+                    }
+                  />
+
+                  <Stack direction="row" justifyContent="flex-end" spacing={1}>
+                    {activeCount > 0 && (
+                      <Button
+                        variant="text"
                         size="small"
-                        label="По"
-                        value={draft.dateTo}
-                        onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, dateTo: event.target.value }))
-                        }
-                        InputLabelProps={{ shrink: true }}
-                        sx={{ flex: 1 }}
-                      />
-                    </Stack>
-                  )}
-                </Stack>
-
-                <FormControlLabel
-                  sx={{ m: 0, alignItems: "center" }}
-                  control={
-                    <Switch
-                      size="small"
-                      checked={draft.showRepeats}
-                      onChange={(event) =>
-                        setDraft((prev) => ({ ...prev, showRepeats: event.target.checked }))
-                      }
-                    />
-                  }
-                  label={
-                    <Typography variant="body2" sx={{ color: primitives.night[100] }}>
-                      Показывать повторы
-                    </Typography>
-                  }
-                />
-
-                <Stack direction="row" justifyContent="flex-end" spacing={1}>
-                  {activeCount > 0 && (
+                        onClick={() => {
+                          const cleared = { ...DEFAULT_FILTERS_STATE, search: filters.search };
+                          setDraft(cleared);
+                          setShowCustomDates(false);
+                          onClear(cleared);
+                        }}
+                        sx={{ color: primitives.night[200] }}
+                      >
+                        Очистить
+                      </Button>
+                    )}
                     <Button
-                      variant="text"
+                      variant="contained"
                       size="small"
                       onClick={() => {
-                        const cleared = { ...DEFAULT_FILTERS_STATE, search: filters.search };
-                        setDraft(cleared);
-                        setShowCustomDates(false);
-                        onClear(cleared);
+                        onApply(draft);
+                        setAnchorEl(null);
+                        buttonRef.current?.focus();
                       }}
-                      sx={{ color: primitives.night[200] }}
                     >
-                      Очистить
+                      Готово
                     </Button>
-                  )}
-                  <Button
-                    variant="contained"
-                    size="small"
-                    onClick={() => {
-                      onApply(draft);
-                      setAnchorEl(null);
-                      buttonRef.current?.focus();
-                    }}
-                  >
-                    Готово
-                  </Button>
+                  </Stack>
                 </Stack>
-              </Stack>
-            </Paper>
-          </ClickAwayListener>
-        </Grow>
-      </Popper>
+              </Paper>
+            </Grow>
+          </Popper>
+        </Box>
+      </ClickAwayListener>
     </Box>
   );
 };
