@@ -2,13 +2,10 @@ import {
   Badge,
   Box,
   Button,
-  Checkbox,
   ClickAwayListener,
   FormControlLabel,
   Grow,
   IconButton,
-  Menu,
-  MenuItem,
   Paper,
   Popper,
   Stack,
@@ -17,28 +14,34 @@ import {
   Typography,
 } from "@mui/material";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiltersState, DEFAULT_FILTERS_STATE } from "../../filters/types";
 import { DATE_PRESET_OPTIONS } from "../../filters/labels";
 import { SEVERITY_STYLES, STATUS_LABELS } from "../../../utils/findingConstants";
 import { primitives } from "../../../design-system/tokens/colors";
 import { useProductOptions, useScannerOptions } from "./hooks";
+import PillDropdownMulti, {
+  PillDropdownOption,
+} from "../../../components/filters/PillDropdownMulti";
 
 interface OptionItem {
   value: string;
   label: string;
 }
 
-const severityOptions: OptionItem[] = Object.entries(SEVERITY_STYLES).map(([value, meta]) => ({
-  value,
-  label: meta.label,
-}));
+const severityOptions: PillDropdownOption[] = Object.entries(SEVERITY_STYLES).map(
+  ([value, meta]) => ({
+    id: value,
+    label: meta.label,
+  })
+);
 
-const statusOptions: OptionItem[] = Object.entries(STATUS_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}));
+const statusOptions: PillDropdownOption[] = Object.entries(STATUS_LABELS).map(
+  ([value, label]) => ({
+    id: value,
+    label,
+  })
+);
 
 interface FiltersPopoverProps {
   filters: FiltersState;
@@ -71,8 +74,8 @@ const FiltersPopover = ({
 
   const scannersHook = useScannerOptions(filters, debouncedSearch);
   const productsHook = useProductOptions();
-  const scannerOptions = scannerOptionsOverride ?? scannersHook.options;
-  const productOptions = productOptionsOverride ?? productsHook.options;
+  const scannerOptionsRaw = scannerOptionsOverride ?? scannersHook.options;
+  const productOptionsRaw = productOptionsOverride ?? productsHook.options;
   const scannersLoading = scannersLoadingOverride ?? scannersHook.loading;
   const productsLoading = productsLoadingOverride ?? productsHook.loading;
 
@@ -83,27 +86,45 @@ const FiltersPopover = ({
     }
   }, [filters, open]);
 
+  const scannerOptions = useMemo(
+    () =>
+      scannerOptionsRaw.map((option) => ({
+        id: option.value,
+        label: option.label,
+      })),
+    [scannerOptionsRaw]
+  );
+
+  const productOptions = useMemo(
+    () =>
+      productOptionsRaw.map((option) => ({
+        id: option.value,
+        label: option.label,
+      })),
+    [productOptionsRaw]
+  );
+
   const productLabelMap = useMemo(() => {
     const map = new Map<string, string>();
-    productOptions.forEach((option) => map.set(option.value, option.label));
+    productOptions.forEach((option) => map.set(option.id, option.label));
     return map;
   }, [productOptions]);
 
   const scannerLabelMap = useMemo(() => {
     const map = new Map<string, string>();
-    scannerOptions.forEach((option) => map.set(option.value, option.label));
+    scannerOptions.forEach((option) => map.set(option.id, option.label));
     return map;
   }, [scannerOptions]);
 
   const severityLabelMap = useMemo(() => {
     const map = new Map<string, string>();
-    severityOptions.forEach((option) => map.set(option.value, option.label));
+    severityOptions.forEach((option) => map.set(option.id, option.label));
     return map;
   }, []);
 
   const statusLabelMap = useMemo(() => {
     const map = new Map<string, string>();
-    statusOptions.forEach((option) => map.set(option.value, option.label));
+    statusOptions.forEach((option) => map.set(option.id, option.label));
     return map;
   }, []);
 
@@ -116,161 +137,6 @@ const FiltersPopover = ({
       return `Выбрано: ${labels.length}`;
     }
     return labels.join(", ");
-  };
-
-  const PillMultiSelect = ({
-    label,
-    options,
-    values,
-    loading,
-    searchable = false,
-    onChange,
-    summary,
-  }: {
-    label: string;
-    options: OptionItem[];
-    values: string[];
-    loading?: boolean;
-    searchable?: boolean;
-    summary: string;
-    onChange: (next: string[]) => void;
-  }) => {
-    const [anchor, setAnchor] = useState<null | HTMLElement>(null);
-    const [query, setQuery] = useState("");
-    const openMenu = Boolean(anchor);
-
-    const selectedSet = useMemo(() => new Set(values), [values]);
-    const filteredOptions = useMemo(() => {
-      if (!query) return options;
-      return options.filter((option) =>
-        option.label.toLowerCase().includes(query.toLowerCase())
-      );
-    }, [options, query]);
-
-    const handleToggle = (value: string) => {
-      if (selectedSet.has(value)) {
-        onChange(values.filter((item) => item !== value));
-      } else {
-        onChange([...values, value]);
-      }
-    };
-
-    const handleClose = () => {
-      anchor?.focus();
-      setAnchor(null);
-      setQuery("");
-    };
-
-    const handleSelectAll = () => {
-      onChange(options.map((option) => option.value));
-    };
-
-    const handleClear = () => {
-      onChange([]);
-    };
-
-    return (
-      <Box>
-        <Button
-          size="small"
-          variant="outlined"
-          endIcon={<KeyboardArrowDownIcon fontSize="small" />}
-          onClick={(event) => setAnchor(event.currentTarget)}
-          sx={{
-            borderRadius: "999px",
-            textTransform: "none",
-            height: 36,
-            fontSize: 12,
-            px: 1.5,
-            color: primitives.night[50],
-            borderColor: primitives.night[600],
-            justifyContent: "space-between",
-            "&:hover": {
-              borderColor: primitives.lotus[400],
-              bgcolor: "rgba(225, 29, 72, 0.08)",
-            },
-          }}
-          aria-label={label}
-          fullWidth
-        >
-          {label}: {summary}
-        </Button>
-
-        <Menu
-          open={openMenu}
-          anchorEl={anchor}
-          onClose={handleClose}
-          disablePortal
-          MenuListProps={{ dense: true, disablePadding: true }}
-          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-          transformOrigin={{ vertical: "top", horizontal: "left" }}
-          slotProps={{
-            paper: {
-              sx: {
-                width: 260,
-                bgcolor: primitives.night[800],
-                color: primitives.night[50],
-                p: 1,
-                border: `1px solid ${primitives.night[600]}`,
-                boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
-              },
-            },
-          }}
-        >
-          <Stack spacing={1} sx={{ px: 1, pt: 0.5, pb: 0.75 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography variant="caption" sx={{ color: primitives.night[200] }}>
-                {label}
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Button size="small" variant="text" onClick={handleSelectAll}>
-                  Всё
-                </Button>
-                <Button size="small" variant="text" onClick={handleClear}>
-                  Очистить
-                </Button>
-              </Stack>
-            </Stack>
-            {searchable && (
-              <TextField
-                size="small"
-                placeholder="Поиск"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                sx={{
-                  "& .MuiInputBase-root": {
-                    bgcolor: primitives.night[700],
-                  },
-                }}
-              />
-            )}
-          </Stack>
-          <Box sx={{ maxHeight: 220, overflowY: "auto", pb: 0.5 }}>
-            {loading ? (
-              <Typography variant="caption" sx={{ color: primitives.night[300], px: 2 }}>
-                Загрузка...
-              </Typography>
-            ) : filteredOptions.length ? (
-              filteredOptions.map((option) => (
-                <MenuItem
-                  key={option.value}
-                  onClick={() => handleToggle(option.value)}
-                  dense
-                  sx={{ px: 1.5, py: 0.5, gap: 1 }}
-                >
-                  <Checkbox checked={selectedSet.has(option.value)} size="small" />
-                  <Typography variant="body2">{option.label}</Typography>
-                </MenuItem>
-              ))
-            ) : (
-              <Typography variant="caption" sx={{ color: primitives.night[300], px: 2 }}>
-                Нет вариантов
-              </Typography>
-            )}
-          </Box>
-        </Menu>
-      </Box>
-    );
   };
 
   return (
@@ -335,6 +201,7 @@ const FiltersPopover = ({
                   p: 1.5,
                   border: `1px solid ${primitives.night[600]}`,
                   boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
+                  overflow: "visible",
                 }}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
@@ -356,37 +223,43 @@ const FiltersPopover = ({
                       gap: 1,
                     }}
                   >
-                    <PillMultiSelect
+                    <PillDropdownMulti
                       label="Критичность"
                       options={severityOptions}
-                      values={draft.severities}
+                      selected={draft.severities}
                       onChange={(next) => setDraft((prev) => ({ ...prev, severities: next }))}
                       summary={buildSummary(draft.severities, severityLabelMap)}
                     />
-                    <PillMultiSelect
+                    <PillDropdownMulti
                       label="Статус"
                       options={statusOptions}
-                      values={draft.statuses}
+                      selected={draft.statuses}
                       onChange={(next) => setDraft((prev) => ({ ...prev, statuses: next }))}
                       summary={buildSummary(draft.statuses, statusLabelMap)}
                     />
-                    <PillMultiSelect
+                    <PillDropdownMulti
                       label="Инструменты"
                       options={scannerOptions}
-                      values={draft.scannerTypes}
-                      loading={scannersLoading}
                       searchable
+                      selected={draft.scannerTypes}
                       onChange={(next) => setDraft((prev) => ({ ...prev, scannerTypes: next }))}
-                      summary={buildSummary(draft.scannerTypes, scannerLabelMap)}
+                      summary={
+                        scannersLoading
+                          ? "Загрузка..."
+                          : buildSummary(draft.scannerTypes, scannerLabelMap)
+                      }
                     />
-                    <PillMultiSelect
+                    <PillDropdownMulti
                       label="Продукты"
                       options={productOptions}
-                      values={draft.productIds}
-                      loading={productsLoading}
                       searchable
+                      selected={draft.productIds}
                       onChange={(next) => setDraft((prev) => ({ ...prev, productIds: next }))}
-                      summary={buildSummary(draft.productIds, productLabelMap)}
+                      summary={
+                        productsLoading
+                          ? "Загрузка..."
+                          : buildSummary(draft.productIds, productLabelMap)
+                      }
                     />
                   </Box>
 
