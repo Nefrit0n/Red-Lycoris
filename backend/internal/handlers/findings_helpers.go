@@ -101,7 +101,15 @@ func isValidRiskBand(band string) bool {
 
 func validateFindingCategory(category string) error {
 	switch category {
-	case models.CategorySAST, models.CategorySCA, models.CategorySecrets, models.CategoryConfig:
+	case models.CategorySAST,
+		models.CategorySCA,
+		models.CategorySecrets,
+		models.CategoryConfig,
+		models.CategoryDAST,
+		models.CategoryLicense,
+		models.CategoryIAC,
+		models.CategoryContainer,
+		models.CategoryUnknown:
 		return nil
 	default:
 		return fmt.Errorf("invalid category")
@@ -152,6 +160,43 @@ func resolveProductFilter(ctx context.Context, db *sql.DB, productIDParam string
 	}
 
 	return nil, fmt.Errorf("product not found")
+}
+
+func resolveProductFilters(ctx context.Context, db *sql.DB, productIDs []string, products []string) ([]uuid.UUID, error) {
+	seen := map[uuid.UUID]struct{}{}
+	ids := make([]uuid.UUID, 0)
+
+	for _, raw := range productIDs {
+		parsed, err := resolveProductFilter(ctx, db, strings.TrimSpace(raw), "")
+		if err != nil {
+			return nil, err
+		}
+		if parsed == nil {
+			continue
+		}
+		if _, ok := seen[*parsed]; ok {
+			continue
+		}
+		seen[*parsed] = struct{}{}
+		ids = append(ids, *parsed)
+	}
+
+	for _, raw := range products {
+		parsed, err := resolveProductFilter(ctx, db, "", strings.TrimSpace(raw))
+		if err != nil {
+			return nil, err
+		}
+		if parsed == nil {
+			continue
+		}
+		if _, ok := seen[*parsed]; ok {
+			continue
+		}
+		seen[*parsed] = struct{}{}
+		ids = append(ids, *parsed)
+	}
+
+	return ids, nil
 }
 
 // userIDFromContext extracts user ID from fiber context
