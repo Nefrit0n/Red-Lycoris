@@ -4,10 +4,10 @@ import {
   Button,
   Checkbox,
   ClickAwayListener,
-  Divider,
   FormControlLabel,
   Grow,
   IconButton,
+  Menu,
   MenuItem,
   Paper,
   Popper,
@@ -65,6 +65,7 @@ const FiltersPopover = ({
 }: FiltersPopoverProps) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [draft, setDraft] = useState<FiltersState>(filters);
+  const [showCustomDates, setShowCustomDates] = useState(false);
   const open = Boolean(anchorEl);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -78,6 +79,7 @@ const FiltersPopover = ({
   useEffect(() => {
     if (open) {
       setDraft(filters);
+      setShowCustomDates(Boolean(filters.dateFrom || filters.dateTo));
     }
   }, [filters, open]);
 
@@ -105,14 +107,15 @@ const FiltersPopover = ({
     return map;
   }, []);
 
-  const buildSummary = (label: string, values: string[], map: Map<string, string>) => {
+  const buildSummary = (values: string[], map: Map<string, string>) => {
     if (values.length === 0) {
-      return `${label}: Все`;
+      return "Все";
     }
     const labels = values.map((value) => map.get(value) ?? value);
-    const visible = labels.slice(0, 2).join(", ");
-    const extra = labels.length - 2;
-    return `${label}: ${visible}${extra > 0 ? ` +${extra}` : ""}`;
+    if (labels.length > 2) {
+      return `Выбрано: ${labels.length}`;
+    }
+    return labels.join(", ");
   };
 
   const PillMultiSelect = ({
@@ -176,115 +179,95 @@ const FiltersPopover = ({
           sx={{
             borderRadius: "999px",
             textTransform: "none",
-            height: 32,
+            height: 36,
             fontSize: 12,
             px: 1.5,
             color: primitives.night[50],
             borderColor: primitives.night[600],
+            justifyContent: "space-between",
             "&:hover": {
               borderColor: primitives.lotus[400],
               bgcolor: "rgba(225, 29, 72, 0.08)",
             },
           }}
           aria-label={label}
+          fullWidth
         >
-          {summary}
+          {label}: {summary}
         </Button>
 
-        <Popper
+        <Menu
           open={openMenu}
           anchorEl={anchor}
-          placement="bottom-start"
-          modifiers={[{ name: "offset", options: { offset: [0, 6] } }]}
-        >
-          <ClickAwayListener
-            onClickAway={(event) => {
-              if (anchor && anchor.contains(event.target as Node)) {
-                return;
-              }
-              handleClose();
-            }}
-          >
-            <Paper
-              sx={{
+          onClose={handleClose}
+          MenuListProps={{ dense: true, disablePadding: true }}
+          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          transformOrigin={{ vertical: "top", horizontal: "left" }}
+          slotProps={{
+            paper: {
+              sx: {
                 width: 260,
                 bgcolor: primitives.night[800],
                 color: primitives.night[50],
-                p: 1.5,
+                p: 1,
                 border: `1px solid ${primitives.night[600]}`,
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.stopPropagation();
-                  handleClose();
-                }
-              }}
-            >
-              <Stack spacing={1}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="caption" sx={{ color: primitives.night[200] }}>
-                    {label}
-                  </Typography>
-                  <Stack direction="row" spacing={1}>
-                    <Button size="small" variant="text" onClick={handleSelectAll}>
-                      Выбрать всё
-                    </Button>
-                    <Button size="small" variant="text" onClick={handleClear}>
-                      Очистить
-                    </Button>
-                  </Stack>
-                </Stack>
-                {searchable && (
-                  <TextField
-                    size="small"
-                    placeholder="Поиск"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                )}
-                <Box sx={{ maxHeight: 220, overflowY: "auto" }}>
-                  {loading ? (
-                    <Typography variant="caption" sx={{ color: primitives.night[300] }}>
-                      Загрузка...
-                    </Typography>
-                  ) : filteredOptions.length ? (
-                    filteredOptions.map((option) => (
-                      <Box
-                        key={option.value}
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 1,
-                          px: 0.5,
-                          py: 0.5,
-                          borderRadius: 1,
-                          cursor: "pointer",
-                          "&:hover": { bgcolor: "rgba(255,255,255,0.06)" },
-                        }}
-                        onClick={() => handleToggle(option.value)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            handleToggle(option.value);
-                          }
-                        }}
-                      >
-                        <Checkbox checked={selectedSet.has(option.value)} size="small" />
-                        <Typography variant="body2">{option.label}</Typography>
-                      </Box>
-                    ))
-                  ) : (
-                    <Typography variant="caption" sx={{ color: primitives.night[300] }}>
-                      Нет вариантов
-                    </Typography>
-                  )}
-                </Box>
+                boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
+              },
+            },
+          }}
+        >
+          <Stack spacing={1} sx={{ px: 1, pt: 0.5, pb: 0.75 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" sx={{ color: primitives.night[200] }}>
+                {label}
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant="text" onClick={handleSelectAll}>
+                  Всё
+                </Button>
+                <Button size="small" variant="text" onClick={handleClear}>
+                  Очистить
+                </Button>
               </Stack>
-            </Paper>
-          </ClickAwayListener>
-        </Popper>
+            </Stack>
+            {searchable && (
+              <TextField
+                size="small"
+                placeholder="Поиск"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                sx={{
+                  "& .MuiInputBase-root": {
+                    bgcolor: primitives.night[700],
+                  },
+                }}
+              />
+            )}
+          </Stack>
+          <Box sx={{ maxHeight: 220, overflowY: "auto", pb: 0.5 }}>
+            {loading ? (
+              <Typography variant="caption" sx={{ color: primitives.night[300], px: 2 }}>
+                Загрузка...
+              </Typography>
+            ) : filteredOptions.length ? (
+              filteredOptions.map((option) => (
+                <MenuItem
+                  key={option.value}
+                  onClick={() => handleToggle(option.value)}
+                  dense
+                  sx={{ px: 1.5, py: 0.5, gap: 1 }}
+                >
+                  <Checkbox checked={selectedSet.has(option.value)} size="small" />
+                  <Typography variant="body2">{option.label}</Typography>
+                </MenuItem>
+              ))
+            ) : (
+              <Typography variant="caption" sx={{ color: primitives.night[300], px: 2 }}>
+                Нет вариантов
+              </Typography>
+            )}
+          </Box>
+        </Menu>
       </Box>
     );
   };
@@ -326,25 +309,27 @@ const FiltersPopover = ({
         modifiers={[{ name: "offset", options: { offset: [0, 8] } }]}
       >
         <Grow in={open} style={{ transformOrigin: "top right" }}>
-          <Paper
-            sx={{
-              width: 400,
-              bgcolor: primitives.night[700],
-              color: primitives.night[50],
-              p: 2,
+          <ClickAwayListener
+            onClickAway={(event) => {
+              if (buttonRef.current && buttonRef.current.contains(event.target as Node)) {
+                return;
+              }
+              setAnchorEl(null);
+              buttonRef.current?.focus();
             }}
           >
-            <ClickAwayListener
-              onClickAway={(event) => {
-                if (buttonRef.current && buttonRef.current.contains(event.target as Node)) {
-                  return;
-                }
-                setAnchorEl(null);
-                buttonRef.current?.focus();
+            <Paper
+              sx={{
+                width: 380,
+                bgcolor: primitives.night[700],
+                color: primitives.night[50],
+                p: 1.5,
+                border: `1px solid ${primitives.night[600]}`,
+                boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
               }}
             >
               <Stack
-                spacing={2}
+                spacing={1}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.stopPropagation();
@@ -355,13 +340,19 @@ const FiltersPopover = ({
               >
                 <Typography variant="subtitle2">Фильтры</Typography>
 
-                <Stack direction="row" spacing={1} flexWrap="wrap">
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                    gap: 1,
+                  }}
+                >
                   <PillMultiSelect
                     label="Критичность"
                     options={severityOptions}
                     values={draft.severities}
                     onChange={(next) => setDraft((prev) => ({ ...prev, severities: next }))}
-                    summary={buildSummary("Критичность", draft.severities, severityLabelMap)}
+                    summary={buildSummary(draft.severities, severityLabelMap)}
                   />
 
                   <PillMultiSelect
@@ -369,7 +360,7 @@ const FiltersPopover = ({
                     options={statusOptions}
                     values={draft.statuses}
                     onChange={(next) => setDraft((prev) => ({ ...prev, statuses: next }))}
-                    summary={buildSummary("Статус", draft.statuses, statusLabelMap)}
+                    summary={buildSummary(draft.statuses, statusLabelMap)}
                   />
 
                   <PillMultiSelect
@@ -379,7 +370,7 @@ const FiltersPopover = ({
                     loading={scannersLoading}
                     searchable
                     onChange={(next) => setDraft((prev) => ({ ...prev, scannerTypes: next }))}
-                    summary={buildSummary("Инструменты", draft.scannerTypes, scannerLabelMap)}
+                    summary={buildSummary(draft.scannerTypes, scannerLabelMap)}
                   />
 
                   <PillMultiSelect
@@ -389,85 +380,153 @@ const FiltersPopover = ({
                     loading={productsLoading}
                     searchable
                     onChange={(next) => setDraft((prev) => ({ ...prev, productIds: next }))}
-                    summary={buildSummary("Продукты", draft.productIds, productLabelMap)}
+                    summary={buildSummary(draft.productIds, productLabelMap)}
                   />
-                </Stack>
+                </Box>
 
-                <Stack direction="row" spacing={1}>
-                  <TextField
-                    select
-                    label="Период"
-                    size="small"
-                    value={draft.datePreset}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        datePreset: event.target.value as FiltersState["datePreset"],
-                      }))
-                    }
-                    sx={{ flex: 1 }}
+                <Stack spacing={0.75}>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 1,
+                    }}
                   >
-                    <MenuItem value="">Без пресета</MenuItem>
                     {DATE_PRESET_OPTIONS.map((preset) => (
-                      <MenuItem key={preset.id} value={preset.id}>
+                      <Button
+                        key={preset.id}
+                        size="small"
+                        variant={draft.datePreset === preset.id ? "contained" : "outlined"}
+                        onClick={() => {
+                          setDraft((prev) => ({
+                            ...prev,
+                            datePreset: preset.id as FiltersState["datePreset"],
+                            dateFrom: "",
+                            dateTo: "",
+                          }));
+                          setShowCustomDates(false);
+                        }}
+                        onFocus={() => setShowCustomDates(false)}
+                        onMouseDown={() => setShowCustomDates(false)}
+                        sx={{
+                          borderRadius: "999px",
+                          height: 36,
+                          textTransform: "none",
+                          fontSize: 12,
+                          borderColor: primitives.night[600],
+                          color:
+                            draft.datePreset === preset.id
+                              ? primitives.night[50]
+                              : primitives.night[50],
+                          bgcolor:
+                            draft.datePreset === preset.id
+                              ? primitives.lotus[500]
+                              : "transparent",
+                          "&:hover": {
+                            borderColor: primitives.lotus[400],
+                            bgcolor:
+                              draft.datePreset === preset.id
+                                ? primitives.lotus[400]
+                                : "rgba(225, 29, 72, 0.08)",
+                          },
+                        }}
+                      >
                         {preset.label}
-                      </MenuItem>
+                      </Button>
                     ))}
-                  </TextField>
-                  <TextField
-                    type="date"
-                    size="small"
-                    label="С"
-                    value={draft.dateFrom}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, dateFrom: event.target.value }))
-                    }
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ flex: 1 }}
-                  />
-                  <TextField
-                    type="date"
-                    size="small"
-                    label="По"
-                    value={draft.dateTo}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, dateTo: event.target.value }))
-                    }
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ flex: 1 }}
-                  />
+                    <Button
+                      size="small"
+                      variant={showCustomDates ? "contained" : "outlined"}
+                      onClick={() => {
+                        setDraft((prev) => ({ ...prev, datePreset: "" }));
+                        setShowCustomDates(true);
+                      }}
+                      onFocus={() => setShowCustomDates(true)}
+                      sx={{
+                        borderRadius: "999px",
+                        height: 36,
+                        textTransform: "none",
+                        fontSize: 12,
+                        borderColor: primitives.night[600],
+                        color: primitives.night[50],
+                        bgcolor: showCustomDates ? primitives.lotus[500] : "transparent",
+                        "&:hover": {
+                          borderColor: primitives.lotus[400],
+                          bgcolor: showCustomDates
+                            ? primitives.lotus[400]
+                            : "rgba(225, 29, 72, 0.08)",
+                        },
+                      }}
+                    >
+                      Кастом
+                    </Button>
+                  </Box>
+
+                  {showCustomDates && (
+                    <Stack direction="row" spacing={1}>
+                      <TextField
+                        type="date"
+                        size="small"
+                        label="С"
+                        value={draft.dateFrom}
+                        onChange={(event) =>
+                          setDraft((prev) => ({ ...prev, dateFrom: event.target.value }))
+                        }
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        type="date"
+                        size="small"
+                        label="По"
+                        value={draft.dateTo}
+                        onChange={(event) =>
+                          setDraft((prev) => ({ ...prev, dateTo: event.target.value }))
+                        }
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ flex: 1 }}
+                      />
+                    </Stack>
+                  )}
                 </Stack>
 
                 <FormControlLabel
+                  sx={{ m: 0, alignItems: "center" }}
                   control={
                     <Switch
+                      size="small"
                       checked={draft.showRepeats}
                       onChange={(event) =>
                         setDraft((prev) => ({ ...prev, showRepeats: event.target.checked }))
                       }
                     />
                   }
-                  label="Показывать повторы"
+                  label={
+                    <Typography variant="body2" sx={{ color: primitives.night[100] }}>
+                      Показывать повторы
+                    </Typography>
+                  }
                 />
 
-                <Divider sx={{ borderColor: primitives.night[600] }} />
-
-                <Stack direction="row" justifyContent="space-between">
+                <Stack direction="row" justifyContent="flex-end" spacing={1}>
                   {activeCount > 0 && (
                     <Button
                       variant="text"
+                      size="small"
                       onClick={() => {
                         const cleared = { ...DEFAULT_FILTERS_STATE, search: filters.search };
                         setDraft(cleared);
+                        setShowCustomDates(false);
                         onClear(cleared);
                       }}
                       sx={{ color: primitives.night[200] }}
                     >
-                      Очистить всё
+                      Очистить
                     </Button>
                   )}
                   <Button
                     variant="contained"
+                    size="small"
                     onClick={() => {
                       onApply(draft);
                       setAnchorEl(null);
@@ -478,8 +537,8 @@ const FiltersPopover = ({
                   </Button>
                 </Stack>
               </Stack>
-            </ClickAwayListener>
-          </Paper>
+            </Paper>
+          </ClickAwayListener>
         </Grow>
       </Popper>
     </Box>
