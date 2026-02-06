@@ -64,7 +64,7 @@ func ListFindingsByFilters(ctx context.Context, db *sql.DB, filters FindingFilte
 		err  error
 	)
 	if limit > 0 {
-		rows, err = db.QueryContext(ctx, queryBase+" LIMIT $16", append(args, limit)...)
+		rows, err = db.QueryContext(ctx, queryBase+" LIMIT $17", append(args, limit)...)
 	} else {
 		rows, err = db.QueryContext(ctx, queryBase, args...)
 	}
@@ -126,67 +126,69 @@ func BulkUpdateFindingStatus(ctx context.Context, db *sql.DB, ids []uuid.UUID, s
 	return result.RowsAffected()
 }
 
-// findingFilterWhereClauseOffset2 is the same as findingFilterWhereClause but with $3-$17 placeholders
+// findingFilterWhereClauseOffset2 is the same as findingFilterWhereClause but with $3-$18 placeholders
 // (offset by 2 for bulk update queries that have $1=value, $2=timestamp).
 const findingFilterWhereClauseOffset2 = `
 f.deleted_at IS NULL
   AND (f.tenant_id = $3)
-  AND ($4::text IS NULL OR f.severity = $4)
-  AND ($5::text IS NULL OR f.status = $5)
-  AND ($6::uuid IS NULL OR f.product_id = $6)
+  AND ($4::text[] IS NULL OR f.severity = ANY($4))
+  AND ($5::text[] IS NULL OR f.status = ANY($5))
+  AND ($6::uuid[] IS NULL OR f.product_id = ANY($6))
   AND ($7::uuid IS NULL OR f.import_job_id = $7)
   AND ($8::uuid IS NULL OR EXISTS (
 		SELECT 1 FROM policy_results pr
 		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $8
 	))
-  AND ($9::text IS NULL OR (
+  AND ($9::text[] IS NULL OR (
 		SELECT pr.decision FROM policy_results pr
 		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
 		ORDER BY pr.evaluated_at DESC
 		LIMIT 1
-	) = $9)
-  AND ($10::text IS NULL OR fr.risk_band = $10)
+	) = ANY($9))
+  AND ($10::text[] IS NULL OR fr.risk_band = ANY($10))
   AND ($11::text IS NULL OR (f.title ILIKE $11 OR f.description ILIKE $11 OR f.fingerprint ILIKE $11 OR p.identifier ILIKE $11 OR p.name ILIKE $11))
-  AND ($12::text IS NULL OR sr.scanner = $12)
+  AND ($12::text[] IS NULL OR sr.scanner = ANY($12))
   AND ($13::text IS NULL OR f.source_type = $13)
-  AND ($14::text IS NULL OR (
-		($14 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
-		OR ($14 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
+  AND ($14::text[] IS NULL OR (
+		(f.duplicate_id IS NULL AND f.repeat_count = 0 AND 'NEW' = ANY($14))
+		OR ((f.repeat_count > 0 OR f.duplicate_id IS NOT NULL) AND 'REPEAT' = ANY($14))
 	))
   AND ($15::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $15)
   AND ($16::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $16)
-  AND ($17::bool = FALSE OR f.duplicate_id IS NULL)`
+  AND ($17::bool = FALSE OR f.duplicate_id IS NULL)
+  AND ($18::text[] IS NULL OR f.category = ANY($18))`
 
-// findingFilterWhereClauseOffset3 is the same as findingFilterWhereClause but with $4-$18 placeholders
+// findingFilterWhereClauseOffset3 is the same as findingFilterWhereClause but with $4-$19 placeholders
 // (offset by 3 for bulk status updates that include rank).
 const findingFilterWhereClauseOffset3 = `
 f.deleted_at IS NULL
   AND (f.tenant_id = $4)
-  AND ($5::text IS NULL OR f.severity = $5)
-  AND ($6::text IS NULL OR f.status = $6)
-  AND ($7::uuid IS NULL OR f.product_id = $7)
+  AND ($5::text[] IS NULL OR f.severity = ANY($5))
+  AND ($6::text[] IS NULL OR f.status = ANY($6))
+  AND ($7::uuid[] IS NULL OR f.product_id = ANY($7))
   AND ($8::uuid IS NULL OR f.import_job_id = $8)
   AND ($9::uuid IS NULL OR EXISTS (
 		SELECT 1 FROM policy_results pr
 		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id AND pr.policy_id = $9
 	))
-  AND ($10::text IS NULL OR (
+  AND ($10::text[] IS NULL OR (
 		SELECT pr.decision FROM policy_results pr
 		WHERE pr.subject_type = 'finding' AND pr.subject_id = f.id
 		ORDER BY pr.evaluated_at DESC
 		LIMIT 1
-	) = $10)
-  AND ($11::text IS NULL OR fr.risk_band = $11)
+	) = ANY($10))
+  AND ($11::text[] IS NULL OR fr.risk_band = ANY($11))
   AND ($12::text IS NULL OR (f.title ILIKE $12 OR f.description ILIKE $12 OR f.fingerprint ILIKE $12 OR p.identifier ILIKE $12 OR p.name ILIKE $12))
-  AND ($13::text IS NULL OR sr.scanner = $13)
+  AND ($13::text[] IS NULL OR sr.scanner = ANY($13))
   AND ($14::text IS NULL OR f.source_type = $14)
-  AND ($15::text IS NULL OR (
-		($15 = 'NEW' AND f.duplicate_id IS NULL AND f.repeat_count = 0)
-		OR ($15 = 'REPEAT' AND (f.repeat_count > 0 OR f.duplicate_id IS NOT NULL))
+  AND ($15::text[] IS NULL OR (
+		(f.duplicate_id IS NULL AND f.repeat_count = 0 AND 'NEW' = ANY($15))
+		OR ((f.repeat_count > 0 OR f.duplicate_id IS NOT NULL) AND 'REPEAT' = ANY($15))
 	))
   AND ($16::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) >= $16)
   AND ($17::timestamptz IS NULL OR COALESCE(f.last_seen_at, f.created_at) <= $17)
-  AND ($18::bool = FALSE OR f.duplicate_id IS NULL)`
+  AND ($18::bool = FALSE OR f.duplicate_id IS NULL)
+  AND ($19::text[] IS NULL OR f.category = ANY($19))`
 
 func BulkUpdateFindingStatusByFilters(ctx context.Context, db *sql.DB, filters FindingFilters, status string) (int64, error) {
 	if filters.TenantID == nil {
