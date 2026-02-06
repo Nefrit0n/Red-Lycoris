@@ -12,7 +12,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import { FiltersState } from "../../filters/types";
 import { countActiveFilters } from "../../filters/url";
 import { CATEGORY_LABELS } from "../../filters/labels";
-import { SEVERITY_STYLES, STATUS_LABELS } from "../../../utils/findingConstants";
+import { FindingSeverity, FindingStatus } from "../../../types/findings";
 import SavedViewsSelector from "../../../components/SavedViewsSelector";
 import ExportMenu from "../../../components/ExportMenu";
 import { FindingListItemDTO } from "../../../types/findings";
@@ -20,6 +20,24 @@ import { primitives } from "../../../design-system/tokens/colors";
 import FiltersPopover from "./FiltersPopover";
 import { useCategoryFacets } from "./hooks";
 import ScanModesMenu from "./ScanModesMenu";
+
+const SEVERITY_LABELS_RU: Record<FindingSeverity, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая",
+  critical: "Критическая",
+};
+
+const STATUS_LABELS_RU: Record<FindingStatus, string> = {
+  new: "Новый",
+  under_review: "На проверке",
+  confirmed: "Подтверждено",
+  false_positive: "Ложноположительное",
+  out_of_scope: "Вне области",
+  risk_accepted: "Риск принят",
+  mitigated: "Исправлено",
+  duplicate: "Дубликат",
+};
 
 interface FindingsTopBarProps {
   totalCount?: number;
@@ -65,12 +83,12 @@ const FindingsTopBar = ({
       : null,
     filters.severities.length
       ? `Критичность: ${filters.severities
-          .map((item) => SEVERITY_STYLES[item]?.label ?? item)
+          .map((item) => SEVERITY_LABELS_RU[item as FindingSeverity] ?? item)
           .join("/")}`
       : null,
     filters.statuses.length
       ? `Статус: ${filters.statuses
-          .map((item) => STATUS_LABELS[item] ?? item)
+          .map((item) => STATUS_LABELS_RU[item as FindingStatus] ?? item)
           .join("/")}`
       : null,
   ].filter(Boolean) as string[];
