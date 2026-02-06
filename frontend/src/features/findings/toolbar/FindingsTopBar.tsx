@@ -18,8 +18,8 @@ import ExportMenu from "../../../components/ExportMenu";
 import { FindingListItemDTO } from "../../../types/findings";
 import { primitives } from "../../../design-system/tokens/colors";
 import FiltersPopover from "./FiltersPopover";
-import TypeStrip from "./TypeStrip";
 import { useCategoryFacets } from "./hooks";
+import ScanModesMenu from "./ScanModesMenu";
 
 interface FindingsTopBarProps {
   totalCount?: number;
@@ -55,7 +55,7 @@ const FindingsTopBar = ({
     ? categoryItemsOverride
     : facets.length
       ? facets.map((facet) => ({ category: facet.category, count: facet.count }))
-      : filters.categories.map((category) => ({ category }));
+      : [];
 
   const summaryParts = [
     filters.categories.length
@@ -138,13 +138,11 @@ const FindingsTopBar = ({
             }}
           />
 
-          <Box sx={{ maxWidth: 420, minWidth: 200 }}>
-            <TypeStrip
-              items={categoryItems}
-              value={filters.categories}
-              onChange={(next) => onApplyView({ categories: next })}
-            />
-          </Box>
+          <ScanModesMenu
+            value={filters.categories}
+            onChange={(next) => onApplyView({ categories: next })}
+            options={categoryItems}
+          />
 
           <Box sx={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 1 }}>
             {summaryText && (
