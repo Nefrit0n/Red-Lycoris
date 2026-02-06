@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   ClickAwayListener,
+  Divider,
   FormControlLabel,
   Grow,
   IconButton,
@@ -14,34 +15,52 @@ import {
   Typography,
 } from "@mui/material";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
+import StarRoundedIcon from "@mui/icons-material/StarRounded";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiltersState, DEFAULT_FILTERS_STATE } from "../../filters/types";
-import { DATE_PRESET_OPTIONS } from "../../filters/labels";
-import { SEVERITY_STYLES, STATUS_LABELS } from "../../../utils/findingConstants";
+import { DATE_PRESET_OPTIONS, LANGUAGE_OPTIONS } from "../../filters/labels";
 import { primitives } from "../../../design-system/tokens/colors";
 import { useProductOptions, useScannerOptions } from "./hooks";
 import PillDropdownMulti, {
   PillDropdownOption,
 } from "../../../components/filters/PillDropdownMulti";
+import { FindingSeverity, FindingStatus } from "../../../types/findings";
+import { useSavedViews } from "../../../hooks/useSavedViews";
 
 interface OptionItem {
   value: string;
   label: string;
 }
 
-const severityOptions: PillDropdownOption[] = Object.entries(SEVERITY_STYLES).map(
-  ([value, meta]) => ({
-    id: value,
-    label: meta.label,
-  })
-);
+const SEVERITY_LABELS_RU: Record<FindingSeverity, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая",
+  critical: "Критическая",
+};
 
-const statusOptions: PillDropdownOption[] = Object.entries(STATUS_LABELS).map(
-  ([value, label]) => ({
+const STATUS_LABELS_RU: Record<FindingStatus, string> = {
+  new: "Новый",
+  under_review: "На проверке",
+  confirmed: "Подтверждено",
+  false_positive: "Ложноположительное",
+  out_of_scope: "Вне области",
+  risk_accepted: "Риск принят",
+  mitigated: "Исправлено",
+  duplicate: "Дубликат",
+};
+
+const severityOptions: PillDropdownOption[] = (Object.keys(SEVERITY_LABELS_RU) as FindingSeverity[])
+  .map((value) => ({
     id: value,
-    label,
-  })
-);
+    label: SEVERITY_LABELS_RU[value],
+  }));
+
+const statusOptions: PillDropdownOption[] = (Object.keys(STATUS_LABELS_RU) as FindingStatus[])
+  .map((value) => ({
+    id: value,
+    label: STATUS_LABELS_RU[value],
+  }));
 
 interface FiltersPopoverProps {
   filters: FiltersState;
@@ -69,7 +88,9 @@ const FiltersPopover = ({
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [draft, setDraft] = useState<FiltersState>(filters);
   const [showCustomDates, setShowCustomDates] = useState(false);
-  const [openMenu, setOpenMenu] = useState<null | "sev" | "status" | "tools" | "products">(null);
+  const [openMenu, setOpenMenu] = useState<
+    null | "sev" | "status" | "tools" | "products" | "languages"
+  >(null);
   const open = Boolean(anchorEl);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -134,6 +155,40 @@ const FiltersPopover = ({
     statusOptions.forEach((option) => map.set(option.id, option.label));
     return map;
   }, []);
+
+  const languageOptions = useMemo(
+    () =>
+      LANGUAGE_OPTIONS.map((option) => ({
+        id: option.value,
+        label: option.label,
+      })),
+    []
+  );
+
+  const languageLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    languageOptions.forEach((option) => map.set(option.id, option.label));
+    return map;
+  }, [languageOptions]);
+
+  const { builtInViews } = useSavedViews();
+
+  const applyQuickFilter = (preset: Partial<FiltersState>) => {
+    const next = {
+      ...DEFAULT_FILTERS_STATE,
+      search: filters.search,
+      pageSize: filters.pageSize,
+      sortField: filters.sortField,
+      sortOrder: filters.sortOrder,
+      ...preset,
+    };
+    setDraft(next);
+    setShowCustomDates(Boolean(next.dateFrom || next.dateTo));
+    onApply(next);
+    setAnchorEl(null);
+    setOpenMenu(null);
+    buttonRef.current?.focus();
+  };
 
   const buildSummary = (values: string[], map: Map<string, string>) => {
     if (values.length === 0) {
@@ -203,10 +258,10 @@ const FiltersPopover = ({
             <Grow in={open} style={{ transformOrigin: "top right" }}>
               <Paper
                 sx={{
-                  width: 380,
+                  width: 340,
                   bgcolor: primitives.night[700],
                   color: primitives.night[50],
-                  p: 1.5,
+                  p: 1,
                   border: `1px solid ${primitives.night[600]}`,
                   boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
                   overflow: "visible",
@@ -225,14 +280,51 @@ const FiltersPopover = ({
                   }
                 }}
               >
-                <Stack spacing={1}>
+                <Stack spacing={0.75}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">Быстрые наборы</Typography>
+                    <Stack
+                      spacing={0.5}
+                      sx={{
+                        borderRadius: 2,
+                        border: `1px solid ${primitives.night[600]}`,
+                        bgcolor: primitives.night[750],
+                        p: 0.75,
+                      }}
+                    >
+                      {builtInViews.map((item) => (
+                        <Button
+                          key={item.id}
+                          variant="text"
+                          onClick={() => applyQuickFilter(item.filters)}
+                          startIcon={<StarRoundedIcon sx={{ color: "#FACC15" }} fontSize="small" />}
+                          sx={{
+                            justifyContent: "flex-start",
+                            textTransform: "none",
+                            color: primitives.night[50],
+                            borderRadius: 1.5,
+                            px: 1,
+                            py: 0.5,
+                            minHeight: 32,
+                            fontSize: 13,
+                            "&:hover": { bgcolor: primitives.night[600] },
+                          }}
+                        >
+                          {item.name}
+                        </Button>
+                      ))}
+                    </Stack>
+                  </Stack>
+
+                  <Divider sx={{ borderColor: primitives.night[600] }} />
+
                   <Typography variant="subtitle2">Фильтры</Typography>
 
                   <Box
                     sx={{
                       display: "grid",
                       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      gap: 1,
+                      gap: 0.75,
                     }}
                   >
                     <PillDropdownMulti
@@ -293,14 +385,27 @@ const FiltersPopover = ({
                       }
                       onClose={() => setOpenMenu(null)}
                     />
+                    <PillDropdownMulti
+                      label="Языки"
+                      options={languageOptions}
+                      searchable
+                      selected={draft.languages}
+                      onChange={(next) => setDraft((prev) => ({ ...prev, languages: next }))}
+                      summary={buildSummary(draft.languages, languageLabelMap)}
+                      open={openMenu === "languages"}
+                      onToggle={() =>
+                        setOpenMenu((prev) => (prev === "languages" ? null : "languages"))
+                      }
+                      onClose={() => setOpenMenu(null)}
+                    />
                   </Box>
 
-                  <Stack spacing={0.75}>
+                  <Stack spacing={0.5}>
                     <Box
                       sx={{
                         display: "grid",
                         gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                        gap: 1,
+                        gap: 0.75,
                       }}
                     >
                       {DATE_PRESET_OPTIONS.map((preset) => (
@@ -321,7 +426,7 @@ const FiltersPopover = ({
                           onMouseDown={() => setShowCustomDates(false)}
                           sx={{
                             borderRadius: "999px",
-                            height: 36,
+                            height: 32,
                             textTransform: "none",
                             fontSize: 12,
                             borderColor: primitives.night[600],
@@ -355,7 +460,7 @@ const FiltersPopover = ({
                         onFocus={() => setShowCustomDates(true)}
                         sx={{
                           borderRadius: "999px",
-                          height: 36,
+                          height: 32,
                           textTransform: "none",
                           fontSize: 12,
                           borderColor: primitives.night[600],
@@ -369,7 +474,7 @@ const FiltersPopover = ({
                           },
                         }}
                       >
-                        Кастом
+                        Свои даты
                       </Button>
                     </Box>
 
