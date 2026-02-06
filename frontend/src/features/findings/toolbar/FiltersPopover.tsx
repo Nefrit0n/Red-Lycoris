@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   ClickAwayListener,
+  Divider,
   FormControlLabel,
   Grow,
   IconButton,
@@ -13,35 +14,58 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import BoltIcon from "@mui/icons-material/Bolt";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import NewReleasesOutlinedIcon from "@mui/icons-material/NewReleasesOutlined";
+import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
+import WebOutlinedIcon from "@mui/icons-material/WebOutlined";
+import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiltersState, DEFAULT_FILTERS_STATE } from "../../filters/types";
 import { DATE_PRESET_OPTIONS } from "../../filters/labels";
-import { SEVERITY_STYLES, STATUS_LABELS } from "../../../utils/findingConstants";
 import { primitives } from "../../../design-system/tokens/colors";
 import { useProductOptions, useScannerOptions } from "./hooks";
 import PillDropdownMulti, {
   PillDropdownOption,
 } from "../../../components/filters/PillDropdownMulti";
+import { FindingSeverity, FindingStatus } from "../../../types/findings";
 
 interface OptionItem {
   value: string;
   label: string;
 }
 
-const severityOptions: PillDropdownOption[] = Object.entries(SEVERITY_STYLES).map(
-  ([value, meta]) => ({
-    id: value,
-    label: meta.label,
-  })
-);
+const SEVERITY_LABELS_RU: Record<FindingSeverity, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая",
+  critical: "Критическая",
+};
 
-const statusOptions: PillDropdownOption[] = Object.entries(STATUS_LABELS).map(
-  ([value, label]) => ({
+const STATUS_LABELS_RU: Record<FindingStatus, string> = {
+  new: "Новый",
+  under_review: "На проверке",
+  confirmed: "Подтверждено",
+  false_positive: "Ложноположительное",
+  out_of_scope: "Вне области",
+  risk_accepted: "Риск принят",
+  mitigated: "Исправлено",
+  duplicate: "Дубликат",
+};
+
+const severityOptions: PillDropdownOption[] = (Object.keys(SEVERITY_LABELS_RU) as FindingSeverity[])
+  .map((value) => ({
     id: value,
-    label,
-  })
-);
+    label: SEVERITY_LABELS_RU[value],
+  }));
+
+const statusOptions: PillDropdownOption[] = (Object.keys(STATUS_LABELS_RU) as FindingStatus[])
+  .map((value) => ({
+    id: value,
+    label: STATUS_LABELS_RU[value],
+  }));
 
 interface FiltersPopoverProps {
   filters: FiltersState;
@@ -135,6 +159,80 @@ const FiltersPopover = ({
     return map;
   }, []);
 
+  const quickFilters = useMemo(
+    () => [
+      {
+        id: "quick-fixes",
+        label: "Быстрые фиксы",
+        icon: <BoltIcon fontSize="small" />,
+        preset: {
+          severities: ["low", "medium"] as FindingSeverity[],
+          statuses: ["new", "under_review"] as FindingStatus[],
+        },
+      },
+      {
+        id: "sla-soon",
+        label: "SLA скоро",
+        icon: <ScheduleIcon fontSize="small" />,
+        preset: { riskBands: ["high"] as FiltersState["riskBands"] },
+      },
+      {
+        id: "sla-overdue",
+        label: "Просрочено SLA",
+        icon: <ReportProblemOutlinedIcon fontSize="small" />,
+        preset: { riskBands: ["critical"] as FiltersState["riskBands"] },
+      },
+      {
+        id: "recent",
+        label: "Недавно обнаружено",
+        icon: <NewReleasesOutlinedIcon fontSize="small" />,
+        preset: { datePreset: "7d" as FiltersState["datePreset"] },
+      },
+      {
+        id: "ignored",
+        label: "Игнорируемые",
+        icon: <VisibilityOffOutlinedIcon fontSize="small" />,
+        preset: {
+          statuses: ["false_positive", "out_of_scope", "risk_accepted"] as FindingStatus[],
+        },
+      },
+    ],
+    []
+  );
+
+  const scopeFilters = useMemo(
+    () => [
+      {
+        id: "frontend",
+        label: "Фронтенд",
+        icon: <WebOutlinedIcon fontSize="small" />,
+        preset: { search: "frontend" },
+      },
+      {
+        id: "backend",
+        label: "Бэкенд",
+        icon: <StorageOutlinedIcon fontSize="small" />,
+        preset: { search: "backend" },
+      },
+    ],
+    []
+  );
+
+  const applyQuickFilter = (preset: Partial<FiltersState>) => {
+    setDraft((prev) => {
+      const next = {
+        ...DEFAULT_FILTERS_STATE,
+        search: prev.search,
+        pageSize: prev.pageSize,
+        sortField: prev.sortField,
+        sortOrder: prev.sortOrder,
+        ...preset,
+      };
+      setShowCustomDates(Boolean(next.dateFrom || next.dateTo));
+      return next;
+    });
+  };
+
   const buildSummary = (values: string[], map: Map<string, string>) => {
     if (values.length === 0) {
       return "Все";
@@ -226,6 +324,71 @@ const FiltersPopover = ({
                 }}
               >
                 <Stack spacing={1}>
+                  <Stack spacing={0.75}>
+                    <Typography variant="subtitle2">Быстрые фильтры</Typography>
+                    <Stack
+                      spacing={0.25}
+                      sx={{
+                        borderRadius: 2,
+                        border: `1px solid ${primitives.night[600]}`,
+                        bgcolor: primitives.night[750],
+                        p: 0.5,
+                      }}
+                    >
+                      {quickFilters.map((item) => (
+                        <Button
+                          key={item.id}
+                          variant="text"
+                          onClick={() => applyQuickFilter(item.preset)}
+                          startIcon={item.icon}
+                          sx={{
+                            justifyContent: "flex-start",
+                            textTransform: "none",
+                            color: primitives.night[50],
+                            borderRadius: 1.5,
+                            px: 1.25,
+                            py: 0.75,
+                            "&:hover": { bgcolor: primitives.night[600] },
+                          }}
+                        >
+                          {item.label}
+                        </Button>
+                      ))}
+                    </Stack>
+
+                    <Stack
+                      spacing={0.25}
+                      sx={{
+                        borderRadius: 2,
+                        border: `1px solid ${primitives.night[600]}`,
+                        bgcolor: primitives.night[750],
+                        p: 0.5,
+                      }}
+                    >
+                      {scopeFilters.map((item) => (
+                        <Button
+                          key={item.id}
+                          variant="text"
+                          onClick={() => applyQuickFilter(item.preset)}
+                          startIcon={item.icon}
+                          sx={{
+                            justifyContent: "flex-start",
+                            textTransform: "none",
+                            color: primitives.night[50],
+                            borderRadius: 1.5,
+                            px: 1.25,
+                            py: 0.75,
+                            "&:hover": { bgcolor: primitives.night[600] },
+                          }}
+                        >
+                          {item.label}
+                        </Button>
+                      ))}
+                    </Stack>
+                  </Stack>
+
+                  <Divider sx={{ borderColor: primitives.night[600] }} />
+
                   <Typography variant="subtitle2">Фильтры</Typography>
 
                   <Box
@@ -369,7 +532,7 @@ const FiltersPopover = ({
                           },
                         }}
                       >
-                        Кастом
+                        Свои даты
                       </Button>
                     </Box>
 
