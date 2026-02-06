@@ -12,7 +12,7 @@ import {
   Typography,
 } from "@mui/material";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import { ReactNode, useMemo, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { primitives } from "../../design-system/tokens/colors";
 
 export interface PillDropdownOption {
@@ -28,6 +28,9 @@ interface PillDropdownMultiProps {
   selected: string[];
   onChange: (next: string[]) => void;
   searchable?: boolean;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
 }
 
 const PillDropdownMulti = ({
@@ -37,11 +40,12 @@ const PillDropdownMulti = ({
   selected,
   onChange,
   searchable = false,
+  open,
+  onToggle,
+  onClose,
 }: PillDropdownMultiProps) => {
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const open = Boolean(anchorEl);
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const filteredOptions = useMemo(() => {
@@ -60,11 +64,11 @@ const PillDropdownMulti = ({
     }
   };
 
-  const handleClose = () => {
-    setAnchorEl(null);
-    setQuery("");
-    buttonRef.current?.focus();
-  };
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+    }
+  }, [open]);
 
   const handleSelectAll = () => {
     onChange(options.map((option) => option.id));
@@ -80,7 +84,7 @@ const PillDropdownMulti = ({
         size="small"
         variant="outlined"
         endIcon={<KeyboardArrowDownIcon fontSize="small" />}
-        onClick={(event) => setAnchorEl(event.currentTarget)}
+        onClick={onToggle}
         sx={{
           borderRadius: "999px",
           textTransform: "none",
@@ -104,7 +108,7 @@ const PillDropdownMulti = ({
 
       <Popper
         open={open}
-        anchorEl={anchorEl}
+        anchorEl={buttonRef.current}
         placement="bottom-start"
         disablePortal
         modifiers={[{ name: "offset", options: { offset: [0, 8] } }]}
@@ -115,7 +119,8 @@ const PillDropdownMulti = ({
             if (buttonRef.current && buttonRef.current.contains(event.target as Node)) {
               return;
             }
-            handleClose();
+            onClose();
+            buttonRef.current?.focus();
           }}
         >
           <Paper
@@ -129,8 +134,10 @@ const PillDropdownMulti = ({
             }}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
+                event.preventDefault();
                 event.stopPropagation();
-                handleClose();
+                onClose();
+                buttonRef.current?.focus();
               }
             }}
           >

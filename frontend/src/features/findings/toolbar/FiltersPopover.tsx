@@ -69,6 +69,7 @@ const FiltersPopover = ({
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [draft, setDraft] = useState<FiltersState>(filters);
   const [showCustomDates, setShowCustomDates] = useState(false);
+  const [openMenu, setOpenMenu] = useState<null | "sev" | "status" | "tools" | "products">(null);
   const open = Boolean(anchorEl);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -85,6 +86,12 @@ const FiltersPopover = ({
       setShowCustomDates(Boolean(filters.dateFrom || filters.dateTo));
     }
   }, [filters, open]);
+
+  useEffect(() => {
+    if (!open) {
+      setOpenMenu(null);
+    }
+  }, [open]);
 
   const scannerOptions = useMemo(
     () =>
@@ -176,6 +183,7 @@ const FiltersPopover = ({
             return;
           }
           setAnchorEl(null);
+          setOpenMenu(null);
           buttonRef.current?.focus();
         }}
       >
@@ -203,12 +211,16 @@ const FiltersPopover = ({
                   boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
                   overflow: "visible",
                 }}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
+                    event.preventDefault();
                     event.stopPropagation();
+                    if (openMenu) {
+                      setOpenMenu(null);
+                      return;
+                    }
                     setAnchorEl(null);
+                    setOpenMenu(null);
                     buttonRef.current?.focus();
                   }
                 }}
@@ -229,6 +241,11 @@ const FiltersPopover = ({
                       selected={draft.severities}
                       onChange={(next) => setDraft((prev) => ({ ...prev, severities: next }))}
                       summary={buildSummary(draft.severities, severityLabelMap)}
+                      open={openMenu === "sev"}
+                      onToggle={() =>
+                        setOpenMenu((prev) => (prev === "sev" ? null : "sev"))
+                      }
+                      onClose={() => setOpenMenu(null)}
                     />
                     <PillDropdownMulti
                       label="Статус"
@@ -236,6 +253,11 @@ const FiltersPopover = ({
                       selected={draft.statuses}
                       onChange={(next) => setDraft((prev) => ({ ...prev, statuses: next }))}
                       summary={buildSummary(draft.statuses, statusLabelMap)}
+                      open={openMenu === "status"}
+                      onToggle={() =>
+                        setOpenMenu((prev) => (prev === "status" ? null : "status"))
+                      }
+                      onClose={() => setOpenMenu(null)}
                     />
                     <PillDropdownMulti
                       label="Инструменты"
@@ -248,6 +270,11 @@ const FiltersPopover = ({
                           ? "Загрузка..."
                           : buildSummary(draft.scannerTypes, scannerLabelMap)
                       }
+                      open={openMenu === "tools"}
+                      onToggle={() =>
+                        setOpenMenu((prev) => (prev === "tools" ? null : "tools"))
+                      }
+                      onClose={() => setOpenMenu(null)}
                     />
                     <PillDropdownMulti
                       label="Продукты"
@@ -260,6 +287,11 @@ const FiltersPopover = ({
                           ? "Загрузка..."
                           : buildSummary(draft.productIds, productLabelMap)
                       }
+                      open={openMenu === "products"}
+                      onToggle={() =>
+                        setOpenMenu((prev) => (prev === "products" ? null : "products"))
+                      }
+                      onClose={() => setOpenMenu(null)}
                     />
                   </Box>
 
@@ -409,6 +441,7 @@ const FiltersPopover = ({
                       onClick={() => {
                         onApply(draft);
                         setAnchorEl(null);
+                        setOpenMenu(null);
                         buttonRef.current?.focus();
                       }}
                     >
