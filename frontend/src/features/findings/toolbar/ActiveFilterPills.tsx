@@ -1,14 +1,31 @@
 import { Box, Chip, Tooltip } from "@mui/material";
 import { useMemo } from "react";
 import { FiltersState } from "../../filters/types";
-import { CATEGORY_LABELS, DATE_PRESET_LABELS } from "../../filters/labels";
-import { SEVERITY_STYLES, STATUS_LABELS } from "../../../utils/findingConstants";
+import { CATEGORY_LABELS, DATE_PRESET_LABELS, LANGUAGE_LABELS } from "../../filters/labels";
 
 const RISK_LABELS: Record<string, string> = {
   low: "Низкий",
   medium: "Средний",
   high: "Высокий",
   critical: "Критичный",
+};
+
+const SEVERITY_LABELS: Record<string, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая",
+  critical: "Критическая",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  new: "Новый",
+  under_review: "На проверке",
+  confirmed: "Подтверждено",
+  false_positive: "Ложноположительное",
+  out_of_scope: "Вне области",
+  risk_accepted: "Риск принят",
+  mitigated: "Исправлено",
+  duplicate: "Дубликат",
 };
 
 const OCCURRENCE_LABELS: Record<string, string> = {
@@ -42,7 +59,7 @@ const ActiveFilterPills = ({ filters, maxVisible = 6, onRemove }: ActiveFilterPi
     filters.severities.forEach((value) =>
       items.push({
         key: `severity-${value}`,
-        label: `Серьезность: ${SEVERITY_STYLES[value]?.label ?? value}`,
+        label: `Критичность: ${SEVERITY_LABELS[value] ?? value}`,
         next: { ...filters, severities: filters.severities.filter((item) => item !== value) },
       })
     );
@@ -65,6 +82,13 @@ const ActiveFilterPills = ({ filters, maxVisible = 6, onRemove }: ActiveFilterPi
         key: `scanner-${value}`,
         label: `Сканер: ${value}`,
         next: { ...filters, scannerTypes: filters.scannerTypes.filter((item) => item !== value) },
+      })
+    );
+    filters.languages.forEach((value) =>
+      items.push({
+        key: `language-${value}`,
+        label: `Язык: ${LANGUAGE_LABELS[value] ?? value}`,
+        next: { ...filters, languages: filters.languages.filter((item) => item !== value) },
       })
     );
     filters.occurrences.forEach((value) =>

@@ -11,7 +11,7 @@ import {
 import SearchIcon from "@mui/icons-material/Search";
 import { FiltersState } from "../../filters/types";
 import { countActiveFilters } from "../../filters/url";
-import { CATEGORY_LABELS } from "../../filters/labels";
+import { CATEGORY_LABELS, LANGUAGE_LABELS } from "../../filters/labels";
 import { FindingSeverity, FindingStatus } from "../../../types/findings";
 import SavedViewsSelector from "../../../components/SavedViewsSelector";
 import ExportMenu from "../../../components/ExportMenu";
@@ -89,6 +89,11 @@ const FindingsTopBar = ({
     filters.statuses.length
       ? `Статус: ${filters.statuses
           .map((item) => STATUS_LABELS_RU[item as FindingStatus] ?? item)
+          .join("/")}`
+      : null,
+    filters.languages.length
+      ? `Языки: ${filters.languages
+          .map((item) => LANGUAGE_LABELS[item] ?? item)
           .join("/")}`
       : null,
   ].filter(Boolean) as string[];
