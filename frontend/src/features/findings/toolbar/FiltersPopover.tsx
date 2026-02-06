@@ -1,5 +1,4 @@
 import {
-  Autocomplete,
   Badge,
   Box,
   Button,
@@ -18,6 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiltersState, DEFAULT_FILTERS_STATE } from "../../filters/types";
 import { DATE_PRESET_OPTIONS } from "../../filters/labels";
@@ -45,6 +45,7 @@ interface FiltersPopoverProps {
   onApply: (next: FiltersState) => void;
   onClear: (next: FiltersState) => void;
   activeCount: number;
+  debouncedSearch?: string;
   scannerOptionsOverride?: OptionItem[];
   productOptionsOverride?: OptionItem[];
   scannersLoadingOverride?: boolean;
@@ -56,6 +57,7 @@ const FiltersPopover = ({
   onApply,
   onClear,
   activeCount,
+  debouncedSearch,
   scannerOptionsOverride,
   productOptionsOverride,
   scannersLoadingOverride,
@@ -66,7 +68,7 @@ const FiltersPopover = ({
   const open = Boolean(anchorEl);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
-  const scannersHook = useScannerOptions();
+  const scannersHook = useScannerOptions(filters, debouncedSearch);
   const productsHook = useProductOptions();
   const scannerOptions = scannerOptionsOverride ?? scannersHook.options;
   const productOptions = productOptionsOverride ?? productsHook.options;
@@ -79,15 +81,213 @@ const FiltersPopover = ({
     }
   }, [filters, open]);
 
-  const productSelections = useMemo(
-    () => productOptions.filter((option) => draft.productIds.includes(option.value)),
-    [draft.productIds, productOptions]
-  );
+  const productLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    productOptions.forEach((option) => map.set(option.value, option.label));
+    return map;
+  }, [productOptions]);
 
-  const scannerSelections = useMemo(
-    () => scannerOptions.filter((option) => draft.scannerTypes.includes(option.value)),
-    [draft.scannerTypes, scannerOptions]
-  );
+  const scannerLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    scannerOptions.forEach((option) => map.set(option.value, option.label));
+    return map;
+  }, [scannerOptions]);
+
+  const severityLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    severityOptions.forEach((option) => map.set(option.value, option.label));
+    return map;
+  }, []);
+
+  const statusLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    statusOptions.forEach((option) => map.set(option.value, option.label));
+    return map;
+  }, []);
+
+  const buildSummary = (label: string, values: string[], map: Map<string, string>) => {
+    if (values.length === 0) {
+      return `${label}: Все`;
+    }
+    const labels = values.map((value) => map.get(value) ?? value);
+    const visible = labels.slice(0, 2).join(", ");
+    const extra = labels.length - 2;
+    return `${label}: ${visible}${extra > 0 ? ` +${extra}` : ""}`;
+  };
+
+  const PillMultiSelect = ({
+    label,
+    options,
+    values,
+    loading,
+    searchable = false,
+    onChange,
+    summary,
+  }: {
+    label: string;
+    options: OptionItem[];
+    values: string[];
+    loading?: boolean;
+    searchable?: boolean;
+    summary: string;
+    onChange: (next: string[]) => void;
+  }) => {
+    const [anchor, setAnchor] = useState<null | HTMLElement>(null);
+    const [query, setQuery] = useState("");
+    const openMenu = Boolean(anchor);
+
+    const selectedSet = useMemo(() => new Set(values), [values]);
+    const filteredOptions = useMemo(() => {
+      if (!query) return options;
+      return options.filter((option) =>
+        option.label.toLowerCase().includes(query.toLowerCase())
+      );
+    }, [options, query]);
+
+    const handleToggle = (value: string) => {
+      if (selectedSet.has(value)) {
+        onChange(values.filter((item) => item !== value));
+      } else {
+        onChange([...values, value]);
+      }
+    };
+
+    const handleClose = () => {
+      anchor?.focus();
+      setAnchor(null);
+      setQuery("");
+    };
+
+    const handleSelectAll = () => {
+      onChange(options.map((option) => option.value));
+    };
+
+    const handleClear = () => {
+      onChange([]);
+    };
+
+    return (
+      <Box>
+        <Button
+          size="small"
+          variant="outlined"
+          endIcon={<KeyboardArrowDownIcon fontSize="small" />}
+          onClick={(event) => setAnchor(event.currentTarget)}
+          sx={{
+            borderRadius: "999px",
+            textTransform: "none",
+            height: 32,
+            fontSize: 12,
+            px: 1.5,
+            color: primitives.night[50],
+            borderColor: primitives.night[600],
+            "&:hover": {
+              borderColor: primitives.lotus[400],
+              bgcolor: "rgba(225, 29, 72, 0.08)",
+            },
+          }}
+          aria-label={label}
+        >
+          {summary}
+        </Button>
+
+        <Popper
+          open={openMenu}
+          anchorEl={anchor}
+          placement="bottom-start"
+          modifiers={[{ name: "offset", options: { offset: [0, 6] } }]}
+        >
+          <ClickAwayListener
+            onClickAway={(event) => {
+              if (anchor && anchor.contains(event.target as Node)) {
+                return;
+              }
+              handleClose();
+            }}
+          >
+            <Paper
+              sx={{
+                width: 260,
+                bgcolor: primitives.night[800],
+                color: primitives.night[50],
+                p: 1.5,
+                border: `1px solid ${primitives.night[600]}`,
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  handleClose();
+                }
+              }}
+            >
+              <Stack spacing={1}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" sx={{ color: primitives.night[200] }}>
+                    {label}
+                  </Typography>
+                  <Stack direction="row" spacing={1}>
+                    <Button size="small" variant="text" onClick={handleSelectAll}>
+                      Выбрать всё
+                    </Button>
+                    <Button size="small" variant="text" onClick={handleClear}>
+                      Очистить
+                    </Button>
+                  </Stack>
+                </Stack>
+                {searchable && (
+                  <TextField
+                    size="small"
+                    placeholder="Поиск"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                )}
+                <Box sx={{ maxHeight: 220, overflowY: "auto" }}>
+                  {loading ? (
+                    <Typography variant="caption" sx={{ color: primitives.night[300] }}>
+                      Загрузка...
+                    </Typography>
+                  ) : filteredOptions.length ? (
+                    filteredOptions.map((option) => (
+                      <Box
+                        key={option.value}
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          px: 0.5,
+                          py: 0.5,
+                          borderRadius: 1,
+                          cursor: "pointer",
+                          "&:hover": { bgcolor: "rgba(255,255,255,0.06)" },
+                        }}
+                        onClick={() => handleToggle(option.value)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleToggle(option.value);
+                          }
+                        }}
+                      >
+                        <Checkbox checked={selectedSet.has(option.value)} size="small" />
+                        <Typography variant="body2">{option.label}</Typography>
+                      </Box>
+                    ))
+                  ) : (
+                    <Typography variant="caption" sx={{ color: primitives.night[300] }}>
+                      Нет вариантов
+                    </Typography>
+                  )}
+                </Box>
+              </Stack>
+            </Paper>
+          </ClickAwayListener>
+        </Popper>
+      </Box>
+    );
+  };
 
   return (
     <Box>
@@ -155,107 +355,43 @@ const FiltersPopover = ({
               >
                 <Typography variant="subtitle2">Фильтры</Typography>
 
-                <Autocomplete
-                  multiple
-                  disableCloseOnSelect
-                  filterSelectedOptions
-                  options={severityOptions}
-                  value={severityOptions.filter((option) => draft.severities.includes(option.value))}
-                  onChange={(_, value) =>
-                    setDraft((prev) => ({ ...prev, severities: value.map((item) => item.value) }))
-                  }
-                  getOptionLabel={(option) => option.label}
-                  renderOption={(props, option, { selected }) => (
-                    <li {...props}>
-                      <Checkbox checked={selected} size="small" />
-                      {option.label}
-                    </li>
-                  )}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Критичность" size="small" />
-                  )}
-                  limitTags={2}
-                />
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  <PillMultiSelect
+                    label="Критичность"
+                    options={severityOptions}
+                    values={draft.severities}
+                    onChange={(next) => setDraft((prev) => ({ ...prev, severities: next }))}
+                    summary={buildSummary("Критичность", draft.severities, severityLabelMap)}
+                  />
 
-                <Autocomplete
-                  multiple
-                  disableCloseOnSelect
-                  filterSelectedOptions
-                  options={statusOptions}
-                  value={statusOptions.filter((option) => draft.statuses.includes(option.value))}
-                  onChange={(_, value) =>
-                    setDraft((prev) => ({ ...prev, statuses: value.map((item) => item.value) }))
-                  }
-                  getOptionLabel={(option) => option.label}
-                  renderOption={(props, option, { selected }) => (
-                    <li {...props}>
-                      <Checkbox checked={selected} size="small" />
-                      {option.label}
-                    </li>
-                  )}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Статус" size="small" />
-                  )}
-                  limitTags={2}
-                />
+                  <PillMultiSelect
+                    label="Статус"
+                    options={statusOptions}
+                    values={draft.statuses}
+                    onChange={(next) => setDraft((prev) => ({ ...prev, statuses: next }))}
+                    summary={buildSummary("Статус", draft.statuses, statusLabelMap)}
+                  />
 
-                <Autocomplete
-                  multiple
-                  disableCloseOnSelect
-                  filterSelectedOptions
-                  options={scannerOptions}
-                  loading={scannersLoading}
-                  value={scannerSelections}
-                  onChange={(_, value) =>
-                    setDraft((prev) => ({ ...prev, scannerTypes: value.map((item) => item.value) }))
-                  }
-                  getOptionLabel={(option) => option.label}
-                  renderOption={(props, option, { selected }) => (
-                    <li {...props}>
-                      <Checkbox checked={selected} size="small" />
-                      {option.label}
-                    </li>
-                  )}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Инструменты"
-                      size="small"
-                      placeholder={scannersLoading ? "Загрузка..." : "Выберите"}
-                    />
-                  )}
-                  noOptionsText="Нет доступных инструментов"
-                  limitTags={2}
-                />
+                  <PillMultiSelect
+                    label="Инструменты"
+                    options={scannerOptions}
+                    values={draft.scannerTypes}
+                    loading={scannersLoading}
+                    searchable
+                    onChange={(next) => setDraft((prev) => ({ ...prev, scannerTypes: next }))}
+                    summary={buildSummary("Инструменты", draft.scannerTypes, scannerLabelMap)}
+                  />
 
-                <Autocomplete
-                  multiple
-                  disableCloseOnSelect
-                  filterSelectedOptions
-                  options={productOptions}
-                  loading={productsLoading}
-                  value={productSelections}
-                  onChange={(_, value) =>
-                    setDraft((prev) => ({ ...prev, productIds: value.map((item) => item.value) }))
-                  }
-                  getOptionLabel={(option) => option.label}
-                  renderOption={(props, option, { selected }) => (
-                    <li {...props}>
-                      <Checkbox checked={selected} size="small" />
-                      {option.label}
-                    </li>
-                  )}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Продукты"
-                      size="small"
-                      placeholder={productsLoading ? "Загрузка..." : "Выберите"}
-                    />
-                  )}
-                  noOptionsText="Нет доступных продуктов"
-                  limitTags={2}
-                />
+                  <PillMultiSelect
+                    label="Продукты"
+                    options={productOptions}
+                    values={draft.productIds}
+                    loading={productsLoading}
+                    searchable
+                    onChange={(next) => setDraft((prev) => ({ ...prev, productIds: next }))}
+                    summary={buildSummary("Продукты", draft.productIds, productLabelMap)}
+                  />
+                </Stack>
 
                 <Stack direction="row" spacing={1}>
                   <TextField
