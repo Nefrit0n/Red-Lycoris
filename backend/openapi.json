@@ -508,6 +508,400 @@
           }
         }
       }
+    },
+    "/api/v1/analysis-jobs": {
+      "post": {
+        "summary": "Create analysis job",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "description": "Exactly one of archive or source_snapshot_id must be provided.",
+                "required": [
+                  "product_id"
+                ],
+                "properties": {
+                  "product_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "scanners": {
+                    "type": "string",
+                    "description": "Comma-separated scanners (semgrep,trivy)"
+                  },
+                  "engagement_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "tenant_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "archive": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "source_snapshot_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing analysis job (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AnalysisJobResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Job accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AnalysisJobCreateResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      },
+      "get": {
+        "summary": "List analysis jobs",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analysis jobs list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AnalysisJobResponse"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis-jobs/{id}": {
+      "get": {
+        "summary": "Get analysis job",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analysis job detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AnalysisJobResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/analysis-jobs/{id}/artifacts/{artifact}": {
+      "get": {
+        "summary": "Download analysis artifact",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artifact file"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/products/{id}/source-snapshots": {
+      "post": {
+        "summary": "Upload product source snapshot",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "archive"
+                ],
+                "properties": {
+                  "archive": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Snapshot created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductSourceSnapshotResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        }
+      },
+      "get": {
+        "summary": "List product source snapshots",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Snapshots list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProductSourceSnapshotResponse"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/products/{id}/source-snapshots/latest": {
+      "get": {
+        "summary": "Get latest product source snapshot",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductSourceSnapshotResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -816,6 +1210,134 @@
             "$ref": "#/components/schemas/GateCheckPolicy"
           },
           "evaluatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AnalysisJobCreateResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "AnalysisJobResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "productName": {
+            "type": "string",
+            "nullable": true
+          },
+          "engagementId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "sourceSnapshotId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "status": {
+            "type": "string"
+          },
+          "scanners": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "semgrepStatus": {
+            "type": "string"
+          },
+          "trivyStatus": {
+            "type": "string"
+          },
+          "findingsTotal": {
+            "type": "integer"
+          },
+          "findingsNew": {
+            "type": "integer"
+          },
+          "duplicatesTotal": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "durationSeconds": {
+            "type": "number",
+            "nullable": true
+          },
+          "artifactSemgrep": {
+            "type": "boolean"
+          },
+          "artifactTrivy": {
+            "type": "boolean"
+          },
+          "semgrepImportJobId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "trivyImportJobId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ProductSourceSnapshotResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
             "type": "string",
             "format": "date-time"
           }

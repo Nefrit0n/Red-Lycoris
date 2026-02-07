@@ -439,9 +439,30 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 	_ = publisher.PublishJSON(ctx, "analysis.started", buildEventPayload(job, models.AnalysisJobProcessing, startedAt, nil, nil))
 
 	archiveKey := job.ArchiveKey
+	sourceType := "ephemeral"
+	if job.SourceSnapshotID.Valid {
+		snapshot, err := storage.GetProductSourceSnapshotByID(ctx, db, job.SourceSnapshotID.UUID)
+		if err != nil {
+			return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, err)
+		}
+		if snapshot == nil || snapshot.ObjectKey == "" {
+			return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("source snapshot missing"))
+		}
+		archiveKey = sql.NullString{String: snapshot.ObjectKey, Valid: true}
+		sourceType = "snapshot"
+	}
 	if !archiveKey.Valid || archiveKey.String == "" {
 		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("archive key missing"))
 	}
+	productID := ""
+	if job.ProductID.Valid {
+		productID = job.ProductID.UUID.String()
+	}
+	tenantID := ""
+	if job.TenantID.Valid {
+		tenantID = job.TenantID.UUID.String()
+	}
+	log.Printf("analysis job processing job_id=%s tenant_id=%s product_id=%s source=%s", job.ID.String(), tenantID, productID, sourceType)
 
 	jobDir := filepath.Join(cfg.AnalysisTempDir, jobID.String())
 	archivePath := filepath.Join(jobDir, "archive")
@@ -495,10 +516,12 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 	job.FindingsNew = totalNew
 	job.DuplicatesTotal = totalDuplicates
 
-	if err := store.DeleteObject(ctx, archiveKey.String); err != nil {
-		scanErrors = append(scanErrors, fmt.Sprintf("failed to delete archive: %v", err))
-	} else {
-		_ = storage.UpdateAnalysisJobArchiveKey(ctx, db, job.ID, nil, 0)
+	if !job.SourceSnapshotID.Valid {
+		if err := store.DeleteObject(ctx, archiveKey.String); err != nil {
+			scanErrors = append(scanErrors, fmt.Sprintf("failed to delete archive: %v", err))
+		} else {
+			_ = storage.UpdateAnalysisJobArchiveKey(ctx, db, job.ID, nil, 0)
+		}
 	}
 
 	status := models.AnalysisJobSucceeded
@@ -750,6 +773,9 @@ func buildEventPayload(job *storage.AnalysisJobDetail, status string, startedAt 
 	if errMsg != nil {
 		payload["error"] = *errMsg
 	}
+	if job.SourceSnapshotID.Valid {
+		payload["source_snapshot_id"] = job.SourceSnapshotID.UUID.String()
+	}
 	return payload
 }
 
@@ -787,7 +813,7 @@ func cleanupArchives(db *sql.DB, store objectstore.Store, ttl time.Duration) {
 		return
 	}
 	for _, job := range jobs {
-		if !job.ArchiveKey.Valid {
+		if job.SourceSnapshotID.Valid || !job.ArchiveKey.Valid {
 			continue
 		}
 		_ = store.DeleteObject(ctx, job.ArchiveKey.String)

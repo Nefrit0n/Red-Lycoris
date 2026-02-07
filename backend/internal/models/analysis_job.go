@@ -34,6 +34,7 @@ type AnalysisJob struct {
 	DuplicatesTotal  int        `db:"duplicates_total"`
 	ArchiveKey       *string    `db:"archive_key"`
 	ArchiveSize      int64      `db:"archive_size"`
+	SourceSnapshotID *uuid.UUID `db:"source_snapshot_id"`
 	ArtifactSemgrep  *string    `db:"artifact_semgrep_key"`
 	ArtifactTrivy    *string    `db:"artifact_trivy_key"`
 	SemgrepImportJob *uuid.UUID `db:"semgrep_import_job_id"`
