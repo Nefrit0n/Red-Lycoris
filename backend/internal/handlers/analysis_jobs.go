@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -93,6 +94,19 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid product_id"})
 	}
 
+	tenantID := tenantIDFromContext(c)
+	if tenantID == nil {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "tenant context is required"})
+	}
+
+	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, productID, tenantID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch product"})
+	}
+	if !exists {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "product not found"})
+	}
+
 	var engagementID *uuid.UUID
 	if raw := strings.TrimSpace(c.FormValue("engagement_id")); raw != "" {
 		parsed, err := uuid.Parse(raw)
@@ -123,13 +137,16 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 	hasArchive := fileErr == nil && fileHeader != nil
 	hasSnapshot := sourceSnapshotID != nil
 	if hasArchive == hasSnapshot {
+		if fileErr != nil && errors.Is(fileErr, fiber.ErrRequestEntityTooLarge) {
+			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": "archive exceeds request limit"})
+		}
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "exactly one of archive or source_snapshot_id must be provided"})
 	}
 
 	if hasArchive {
 		maxSize := parseInt64WithDefault(h.cfg.AnalysisMaxArchiveBytes, 104857600)
 		if fileHeader.Size > maxSize {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("archive exceeds %d bytes", maxSize)})
+			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": fmt.Sprintf("archive exceeds %d bytes", maxSize)})
 		}
 
 		if !isSupportedArchive(fileHeader.Filename) {
@@ -144,13 +161,7 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		Scanners:       scanners,
 		CreatedBy:      uploaderID,
 		IdempotencyKey: nil,
-	}
-	if rawTenant := strings.TrimSpace(c.FormValue("tenant_id")); rawTenant != "" {
-		parsed, err := uuid.Parse(rawTenant)
-		if err != nil {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant_id"})
-		}
-		job.TenantID = &parsed
+		TenantID:       tenantID,
 	}
 	if idempotencyKey != "" {
 		job.IdempotencyKey = &idempotencyKey
@@ -168,11 +179,8 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		if snapshot.ProductID != productID {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "source snapshot does not match product"})
 		}
-		tenantID := tenantIDFromContext(c)
-		if tenantID != nil {
-			if !snapshot.TenantID.Valid || snapshot.TenantID.UUID != *tenantID {
-				return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "source snapshot does not belong to tenant"})
-			}
+		if !snapshot.TenantID.Valid || snapshot.TenantID.UUID != *tenantID {
+			return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "source snapshot does not belong to tenant"})
 		}
 		job.SourceSnapshotID = sourceSnapshotID
 		job.ArchiveSize = snapshot.ArchiveSize
@@ -183,7 +191,7 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 
 		file, err := fileHeader.Open()
 		if err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to read archive"})
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "failed to read archive"})
 		}
 		defer file.Close()
 
