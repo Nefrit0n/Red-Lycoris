@@ -28,7 +28,7 @@ export function normalizeDateTo(dateStr: string | undefined): string | undefined
   return parsed.toISOString();
 }
 
-const DATE_PATTERN_DD_MM_YYYY = /^\d{2}-\d{2}-\d{4}$/;
+const DATE_PATTERN_DD_MM_YYYY = /^\d{2}[.-]\d{2}[.-]\d{4}$/;
 const DATE_PATTERN_YYYY_MM_DD = /^\d{4}-\d{2}-\d{2}$/;
 
 function normalizeDateInput(dateStr: string): string | undefined {
@@ -37,7 +37,7 @@ function normalizeDateInput(dateStr: string): string | undefined {
   }
 
   if (DATE_PATTERN_DD_MM_YYYY.test(dateStr)) {
-    const [day, month, year] = dateStr.split("-");
+    const [day, month, year] = dateStr.split(/[.-]/);
     return `${year}-${month}-${day}`;
   }
 
