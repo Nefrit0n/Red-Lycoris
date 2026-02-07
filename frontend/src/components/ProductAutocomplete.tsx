@@ -7,13 +7,19 @@ interface ProductAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
   onLabelChange?: (label: string) => void;
+  returnId?: boolean;
 }
 
 /**
  * Reusable ProductAutocomplete component
  * Handles product selection with autocomplete functionality
  */
-export const ProductAutocomplete = ({ value, onChange, onLabelChange }: ProductAutocompleteProps) => {
+export const ProductAutocomplete = ({
+  value,
+  onChange,
+  onLabelChange,
+  returnId = false,
+}: ProductAutocompleteProps) => {
   const [products, setProducts] = useState<ProductListItemDTO[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productInput, setProductInput] = useState("");
@@ -85,7 +91,7 @@ export const ProductAutocomplete = ({ value, onChange, onLabelChange }: ProductA
           return;
         }
         if (value) {
-          onChange(value.identifier || value.id);
+          onChange(returnId ? value.id : value.identifier || value.id);
           return;
         }
         onChange("");
