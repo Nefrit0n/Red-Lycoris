@@ -13,7 +13,6 @@ import { FiltersState } from "../../filters/types";
 import { countActiveFilters } from "../../filters/url";
 import { CATEGORY_LABELS, LANGUAGE_LABELS } from "../../filters/labels";
 import { FindingSeverity, FindingStatus } from "../../../types/findings";
-import SavedViewsSelector from "../../../components/SavedViewsSelector";
 import ExportMenu from "../../../components/ExportMenu";
 import { FindingListItemDTO } from "../../../types/findings";
 import { primitives } from "../../../design-system/tokens/colors";
@@ -188,8 +187,6 @@ const FindingsTopBar = ({
         </Stack>
 
         <Stack direction="row" spacing={1} alignItems="center">
-          <SavedViewsSelector currentFilters={filters} onApplyView={onApplyView} />
-
           <FiltersPopover
             filters={filters}
             activeCount={activeCount}
