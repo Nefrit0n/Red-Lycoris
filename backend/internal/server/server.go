@@ -2,7 +2,10 @@ package server
 
 import (
 	"database/sql"
+	"math"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"lotus-warden/backend/internal/config"
 	"lotus-warden/backend/internal/events"
@@ -20,8 +23,15 @@ import (
 )
 
 func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) *fiber.App {
+	maxArchiveBytes := parseInt64WithDefault(cfg.AnalysisMaxArchiveBytes, 104857600)
+	if maxArchiveBytes <= 0 {
+		maxArchiveBytes = 104857600
+	}
+	if maxArchiveBytes > int64(math.MaxInt) {
+		maxArchiveBytes = int64(math.MaxInt)
+	}
 	app := fiber.New(fiber.Config{
-		BodyLimit: 12 << 20,
+		BodyLimit: int(maxArchiveBytes),
 	})
 	app.Use(requestid.New())
 	app.Use(logger.New(logger.Config{
@@ -29,6 +39,18 @@ func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store ob
 	}))
 	setupRoutes(app, cfg, db, publisher, store)
 	return app
+}
+
+func parseInt64WithDefault(raw string, fallback int64) int64 {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) {
