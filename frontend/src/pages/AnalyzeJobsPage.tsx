@@ -1,27 +1,26 @@
 import {
-  Alert,
   Box,
   Button,
   Card,
   CardContent,
-  Checkbox,
+  Chip,
   CircularProgress,
   Divider,
   FormControl,
   FormControlLabel,
-  InputLabel,
-  MenuItem,
-  Select,
+  FormLabel,
+  LinearProgress,
+  Paper,
+  Radio,
+  RadioGroup,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
+  Step,
+  StepLabel,
+  Stepper,
+  Tab,
+  Tabs,
   TextField,
   Typography,
-  Link as MuiLink,
-  Paper,
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -30,20 +29,42 @@ import {
   createAnalysisJob,
   fetchAnalysisJobs,
 } from "../api/analysisJobs";
-import { fetchProducts } from "../api/products";
+import { createProduct } from "../api/products";
+import {
+  createProductSourceSnapshot,
+  fetchLatestProductSourceSnapshot,
+  ProductSourceSnapshot,
+} from "../api/productSourceSnapshots";
+import { ArchiveDropzone } from "../components/ArchiveDropzone";
 import PaginationControl from "../components/PaginationControl";
-import { ProductListItemDTO } from "../types/products";
+import { ProductAutocomplete } from "../components/ProductAutocomplete";
+import { useNotification } from "../contexts/NotificationContext";
+
+const productSteps = ["Продукт", "Исходники", "Сканеры и запуск"];
+
+type ProductMode = "existing" | "new";
+
+type SourceMode = "latest" | "snapshot" | "job";
 
 const AnalyzeJobsPage = () => {
-  const [products, setProducts] = useState<ProductListItemDTO[]>([]);
+  const { showError, showSuccess } = useNotification();
+
+  const [productMode, setProductMode] = useState<ProductMode>("existing");
   const [selectedProductId, setSelectedProductId] = useState<string>("");
-  const [engagementId, setEngagementId] = useState<string>("");
+  const [selectedProductLabel, setSelectedProductLabel] = useState<string>("");
+  const [newProductName, setNewProductName] = useState<string>("");
+  const [newProductVersion, setNewProductVersion] = useState<string>("");
+  const [newProductIdentifier, setNewProductIdentifier] = useState<string>("");
+
+  const [sourceMode, setSourceMode] = useState<SourceMode>("job");
   const [archive, setArchive] = useState<File | null>(null);
+  const [latestSnapshot, setLatestSnapshot] = useState<ProductSourceSnapshot | null>(null);
+  const [latestSnapshotLoading, setLatestSnapshotLoading] = useState(false);
+
   const [runSemgrep, setRunSemgrep] = useState(true);
   const [runTrivy, setRunTrivy] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const [data, setData] = useState<AnalysisJob[]>([]);
   const [total, setTotal] = useState(0);
@@ -59,16 +80,32 @@ const AnalyzeJobsPage = () => {
     return list;
   }, [runSemgrep, runTrivy]);
 
-  const isValid = Boolean(selectedProductId && archive && scanners.length > 0);
-
-  const loadProducts = useCallback(async () => {
-    try {
-      const response = await fetchProducts(200, 0);
-      setProducts(response.data);
-    } catch {
-      setProducts([]);
+  const productSummary = useMemo(() => {
+    if (productMode === "new") {
+      if (!newProductName) return "Новый продукт";
+      return `${newProductName}${newProductVersion ? ` · ${newProductVersion}` : ""}`;
     }
-  }, []);
+    return selectedProductLabel || selectedProductId || "Продукт не выбран";
+  }, [productMode, newProductName, newProductVersion, selectedProductLabel, selectedProductId]);
+
+  const sourceSummary = useMemo(() => {
+    switch (sourceMode) {
+      case "latest":
+        return latestSnapshot
+          ? `Последний снапшот · ${new Date(latestSnapshot.createdAt).toLocaleDateString("ru-RU")}`
+          : "Последний снапшот";
+      case "snapshot":
+        return archive ? `Новый снапшот · ${archive.name}` : "Новый снапшот";
+      case "job":
+      default:
+        return archive ? `Архив для задачи · ${archive.name}` : "Архив для задачи";
+    }
+  }, [sourceMode, latestSnapshot, archive]);
+
+  const scannerSummary = useMemo(() => {
+    if (scanners.length === 0) return "Сканеры не выбраны";
+    return scanners.join(" + ");
+  }, [scanners]);
 
   const loadJobs = useCallback(
     async (signal?: AbortSignal) => {
@@ -90,43 +127,178 @@ const AnalyzeJobsPage = () => {
   );
 
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
-
-  useEffect(() => {
     const controller = new AbortController();
     loadJobs(controller.signal);
     return () => controller.abort();
   }, [loadJobs]);
 
-  const handleSubmit = async () => {
-    if (!archive || !selectedProductId || scanners.length === 0) {
-      setSubmitError("Заполните продукт, файл и список сканеров.");
+  useEffect(() => {
+    if (productMode === "new") {
+      setSelectedProductId("");
+      setSelectedProductLabel("");
+    }
+  }, [productMode]);
+
+  useEffect(() => {
+    if (productMode === "new") {
+      setLatestSnapshot(null);
+      setSourceMode("snapshot");
       return;
     }
-    setSubmitError(null);
-    setSubmitSuccess(null);
+    if (!selectedProductId) {
+      setLatestSnapshot(null);
+      setSourceMode("job");
+      return;
+    }
+
+    const controller = new AbortController();
+    const loadLatest = async () => {
+      setLatestSnapshotLoading(true);
+      try {
+        const snapshot = await fetchLatestProductSourceSnapshot(selectedProductId);
+        setLatestSnapshot(snapshot);
+        setSourceMode("latest");
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          setLatestSnapshot(null);
+          setSourceMode("snapshot");
+        }
+      } finally {
+        setLatestSnapshotLoading(false);
+      }
+    };
+
+    loadLatest();
+    return () => controller.abort();
+  }, [productMode, selectedProductId]);
+
+  useEffect(() => {
+    if (sourceMode === "latest") {
+      setArchive(null);
+    }
+  }, [sourceMode]);
+
+  const handlePreset = (preset: "fast" | "full") => {
+    if (preset === "fast") {
+      setRunSemgrep(true);
+      setRunTrivy(false);
+    } else {
+      setRunSemgrep(true);
+      setRunTrivy(true);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+
+    if (scanners.length === 0) {
+      showError("Выберите хотя бы один сканер.");
+      return;
+    }
+
+    if (productMode === "existing" && !selectedProductId) {
+      showError("Выберите существующий продукт.");
+      return;
+    }
+
+    if (productMode === "new" && !newProductName.trim()) {
+      showError("Введите название нового продукта.");
+      return;
+    }
+
+    if (sourceMode === "latest" && !latestSnapshot) {
+      showError("Для этого продукта нет сохранённых снапшотов.");
+      return;
+    }
+
+    if (sourceMode !== "latest" && !archive) {
+      showError("Добавьте архив исходников.");
+      return;
+    }
+
     setSubmitting(true);
+    setUploadProgress(null);
+
     try {
-      const response = await createAnalysisJob({
-        productId: selectedProductId,
-        engagementId: engagementId || undefined,
+      let productId = selectedProductId;
+
+      if (productMode === "new") {
+        const created = await createProduct({
+          name: newProductName.trim(),
+          version: newProductVersion.trim() || undefined,
+          identifier: newProductIdentifier.trim() || undefined,
+        });
+        productId = created.id;
+        setSelectedProductId(created.id);
+        setSelectedProductLabel(created.name);
+      }
+
+      let sourceSnapshotId: string | undefined;
+      let archiveToUpload: File | undefined;
+
+      if (sourceMode === "latest") {
+        sourceSnapshotId = latestSnapshot?.id;
+      } else if (sourceMode === "snapshot" && archive) {
+        const snapshotIdempotencyKey = crypto.randomUUID();
+        setUploadProgress(0);
+        const snapshot = await createProductSourceSnapshot(productId, archive, {
+          idempotencyKey: snapshotIdempotencyKey,
+          onProgress: setUploadProgress,
+        });
+        sourceSnapshotId = snapshot.id;
+      } else if (sourceMode === "job" && archive) {
+        archiveToUpload = archive;
+      }
+
+      if (!productId) {
+        showError("Не удалось определить продукт для запуска анализа.");
+        return;
+      }
+
+      const jobIdempotencyKey = crypto.randomUUID();
+      if (archiveToUpload) {
+        setUploadProgress(0);
+      }
+
+      await createAnalysisJob({
+        productId,
         scanners,
-        archive,
+        archive: archiveToUpload,
+        sourceSnapshotId,
+        idempotencyKey: jobIdempotencyKey,
+        onProgress: archiveToUpload ? setUploadProgress : undefined,
       });
-      setSubmitSuccess(`Анализ поставлен в очередь: ${response.id}`);
+
+      showSuccess("Анализ поставлен в очередь.");
       setArchive(null);
       await loadJobs();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Не удалось создать анализ");
+      const message = err instanceof Error ? err.message : "Не удалось создать анализ";
+      showError(message);
     } finally {
+      setUploadProgress(null);
       setSubmitting(false);
+    }
+  };
+
+  const statusChip = (status: string) => {
+    switch (status) {
+      case "queued":
+        return <Chip label="В очереди" size="small" />;
+      case "processing":
+        return <Chip label="В работе" size="small" color="info" />;
+      case "succeeded":
+        return <Chip label="Успешно" size="small" color="success" />;
+      case "failed":
+        return <Chip label="Ошибка" size="small" color="error" />;
+      default:
+        return <Chip label={status} size="small" />;
     }
   };
 
   const formatStats = (job: AnalysisJob) => {
     const repeats = Math.max(job.findingsTotal - job.findingsNew - job.duplicatesTotal, 0);
-    return `New: ${job.findingsNew} · Repeat: ${repeats} · Duplicates: ${job.duplicatesTotal}`;
+    return `Новые: ${job.findingsNew} · Повторы: ${repeats} · Дубликаты: ${job.duplicatesTotal}`;
   };
 
   return (
@@ -134,93 +306,216 @@ const AnalyzeJobsPage = () => {
       <Stack spacing={3}>
         <Box>
           <Typography variant="h4" gutterBottom>
-            Analyze
+            Анализ
           </Typography>
           <Typography color="text.secondary">
-            Запустите анализ кода проекта с помощью Semgrep и Trivy.
+            Настройте продукт, исходники и сканеры, чтобы запустить анализ.
           </Typography>
         </Box>
 
         <Card>
           <CardContent>
-            <Stack spacing={2}>
-              <FormControl fullWidth>
-                <InputLabel id="product-label">Product</InputLabel>
-                <Select
-                  labelId="product-label"
-                  label="Product"
-                  value={selectedProductId}
-                  onChange={(event) => setSelectedProductId(event.target.value)}
-                >
-                  {products.length === 0 && (
-                    <MenuItem value="">
-                      <em>Нет доступных продуктов</em>
-                    </MenuItem>
-                  )}
-                  {products.map((product) => (
-                    <MenuItem key={product.id} value={product.id}>
-                      {product.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <TextField
-                label="Engagement ID (optional)"
-                value={engagementId}
-                onChange={(event) => setEngagementId(event.target.value)}
-                placeholder="UUID"
-                fullWidth
-              />
-
-              <Button variant="outlined" component="label">
-                {archive ? `Файл: ${archive.name}` : "Загрузить архив (zip/tar.gz)"}
-                <input
-                  hidden
-                  type="file"
-                  accept=".zip,.tar.gz,.tgz"
-                  onChange={(event) => {
-                    const selected = event.target.files?.[0] || null;
-                    setArchive(selected);
-                  }}
-                />
-              </Button>
+            <Stack spacing={3}>
+              <Stepper activeStep={2} alternativeLabel>
+                {productSteps.map((label) => (
+                  <Step key={label}>
+                    <StepLabel>{label}</StepLabel>
+                  </Step>
+                ))}
+              </Stepper>
 
               <Divider />
 
-              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={runSemgrep}
-                      onChange={(event) => setRunSemgrep(event.target.checked)}
+              <Stack spacing={2}>
+                <Typography variant="h6">Шаг 1. Продукт</Typography>
+                <Tabs
+                  value={productMode}
+                  onChange={(_, value) => setProductMode(value)}
+                  variant="fullWidth"
+                >
+                  <Tab value="existing" label="Существующий" />
+                  <Tab value="new" label="Новый" />
+                </Tabs>
+
+                {productMode === "existing" ? (
+                  <ProductAutocomplete
+                    value={selectedProductId}
+                    returnId
+                    onChange={(value) => setSelectedProductId(value)}
+                    onLabelChange={setSelectedProductLabel}
+                  />
+                ) : (
+                  <Stack spacing={2}>
+                    <Typography color="text.secondary" variant="body2">
+                      Создайте продукт перед запуском анализа. Поля версии и identifier опциональны.
+                    </Typography>
+                    <TextField
+                      label="Название продукта *"
+                      value={newProductName}
+                      onChange={(event) => setNewProductName(event.target.value)}
+                      placeholder="Lotus Platform"
+                      fullWidth
                     />
-                  }
-                  label="Semgrep"
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={runTrivy}
-                      onChange={(event) => setRunTrivy(event.target.checked)}
-                    />
-                  }
-                  label="Trivy"
-                />
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                      <TextField
+                        label="Версия"
+                        value={newProductVersion}
+                        onChange={(event) => setNewProductVersion(event.target.value)}
+                        placeholder="v1.0.0"
+                        fullWidth
+                      />
+                      <TextField
+                        label="Identifier"
+                        value={newProductIdentifier}
+                        onChange={(event) => setNewProductIdentifier(event.target.value)}
+                        placeholder="lotus-platform"
+                        fullWidth
+                      />
+                    </Stack>
+                  </Stack>
+                )}
               </Stack>
 
-              {submitting && <CircularProgress size={24} />}
+              <Divider />
 
-              <Button
-                variant="contained"
-                onClick={handleSubmit}
-                disabled={!isValid || submitting}
-              >
-                Запустить анализ
-              </Button>
+              <Stack spacing={2}>
+                <Typography variant="h6">Шаг 2. Исходники</Typography>
+                <FormControl>
+                  <FormLabel>Источник архива</FormLabel>
+                  <RadioGroup
+                    value={sourceMode}
+                    onChange={(event) => setSourceMode(event.target.value as SourceMode)}
+                  >
+                    <FormControlLabel
+                      value="latest"
+                      control={<Radio />}
+                      disabled={productMode === "new" || (!latestSnapshot && !latestSnapshotLoading)}
+                      label="Использовать последний загруженный архив"
+                    />
+                    <FormControlLabel
+                      value="snapshot"
+                      control={<Radio />}
+                      label="Загрузить и сохранить новый архив для продукта"
+                    />
+                    <FormControlLabel
+                      value="job"
+                      control={<Radio />}
+                      label="Загрузить архив только для этой задачи"
+                    />
+                  </RadioGroup>
+                </FormControl>
 
-              {submitError && <Alert severity="error">{submitError}</Alert>}
-              {submitSuccess && <Alert severity="success">{submitSuccess}</Alert>}
+                {latestSnapshotLoading && (
+                  <Typography variant="body2" color="text.secondary">
+                    Проверяем наличие снапшота...
+                  </Typography>
+                )}
+
+                {sourceMode !== "latest" && (
+                  <ArchiveDropzone
+                    value={archive}
+                    onChange={setArchive}
+                    helperText="Поддерживаются .zip, .tar.gz, .tgz"
+                  />
+                )}
+
+                {sourceMode === "latest" && latestSnapshot && (
+                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                    <Typography variant="subtitle2">Последний снапшот</Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      Создан: {new Date(latestSnapshot.createdAt).toLocaleString("ru-RU")}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      Размер: {Math.round(latestSnapshot.size / 1024)} KB
+                    </Typography>
+                  </Paper>
+                )}
+              </Stack>
+
+              <Divider />
+
+              <Stack spacing={2}>
+                <Typography variant="h6">Шаг 3. Сканеры и запуск</Typography>
+                <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                  <Card variant="outlined" sx={{ flex: 1 }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Typography variant="subtitle1">Semgrep</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Поиск уязвимостей в коде и конфигурации.
+                        </Typography>
+                        <Button
+                          variant={runSemgrep ? "contained" : "outlined"}
+                          onClick={() => setRunSemgrep((prev) => !prev)}
+                        >
+                          {runSemgrep ? "Включен" : "Выключен"}
+                        </Button>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                  <Card variant="outlined" sx={{ flex: 1 }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Typography variant="subtitle1">Trivy</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Анализ контейнеров и зависимостей.
+                        </Typography>
+                        <Button
+                          variant={runTrivy ? "contained" : "outlined"}
+                          onClick={() => setRunTrivy((prev) => !prev)}
+                        >
+                          {runTrivy ? "Включен" : "Выключен"}
+                        </Button>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Stack>
+
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <Button variant="outlined" onClick={() => handlePreset("fast")}>
+                    Быстро (Semgrep)
+                  </Button>
+                  <Button variant="outlined" onClick={() => handlePreset("full")}>
+                    Полный (Semgrep + Trivy)
+                  </Button>
+                </Stack>
+
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                  <Stack spacing={1}>
+                    <Typography variant="subtitle1">Итоговая сводка</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Продукт: {productSummary}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Источник: {sourceSummary}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Сканеры: {scannerSummary}
+                    </Typography>
+                  </Stack>
+                </Paper>
+
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Button
+                    variant="contained"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                  >
+                    Запустить анализ
+                  </Button>
+                  <Box sx={{ width: 24, display: "flex", justifyContent: "center" }}>
+                    {submitting && <CircularProgress size={18} />}
+                  </Box>
+                </Stack>
+                {uploadProgress !== null && (
+                  <Stack spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      Загрузка архива: {uploadProgress}%
+                    </Typography>
+                    <LinearProgress variant="determinate" value={uploadProgress} />
+                  </Stack>
+                )}
+              </Stack>
             </Stack>
           </CardContent>
         </Card>
@@ -231,48 +526,65 @@ const AnalyzeJobsPage = () => {
               <CircularProgress />
             </Box>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Job</TableCell>
-                  <TableCell>Продукт</TableCell>
-                  <TableCell>Сканеры</TableCell>
-                  <TableCell>Статус</TableCell>
-                  <TableCell>Статистика</TableCell>
-                  <TableCell>Создано</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
+            <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
+              <Box component="thead" sx={{ backgroundColor: "action.hover" }}>
+                <Box component="tr">
+                  {["ID анализа", "Продукт", "Сканеры", "Статус", "Статистика", "Создан"].map(
+                    (label) => (
+                      <Box
+                        component="th"
+                        key={label}
+                        sx={{ textAlign: "left", px: 2, py: 1.5, fontWeight: 600, fontSize: 13 }}
+                      >
+                        {label}
+                      </Box>
+                    )
+                  )}
+                </Box>
+              </Box>
+              <Box component="tbody">
                 {data.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                      <Typography color="text.secondary">
-                        Анализов пока нет.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
+                  <Box component="tr">
+                    <Box component="td" colSpan={6} sx={{ py: 6, textAlign: "center" }}>
+                      <Typography color="text.secondary">Анализов пока нет.</Typography>
+                    </Box>
+                  </Box>
                 ) : (
                   data.map((item) => (
-                    <TableRow key={item.id} hover>
-                      <TableCell>
-                        <MuiLink component={Link} to={`/analyze/${item.id}`} underline="hover">
+                    <Box component="tr" key={item.id} sx={{ borderTop: "1px solid", borderColor: "divider" }}>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        <Button component={Link} to={`/analyze/${item.id}`} size="small">
                           {item.id}
-                        </MuiLink>
-                      </TableCell>
-                      <TableCell>{item.productName || "—"}</TableCell>
-                      <TableCell>{item.scanners.join(", ")}</TableCell>
-                      <TableCell>{item.status}</TableCell>
-                      <TableCell>{formatStats(item)}</TableCell>
-                      <TableCell>{new Date(item.createdAt).toLocaleString("ru-RU")}</TableCell>
-                    </TableRow>
+                        </Button>
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        {item.productName || "—"}
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        {item.scanners.join(", ")}
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        {statusChip(item.status)}
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        {formatStats(item)}
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        {new Date(item.createdAt).toLocaleString("ru-RU")}
+                      </Box>
+                    </Box>
                   ))
                 )}
-              </TableBody>
-            </Table>
+              </Box>
+            </Box>
           )}
         </Paper>
 
-        {error && <Alert severity="error">{error}</Alert>}
+        {error && (
+          <Typography color="error" variant="body2">
+            {error}
+          </Typography>
+        )}
 
         <PaginationControl
           page={page}
