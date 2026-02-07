@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	AnalysisStreamName  = "ANALYSIS"
-	AnalysisSubject     = "analysis.>"
-	AnalysisJobsSubject = "analysis.jobs"
+	AnalysisStreamName                  = "ANALYSIS"
+	AnalysisSubject                     = "analysis.>"
+	AnalysisJobsSubject                 = "analysis.jobs"
+	ProductSourceSnapshotCreatedSubject = "product.source_snapshot.created.v1"
 
 	SbomStreamName            = "SBOM"
 	SbomSubject               = "sbom.>"
@@ -51,7 +52,7 @@ func NewPublisher(url string) (*Publisher, error) {
 	// Важно: не просто AddStream. Если stream уже есть, но subjects другие — делаем UpdateStream.
 	if err := ensureStream(js, &nats.StreamConfig{
 		Name:      AnalysisStreamName,
-		Subjects:  []string{AnalysisSubject, RiskRecomputeRequestedSubject, AssetContextUpdatedSubject, RiskModelActivatedSubject},
+		Subjects:  []string{AnalysisSubject, RiskRecomputeRequestedSubject, AssetContextUpdatedSubject, RiskModelActivatedSubject, ProductSourceSnapshotCreatedSubject},
 		Retention: nats.LimitsPolicy,
 		MaxAge:    7 * 24 * time.Hour,
 	}); err != nil {
