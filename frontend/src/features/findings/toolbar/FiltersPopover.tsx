@@ -4,19 +4,15 @@ import {
   Button,
   ClickAwayListener,
   Divider,
-  FormControlLabel,
   Grow,
   IconButton,
   Paper,
   Popper,
   Stack,
-  Switch,
   TextField,
   Typography,
 } from "@mui/material";
-import BoltIcon from "@mui/icons-material/Bolt";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
-import StarRoundedIcon from "@mui/icons-material/StarRounded";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiltersState, DEFAULT_FILTERS_STATE } from "../../filters/types";
 import { DATE_PRESET_OPTIONS, LANGUAGE_OPTIONS } from "../../filters/labels";
@@ -102,9 +98,28 @@ const FiltersPopover = ({
   const scannersLoading = scannersLoadingOverride ?? scannersHook.loading;
   const productsLoading = productsLoadingOverride ?? productsHook.loading;
 
+  const formatDateInput = (value: string) => {
+    if (!value) return "";
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return `${day}.${month}.${year}`;
+    }
+    const dashedMatch = value.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (dashedMatch) {
+      const [, day, month, year] = dashedMatch;
+      return `${day}.${month}.${year}`;
+    }
+    return value;
+  };
+
   useEffect(() => {
     if (open) {
-      setDraft(filters);
+      setDraft({
+        ...filters,
+        dateFrom: formatDateInput(filters.dateFrom),
+        dateTo: formatDateInput(filters.dateTo),
+      });
       setShowCustomDates(Boolean(filters.dateFrom || filters.dateTo));
     }
   }, [filters, open]);
@@ -182,6 +197,7 @@ const FiltersPopover = ({
       sortField: filters.sortField,
       sortOrder: filters.sortOrder,
       ...preset,
+      showRepeats: false,
     };
     setDraft(next);
     setShowCustomDates(Boolean(next.dateFrom || next.dateTo));
@@ -233,7 +249,6 @@ const FiltersPopover = ({
       </Badge>
 
       <ClickAwayListener
-        disableReactTree
         onClickAway={(event) => {
           if (buttonRef.current && buttonRef.current.contains(event.target as Node)) {
             return;
@@ -288,9 +303,7 @@ const FiltersPopover = ({
                       spacing={0.5}
                       sx={{
                         borderRadius: 2,
-                        border: `1px solid ${primitives.night[600]}`,
-                        bgcolor: primitives.night[750],
-                        p: 0.75,
+                        p: 0.25,
                       }}
                     >
                       {builtInViews.map((item) => (
@@ -298,7 +311,6 @@ const FiltersPopover = ({
                           key={item.id}
                           variant="text"
                           onClick={() => applyQuickFilter(item.filters)}
-                          startIcon={<StarRoundedIcon sx={{ color: "#FACC15" }} fontSize="small" />}
                           sx={{
                             justifyContent: "flex-start",
                             textTransform: "none",
@@ -480,50 +492,43 @@ const FiltersPopover = ({
                     </Box>
 
                     {showCustomDates && (
-                      <Stack direction="row" spacing={1}>
+                      <Stack direction="row" spacing={0.5} alignItems="center">
                         <TextField
-                          type="date"
                           size="small"
-                          label="С"
+                          placeholder="дд.мм.гггг"
                           value={draft.dateFrom}
                           onChange={(event) =>
                             setDraft((prev) => ({ ...prev, dateFrom: event.target.value }))
                           }
-                          InputLabelProps={{ shrink: true }}
-                          sx={{ flex: 1 }}
+                          sx={{
+                            flex: 1,
+                            "& .MuiInputBase-root": {
+                              height: 30,
+                              fontSize: 12,
+                            },
+                          }}
                         />
+                        <Typography variant="caption" sx={{ color: primitives.night[300] }}>
+                          —
+                        </Typography>
                         <TextField
-                          type="date"
                           size="small"
-                          label="По"
+                          placeholder="дд.мм.гггг"
                           value={draft.dateTo}
                           onChange={(event) =>
                             setDraft((prev) => ({ ...prev, dateTo: event.target.value }))
                           }
-                          InputLabelProps={{ shrink: true }}
-                          sx={{ flex: 1 }}
+                          sx={{
+                            flex: 1,
+                            "& .MuiInputBase-root": {
+                              height: 30,
+                              fontSize: 12,
+                            },
+                          }}
                         />
                       </Stack>
                     )}
                   </Stack>
-
-                  <FormControlLabel
-                    sx={{ m: 0, alignItems: "center" }}
-                    control={
-                      <Switch
-                        size="small"
-                        checked={draft.showRepeats}
-                        onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, showRepeats: event.target.checked }))
-                        }
-                      />
-                    }
-                    label={
-                      <Typography variant="body2" sx={{ color: primitives.night[100] }}>
-                        Показывать повторы
-                      </Typography>
-                    }
-                  />
 
                   <Stack direction="row" justifyContent="flex-end" spacing={1}>
                     {activeCount > 0 && (
@@ -545,7 +550,7 @@ const FiltersPopover = ({
                       variant="contained"
                       size="small"
                       onClick={() => {
-                        onApply(draft);
+                        onApply({ ...draft, showRepeats: false });
                         setAnchorEl(null);
                         setOpenMenu(null);
                         buttonRef.current?.focus();
