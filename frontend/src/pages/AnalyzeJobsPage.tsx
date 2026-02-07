@@ -29,6 +29,7 @@ import {
   createAnalysisJob,
   fetchAnalysisJobs,
 } from "../api/analysisJobs";
+import { ApiError } from "../api/client";
 import { createProduct } from "../api/products";
 import {
   createProductSourceSnapshot,
@@ -48,6 +49,7 @@ type SourceMode = "latest" | "snapshot" | "job";
 
 const AnalyzeJobsPage = () => {
   const { showError, showSuccess } = useNotification();
+  const maxArchiveMb = 100;
 
   const [productMode, setProductMode] = useState<ProductMode>("existing");
   const [selectedProductId, setSelectedProductId] = useState<string>("");
@@ -65,6 +67,9 @@ const AnalyzeJobsPage = () => {
   const [runTrivy, setRunTrivy] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [submitError, setSubmitError] = useState<{ message: string; canRetry: boolean } | null>(
+    null
+  );
 
   const [data, setData] = useState<AnalysisJob[]>([]);
   const [total, setTotal] = useState(0);
@@ -218,6 +223,7 @@ const AnalyzeJobsPage = () => {
 
     setSubmitting(true);
     setUploadProgress(null);
+    setSubmitError(null);
 
     try {
       let productId = selectedProductId;
@@ -273,6 +279,24 @@ const AnalyzeJobsPage = () => {
       setArchive(null);
       await loadJobs();
     } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 413) {
+          showError(`Архив слишком большой. Максимум: ${maxArchiveMb} MB.`);
+          return;
+        }
+        if (err.status === 401 || err.status === 403) {
+          showError("Сессия/tenant context недоступны, перелогиньтесь.");
+          return;
+        }
+        if (err.status >= 500) {
+          const message = err.message || "Ошибка сервера. Попробуйте еще раз.";
+          setSubmitError({ message, canRetry: true });
+          showError(message);
+          return;
+        }
+        showError(err.message || "Не удалось создать анализ");
+        return;
+      }
       const message = err instanceof Error ? err.message : "Не удалось создать анализ";
       showError(message);
     } finally {
@@ -514,6 +538,20 @@ const AnalyzeJobsPage = () => {
                     </Typography>
                     <LinearProgress variant="determinate" value={uploadProgress} />
                   </Stack>
+                )}
+                {submitError && (
+                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: "error.main" }}>
+                    <Stack spacing={1}>
+                      <Typography variant="body2" color="error">
+                        {submitError.message}
+                      </Typography>
+                      {submitError.canRetry && (
+                        <Button variant="outlined" color="error" onClick={handleSubmit}>
+                          Повторить
+                        </Button>
+                      )}
+                    </Stack>
+                  </Paper>
                 )}
               </Stack>
             </Stack>
