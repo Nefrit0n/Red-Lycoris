@@ -45,6 +45,21 @@ interface ActiveFilterPillsProps {
   onRemove: (next: FiltersState) => void;
 }
 
+const formatDateLabel = (value: string) => {
+  if (!value) return value;
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${day}.${month}.${year}`;
+  }
+  const dashedMatch = value.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (dashedMatch) {
+    const [, day, month, year] = dashedMatch;
+    return `${day}.${month}.${year}`;
+  }
+  return value;
+};
+
 const ActiveFilterPills = ({ filters, maxVisible = 6, onRemove }: ActiveFilterPillsProps) => {
   const pills = useMemo(() => {
     const items: Array<{ key: string; label: string; next: FiltersState }> = [];
@@ -125,20 +140,12 @@ const ActiveFilterPills = ({ filters, maxVisible = 6, onRemove }: ActiveFilterPi
     }
 
     if (filters.dateFrom || filters.dateTo) {
-      const from = filters.dateFrom || "—";
-      const to = filters.dateTo || "—";
+      const from = formatDateLabel(filters.dateFrom) || "—";
+      const to = formatDateLabel(filters.dateTo) || "—";
       items.push({
         key: "date-range",
         label: `Дата: ${from}–${to}`,
         next: { ...filters, dateFrom: "", dateTo: "" },
-      });
-    }
-
-    if (filters.showRepeats) {
-      items.push({
-        key: "repeats",
-        label: "Показывать повторы",
-        next: { ...filters, showRepeats: false },
       });
     }
 
