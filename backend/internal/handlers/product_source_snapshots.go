@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -79,12 +81,15 @@ func (h *ProductSourceSnapshotsHandler) Create(c *fiber.Ctx) error {
 
 	fileHeader, err := c.FormFile("archive")
 	if err != nil || fileHeader == nil {
+		if err != nil && errors.Is(err, fiber.ErrRequestEntityTooLarge) {
+			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": "archive exceeds request limit"})
+		}
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "archive file is required"})
 	}
 
 	maxSize := parseInt64WithDefault(h.cfg.AnalysisMaxArchiveBytes, 104857600)
 	if fileHeader.Size > maxSize {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("archive exceeds %d bytes", maxSize)})
+		return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": fmt.Sprintf("archive exceeds %d bytes", maxSize)})
 	}
 
 	if !isSupportedArchive(fileHeader.Filename) {
@@ -108,16 +113,18 @@ func (h *ProductSourceSnapshotsHandler) Create(c *fiber.Ctx) error {
 
 	file, err := fileHeader.Open()
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to read archive"})
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "failed to read archive"})
 	}
 	defer file.Close()
 
 	if err := h.store.PutObject(c.Context(), objectKey, file, fileHeader.Size, "application/octet-stream"); err != nil {
+		logSnapshotError(c, tenantID, productID, snapshot.ID, "failed to store archive", err)
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to store archive"})
 	}
 
 	if err := storage.CreateProductSourceSnapshot(c.Context(), h.db, snapshot); err != nil {
 		_ = h.store.DeleteObject(c.Context(), objectKey)
+		logSnapshotError(c, tenantID, productID, snapshot.ID, "failed to save source snapshot", err)
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to save source snapshot"})
 	}
 
@@ -213,4 +220,16 @@ func archiveExtension(filename string) string {
 		return ".tar.gz"
 	}
 	return filepath.Ext(filename)
+}
+
+func logSnapshotError(c *fiber.Ctx, tenantID *uuid.UUID, productID uuid.UUID, snapshotID uuid.UUID, message string, err error) {
+	requestID := "unknown"
+	if value := requestIDFromContext(c); value != nil {
+		requestID = *value
+	}
+	tenantValue := "unknown"
+	if tenantID != nil {
+		tenantValue = tenantID.String()
+	}
+	log.Printf("%s request_id=%s tenant_id=%s product_id=%s snapshot_id=%s err=%v", message, requestID, tenantValue, productID.String(), snapshotID.String(), err)
 }
