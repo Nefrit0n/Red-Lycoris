@@ -647,7 +647,29 @@ func TestParseSarifReport(t *testing.T) {
 	}
 
 	findings, err := ParseReport("trivy", raw)
-	if err == nil {
-		t.Fatalf("expected sarif report to be unsupported, got %d findings", len(findings))
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	f := findings[0]
+	if f.RuleID != "TRIVY-001" {
+		t.Fatalf("expected rule id TRIVY-001, got %s", f.RuleID)
+	}
+	if f.Severity != "medium" {
+		t.Fatalf("expected severity medium, got %s", f.Severity)
+	}
+	if f.Location != "package.json:12" {
+		t.Fatalf("expected location package.json:12, got %s", f.Location)
+	}
+	if f.Category != models.CategorySCA {
+		t.Fatalf("expected category SCA, got %s", f.Category)
+	}
+	if f.Evidence["scannerType"] != "trivy" {
+		t.Fatalf("expected scannerType trivy, got %v", f.Evidence["scannerType"])
+	}
+	if f.Evidence["message"] != "Outdated dependency" {
+		t.Fatalf("expected message evidence, got %v", f.Evidence["message"])
 	}
 }
