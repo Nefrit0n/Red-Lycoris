@@ -9,6 +9,7 @@ exclude:
       - "**/*.min.js"
       - "**/*.min.css"
       - "backend/go.sum"
+      - "frontend/package-lock.json"
 
   - message: Docs templates and examples
     paths:
