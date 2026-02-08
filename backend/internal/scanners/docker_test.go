@@ -16,7 +16,7 @@ func TestRunTrivyWithoutDocker(t *testing.T) {
 	t.Setenv("PATH", "")
 	t.Cleanup(func() { _ = os.Setenv("PATH", originalPath) })
 
-	err := RunTrivy(context.Background(), RunnerConfig{Timeout: 1 * time.Second}, "/tmp", "/tmp/out.json")
+	_, err := RunTrivy(context.Background(), RunnerConfig{Timeout: 1 * time.Second}, "/tmp", "/tmp/out.json")
 	if err == nil {
 		t.Fatal("expected error when docker is unavailable")
 	}
