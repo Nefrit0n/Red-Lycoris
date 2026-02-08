@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ZAP",
+          "rules": [
+            {
+              "id": "10020",
+              "name": "10020",
+              "shortDescription": {
+                "text": "Missing anti-clickjacking header"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "10020",
+          "level": "error",
+          "message": {
+            "text": "Missing anti-clickjacking header"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://example.com"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
