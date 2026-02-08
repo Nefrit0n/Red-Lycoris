@@ -28,7 +28,6 @@ exclude:
   - message: Example AWS key used in tests
     pattern: "AKIAIOSFODNN7EXAMPLE"
 
-severity: "medium"
 ignore_nosecret: true
 no_entropy: false
 no_pattern: false
