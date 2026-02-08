@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -148,10 +147,6 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		if fileHeader.Size > maxSize {
 			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": fmt.Sprintf("archive exceeds %d bytes", maxSize)})
 		}
-
-		if !isSupportedArchive(fileHeader.Filename) {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "unsupported archive type"})
-		}
 	}
 
 	job := &models.AnalysisJob{
@@ -186,16 +181,24 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		job.ArchiveSize = snapshot.ArchiveSize
 	} else {
 		job.ArchiveSize = fileHeader.Size
-		archiveKey := fmt.Sprintf("analysis/%s/source/archive%s", job.ID.String(), filepath.Ext(fileHeader.Filename))
-		job.ArchiveKey = &archiveKey
-
 		file, err := fileHeader.Open()
 		if err != nil {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "failed to read archive"})
 		}
 		defer file.Close()
 
-		if err := h.store.PutObject(c.Context(), archiveKey, file, fileHeader.Size, "application/octet-stream"); err != nil {
+		format, buffered, err := detectArchiveFormat(file)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "failed to read archive"})
+		}
+		if !isSupportedArchiveFormat(format) {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": supportedArchiveMessage})
+		}
+
+		archiveKey := fmt.Sprintf("analysis/%s/source/archive%s", job.ID.String(), format.Extension())
+		job.ArchiveKey = &archiveKey
+
+		if err := h.store.PutObject(c.Context(), archiveKey, buffered, fileHeader.Size, "application/octet-stream"); err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to store archive"})
 		}
 	}
@@ -400,11 +403,6 @@ func validateScanners(scanners []string) error {
 		}
 	}
 	return nil
-}
-
-func isSupportedArchive(filename string) bool {
-	lower := strings.ToLower(filename)
-	return strings.HasSuffix(lower, ".zip") || strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz")
 }
 
 func parseInt64WithDefault(raw string, fallback int64) int64 {
