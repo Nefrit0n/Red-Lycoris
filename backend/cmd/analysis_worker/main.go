@@ -506,6 +506,7 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 
 	scannerCfg := scanners.RunnerConfig{
 		ContainerNetwork: cfg.AnalysisContainerNetwork,
+		OpenGrepBinary:   cfg.AnalysisOpenGrepBinary,
 		OpenGrepImage:    cfg.AnalysisOpenGrepImage,
 		TrivyImage:       cfg.AnalysisTrivyImage,
 		CheckovImage:     cfg.AnalysisCheckovImage,
