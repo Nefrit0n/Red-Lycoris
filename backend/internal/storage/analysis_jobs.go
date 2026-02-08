@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"lotus-warden/backend/internal/models"
@@ -189,7 +190,14 @@ func GetAnalysisJobByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*Analysi
 		 WHERE aj.id = $1`,
 		id,
 	)
-	return scanAnalysisJobDetail(row)
+	item, err := scanAnalysisJobDetail(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return item, nil
 }
 
 func GetAnalysisJobByIdempotencyKey(ctx context.Context, db *sql.DB, key string) (*AnalysisJobDetail, error) {
@@ -226,7 +234,14 @@ func GetAnalysisJobByIdempotencyKey(ctx context.Context, db *sql.DB, key string)
 		 WHERE aj.idempotency_key = $1`,
 		key,
 	)
-	return scanAnalysisJobDetail(row)
+	item, err := scanAnalysisJobDetail(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return item, nil
 }
 
 func UpdateAnalysisJobStatus(ctx context.Context, db *sql.DB, id uuid.UUID, status string, startedAt *time.Time, finishedAt *time.Time, errorMessage *string) error {
