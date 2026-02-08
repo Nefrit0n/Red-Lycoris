@@ -39,7 +39,7 @@ func (h *ProductsHandler) List(c *fiber.Ctx) error {
 
 	tenantID := tenantIDFromContext(c)
 	if tenantID == nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "tenant context is required"})
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
 	}
 
 	items, total, err := storage.ListProducts(c.Context(), h.db, tenantID, limit, offset)
@@ -65,7 +65,7 @@ func (h *ProductsHandler) Create(c *fiber.Ctx) error {
 
 	tenantID := tenantIDFromContext(c)
 	if tenantID == nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "tenant context is required"})
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
 	}
 
 	product := &models.Product{
@@ -101,7 +101,7 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 
 	tenantID := tenantIDFromContext(c)
 	if tenantID == nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "tenant context is required"})
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
 	}
 
 	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, id, tenantID)
@@ -132,7 +132,7 @@ func (h *ProductsHandler) Stats(c *fiber.Ctx) error {
 
 	tenantID := tenantIDFromContext(c)
 	if tenantID == nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "tenant context is required"})
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
 	}
 
 	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, id, tenantID)
