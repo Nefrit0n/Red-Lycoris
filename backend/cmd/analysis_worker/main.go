@@ -477,9 +477,20 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, err)
 	}
 
-	maxExtract := parseInt64(cfg.AnalysisMaxExtractBytes, 524288000)
-	if err := archive.Extract(archivePath, workspace, maxExtract); err != nil {
+	format, err := archive.DetectArchiveFormatFromPath(archivePath)
+	if err != nil {
 		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, err)
+	}
+	log.Printf("analysis job archive job_id=%s tenant_id=%s product_id=%s source=%s archive_format=%s",
+		job.ID.String(), tenantID, productID, sourceType, format.String())
+
+	if !isSupportedArchiveFormat(format) {
+		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("Неподдерживаемый формат архива. Поддерживаются: zip, tar.gz, tgz."))
+	}
+
+	maxExtract := parseInt64(cfg.AnalysisMaxExtractBytes, 524288000)
+	if err := archive.ExtractWithFormat(archivePath, workspace, maxExtract, format); err != nil {
+		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, wrapArchiveExtractionError(format, err))
 	}
 
 	scannerCfg := scanners.RunnerConfig{
@@ -842,4 +853,21 @@ func parseInt64(value string, fallback int64) int64 {
 		return fallback
 	}
 	return parsed
+}
+
+func isSupportedArchiveFormat(format archive.ArchiveFormat) bool {
+	return format == archive.ArchiveFormatZip || format == archive.ArchiveFormatTarGz
+}
+
+func wrapArchiveExtractionError(format archive.ArchiveFormat, err error) error {
+	if err == nil {
+		return nil
+	}
+	if format == archive.ArchiveFormatTarGz {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "gzip") || strings.Contains(msg, "invalid header") {
+			return fmt.Errorf("Архив не является gzip/tar.gz. Возможно, вы загрузили ZIP. Поддерживаются: zip, tar.gz, tgz.")
+		}
+	}
+	return err
 }
