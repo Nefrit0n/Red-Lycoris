@@ -22,6 +22,7 @@ services:
     command: [ "go", "run", "./cmd/analysis_worker" ]
     volumes:
       - ./backend:/app
+      - /var/run/docker.sock:/var/run/docker.sock
 
   intel-worker:
     build:
