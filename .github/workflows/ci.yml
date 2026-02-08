@@ -5,14 +5,22 @@ on:
     branches: ["main"]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
   GO_VERSION: "1.24"
   NODE_VERSION: "20"
   PYTHON_VERSION: "3.12"
+  GOTOOLCHAIN: local
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   backend:
@@ -33,7 +41,7 @@ jobs:
           --health-cmd="pg_isready -U postgres"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=5
+          --health-retries=10
 
     env:
       DB_HOST: localhost
@@ -42,11 +50,11 @@ jobs:
       DB_PASSWORD: postgres
       DB_NAME: lotus_warden
       DB_SSLMODE: disable
-      MIGRATIONS_PATH: migrations 
+      MIGRATIONS_PATH: migrations
       ROOT_EMAIL: root@localhost
       ROOT_PASSWORD: root
       JWT_SECRET: contract-test-secret
-      
+
     steps:
       - uses: actions/checkout@v6
 
@@ -55,23 +63,45 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+          cache-dependency-path: |
+            backend/go.sum
+
+      - name: Wait for Postgres
+        run: |
+          set -euo pipefail
+          for i in {1..30}; do
+            if docker run --rm --network host postgres:16-alpine pg_isready -h localhost -U postgres >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres did not become ready"
+          docker ps -a || true
+          exit 1
 
       - name: Go format & vet
         working-directory: backend
         run: |
-          if [ -n "$(gofmt -l .)" ]; then
-            echo "Go files must be formatted with gofmt"
+          set -euo pipefail
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "Go files must be formatted with gofmt:"
+            echo "$unformatted"
             exit 1
           fi
           go vet ./...
 
       - name: Run migrations
         working-directory: backend
-        run: go run ./cmd/migrate
+        run: |
+          set -euo pipefail
+          go run ./cmd/migrate
 
       - name: Go tests
         working-directory: backend
-        run: go test ./...
+        run: |
+          set -euo pipefail
+          go test -count=1 -race ./...
 
   contracts:
     name: Contract tests
@@ -91,11 +121,13 @@ jobs:
           --health-cmd="pg_isready -U postgres"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=5
+          --health-retries=10
+
       nats:
         image: nats:2.10-alpine
         ports:
           - 4222:4222
+
       minio:
         image: minio/minio:RELEASE.2024-01-18T22-51-28Z
         env:
@@ -107,23 +139,22 @@ jobs:
           --health-cmd="curl -f http://localhost:9000/minio/health/live"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=5
-      command: server /data --console-address ":9001"
-        
+          --health-retries=10
+
     env:
       DB_HOST: localhost
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
-      MIGRATIONS_PATH: migrations 
       DB_NAME: lotus_warden
       DB_SSLMODE: disable
+      MIGRATIONS_PATH: migrations
       NATS_URL: nats://localhost:4222
       OBJECT_STORE_ENDPOINT: localhost:9000
       OBJECT_STORE_ACCESS_KEY: minioadmin
       OBJECT_STORE_SECRET_KEY: minioadmin
       OBJECT_STORE_BUCKET: lotus-warden
-      OBJECT_STORE_USE_SSL: false
+      OBJECT_STORE_USE_SSL: "false"
       ROOT_EMAIL: root@localhost
       ROOT_PASSWORD: root
       JWT_SECRET: contract-test-secret
@@ -137,6 +168,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+          cache-dependency-path: |
+            backend/go.sum
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -145,55 +178,101 @@ jobs:
           cache: "pip"
 
       - name: Add Go bin to PATH
-        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install contract test dependencies
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           pip install schemathesis jsonschema
 
-      - name: Run migrations
-        working-directory: backend
-        run: go run ./cmd/migrate
-
       - name: Wait for services
         run: |
+          set -euo pipefail
+
+          echo "Waiting for Postgres..."
           for i in {1..30}; do
-            if curl -sf http://localhost:9000/minio/health/live > /dev/null; then
+            if docker run --rm --network host postgres:16-alpine pg_isready -h localhost -U postgres >/dev/null 2>&1; then
               break
             fi
             sleep 2
           done
 
+          echo "Waiting for NATS..."
+          for i in {1..30}; do
+            if nc -z localhost 4222 >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+
+          echo "Waiting for MinIO..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run migrations
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          go run ./cmd/migrate
+
       - name: Start backend
         working-directory: backend
         run: |
+          set -euo pipefail
           go run ./cmd/server > /tmp/backend.log 2>&1 &
           echo $! > /tmp/backend.pid
 
       - name: Wait for backend
         run: |
+          set -euo pipefail
           for i in {1..30}; do
-            if curl -sf http://localhost:8080/health > /dev/null; then
+            if curl -sf http://localhost:8080/health >/dev/null; then
               exit 0
             fi
             sleep 2
           done
 
           echo "Backend did not become healthy"
-          cat /tmp/backend.log
+          echo "---- backend.log ----"
+          cat /tmp/backend.log || true
           exit 1
 
       - name: Validate contract fixtures
-        run: python scripts/contracts/validate_fixtures.py
+        run: |
+          set -euo pipefail
+          python scripts/contracts/validate_fixtures.py
 
       - name: Run Schemathesis
-        run: scripts/contracts/run_schemathesis.sh
+        run: |
+          set -euo pipefail
+          scripts/contracts/run_schemathesis.sh
 
       - name: OpenAPI backward compatibility
         run: |
-          go install github.com/tufin/oasdiff/cmd/oasdiff@latest
+          set -euo pipefail
+          go install github.com/oasdiff/oasdiff@v1.11.10
           scripts/contracts/check_openapi_compat.sh
+
+      - name: Stop backend
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f /tmp/backend.pid ]; then
+            kill "$(cat /tmp/backend.pid)" || true
+          fi
+
+      - name: Upload backend log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-log
+          path: /tmp/backend.log
+          if-no-files-found: ignore
 
   frontend:
     name: Frontend checks
@@ -212,15 +291,27 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: |
+          set -euo pipefail
+          npm ci
 
       - name: Lint
         working-directory: frontend
-        run: npm run lint
+        run: |
+          set -euo pipefail
+          npm run lint
 
       - name: Test
         working-directory: frontend
-        run: npm run test
+        run: |
+          set -euo pipefail
+          npm run test
+
+      - name: Build
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm run build
 
   python:
     name: Python API checks
@@ -236,7 +327,7 @@ jobs:
           --health-cmd="redis-cli ping"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=5
+          --health-retries=10
 
     env:
       CELERY_BROKER_URL: redis://localhost:6379/0
@@ -255,6 +346,7 @@ jobs:
       - name: Install dependencies
         working-directory: python_api
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install ruff pytest pytest-cov
@@ -262,18 +354,46 @@ jobs:
       - name: Lint with ruff
         working-directory: python_api
         run: |
-          ruff check .
-          ruff format --check .
+          set -euo pipefail
+          ruff check --output-format=github .
+          ruff format --check --diff .
 
       - name: Run tests
         working-directory: python_api
-        run: pytest --cov=app --cov-report=term-missing || true
+        run: |
+          set -euo pipefail
+          pytest --cov=app --cov-report=term-missing
 
   docker:
     name: Docker build
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [backend, frontend, python]
+    needs: [backend, frontend, python, contracts]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            file: backend/Dockerfile
+            target: runtime
+            tag: lotus-warden-backend
+          - name: frontend
+            context: ./frontend
+            file: frontend/Dockerfile
+            target: runtime
+            tag: lotus-warden-frontend
+          - name: nginx
+            context: .
+            file: nginx/Dockerfile
+            target: ""
+            tag: lotus-warden-nginx
+          - name: python-api
+            context: ./python_api
+            file: python_api/Dockerfile
+            target: runtime
+            tag: lotus-warden-python-api
 
     steps:
       - uses: actions/checkout@v6
@@ -281,46 +401,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build backend image
+      - name: Build ${{ matrix.name }} image
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
-          file: backend/Dockerfile
-          target: runtime
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
           push: false
-          tags: lotus-warden-backend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build frontend image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          file: frontend/Dockerfile
-          target: runtime
-          push: false
-          tags: lotus-warden-frontend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build nginx image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: nginx/Dockerfile
-          push: false
-          tags: lotus-warden-nginx:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build python-api image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./python_api
-          file: python_api/Dockerfile
-          target: runtime
-          push: false
-          tags: lotus-warden-python-api:${{ github.sha }}
+          tags: ${{ matrix.tag }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -328,7 +416,7 @@ jobs:
     name: Security scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [backend, frontend, python]
+    needs: [backend, frontend, python, contracts]
 
     steps:
       - uses: actions/checkout@v6
