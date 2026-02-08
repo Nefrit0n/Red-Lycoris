@@ -38,6 +38,7 @@ type Config struct {
 	AnalysisScannerTimeout   string
 	AnalysisCleanupInterval  string
 	AnalysisCleanupTTL       string
+	AnalysisOpenGrepBinary   string
 	AnalysisOpenGrepImage    string
 	AnalysisTrivyImage       string
 	AnalysisCheckovImage     string
@@ -88,7 +89,8 @@ func Load() Config {
 		AnalysisScannerTimeout:   getEnv("ANALYSIS_SCANNER_TIMEOUT", "20m"),
 		AnalysisCleanupInterval:  getEnv("ANALYSIS_CLEANUP_INTERVAL", "1h"),
 		AnalysisCleanupTTL:       getEnv("ANALYSIS_CLEANUP_TTL", "24h"),
-		AnalysisOpenGrepImage:    getEnv("ANALYSIS_OPENGREP_IMAGE", "ghcr.io/opengrep/opengrep:latest"),
+		AnalysisOpenGrepBinary:   getEnv("ANALYSIS_OPENGREP_BINARY", ""),
+		AnalysisOpenGrepImage:    getEnv("ANALYSIS_OPENGREP_IMAGE", ""),
 		AnalysisTrivyImage:       getEnv("ANALYSIS_TRIVY_IMAGE", "aquasec/trivy:latest"),
 		AnalysisCheckovImage:     getEnv("ANALYSIS_CHECKOV_IMAGE", "bridgecrew/checkov:latest"),
 		AnalysisKICSImage:        getEnv("ANALYSIS_KICS_IMAGE", "checkmarx/kics:latest"),
