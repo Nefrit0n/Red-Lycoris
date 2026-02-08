@@ -198,7 +198,7 @@ fi
 
 # ---- SCHEMATHESIS ----
 schemathesis run "$OPENAPI_SPEC" \
-  --base-url "$API_URL" \
+  --url "$API_URL" \
   --header "Authorization: Bearer ${api_token}" \
   --method GET \
   --endpoint /api/v1/findings \
