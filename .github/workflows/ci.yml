@@ -424,17 +424,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install "trufflehog3==3.0.10"
 
-      - name: Create trufflehog3 config (ignore docs templates)
+      - name: Run trufflehog3 (no config)
         run: |
-          cat > .trufflehog3.yml <<'YAML'
-          exclude_paths:
-            - lotus-warden/docs/template
-            - docs/template
-          YAML
+          rm -f .trufflehog3.yml .trufflehog3.yaml trufflehog3.yml trufflehog3.yaml || true
 
-      - name: Run trufflehog3 (files only, no git history)
-        run: |
-          trufflehog3 --no-history --format json --output trufflehog3.json .
+          trufflehog3 \
+            --no-history \
+            --format JSON \
+            --output trufflehog3.json \
+            --exclude '(^|/)(lotus-warden/docs/template|docs/template)/' \
+            .
 
       - name: Upload trufflehog3 report
         if: always()
