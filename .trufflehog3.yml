@@ -1,0 +1,69 @@
+exclude:
+  # --- build / artifacts ---
+  - message: Build artifacts
+    paths:
+      - build/**
+      - dist/**
+      - coverage/**
+      - **/*.min.js
+      - **/*.min.css
+
+  # --- documentation templates ---
+  - message: Docs templates and examples
+    paths:
+      - lotus-warden/docs/template/**
+      - docs/template/**
+      - docs/**/*.html
+      - docs/examples/**
+
+  # --- test fixtures with fake secrets ---
+  - message: Fake credentials used in tests
+    pattern: AKIA[A-Z0-9]{16}
+    paths:
+      - "**/*_test.go"
+      - "**/test/**"
+      - "**/tests/**"
+
+  # --- generic example keys ---
+  - message: Example AWS keys
+    pattern: AKIAIOSFODNN7EXAMPLE
+
+  # --- CI / GitHub ---
+  - message: GitHub workflow templates
+    paths:
+      - .github/**
+
+  # --- frontend node stuff ---
+  - message: Node dependencies
+    paths:
+      - node_modules/**
+      - frontend/node_modules/**
+
+  # --- python caches ---
+  - message: Python cache files
+    paths:
+      - "**/__pycache__/**"
+      - "**/*.pyc"
+
+# -----------------------------
+# Scanner behaviour
+# -----------------------------
+
+severity: medium        # LOW шумит, MEDIUM — хороший баланс
+ignore_nosecret: true   # поддержка // nosecret
+no_entropy: false
+no_pattern: false
+
+# -----------------------------
+# Source settings
+# -----------------------------
+
+branch: main
+no_history: true        # мы не хотим лезть в git history в CI
+no_current: false
+
+# -----------------------------
+# Output
+# -----------------------------
+
+context: 0
