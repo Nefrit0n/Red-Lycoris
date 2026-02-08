@@ -428,7 +428,6 @@ jobs:
         run: |
           trufflehog3 \
             --no-history \
-            -f JSON -o trufflehog3.json \
             -e "backend/internal/parser/**" \
             .
 
