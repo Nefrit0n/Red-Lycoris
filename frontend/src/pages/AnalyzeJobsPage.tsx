@@ -1,73 +1,51 @@
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  FormControl,
-  FormControlLabel,
-  FormLabel,
-  LinearProgress,
-  Paper,
-  Radio,
-  RadioGroup,
-  Stack,
-  Tab,
-  Tabs,
-  TextField,
-  Typography,
-} from "@mui/material";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { Box, Card, CardContent, Stack, Typography } from "@mui/material";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AnalysisJob,
   createAnalysisJob,
   fetchAnalysisJobs,
 } from "../api/analysisJobs";
 import { ApiError } from "../api/client";
-import { createProduct } from "../api/products";
 import {
-  createProductSourceSnapshot,
-  fetchLatestProductSourceSnapshot,
-  ProductSourceSnapshot,
-} from "../api/productSourceSnapshots";
-import { ArchiveDropzone } from "../components/ArchiveDropzone";
+  createSourceSnapshot,
+  fetchLatestSourceSnapshot,
+  listSourceSnapshots,
+  SourceSnapshot,
+} from "../api/sourceSnapshots";
 import PaginationControl from "../components/PaginationControl";
-import { ProductAutocomplete } from "../components/ProductAutocomplete";
 import { useNotification } from "../contexts/NotificationContext";
+import AnalyzeHeader from "../features/analyze/components/AnalyzeHeader";
+import ProductSection from "../features/analyze/components/ProductSection";
+import RunSummary from "../features/analyze/components/RunSummary";
+import ScannerSection from "../features/analyze/components/ScannerSection";
+import RecentAnalyses from "../features/analyze/components/RecentAnalyses";
+import SourceSection, { SourceMode } from "../features/analyze/components/SourceSection";
 
-type ProductMode = "existing" | "new";
-
-type SourceMode = "latest" | "snapshot" | "job";
+const maxArchiveMb = 200;
+const snapshotsPageSize = 50;
 
 const AnalyzeJobsPage = () => {
   const { showError, showSuccess } = useNotification();
-  const maxArchiveMb = 200;
+  const historyRef = useRef<HTMLDivElement | null>(null);
 
-  const [productMode, setProductMode] = useState<ProductMode>("existing");
-  const [selectedProductId, setSelectedProductId] = useState<string>("");
-  const [selectedProductLabel, setSelectedProductLabel] = useState<string>("");
-  const [newProductName, setNewProductName] = useState<string>("");
-  const [newProductVersion, setNewProductVersion] = useState<string>("");
-  const [newProductIdentifier, setNewProductIdentifier] = useState<string>("");
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedProductLabel, setSelectedProductLabel] = useState("");
 
-  const [sourceMode, setSourceMode] = useState<SourceMode>("job");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("latest");
   const [archive, setArchive] = useState<File | null>(null);
-  const [latestSnapshot, setLatestSnapshot] = useState<ProductSourceSnapshot | null>(null);
+  const [latestSnapshot, setLatestSnapshot] = useState<SourceSnapshot | null>(null);
   const [latestSnapshotLoading, setLatestSnapshotLoading] = useState(false);
+  const [snapshots, setSnapshots] = useState<SourceSnapshot[]>([]);
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
   const [runSemgrep, setRunSemgrep] = useState(true);
   const [runTrivy, setRunTrivy] = useState(true);
+
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [submitError, setSubmitError] = useState<{ message: string; canRetry: boolean } | null>(
-    null
-  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [lastJobId, setLastJobId] = useState<string | null>(null);
 
   const [data, setData] = useState<AnalysisJob[]>([]);
   const [total, setTotal] = useState(0);
@@ -84,12 +62,9 @@ const AnalyzeJobsPage = () => {
   }, [runSemgrep, runTrivy]);
 
   const productSummary = useMemo(() => {
-    if (productMode === "new") {
-      if (!newProductName) return "Новый продукт";
-      return `${newProductName}${newProductVersion ? ` · ${newProductVersion}` : ""}`;
-    }
-    return selectedProductLabel || selectedProductId || "Продукт не выбран";
-  }, [productMode, newProductName, newProductVersion, selectedProductLabel, selectedProductId]);
+    if (!selectedProductId) return "Продукт не выбран";
+    return selectedProductLabel || selectedProductId;
+  }, [selectedProductId, selectedProductLabel]);
 
   const sourceSummary = useMemo(() => {
     switch (sourceMode) {
@@ -97,13 +72,17 @@ const AnalyzeJobsPage = () => {
         return latestSnapshot
           ? `Последний снапшот · ${new Date(latestSnapshot.createdAt).toLocaleDateString("ru-RU")}`
           : "Последний снапшот";
-      case "snapshot":
+      case "select": {
+        const snapshot = snapshots.find((item) => item.id === selectedSnapshotId);
+        return snapshot?.label || snapshot?.originalFilename || "Выбранный снапшот";
+      }
+      case "upload":
         return archive ? `Новый снапшот · ${archive.name}` : "Новый снапшот";
-      case "job":
+      case "ephemeral":
       default:
-        return archive ? `Архив для задачи · ${archive.name}` : "Архив для задачи";
+        return archive ? `Архив задачи · ${archive.name}` : "Архив задачи";
     }
-  }, [sourceMode, latestSnapshot, archive]);
+  }, [archive, latestSnapshot, selectedSnapshotId, snapshots, sourceMode]);
 
   const scannerSummary = useMemo(() => {
     if (scanners.length === 0) return "Сканеры не выбраны";
@@ -136,52 +115,61 @@ const AnalyzeJobsPage = () => {
   }, [loadJobs]);
 
   useEffect(() => {
-    if (productMode === "new") {
-      setSelectedProductId("");
-      setSelectedProductLabel("");
-    }
-  }, [productMode]);
-
-  useEffect(() => {
-    if (productMode === "new") {
-      setLatestSnapshot(null);
-      setSourceMode("snapshot");
-      return;
-    }
     if (!selectedProductId) {
       setLatestSnapshot(null);
-      setSourceMode("job");
+      setSnapshots([]);
+      setSelectedSnapshotId("");
       return;
     }
 
     const controller = new AbortController();
-    const loadLatest = async () => {
+    const loadSnapshots = async () => {
       setLatestSnapshotLoading(true);
+      setSnapshotsLoading(true);
       try {
-        const snapshot = await fetchLatestProductSourceSnapshot(selectedProductId);
-        setLatestSnapshot(snapshot);
-        setSourceMode("latest");
-      } catch (err) {
-        if (!(err instanceof DOMException && err.name === "AbortError")) {
+        const [latestResult, listResult] = await Promise.allSettled([
+          fetchLatestSourceSnapshot(selectedProductId),
+          listSourceSnapshots(selectedProductId, snapshotsPageSize, 0),
+        ]);
+        if (latestResult.status === "fulfilled") {
+          setLatestSnapshot(latestResult.value);
+          if (sourceMode === "latest") {
+            setSelectedSnapshotId(latestResult.value?.id ?? "");
+          }
+        } else {
           setLatestSnapshot(null);
-          setSourceMode("snapshot");
         }
+        if (listResult.status === "fulfilled") {
+          setSnapshots(listResult.value.data);
+        } else {
+          setSnapshots([]);
+        }
+      } catch {
+        setLatestSnapshot(null);
+        setSnapshots([]);
       } finally {
         setLatestSnapshotLoading(false);
+        setSnapshotsLoading(false);
       }
     };
 
-    loadLatest();
+    loadSnapshots();
     return () => controller.abort();
-  }, [productMode, selectedProductId]);
+  }, [selectedProductId, sourceMode]);
 
   useEffect(() => {
     if (sourceMode === "latest") {
       setArchive(null);
+      if (latestSnapshot?.id) {
+        setSelectedSnapshotId(latestSnapshot.id);
+      }
     }
-  }, [sourceMode]);
+    if (sourceMode === "select") {
+      setArchive(null);
+    }
+  }, [latestSnapshot, sourceMode]);
 
-  const handlePreset = (preset: "fast" | "full") => {
+  const handlePreset = useCallback((preset: "fast" | "full") => {
     if (preset === "fast") {
       setRunSemgrep(true);
       setRunTrivy(false);
@@ -189,23 +177,16 @@ const AnalyzeJobsPage = () => {
       setRunSemgrep(true);
       setRunTrivy(true);
     }
-  };
+  }, []);
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (submitting) return;
-
     if (scanners.length === 0) {
       showError("Выберите хотя бы один сканер.");
       return;
     }
-
-    if (productMode === "existing" && !selectedProductId) {
-      showError("Выберите существующий продукт.");
-      return;
-    }
-
-    if (productMode === "new" && !newProductName.trim()) {
-      showError("Введите название нового продукта.");
+    if (!selectedProductId) {
+      showError("Выберите продукт.");
       return;
     }
 
@@ -214,7 +195,12 @@ const AnalyzeJobsPage = () => {
       return;
     }
 
-    if (sourceMode !== "latest" && !archive) {
+    if (sourceMode === "select" && !selectedSnapshotId) {
+      showError("Выберите снапшот из списка.");
+      return;
+    }
+
+    if ((sourceMode === "upload" || sourceMode === "ephemeral") && !archive) {
       showError("Добавьте архив исходников.");
       return;
     }
@@ -224,39 +210,23 @@ const AnalyzeJobsPage = () => {
     setSubmitError(null);
 
     try {
-      let productId = selectedProductId;
-
-      if (productMode === "new") {
-        const created = await createProduct({
-          name: newProductName.trim(),
-          version: newProductVersion.trim() || undefined,
-          identifier: newProductIdentifier.trim() || undefined,
-        });
-        productId = created.id;
-        setSelectedProductId(created.id);
-        setSelectedProductLabel(created.name);
-      }
-
       let sourceSnapshotId: string | undefined;
       let archiveToUpload: File | undefined;
 
       if (sourceMode === "latest") {
-        sourceSnapshotId = latestSnapshot?.id;
-      } else if (sourceMode === "snapshot" && archive) {
+        sourceSnapshotId = undefined;
+      } else if (sourceMode === "select") {
+        sourceSnapshotId = selectedSnapshotId;
+      } else if (sourceMode === "upload" && archive) {
         const snapshotIdempotencyKey = crypto.randomUUID();
         setUploadProgress(0);
-        const snapshot = await createProductSourceSnapshot(productId, archive, {
+        const snapshot = await createSourceSnapshot(selectedProductId, archive, {
           idempotencyKey: snapshotIdempotencyKey,
           onProgress: setUploadProgress,
         });
         sourceSnapshotId = snapshot.id;
-      } else if (sourceMode === "job" && archive) {
+      } else if (sourceMode === "ephemeral" && archive) {
         archiveToUpload = archive;
-      }
-
-      if (!productId) {
-        showError("Не удалось определить продукт для запуска анализа.");
-        return;
       }
 
       const jobIdempotencyKey = crypto.randomUUID();
@@ -264,17 +234,19 @@ const AnalyzeJobsPage = () => {
         setUploadProgress(0);
       }
 
-      await createAnalysisJob({
-        productId,
+      const response = await createAnalysisJob({
+        productId: selectedProductId,
         scanners,
         archive: archiveToUpload,
         sourceSnapshotId,
+        sourceMode: sourceMode === "latest" ? "latest" : undefined,
         idempotencyKey: jobIdempotencyKey,
         onProgress: archiveToUpload ? setUploadProgress : undefined,
       });
 
       showSuccess("Анализ поставлен в очередь.");
       setArchive(null);
+      setLastJobId(response.id);
       await loadJobs();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -285,388 +257,100 @@ const AnalyzeJobsPage = () => {
         if (err.code === "PASSWORD_CHANGE_REQUIRED") {
           return;
         }
-        if (err.status === 401) {
-          showError("Сессия истекла. Войдите снова.");
-          return;
-        }
-        if (err.status === 403) {
-          showError(
-            "Контекст арендатора недоступен. Обратитесь к администратору."
-          );
-          return;
-        }
-        if (err.status >= 500) {
-          const message = err.message || "Ошибка сервера. Попробуйте еще раз.";
-          setSubmitError({ message, canRetry: true });
-          showError(message);
-          return;
-        }
-        showError(err.message || "Не удалось создать анализ");
+        const message = err.message || "Не удалось создать анализ";
+        setSubmitError(message);
+        showError(message);
         return;
       }
       const message = err instanceof Error ? err.message : "Не удалось создать анализ";
+      setSubmitError(message);
       showError(message);
     } finally {
       setUploadProgress(null);
       setSubmitting(false);
     }
-  };
+  }, [
+    archive,
+    latestSnapshot,
+    loadJobs,
+    scanners,
+    selectedProductId,
+    selectedSnapshotId,
+    showError,
+    showSuccess,
+    sourceMode,
+    submitting,
+  ]);
 
-  const statusChip = (status: string) => {
-    switch (status) {
-      case "queued":
-        return <Chip label="В очереди" size="small" />;
-      case "processing":
-        return <Chip label="В работе" size="small" color="info" />;
-      case "succeeded":
-        return <Chip label="Успешно" size="small" color="success" />;
-      case "failed":
-        return <Chip label="Ошибка" size="small" color="error" />;
-      default:
-        return <Chip label={status} size="small" />;
+  const scannerWarnings = useMemo(() => {
+    if (scanners.length === 0) {
+      return ["Нужно выбрать хотя бы один сканер."];
     }
-  };
+    return [];
+  }, [scanners.length]);
 
-  const formatStats = (job: AnalysisJob) => {
-    const repeats = Math.max(job.findingsTotal - job.findingsNew - job.duplicatesTotal, 0);
-    return `Новые: ${job.findingsNew} · Повторы: ${repeats} · Дубликаты: ${job.duplicatesTotal}`;
-  };
+  const handleHistoryClick = useCallback(() => {
+    historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   return (
     <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }} sx={{ maxWidth: 1200, mx: "auto" }}>
       <Stack spacing={3}>
-        <Box>
-          <Typography variant="h4" gutterBottom>
-            Анализ
-          </Typography>
-          <Typography color="text.secondary">
-            Настройте продукт, исходники и сканеры, чтобы запустить анализ.
-          </Typography>
-        </Box>
+        <AnalyzeHeader onHistoryClick={handleHistoryClick} />
 
         <Stack direction={{ xs: "column", lg: "row" }} spacing={3} alignItems="flex-start">
-          <Card sx={{ flex: 1 }}>
+          <Card variant="outlined" sx={{ flex: 1 }}>
             <CardContent>
               <Stack spacing={2}>
-                <Accordion defaultExpanded>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Stack spacing={0.5}>
-                      <Typography variant="subtitle1">Шаг 1. Продукт</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {productSummary}
-                      </Typography>
-                    </Stack>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Stack spacing={2}>
-                      <Tabs
-                        value={productMode}
-                        onChange={(_, value) => setProductMode(value)}
-                        variant="fullWidth"
-                      >
-                        <Tab value="existing" label="Существующий" />
-                        <Tab value="new" label="Новый" />
-                      </Tabs>
+                <ProductSection
+                  selectedProductId={selectedProductId}
+                  onProductIdChange={setSelectedProductId}
+                  onProductLabelChange={setSelectedProductLabel}
+                />
 
-                      {productMode === "existing" ? (
-                        <ProductAutocomplete
-                          value={selectedProductId}
-                          returnId
-                          onChange={(value) => setSelectedProductId(value)}
-                          onLabelChange={setSelectedProductLabel}
-                        />
-                      ) : (
-                        <Stack spacing={2}>
-                          <Typography color="text.secondary" variant="body2">
-                            Создайте продукт перед запуском анализа. Поля версии и identifier опциональны.
-                          </Typography>
-                          <TextField
-                            label="Название продукта *"
-                            value={newProductName}
-                            onChange={(event) => setNewProductName(event.target.value)}
-                            placeholder="Lotus Platform"
-                            fullWidth
-                          />
-                          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                            <TextField
-                              label="Версия"
-                              value={newProductVersion}
-                              onChange={(event) => setNewProductVersion(event.target.value)}
-                              placeholder="v1.0.0"
-                              fullWidth
-                            />
-                            <TextField
-                              label="Identifier"
-                              value={newProductIdentifier}
-                              onChange={(event) => setNewProductIdentifier(event.target.value)}
-                              placeholder="lotus-platform"
-                              fullWidth
-                            />
-                          </Stack>
-                        </Stack>
-                      )}
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
+                <SourceSection
+                  sourceMode={sourceMode}
+                  onSourceModeChange={setSourceMode}
+                  hasProduct={Boolean(selectedProductId)}
+                  archive={archive}
+                  onArchiveChange={setArchive}
+                  latestSnapshot={latestSnapshot}
+                  latestSnapshotLoading={latestSnapshotLoading}
+                  snapshots={snapshots}
+                  snapshotsLoading={snapshotsLoading}
+                  selectedSnapshotId={selectedSnapshotId}
+                  onSnapshotChange={setSelectedSnapshotId}
+                  showSnapshotWarnings={!archive && (sourceMode === "upload" || sourceMode === "ephemeral")}
+                />
 
-                <Accordion defaultExpanded>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Stack spacing={0.5}>
-                      <Typography variant="subtitle1">Шаг 2. Исходники</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {sourceSummary}
-                      </Typography>
-                    </Stack>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Stack spacing={2}>
-                      <FormControl>
-                        <FormLabel>Источник архива</FormLabel>
-                        <RadioGroup
-                          value={sourceMode}
-                          onChange={(event) => setSourceMode(event.target.value as SourceMode)}
-                        >
-                          <FormControlLabel
-                            value="latest"
-                            control={<Radio />}
-                            disabled={productMode === "new" || (!latestSnapshot && !latestSnapshotLoading)}
-                            label="Использовать последний загруженный архив"
-                          />
-                          <FormControlLabel
-                            value="snapshot"
-                            control={<Radio />}
-                            label="Загрузить и сохранить новый архив для продукта"
-                          />
-                          <FormControlLabel
-                            value="job"
-                            control={<Radio />}
-                            label="Загрузить архив только для этой задачи"
-                          />
-                        </RadioGroup>
-                      </FormControl>
-
-                      {latestSnapshotLoading && (
-                        <Typography variant="body2" color="text.secondary">
-                          Проверяем наличие снапшота...
-                        </Typography>
-                      )}
-
-                      {sourceMode !== "latest" && (
-                        <ArchiveDropzone
-                          value={archive}
-                          onChange={setArchive}
-                          helperText="Поддерживаются .zip, .tar.gz, .tgz"
-                        />
-                      )}
-
-                      {sourceMode === "latest" && latestSnapshot && (
-                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                          <Typography variant="subtitle2">Последний снапшот</Typography>
-                          <Typography color="text.secondary" variant="body2">
-                            Создан: {new Date(latestSnapshot.createdAt).toLocaleString("ru-RU")}
-                          </Typography>
-                          <Typography color="text.secondary" variant="body2">
-                            Размер: {Math.round(latestSnapshot.size / 1024)} KB
-                          </Typography>
-                        </Paper>
-                      )}
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
-
-                <Accordion defaultExpanded>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Stack spacing={0.5}>
-                      <Typography variant="subtitle1">Шаг 3. Сканеры</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {scannerSummary}
-                      </Typography>
-                    </Stack>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Stack spacing={2}>
-                      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                        <Card variant="outlined" sx={{ flex: 1 }}>
-                          <CardContent>
-                            <Stack spacing={1}>
-                              <Typography variant="subtitle1">Semgrep</Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                Поиск уязвимостей в коде и конфигурации.
-                              </Typography>
-                              <Button
-                                variant={runSemgrep ? "contained" : "outlined"}
-                                onClick={() => setRunSemgrep((prev) => !prev)}
-                              >
-                                {runSemgrep ? "Включен" : "Выключен"}
-                              </Button>
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                        <Card variant="outlined" sx={{ flex: 1 }}>
-                          <CardContent>
-                            <Stack spacing={1}>
-                              <Typography variant="subtitle1">Trivy</Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                Анализ контейнеров и зависимостей.
-                              </Typography>
-                              <Button
-                                variant={runTrivy ? "contained" : "outlined"}
-                                onClick={() => setRunTrivy((prev) => !prev)}
-                              >
-                                {runTrivy ? "Включен" : "Выключен"}
-                              </Button>
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      </Stack>
-
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                        <Button variant="outlined" onClick={() => handlePreset("fast")}>
-                          Быстро (Semgrep)
-                        </Button>
-                        <Button variant="outlined" onClick={() => handlePreset("full")}>
-                          Полный (Semgrep + Trivy)
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
+                <ScannerSection
+                  runSemgrep={runSemgrep}
+                  runTrivy={runTrivy}
+                  onToggleSemgrep={() => setRunSemgrep((prev) => !prev)}
+                  onToggleTrivy={() => setRunTrivy((prev) => !prev)}
+                  onPreset={handlePreset}
+                  warnings={scannerWarnings}
+                />
               </Stack>
             </CardContent>
           </Card>
 
-          <Card
-            sx={{
-              width: { xs: "100%", lg: 320 },
-              position: { lg: "sticky" },
-              top: { lg: 24 },
-            }}
-          >
-            <CardContent>
-              <Stack spacing={2}>
-                <Typography variant="subtitle1">Итоговая сводка</Typography>
-                <Stack spacing={0.5}>
-                  <Typography variant="body2" color="text.secondary">
-                    Продукт: {productSummary}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Источник: {sourceSummary}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Сканеры: {scannerSummary}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Максимальный архив: {maxArchiveMb} MB
-                  </Typography>
-                </Stack>
-
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                  >
-                    Запустить анализ
-                  </Button>
-                  <Box sx={{ width: 24, display: "flex", justifyContent: "center" }}>
-                    {submitting && <CircularProgress size={18} />}
-                  </Box>
-                </Stack>
-
-                {uploadProgress !== null && (
-                  <Stack spacing={1}>
-                    <Typography variant="body2" color="text.secondary">
-                      Загрузка архива: {uploadProgress}%
-                    </Typography>
-                    <LinearProgress variant="determinate" value={uploadProgress} />
-                  </Stack>
-                )}
-
-                {submitError && (
-                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: "error.main" }}>
-                    <Stack spacing={1}>
-                      <Typography variant="body2" color="error">
-                        {submitError.message}
-                      </Typography>
-                      {submitError.canRetry && (
-                        <Button variant="outlined" color="error" onClick={handleSubmit}>
-                          Повторить
-                        </Button>
-                      )}
-                    </Stack>
-                  </Paper>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
+          <RunSummary
+            productSummary={productSummary}
+            sourceSummary={sourceSummary}
+            scannerSummary={scannerSummary}
+            submitting={submitting}
+            uploadProgress={uploadProgress}
+            lastJobId={lastJobId}
+            onSubmit={handleSubmit}
+            submitError={submitError}
+            onRetry={submitError ? handleSubmit : undefined}
+          />
         </Stack>
 
-        <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-          {loading ? (
-            <Box display="flex" justifyContent="center" py={8}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
-              <Box component="thead" sx={{ backgroundColor: "action.hover" }}>
-                <Box component="tr">
-                  {["ID анализа", "Продукт", "Сканеры", "Статус", "Статистика", "Создан"].map(
-                    (label) => (
-                      <Box
-                        component="th"
-                        key={label}
-                        sx={{ textAlign: "left", px: 2, py: 1.5, fontWeight: 600, fontSize: 13 }}
-                      >
-                        {label}
-                      </Box>
-                    )
-                  )}
-                </Box>
-              </Box>
-              <Box component="tbody">
-                {data.length === 0 ? (
-                  <Box component="tr">
-                    <Box component="td" colSpan={6} sx={{ py: 6, textAlign: "center" }}>
-                      <Typography color="text.secondary">Анализов пока нет.</Typography>
-                    </Box>
-                  </Box>
-                ) : (
-                  data.map((item) => (
-                    <Box component="tr" key={item.id} sx={{ borderTop: "1px solid", borderColor: "divider" }}>
-                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                        <Button component={Link} to={`/analyze/${item.id}`} size="small">
-                          {item.id}
-                        </Button>
-                      </Box>
-                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                        {item.productName || "—"}
-                      </Box>
-                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                        {item.scanners.join(", ")}
-                      </Box>
-                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                        {statusChip(item.status)}
-                      </Box>
-                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                        {formatStats(item)}
-                      </Box>
-                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                        {new Date(item.createdAt).toLocaleString("ru-RU")}
-                      </Box>
-                    </Box>
-                  ))
-                )}
-              </Box>
-            </Box>
-          )}
-        </Paper>
-
-        {error && (
-          <Typography color="error" variant="body2">
-            {error}
-          </Typography>
-        )}
+        <Box ref={historyRef}>
+          <RecentAnalyses jobs={data} loading={loading} error={error} />
+        </Box>
 
         <PaginationControl
           page={page}

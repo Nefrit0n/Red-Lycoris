@@ -15,6 +15,9 @@ type ProductSourceSnapshotItem struct {
 	ID             uuid.UUID
 	TenantID       uuid.NullUUID
 	ProductID      uuid.UUID
+	OriginalName   sql.NullString
+	Label          sql.NullString
+	Notes          sql.NullString
 	ObjectKey      string
 	ArchiveSize    int64
 	SHA256         sql.NullString
@@ -36,6 +39,9 @@ func CreateProductSourceSnapshot(ctx context.Context, db *sql.DB, snapshot *mode
 			id,
 			tenant_id,
 			product_id,
+			original_filename,
+			label,
+			notes,
 			object_key,
 			archive_size,
 			sha256,
@@ -44,11 +50,14 @@ func CreateProductSourceSnapshot(ctx context.Context, db *sql.DB, snapshot *mode
 			created_at,
 			deleted_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13
 		)`,
 		snapshot.ID,
 		anyUUIDPtr(snapshot.TenantID),
 		snapshot.ProductID,
+		anyStringPtr(snapshot.OriginalName),
+		anyStringPtr(snapshot.Label),
+		anyStringPtr(snapshot.Notes),
 		snapshot.ObjectKey,
 		snapshot.ArchiveSize,
 		anyStringPtr(snapshot.SHA256),
@@ -75,6 +84,9 @@ func ListProductSourceSnapshots(ctx context.Context, db *sql.DB, tenantID *uuid.
 			`SELECT id,
 		        tenant_id,
 		        product_id,
+		        original_filename,
+		        label,
+		        notes,
 		        object_key,
 		        archive_size,
 		        sha256,
@@ -104,6 +116,9 @@ func ListProductSourceSnapshots(ctx context.Context, db *sql.DB, tenantID *uuid.
 			&item.ID,
 			&item.TenantID,
 			&item.ProductID,
+			&item.OriginalName,
+			&item.Label,
+			&item.Notes,
 			&item.ObjectKey,
 			&item.ArchiveSize,
 			&item.SHA256,
@@ -127,6 +142,9 @@ func GetLatestProductSourceSnapshot(ctx context.Context, db *sql.DB, tenantID *u
 	query := fmt.Sprintf(`SELECT id,
 	        tenant_id,
 	        product_id,
+	        original_filename,
+	        label,
+	        notes,
 	        object_key,
 	        archive_size,
 	        sha256,
@@ -148,6 +166,9 @@ func GetProductSourceSnapshotByID(ctx context.Context, db *sql.DB, id uuid.UUID)
 		`SELECT id,
 		        tenant_id,
 		        product_id,
+		        original_filename,
+		        label,
+		        notes,
 		        object_key,
 		        archive_size,
 		        sha256,
@@ -180,6 +201,9 @@ func scanProductSourceSnapshotRow(s scanner) (*ProductSourceSnapshotItem, error)
 		&item.ID,
 		&item.TenantID,
 		&item.ProductID,
+		&item.OriginalName,
+		&item.Label,
+		&item.Notes,
 		&item.ObjectKey,
 		&item.ArchiveSize,
 		&item.SHA256,
@@ -205,6 +229,9 @@ func GetProductSourceSnapshotByIdempotencyKey(ctx context.Context, db *sql.DB, t
 		`SELECT id,
 		        tenant_id,
 		        product_id,
+		        original_filename,
+		        label,
+		        notes,
 		        object_key,
 		        archive_size,
 		        sha256,

@@ -58,6 +58,22 @@ func TestExtractZipAndTarGz(t *testing.T) {
 	}
 }
 
+func TestExtractIgnoresExtensionWhenDetectingFormat(t *testing.T) {
+	tempDir := t.TempDir()
+
+	zipPath := filepath.Join(tempDir, "archive.bin")
+	if err := os.WriteFile(zipPath, buildZipFixture(t, map[string]string{"c.txt": "zip content"}), 0o600); err != nil {
+		t.Fatalf("write zip fixture failed: %v", err)
+	}
+	zipDest := filepath.Join(tempDir, "zip")
+	if err := Extract(zipPath, zipDest, 1024*1024); err != nil {
+		t.Fatalf("extract zip without extension failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(zipDest, "c.txt")); err != nil {
+		t.Fatalf("expected zip file extracted: %v", err)
+	}
+}
+
 func TestExtractRejectsZipSlip(t *testing.T) {
 	tempDir := t.TempDir()
 

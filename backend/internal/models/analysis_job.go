@@ -20,12 +20,18 @@ const (
 	AnalysisScannerFailed    = "failed"
 )
 
+const (
+	AnalysisJobSourceEphemeral = "ephemeral"
+	AnalysisJobSourceSnapshot  = "snapshot"
+)
+
 type AnalysisJob struct {
 	ID               uuid.UUID  `db:"id"`
 	TenantID         *uuid.UUID `db:"tenant_id"`
 	ProductID        *uuid.UUID `db:"product_id"`
 	EngagementID     *uuid.UUID `db:"engagement_id"`
 	Status           string     `db:"status"`
+	SourceKind       string     `db:"source_kind"`
 	Scanners         []string   `db:"scanners"`
 	SemgrepStatus    string     `db:"semgrep_status"`
 	TrivyStatus      string     `db:"trivy_status"`
@@ -56,6 +62,11 @@ func (j *AnalysisJob) Validate() error {
 	if len(j.Scanners) == 0 {
 		return fmt.Errorf("scanners must not be empty")
 	}
+	switch j.SourceKind {
+	case AnalysisJobSourceEphemeral, AnalysisJobSourceSnapshot:
+	default:
+		return fmt.Errorf("source_kind must be ephemeral or snapshot")
+	}
 	return nil
 }
 
@@ -71,5 +82,12 @@ func (j *AnalysisJob) PrepareForInsert() {
 	}
 	if j.TrivyStatus == "" {
 		j.TrivyStatus = AnalysisScannerPending
+	}
+	if j.SourceKind == "" {
+		if j.SourceSnapshotID != nil {
+			j.SourceKind = AnalysisJobSourceSnapshot
+		} else {
+			j.SourceKind = AnalysisJobSourceEphemeral
+		}
 	}
 }
