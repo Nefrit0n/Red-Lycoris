@@ -27,7 +27,6 @@ env:
   GO_VERSION: "1.24"
   NODE_VERSION: "20"
   PYTHON_VERSION: "3.12"
-  GHAS_ENABLED: ${{ vars.GHAS_ENABLED || 'false' }}
 
 jobs:
   backend:
@@ -64,15 +63,14 @@ jobs:
       JWT_SECRET: contract-test-secret
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-          # setup-go v6 caches based on go.mod by default; use go.sum for tighter invalidation
-          cache-dependency-path: backend/go.sum
+          cache-dependency-path: backend/go.sum # setup-go v6: можно привязать кеш к go.sum :contentReference[oaicite:5]{index=5}
 
       - name: Go format & vet
         working-directory: backend
@@ -142,7 +140,7 @@ jobs:
       APP_PORT: 8080
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -156,9 +154,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
-          # рекомендую завести файл, чтобы кеш был детерминированным:
-          # scripts/contracts/requirements.txt (schemathesis, jsonschema, etc)
-          cache-dependency-path: scripts/contracts/requirements.txt
 
       - name: Start MinIO (workaround GHA services can't pass command args)
         run: |
@@ -182,15 +177,14 @@ jobs:
           docker logs minio || true
           exit 1
 
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
       - name: Install contract test dependencies
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          if [ -f scripts/contracts/requirements.txt ]; then
-            pip install -r scripts/contracts/requirements.txt
-          else
-            pip install schemathesis jsonschema
-          fi
+          pip install schemathesis jsonschema
 
       - name: Run migrations
         working-directory: backend
@@ -198,14 +192,13 @@ jobs:
           set -euo pipefail
           go run ./cmd/migrate
 
-      - name: Build backend
+      - name: Build backend binary
         working-directory: backend
         run: |
           set -euo pipefail
           go build -o /tmp/backend ./cmd/server
 
       - name: Start backend
-        working-directory: backend
         run: |
           set -euo pipefail
           /tmp/backend > /tmp/backend.log 2>&1 &
@@ -220,7 +213,6 @@ jobs:
             fi
             sleep 2
           done
-
           echo "Backend did not become healthy"
           cat /tmp/backend.log || true
           exit 1
@@ -247,12 +239,13 @@ jobs:
           echo "----- /tmp/backend.log -----"
           cat /tmp/backend.log || true
 
-      - name: Cleanup backend
+      - name: Cleanup
         if: always()
         run: |
           if [ -f /tmp/backend.pid ]; then
             kill "$(cat /tmp/backend.pid)" || true
           fi
+          docker rm -f minio >/dev/null 2>&1 || true
 
   frontend:
     name: Frontend checks
@@ -261,7 +254,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -310,7 +303,7 @@ jobs:
       CELERY_RESULT_BACKEND: redis://localhost:6379/1
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -340,9 +333,6 @@ jobs:
           set -euo pipefail
           pytest --cov=app --cov-report=term-missing
 
-        # если хочешь “мягкий” режим — включай так:
-        # continue-on-error: true
-
   docker:
     name: Docker build
     if: github.event_name != 'schedule'
@@ -351,7 +341,7 @@ jobs:
     needs: [backend, frontend, python]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -399,23 +389,25 @@ jobs:
           cache-from: type=gha,scope=python_api
           cache-to: type=gha,mode=max,scope=python_api
 
-  # ---------- Security ----------
+  # ---------------- Security ----------------
 
   security-codeql:
-    name: SAST (CodeQL)
-    if: env.GHAS_ENABLED == 'true'
+    name: SAST (CodeQL) - public only
+    if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       actions: read
       security-events: write
+
     strategy:
       fail-fast: false
       matrix:
         language: [go, python, javascript-typescript]
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -436,14 +428,14 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@v4
 
-  # OSS fallback когда GHAS/Code Security нет:
-  security-sast-lite:
-    name: SAST lite (gosec + bandit)
-    if: env.GHAS_ENABLED != 'true'
+  security-lite:
+    name: SAST lite (private fallback)
+    if: ${{ github.event.repository.private == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -454,10 +446,13 @@ jobs:
 
       - name: gosec (Go SAST)
         working-directory: backend
-        uses: securego/gosec@master
-        with:
-          args: ./...
-        # gosec — OSS анализатор безопасности Go :contentReference[oaicite:3]{index=3}
+        run: |
+          set -euo pipefail
+          # Install gosec CLI and ensure GOPATH/bin is on PATH
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          # Run gosec on the backend module
+          gosec ./...
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -471,15 +466,17 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install bandit
           bandit -r .
 
   security-secrets:
-    name: Secrets scan (Gitleaks + TruffleHog)
+    name: Secrets scan (Gitleaks + TruffleHog3)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -506,24 +503,44 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: /tmp/gitleaks.toml
 
-      # TruffleHog есть в виде GitHub Action/Marketplace :contentReference[oaicite:4]{index=4}
-      - name: TruffleHog (OSS)
-        uses: trufflesecurity/trufflehog@main
+      - name: Set up Python (for trufflehog3)
+        uses: actions/setup-python@v6
         with:
-          path: .
-          base: ${{ github.event.pull_request.base.sha || '' }}
-          head: ${{ github.sha }}
-        continue-on-error: false
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-  # Trivy для CI (после тестов) — как у тебя было
+      - name: Install trufflehog3
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install "trufflehog3==3.0.10"
+
+      - name: Run trufflehog3
+        run: |
+          set -euo pipefail
+          trufflehog3 \
+            --config .trufflehog3.yml \
+            -f JSON \
+            -o trufflehog3.json \
+            -s HIGH \
+            .
+
+      - name: Upload trufflehog3 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trufflehog3-report
+          path: trufflehog3.json
+
   security-trivy-ci:
-    name: Trivy scan (fs + config)
+    name: Trivy scan (fs + config) - CI
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [backend, frontend, python]
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Trivy vulnerability scanner (filesystem)
         uses: aquasecurity/trivy-action@0.33.1
@@ -544,14 +561,14 @@ jobs:
           exit-code: "0"
           skip-dirs: "lotus-warden/docs/template,docs/template"
 
-  # Trivy для schedule (без needs -> реально запускается)
   security-trivy-scheduled:
-    name: Trivy scan (scheduled)
+    name: Trivy scan (fs + config) - scheduled
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Trivy vulnerability scanner (filesystem)
         uses: aquasecurity/trivy-action@0.33.1
@@ -573,13 +590,15 @@ jobs:
           skip-dirs: "lotus-warden/docs/template,docs/template"
 
   dependency-review:
-    name: Dependency Review (PR only)
-    if: github.event_name == 'pull_request' && env.GHAS_ENABLED == 'true'
+    name: Dependency Review (PR only, public only)
+    if: ${{ github.event_name == 'pull_request' && github.event.repository.private == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: write # action docs/examples упоминают доп. права для PR feedback :contentReference[oaicite:6]{index=6}
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
