@@ -90,34 +90,6 @@ func runOpenGrepBinary(ctx context.Context, binary string, workspace string, out
 	return string(output), nil
 }
 
-func resolveOpenGrepBinary(configuredPath string) string {
-	if configuredPath != "" {
-		if resolved, err := exec.LookPath(configuredPath); err == nil {
-			return resolved
-		}
-	}
-	if resolved, err := exec.LookPath("opengrep"); err == nil {
-		return resolved
-	}
-	return ""
-}
-
-func runOpenGrepBinary(ctx context.Context, binary string, workspace string, outputPath string) error {
-	cmd := exec.CommandContext(
-		ctx,
-		binary,
-		"--config=auto",
-		"--json",
-		"--output", outputPath,
-		workspace,
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
 // RunTrivy runs Trivy scanner in a Docker container.
 func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
