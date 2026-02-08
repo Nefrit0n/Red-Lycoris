@@ -21,10 +21,13 @@ import {
 } from "@mui/icons-material";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import GridLayout, { Layout } from "react-grid-layout";
-import { WidthProvider } from "react-grid-layout";
+
+// react-grid-layout v2: WidthProvider живёт в legacy
+import GridLayout, { WidthProvider, type Layout, type LayoutItem } from "react-grid-layout/legacy";
+
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
+
 import AddWidgetDialog from "./components/AddWidgetDialog";
 import DashboardShell from "./components/DashboardShell";
 import TemplatePicker from "./components/TemplatePicker";
@@ -38,6 +41,7 @@ import { fetchProductsWithStats } from "../api/products";
 const columns = 12;
 const rowHeight = 96;
 const gridGapPx = 24;
+
 const AutoGridLayout = WidthProvider(GridLayout);
 
 const DashboardV2 = () => {
@@ -54,6 +58,7 @@ const DashboardV2 = () => {
     resetLayout,
     updateLayout,
   } = useDashboardLayout();
+
   const [timeRange, setTimeRange] = useState("30d");
   const [productFilter, setProductFilter] = useState("Все продукты");
   const [environmentFilter, setEnvironmentFilter] = useState("Все окружения");
@@ -115,12 +120,15 @@ const DashboardV2 = () => {
   const handleMove = (widgetId: string, direction: "up" | "down") => {
     const current = layout.find((item) => item.widgetId === widgetId);
     if (!current) return;
+
     const delta = direction === "up" ? -1 : 1;
+
     const nextLayout = layout.map((item) =>
       item.widgetId === widgetId
         ? { ...item, y: Math.max(0, item.y + delta) }
         : item
     );
+
     updateLayout(nextLayout);
   };
 
@@ -139,6 +147,7 @@ const DashboardV2 = () => {
       // Shift all other widgets down to make room for pinned widget
       return { ...item, y: item.y + target.h };
     });
+
     updateLayout(nextLayout);
   };
 
@@ -148,6 +157,7 @@ const DashboardV2 = () => {
     // Prevent adding duplicate widgets
     if (layout.some((item) => item.widgetId === widgetId)) return;
     const nextY = layout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+
     updateLayout([
       ...layout,
       {
@@ -158,6 +168,7 @@ const DashboardV2 = () => {
         h: widget.defaultSize.h,
       },
     ]);
+
     setIsAddWidgetOpen(false);
   };
 
@@ -188,6 +199,7 @@ const DashboardV2 = () => {
                   <MenuItem key={name} value={name}>{name}</MenuItem>
                 ))}
               </Select>
+
               <Select
                 size="small"
                 value={environmentFilter}
@@ -205,6 +217,7 @@ const DashboardV2 = () => {
               <Typography variant="caption" color="text.secondary">
                 Моя область
               </Typography>
+
               <Select
                 size="small"
                 value={developerRepo}
@@ -219,6 +232,7 @@ const DashboardV2 = () => {
                   <MenuItem value={developerRepo}>{developerRepo}</MenuItem>
                 )}
               </Select>
+
               <Select
                 size="small"
                 value={developerBranch}
@@ -229,6 +243,7 @@ const DashboardV2 = () => {
                 <MenuItem value="release/1.2">release/1.2</MenuItem>
                 <MenuItem value="feature/auth">feature/auth</MenuItem>
               </Select>
+
               <Select
                 size="small"
                 value={developerEnv}
@@ -239,11 +254,8 @@ const DashboardV2 = () => {
                 <MenuItem value="Стадия">Стадия</MenuItem>
                 <MenuItem value="Разработка">Разработка</MenuItem>
               </Select>
-              <Button
-                variant="contained"
-                component={Link}
-                to="/findings?assignee=me"
-              >
+
+              <Button variant="contained" component={Link} to="/findings?assignee=me">
                 Открыть находки
               </Button>
             </>
@@ -312,9 +324,10 @@ const DashboardV2 = () => {
               isResizable={isEditing}
               resizeHandles={["se", "e", "s"]}
               draggableHandle=".widget-drag-handle"
-              onLayoutChange={(nextLayout: Layout[]) => {
+              onLayoutChange={(nextLayout: Layout) => {
+                // Layout = LayoutItem[] (в типах RGL). Явно типизируем элементы, чтобы TS не ругался.
                 updateLayout(
-                  nextLayout.map((item) => ({
+                  (nextLayout as LayoutItem[]).map((item) => ({
                     widgetId: item.i,
                     x: item.x,
                     y: item.y,
@@ -326,11 +339,13 @@ const DashboardV2 = () => {
             >
               {placedWidgets.map(({ placement, definition }) => {
                 if (!definition) return null;
+
                 const dataState = dataMap[definition.id] ?? {
                   data: null,
                   loading: false,
                   error: null,
                 };
+
                 return (
                   <Box
                     key={definition.id}
@@ -367,6 +382,7 @@ const DashboardV2 = () => {
                               Посмотреть в находках
                             </Button>
                           )}
+
                           {isEditing && (
                             <>
                               {definition.pinnable && (
@@ -378,6 +394,7 @@ const DashboardV2 = () => {
                                   <PushPin fontSize="inherit" />
                                 </IconButton>
                               )}
+
                               <IconButton
                                 size="small"
                                 aria-label="Поднять виджет"
@@ -385,6 +402,7 @@ const DashboardV2 = () => {
                               >
                                 <ArrowUpward fontSize="inherit" />
                               </IconButton>
+
                               <IconButton
                                 size="small"
                                 aria-label="Опустить виджет"
@@ -392,6 +410,7 @@ const DashboardV2 = () => {
                               >
                                 <ArrowDownward fontSize="inherit" />
                               </IconButton>
+
                               <IconButton
                                 size="small"
                                 aria-label="Удалить виджет"

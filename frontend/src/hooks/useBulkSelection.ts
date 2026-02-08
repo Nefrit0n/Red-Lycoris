@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { bulkUpdateFindings } from "../api/findings";
 import { Finding, FindingStatus } from '../types/findings';
-import { FiltersState } from './useUrlFiltersSync';
-import { normalizeDateFrom, normalizeDateTo } from '../utils/urlHelpers';
+import { FiltersState } from '../features/filters/types';
+import { normalizeDateFrom, normalizeDateTo } from '../features/filters/api';
 
 type BulkUndoItem = {
   id: string;
@@ -73,18 +73,19 @@ export function useBulkSelection({
     setSelectAllMatching(false);
   }, [
     filters.pageSize,
-    filters.productId,
-    filters.filterSeverity,
-    filters.filterStatus,
-    filters.filterRiskBand,
-    filters.filterOccurrence,
-    filters.filterScannerType,
-    filters.filterPolicyDecision,
+    filters.productIds,
+    filters.severities,
+    filters.statuses,
+    filters.riskBands,
+    filters.occurrences,
+    filters.scannerTypes,
+    filters.policyDecisions,
+    filters.categories,
+    filters.datePreset,
     filters.dateFrom,
     filters.dateTo,
     filters.showRepeats,
-    filters.searchInput,
-    filters.importJobId,
+    filters.search,
     filters.sortField,
     filters.sortOrder,
   ]);
@@ -136,19 +137,26 @@ export function useBulkSelection({
       setError(null);
 
       try {
+        const toBulkFilter = (values: string[]) => {
+          if (values.length === 0) return undefined;
+          if (values.length === 1) return values[0];
+          return values;
+        };
+
         const response = await bulkUpdateFindings({
           ids: selectAllMatching ? [] : selectedIds,
           select_all: selectAllMatching,
           filters: selectAllMatching
             ? {
-                product: filters.productId || undefined,
-                severity: filters.filterSeverity || undefined,
-                status: filters.filterStatus || undefined,
-                occurrenceStatus: filters.filterOccurrence || undefined,
-                scannerType: filters.filterScannerType || undefined,
-                policyDecision: filters.filterPolicyDecision || undefined,
+                product: toBulkFilter(filters.productIds),
+                severity: toBulkFilter(filters.severities),
+                status: toBulkFilter(filters.statuses),
+                riskBand: toBulkFilter(filters.riskBands),
+                occurrenceStatus: toBulkFilter(filters.occurrences),
+                scannerType: toBulkFilter(filters.scannerTypes),
+                policyDecision: toBulkFilter(filters.policyDecisions),
+                category: toBulkFilter(filters.categories),
                 q: debouncedSearch || undefined,
-                import_job_id: filters.importJobId || undefined,
                 dateFrom: normalizeDateFrom(filters.dateFrom),
                 dateTo: normalizeDateTo(filters.dateTo),
                 canonicalOnly: !filters.showRepeats,

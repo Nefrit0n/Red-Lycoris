@@ -17,8 +17,8 @@ import {
 import { useState } from "react";
 import { FindingListItemDTO } from "../types/findings";
 import { SEVERITY_STYLES, STATUS_LABELS } from "../utils/findingConstants";
-import { FiltersState } from "../hooks/useUrlFiltersSync";
-import { normalizeDateFrom, normalizeDateTo } from "../utils/urlHelpers";
+import { FiltersState } from "../features/filters/types";
+import { mapFiltersToApiParams } from "../features/filters/api";
 import { getAuthHeaders } from "../api/http";
 
 interface ExportMenuProps {
@@ -45,27 +45,12 @@ const buildExportUrl = (
   filters: FiltersState,
   debouncedSearch: string
 ): string => {
-  const params = new URLSearchParams();
+  const params = mapFiltersToApiParams({
+    ...filters,
+    search: debouncedSearch,
+  });
   params.set("format", format);
   params.set("limit", "20000"); // Max allowed by backend
-
-  if (filters.productId) params.set("product", filters.productId);
-  if (filters.filterSeverity) params.set("severity", filters.filterSeverity);
-  if (filters.filterStatus) params.set("status", filters.filterStatus);
-  if (filters.filterRiskBand) params.set("riskBand", filters.filterRiskBand);
-  if (filters.filterOccurrence) params.set("occurrenceStatus", filters.filterOccurrence);
-  if (filters.filterScannerType) params.set("scannerType", filters.filterScannerType);
-  if (filters.filterPolicyDecision) params.set("policyDecision", filters.filterPolicyDecision);
-  if (debouncedSearch) params.set("search", debouncedSearch);
-  if (filters.importJobId) params.set("import_job_id", filters.importJobId);
-
-  const dateFrom = normalizeDateFrom(filters.dateFrom);
-  const dateTo = normalizeDateTo(filters.dateTo);
-  if (dateFrom) params.set("dateFrom", dateFrom);
-  if (dateTo) params.set("dateTo", dateTo);
-
-  params.set("canonicalOnly", String(!filters.showRepeats));
-  params.set("includeRepeats", String(filters.showRepeats));
 
   // Note: backend export doesn't support sorting, so we don't include sortField/sortOrder
 

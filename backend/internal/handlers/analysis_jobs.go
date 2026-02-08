@@ -2,9 +2,9 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +37,8 @@ type AnalysisJobResponse struct {
 	ProductID          *string  `json:"productId,omitempty"`
 	ProductName        *string  `json:"productName,omitempty"`
 	EngagementID       *string  `json:"engagementId,omitempty"`
+	SourceSnapshotID   *string  `json:"sourceSnapshotId,omitempty"`
+	SourceKind         string   `json:"sourceKind"`
 	Status             string   `json:"status"`
 	Scanners           []string `json:"scanners"`
 	SemgrepStatus      string   `json:"semgrepStatus"`
@@ -92,6 +94,19 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid product_id"})
 	}
 
+	tenantID := tenantIDFromContext(c)
+	if tenantID == nil {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
+	}
+
+	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, productID, tenantID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch product"})
+	}
+	if !exists {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "product not found"})
+	}
+
 	var engagementID *uuid.UUID
 	if raw := strings.TrimSpace(c.FormValue("engagement_id")); raw != "" {
 		parsed, err := uuid.Parse(raw)
@@ -109,18 +124,42 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	fileHeader, err := c.FormFile("archive")
-	if err != nil || fileHeader == nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "archive file is required"})
+	var sourceSnapshotID *uuid.UUID
+	if raw := strings.TrimSpace(c.FormValue("source_snapshot_id")); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid source_snapshot_id"})
+		}
+		sourceSnapshotID = &parsed
 	}
 
-	maxSize := parseInt64WithDefault(h.cfg.AnalysisMaxArchiveBytes, 104857600)
-	if fileHeader.Size > maxSize {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("archive exceeds %d bytes", maxSize)})
+	sourceMode := strings.TrimSpace(c.FormValue("source_mode"))
+	if sourceMode != "" && sourceMode != "latest" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid source_mode"})
 	}
 
-	if !isSupportedArchive(fileHeader.Filename) {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "unsupported archive type"})
+	fileHeader, fileErr := c.FormFile("archive")
+	hasArchive := fileErr == nil && fileHeader != nil
+	hasSnapshot := sourceSnapshotID != nil
+	hasLatest := sourceMode == "latest"
+	if (hasArchive && (hasSnapshot || hasLatest)) || (hasSnapshot && hasLatest) {
+		if fileErr != nil && errors.Is(fileErr, fiber.ErrRequestEntityTooLarge) {
+			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": "archive exceeds request limit"})
+		}
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "archive, source_snapshot_id, and source_mode are mutually exclusive"})
+	}
+	if !hasArchive && !hasSnapshot && !hasLatest {
+		if fileErr != nil && errors.Is(fileErr, fiber.ErrRequestEntityTooLarge) {
+			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": "archive exceeds request limit"})
+		}
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "archive, source_snapshot_id, or source_mode=latest is required"})
+	}
+
+	if hasArchive {
+		maxSize := parseInt64WithDefault(h.cfg.AnalysisMaxArchiveBytes, 104857600)
+		if fileHeader.Size > maxSize {
+			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": fmt.Sprintf("archive exceeds %d bytes", maxSize)})
+		}
 	}
 
 	job := &models.AnalysisJob{
@@ -129,36 +168,69 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		Status:         models.AnalysisJobQueued,
 		Scanners:       scanners,
 		CreatedBy:      uploaderID,
-		ArchiveSize:    fileHeader.Size,
 		IdempotencyKey: nil,
-	}
-	if rawTenant := strings.TrimSpace(c.FormValue("tenant_id")); rawTenant != "" {
-		parsed, err := uuid.Parse(rawTenant)
-		if err != nil {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant_id"})
-		}
-		job.TenantID = &parsed
+		TenantID:       tenantID,
 	}
 	if idempotencyKey != "" {
 		job.IdempotencyKey = &idempotencyKey
 	}
 	job.PrepareForInsert()
 
-	archiveKey := fmt.Sprintf("analysis/%s/source/archive%s", job.ID.String(), filepath.Ext(fileHeader.Filename))
-	job.ArchiveKey = &archiveKey
+	if hasSnapshot || hasLatest {
+		var snapshot *storage.ProductSourceSnapshotItem
+		if hasLatest {
+			snapshot, err = storage.GetLatestProductSourceSnapshot(c.Context(), h.db, tenantID, productID)
+		} else {
+			snapshot, err = storage.GetProductSourceSnapshotByID(c.Context(), h.db, *sourceSnapshotID)
+		}
+		if err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load source snapshot"})
+		}
+		if snapshot == nil {
+			return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "source snapshot not found"})
+		}
+		if snapshot.ProductID != productID {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "source snapshot does not match product"})
+		}
+		if !snapshot.TenantID.Valid || snapshot.TenantID.UUID != *tenantID {
+			return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "source snapshot does not belong to tenant"})
+		}
+		if hasLatest {
+			job.SourceSnapshotID = &snapshot.ID
+		} else {
+			job.SourceSnapshotID = sourceSnapshotID
+		}
+		job.SourceKind = models.AnalysisJobSourceSnapshot
+		job.ArchiveSize = snapshot.ArchiveSize
+	} else {
+		job.SourceKind = models.AnalysisJobSourceEphemeral
+		job.ArchiveSize = fileHeader.Size
+		file, err := fileHeader.Open()
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "failed to read archive"})
+		}
+		defer file.Close()
 
-	file, err := fileHeader.Open()
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to read archive"})
-	}
-	defer file.Close()
+		format, buffered, err := detectArchiveFormat(file)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "failed to read archive"})
+		}
+		if !isSupportedArchiveFormat(format) {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": supportedArchiveMessage})
+		}
 
-	if err := h.store.PutObject(c.Context(), archiveKey, file, fileHeader.Size, "application/octet-stream"); err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to store archive"})
+		archiveKey := fmt.Sprintf("analysis/%s/source/archive%s", job.ID.String(), format.Extension())
+		job.ArchiveKey = &archiveKey
+
+		if err := h.store.PutObject(c.Context(), archiveKey, buffered, fileHeader.Size, "application/octet-stream"); err != nil {
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to store archive"})
+		}
 	}
 
 	if err := storage.CreateAnalysisJob(c.Context(), h.db, job); err != nil {
-		_ = h.store.DeleteObject(c.Context(), archiveKey)
+		if job.ArchiveKey != nil {
+			_ = h.store.DeleteObject(c.Context(), *job.ArchiveKey)
+		}
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create analysis job"})
 	}
 
@@ -170,6 +242,10 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		"status":     job.Status,
 		"created_at": job.CreatedAt.Format(time.RFC3339),
 	}
+	if job.SourceSnapshotID != nil {
+		payload["source_snapshot_id"] = job.SourceSnapshotID.String()
+	}
+	payload["source_kind"] = job.SourceKind
 	_ = h.publisher.PublishJSON(c.Context(), "analysis.requested", payload)
 	_ = h.publisher.PublishJSON(c.Context(), events.AnalysisJobsSubject, payload)
 
@@ -268,6 +344,7 @@ func mapAnalysisJobListItem(item storage.AnalysisJobListItem) AnalysisJobRespons
 	resp := AnalysisJobResponse{
 		ID:              item.ID.String(),
 		Status:          item.Status,
+		SourceKind:      item.SourceKind,
 		Scanners:        item.Scanners,
 		SemgrepStatus:   item.SemgrepStatus,
 		TrivyStatus:     item.TrivyStatus,
@@ -291,6 +368,10 @@ func mapAnalysisJobListItem(item storage.AnalysisJobListItem) AnalysisJobRespons
 	if item.EngagementID.Valid {
 		value := item.EngagementID.UUID.String()
 		resp.EngagementID = &value
+	}
+	if item.SourceSnapshotID.Valid {
+		value := item.SourceSnapshotID.UUID.String()
+		resp.SourceSnapshotID = &value
 	}
 	if item.StartedAt.Valid {
 		value := item.StartedAt.Time.Format(time.RFC3339)
@@ -348,11 +429,6 @@ func validateScanners(scanners []string) error {
 		}
 	}
 	return nil
-}
-
-func isSupportedArchive(filename string) bool {
-	lower := strings.ToLower(filename)
-	return strings.HasSuffix(lower, ".zip") || strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz")
 }
 
 func parseInt64WithDefault(raw string, fallback int64) int64 {

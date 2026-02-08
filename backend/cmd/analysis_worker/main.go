@@ -438,13 +438,45 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 	}
 	_ = publisher.PublishJSON(ctx, "analysis.started", buildEventPayload(job, models.AnalysisJobProcessing, startedAt, nil, nil))
 
+	sourceKind := strings.ToLower(strings.TrimSpace(job.SourceKind))
+	if sourceKind == "" {
+		if job.SourceSnapshotID.Valid {
+			sourceKind = models.AnalysisJobSourceSnapshot
+		} else {
+			sourceKind = models.AnalysisJobSourceEphemeral
+		}
+	}
+
 	archiveKey := job.ArchiveKey
+	sourceType := sourceKind
+	if sourceKind == models.AnalysisJobSourceSnapshot {
+		if !job.SourceSnapshotID.Valid {
+			return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("source snapshot missing"))
+		}
+		snapshot, err := storage.GetProductSourceSnapshotByID(ctx, db, job.SourceSnapshotID.UUID)
+		if err != nil {
+			return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, err)
+		}
+		if snapshot == nil || snapshot.ObjectKey == "" {
+			return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("source snapshot missing"))
+		}
+		archiveKey = sql.NullString{String: snapshot.ObjectKey, Valid: true}
+	}
 	if !archiveKey.Valid || archiveKey.String == "" {
 		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("archive key missing"))
 	}
+	productID := ""
+	if job.ProductID.Valid {
+		productID = job.ProductID.UUID.String()
+	}
+	tenantID := ""
+	if job.TenantID.Valid {
+		tenantID = job.TenantID.UUID.String()
+	}
+	log.Printf("analysis job processing job_id=%s tenant_id=%s product_id=%s source=%s", job.ID.String(), tenantID, productID, sourceType)
 
 	jobDir := filepath.Join(cfg.AnalysisTempDir, jobID.String())
-	archivePath := filepath.Join(jobDir, "archive")
+	archivePath := archivePathForKey(jobDir, archiveKey.String)
 	workspace := filepath.Join(jobDir, "src")
 
 	if err := os.MkdirAll(jobDir, 0o750); err != nil {
@@ -456,9 +488,20 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, err)
 	}
 
-	maxExtract := parseInt64(cfg.AnalysisMaxExtractBytes, 524288000)
-	if err := archive.Extract(archivePath, workspace, maxExtract); err != nil {
+	format, err := archive.DetectArchiveFormatFromPath(archivePath)
+	if err != nil {
 		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, err)
+	}
+	log.Printf("analysis job archive job_id=%s tenant_id=%s product_id=%s source=%s archive_format=%s",
+		job.ID.String(), tenantID, productID, sourceType, format.String())
+
+	if !isSupportedArchiveFormat(format) {
+		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("Неподдерживаемый формат архива. Поддерживаются: zip, tar.gz, tgz."))
+	}
+
+	maxExtract := parseInt64(cfg.AnalysisMaxExtractBytes, 524288000)
+	if err := archive.ExtractWithFormat(archivePath, workspace, maxExtract, format); err != nil {
+		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, wrapArchiveExtractionError(format, err))
 	}
 
 	scannerCfg := scanners.RunnerConfig{
@@ -495,10 +538,12 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 	job.FindingsNew = totalNew
 	job.DuplicatesTotal = totalDuplicates
 
-	if err := store.DeleteObject(ctx, archiveKey.String); err != nil {
-		scanErrors = append(scanErrors, fmt.Sprintf("failed to delete archive: %v", err))
-	} else {
-		_ = storage.UpdateAnalysisJobArchiveKey(ctx, db, job.ID, nil, 0)
+	if sourceKind == models.AnalysisJobSourceEphemeral {
+		if err := store.DeleteObject(ctx, archiveKey.String); err != nil {
+			scanErrors = append(scanErrors, fmt.Sprintf("failed to delete archive: %v", err))
+		} else {
+			_ = storage.UpdateAnalysisJobArchiveKey(ctx, db, job.ID, nil, 0)
+		}
 	}
 
 	status := models.AnalysisJobSucceeded
@@ -750,7 +795,25 @@ func buildEventPayload(job *storage.AnalysisJobDetail, status string, startedAt 
 	if errMsg != nil {
 		payload["error"] = *errMsg
 	}
+	if job.SourceSnapshotID.Valid {
+		payload["source_snapshot_id"] = job.SourceSnapshotID.UUID.String()
+	}
 	return payload
+}
+
+func archivePathForKey(jobDir string, key string) string {
+	filename := "archive"
+	lowerKey := strings.ToLower(strings.TrimSpace(key))
+	if strings.HasSuffix(lowerKey, ".tar.gz") {
+		filename += ".tar.gz"
+	} else if strings.HasSuffix(lowerKey, ".tgz") {
+		filename += ".tar.gz"
+	} else if strings.HasSuffix(lowerKey, ".zip") {
+		filename += ".zip"
+	} else if strings.HasSuffix(lowerKey, ".tar") {
+		filename += ".tar"
+	}
+	return filepath.Join(jobDir, filename)
 }
 
 func periodicCleanup(db *sql.DB, store objectstore.Store, tempDir string, ttl time.Duration, interval time.Duration) {
@@ -787,7 +850,7 @@ func cleanupArchives(db *sql.DB, store objectstore.Store, ttl time.Duration) {
 		return
 	}
 	for _, job := range jobs {
-		if !job.ArchiveKey.Valid {
+		if job.SourceSnapshotID.Valid || !job.ArchiveKey.Valid {
 			continue
 		}
 		_ = store.DeleteObject(ctx, job.ArchiveKey.String)
@@ -816,4 +879,21 @@ func parseInt64(value string, fallback int64) int64 {
 		return fallback
 	}
 	return parsed
+}
+
+func isSupportedArchiveFormat(format archive.ArchiveFormat) bool {
+	return format == archive.ArchiveFormatZip || format == archive.ArchiveFormatTarGz
+}
+
+func wrapArchiveExtractionError(format archive.ArchiveFormat, err error) error {
+	if err == nil {
+		return nil
+	}
+	if format == archive.ArchiveFormatTarGz {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "gzip") || strings.Contains(msg, "invalid header") {
+			return fmt.Errorf("Архив не является gzip/tar.gz. Возможно, вы загрузили ZIP. Поддерживаются: zip, tar.gz, tgz.")
+		}
+	}
+	return err
 }

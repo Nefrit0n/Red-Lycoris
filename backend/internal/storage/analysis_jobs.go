@@ -12,21 +12,23 @@ import (
 )
 
 type AnalysisJobListItem struct {
-	ID              uuid.UUID
-	TenantID        uuid.NullUUID
-	ProductID       uuid.NullUUID
-	ProductName     sql.NullString
-	EngagementID    uuid.NullUUID
-	Status          string
-	Scanners        []string
-	SemgrepStatus   string
-	TrivyStatus     string
-	FindingsTotal   int
-	FindingsNew     int
-	DuplicatesTotal int
-	CreatedAt       time.Time
-	StartedAt       sql.NullTime
-	FinishedAt      sql.NullTime
+	ID               uuid.UUID
+	TenantID         uuid.NullUUID
+	ProductID        uuid.NullUUID
+	ProductName      sql.NullString
+	EngagementID     uuid.NullUUID
+	Status           string
+	SourceKind       string
+	Scanners         []string
+	SemgrepStatus    string
+	TrivyStatus      string
+	FindingsTotal    int
+	FindingsNew      int
+	DuplicatesTotal  int
+	SourceSnapshotID uuid.NullUUID
+	CreatedAt        time.Time
+	StartedAt        sql.NullTime
+	FinishedAt       sql.NullTime
 }
 
 type AnalysisJobDetail struct {
@@ -59,6 +61,10 @@ func CreateAnalysisJob(ctx context.Context, db *sql.DB, job *models.AnalysisJob)
 	var archiveKey sql.NullString
 	if job.ArchiveKey != nil {
 		archiveKey = sql.NullString{String: *job.ArchiveKey, Valid: true}
+	}
+	var sourceSnapshotID interface{}
+	if job.SourceSnapshotID != nil {
+		sourceSnapshotID = *job.SourceSnapshotID
 	}
 	var artifactSemgrep sql.NullString
 	if job.ArtifactSemgrep != nil {
@@ -97,6 +103,7 @@ func CreateAnalysisJob(ctx context.Context, db *sql.DB, job *models.AnalysisJob)
 			product_id,
 			engagement_id,
 			status,
+			source_kind,
 			scanners,
 			semgrep_status,
 			trivy_status,
@@ -105,6 +112,7 @@ func CreateAnalysisJob(ctx context.Context, db *sql.DB, job *models.AnalysisJob)
 			duplicates_total,
 			archive_key,
 			archive_size,
+			source_snapshot_id,
 			artifact_semgrep_key,
 			artifact_trivy_key,
 			semgrep_import_job_id,
@@ -116,13 +124,14 @@ func CreateAnalysisJob(ctx context.Context, db *sql.DB, job *models.AnalysisJob)
 			started_at,
 			finished_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
 		)`,
 		job.ID,
 		anyUUIDPtr(job.TenantID),
 		productID,
 		engagementID,
 		job.Status,
+		job.SourceKind,
 		pq.Array(job.Scanners),
 		job.SemgrepStatus,
 		job.TrivyStatus,
@@ -131,6 +140,7 @@ func CreateAnalysisJob(ctx context.Context, db *sql.DB, job *models.AnalysisJob)
 		job.DuplicatesTotal,
 		archiveKey,
 		job.ArchiveSize,
+		sourceSnapshotID,
 		artifactSemgrep,
 		artifactTrivy,
 		semgrepImportJob,
@@ -154,6 +164,7 @@ func GetAnalysisJobByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*Analysi
 			p.name,
 			aj.engagement_id,
 			aj.status,
+			aj.source_kind,
 			aj.scanners,
 			aj.semgrep_status,
 			aj.trivy_status,
@@ -165,6 +176,7 @@ func GetAnalysisJobByID(ctx context.Context, db *sql.DB, id uuid.UUID) (*Analysi
 			aj.finished_at,
 			aj.archive_key,
 			aj.archive_size,
+			aj.source_snapshot_id,
 			aj.artifact_semgrep_key,
 			aj.artifact_trivy_key,
 			aj.semgrep_import_job_id,
@@ -189,6 +201,7 @@ func GetAnalysisJobByIdempotencyKey(ctx context.Context, db *sql.DB, key string)
 			p.name,
 			aj.engagement_id,
 			aj.status,
+			aj.source_kind,
 			aj.scanners,
 			aj.semgrep_status,
 			aj.trivy_status,
@@ -200,6 +213,7 @@ func GetAnalysisJobByIdempotencyKey(ctx context.Context, db *sql.DB, key string)
 			aj.finished_at,
 			aj.archive_key,
 			aj.archive_size,
+			aj.source_snapshot_id,
 			aj.artifact_semgrep_key,
 			aj.artifact_trivy_key,
 			aj.semgrep_import_job_id,
@@ -307,12 +321,14 @@ func ListAnalysisJobs(ctx context.Context, db *sql.DB, limit int, offset int) ([
 			p.name,
 			aj.engagement_id,
 			aj.status,
+			aj.source_kind,
 			aj.scanners,
 			aj.semgrep_status,
 			aj.trivy_status,
 			aj.findings_total,
 			aj.findings_new,
 			aj.duplicates_total,
+			aj.source_snapshot_id,
 			aj.created_at,
 			aj.started_at,
 			aj.finished_at
@@ -339,12 +355,14 @@ func ListAnalysisJobs(ctx context.Context, db *sql.DB, limit int, offset int) ([
 			&item.ProductName,
 			&item.EngagementID,
 			&item.Status,
+			&item.SourceKind,
 			pq.Array(&scanners),
 			&item.SemgrepStatus,
 			&item.TrivyStatus,
 			&item.FindingsTotal,
 			&item.FindingsNew,
 			&item.DuplicatesTotal,
+			&item.SourceSnapshotID,
 			&item.CreatedAt,
 			&item.StartedAt,
 			&item.FinishedAt,
@@ -375,6 +393,7 @@ func scanAnalysisJobDetailRow(s scanner) (*AnalysisJobDetail, error) {
 		&item.ProductName,
 		&item.EngagementID,
 		&item.Status,
+		&item.SourceKind,
 		pq.Array(&scanners),
 		&item.SemgrepStatus,
 		&item.TrivyStatus,
@@ -386,6 +405,7 @@ func scanAnalysisJobDetailRow(s scanner) (*AnalysisJobDetail, error) {
 		&item.FinishedAt,
 		&item.ArchiveKey,
 		&item.ArchiveSize,
+		&item.SourceSnapshotID,
 		&item.ArtifactSemgrep,
 		&item.ArtifactTrivy,
 		&item.SemgrepImportJob,
@@ -413,6 +433,7 @@ func ListAnalysisJobsWithArchiveCleanup(ctx context.Context, db *sql.DB, olderTh
 			p.name,
 			aj.engagement_id,
 			aj.status,
+			aj.source_kind,
 			aj.scanners,
 			aj.semgrep_status,
 			aj.trivy_status,
@@ -424,6 +445,7 @@ func ListAnalysisJobsWithArchiveCleanup(ctx context.Context, db *sql.DB, olderTh
 			aj.finished_at,
 			aj.archive_key,
 			aj.archive_size,
+			aj.source_snapshot_id,
 			aj.artifact_semgrep_key,
 			aj.artifact_trivy_key,
 			aj.semgrep_import_job_id,
@@ -435,6 +457,7 @@ func ListAnalysisJobsWithArchiveCleanup(ctx context.Context, db *sql.DB, olderTh
 		 LEFT JOIN products p ON p.id = aj.product_id
 		 WHERE aj.archive_key IS NOT NULL
 		   AND aj.finished_at IS NOT NULL
+		   AND aj.source_kind = 'ephemeral'
 		   AND aj.finished_at < $1
 		 ORDER BY aj.finished_at ASC
 		 LIMIT $2`,

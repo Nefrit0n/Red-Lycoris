@@ -33,7 +33,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ErrorIcon from "@mui/icons-material/Error";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import BatchPredictionIcon from "@mui/icons-material/BatchPrediction";
-import { useEffect, useMemo, useState, useDeferredValue } from "react";
+import { useCallback, useEffect, useMemo, useState, useDeferredValue } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchFindingDetail, fetchFindings } from "../api/findings";
 import { uploadScan, UploadScanResponse } from "../api/scans";
@@ -155,7 +155,7 @@ const ScanUploadPage = () => {
   }, [file, scannerType]);
 
   // Handle auto-detected scanner from content
-  const handleScannerDetected = (scannerId: string) => {
+  const handleScannerDetected = useCallback((scannerId: string) => {
     setAutoDetectedScanner(scannerId);
     if (!scannerType || scannerType === "sarif") {
       setScannerType(scannerId);
@@ -164,7 +164,7 @@ const ScanUploadPage = () => {
         setSelectedCategory(scanner.category);
       }
     }
-  };
+  }, [scannerType]);
 
   // Calculate current step
   const activeStep = useMemo(() => {
@@ -429,9 +429,9 @@ const ScanUploadPage = () => {
     setSearchQuery("");
   };
 
-  const handleFilesSelect = (newFiles: FileWithValidation[]) => {
+  const handleFilesSelect = useCallback((newFiles: FileWithValidation[]) => {
     setFiles(newFiles);
-  };
+  }, []);
 
   // Calculate batch stats
   const batchStats = useMemo(() => {

@@ -2,7 +2,10 @@ package server
 
 import (
 	"database/sql"
+	"math"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"lotus-warden/backend/internal/config"
 	"lotus-warden/backend/internal/events"
@@ -20,8 +23,19 @@ import (
 )
 
 func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) *fiber.App {
+	minArchiveBytes := int64(104857600)
+	maxArchiveBytes := parseInt64WithDefault(cfg.AnalysisMaxArchiveBytes, 209715200)
+	if maxArchiveBytes <= 0 {
+		maxArchiveBytes = minArchiveBytes
+	}
+	if maxArchiveBytes < minArchiveBytes {
+		maxArchiveBytes = minArchiveBytes
+	}
+	if maxArchiveBytes > int64(math.MaxInt) {
+		maxArchiveBytes = int64(math.MaxInt)
+	}
 	app := fiber.New(fiber.Config{
-		BodyLimit: 12 << 20,
+		BodyLimit: int(maxArchiveBytes),
 	})
 	app.Use(requestid.New())
 	app.Use(logger.New(logger.Config{
@@ -29,6 +43,18 @@ func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store ob
 	}))
 	setupRoutes(app, cfg, db, publisher, store)
 	return app
+}
+
+func parseInt64WithDefault(raw string, fallback int64) int64 {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) {
@@ -136,6 +162,11 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	assetContextHandler := handlers.NewAssetContextHandler(db, publisher)
 	secured.Get("/products/:id/asset-context", middleware.AuthorizeRole("admin", "analyst"), assetContextHandler.GetProductAssetContext)
 	secured.Put("/products/:id/asset-context", middleware.AuthorizeRole("admin", "analyst"), assetContextHandler.UpsertProductAssetContext)
+
+	sourceSnapshotsHandler := handlers.NewProductSourceSnapshotsHandler(db, store, publisher, cfg)
+	secured.Post("/products/:id/source-snapshots", middleware.AuthorizeRole("admin", "analyst"), sourceSnapshotsHandler.Create)
+	secured.Get("/products/:id/source-snapshots", sourceSnapshotsHandler.List)
+	secured.Get("/products/:id/source-snapshots/latest", sourceSnapshotsHandler.Latest)
 
 	sbomHandler := handlers.NewSbomHandler(db, store, publisher)
 	secured.Post("/sbom/upload", middleware.AuthorizeRole("analyst", "admin"), sbomHandler.Upload)
