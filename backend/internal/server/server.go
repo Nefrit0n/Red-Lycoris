@@ -23,9 +23,13 @@ import (
 )
 
 func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) *fiber.App {
-	maxArchiveBytes := parseInt64WithDefault(cfg.AnalysisMaxArchiveBytes, 104857600)
+	minArchiveBytes := int64(104857600)
+	maxArchiveBytes := parseInt64WithDefault(cfg.AnalysisMaxArchiveBytes, 209715200)
 	if maxArchiveBytes <= 0 {
-		maxArchiveBytes = 104857600
+		maxArchiveBytes = minArchiveBytes
+	}
+	if maxArchiveBytes < minArchiveBytes {
+		maxArchiveBytes = minArchiveBytes
 	}
 	if maxArchiveBytes > int64(math.MaxInt) {
 		maxArchiveBytes = int64(math.MaxInt)

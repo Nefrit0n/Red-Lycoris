@@ -68,8 +68,12 @@ func TestCreateProductSourceSnapshotOK(t *testing.T) {
 			sqlmock.AnyArg(),
 			tenantID,
 			productID,
+			"source.zip",
+			nil,
+			nil,
 			sqlmock.AnyArg(),
-			int64(7),
+			sqlmock.AnyArg(),
+			nil,
 			nil,
 			userID,
 			sqlmock.AnyArg(),
@@ -150,15 +154,21 @@ func TestCreateAnalysisJobFromSnapshotOK(t *testing.T) {
 	userID := uuid.New()
 	snapshotID := uuid.New()
 
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(productID, tenantID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("FROM product_source_snapshots").
 		WithArgs(snapshotID).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id",
 			"tenant_id",
 			"product_id",
+			"original_filename",
+			"label",
+			"notes",
 			"object_key",
 			"archive_size",
 			"sha256",
+			"idempotency_key",
 			"created_by",
 			"created_at",
 			"deleted_at",
@@ -166,8 +176,12 @@ func TestCreateAnalysisJobFromSnapshotOK(t *testing.T) {
 			snapshotID,
 			tenantID,
 			productID,
-			"products/source-snapshots/archive.zip",
+			nil,
+			nil,
+			nil,
+			"tenants/tenant/products/product/snapshots/snapshot/source.zip",
 			int64(12),
+			nil,
 			nil,
 			userID,
 			time.Now().UTC(),
@@ -180,6 +194,7 @@ func TestCreateAnalysisJobFromSnapshotOK(t *testing.T) {
 			tenantID,
 			productID,
 			nil,
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
@@ -246,8 +261,8 @@ func TestCreateAnalysisJobFromSnapshotOK(t *testing.T) {
 	}
 }
 
-func TestCreateAnalysisJobWithArchiveAndSnapshotReturnsBadRequest(t *testing.T) {
-	db, _, err := sqlmock.New()
+func TestCreateAnalysisJobFromLatestSnapshotOK(t *testing.T) {
+	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("sqlmock setup failed: %v", err)
 	}
@@ -261,6 +276,133 @@ func TestCreateAnalysisJobWithArchiveAndSnapshotReturnsBadRequest(t *testing.T) 
 	tenantID := uuid.New()
 	userID := uuid.New()
 	snapshotID := uuid.New()
+
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(productID, tenantID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+	mock.ExpectQuery("FROM product_source_snapshots").
+		WithArgs(productID, tenantID).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"tenant_id",
+			"product_id",
+			"original_filename",
+			"label",
+			"notes",
+			"object_key",
+			"archive_size",
+			"sha256",
+			"idempotency_key",
+			"created_by",
+			"created_at",
+			"deleted_at",
+		}).AddRow(
+			snapshotID,
+			tenantID,
+			productID,
+			"source.zip",
+			nil,
+			nil,
+			"tenants/tenant/products/product/snapshots/snapshot/source.zip",
+			int64(12),
+			nil,
+			nil,
+			userID,
+			time.Now().UTC(),
+			nil,
+		))
+
+	mock.ExpectExec("INSERT INTO analysis_jobs").
+		WithArgs(
+			sqlmock.AnyArg(),
+			tenantID,
+			productID,
+			nil,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			0,
+			0,
+			0,
+			sqlmock.AnyArg(),
+			int64(12),
+			snapshotID,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			nil,
+			nil,
+			nil,
+			nil,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			nil,
+			nil,
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	if err := writer.WriteField("product_id", productID.String()); err != nil {
+		t.Fatalf("write product_id failed: %v", err)
+	}
+	if err := writer.WriteField("source_mode", "latest"); err != nil {
+		t.Fatalf("write source_mode failed: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer failed: %v", err)
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, middleware.JWTClaims{
+		UserID:   userID.String(),
+		TenantID: tenantID.String(),
+		Roles:    []string{"admin"},
+	})
+	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
+	if err != nil {
+		t.Fatalf("sign token failed: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/analysis-jobs", body)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != 202 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 202 status, got %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	if len(store.putCalls) != 0 {
+		t.Fatalf("expected no archive upload when using latest snapshot")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet db expectations: %v", err)
+	}
+}
+
+func TestCreateAnalysisJobWithArchiveAndSnapshotReturnsBadRequest(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock setup failed: %v", err)
+	}
+	defer db.Close()
+
+	cfg := config.Config{JWTSecret: "test-secret"}
+	store := &mockObjectStore{}
+	app := server.NewApp(cfg, db, nil, store)
+
+	productID := uuid.New()
+	tenantID := uuid.New()
+	userID := uuid.New()
+	snapshotID := uuid.New()
+
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(productID, tenantID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -305,7 +447,7 @@ func TestCreateAnalysisJobWithArchiveAndSnapshotReturnsBadRequest(t *testing.T) 
 }
 
 func TestCreateAnalysisJobWithoutArchiveOrSnapshotReturnsBadRequest(t *testing.T) {
-	db, _, err := sqlmock.New()
+	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("sqlmock setup failed: %v", err)
 	}
@@ -318,6 +460,9 @@ func TestCreateAnalysisJobWithoutArchiveOrSnapshotReturnsBadRequest(t *testing.T
 	productID := uuid.New()
 	tenantID := uuid.New()
 	userID := uuid.New()
+
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(productID, tenantID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -376,6 +521,7 @@ func TestCreateAnalysisJobIdempotencyReturnsExisting(t *testing.T) {
 			"name",
 			"engagement_id",
 			"status",
+			"source_kind",
 			"scanners",
 			"semgrep_status",
 			"trivy_status",
@@ -402,6 +548,7 @@ func TestCreateAnalysisJobIdempotencyReturnsExisting(t *testing.T) {
 			"Product A",
 			nil,
 			"queued",
+			"ephemeral",
 			"{semgrep}",
 			"pending",
 			"pending",
