@@ -46,6 +46,7 @@ const DashboardV2 = () => {
     selectedTemplate,
     layout,
     isEditing,
+    hasUnsavedChanges,
     startEditing,
     cancelEditing,
     saveLayout,
@@ -78,6 +79,18 @@ const DashboardV2 = () => {
       });
     return () => controller.abort();
   }, []);
+
+  // Warn user before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const handleResetClick = () => {
     setIsResetConfirmOpen(true);
