@@ -243,15 +243,15 @@ func (p *CodeQLParser) parseCSVRow(row []string, headerIdx map[string]int) Findi
 }
 
 var codeqlSeverityMap = map[string]string{
-	"ERROR":       models.SeverityHigh,
-	"WARNING":     models.SeverityMedium,
-	"NOTE":        models.SeverityLow,
-	"INFORMATION": models.SeverityLow,
+	"ERROR":          models.SeverityHigh,
+	"WARNING":        models.SeverityMedium,
+	"NOTE":           models.SeverityLow,
+	"INFORMATION":    models.SeverityLow,
 	"RECOMMENDATION": models.SeverityLow,
-	"HIGH":        models.SeverityHigh,
-	"MEDIUM":      models.SeverityMedium,
-	"LOW":         models.SeverityLow,
-	"CRITICAL":    models.SeverityCritical,
+	"HIGH":           models.SeverityHigh,
+	"MEDIUM":         models.SeverityMedium,
+	"LOW":            models.SeverityLow,
+	"CRITICAL":       models.SeverityCritical,
 }
 
 func mapCodeQLSeverity(raw string) string {
