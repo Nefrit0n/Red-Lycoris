@@ -8,6 +8,7 @@ exclude:
       - "coverage/**"
       - "**/*.min.js"
       - "**/*.min.css"
+      - "backend/go.sum"
 
   - message: Docs templates and examples
     paths:
