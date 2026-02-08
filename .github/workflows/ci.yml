@@ -409,16 +409,28 @@ jobs:
               '''^docs/template/'''
             ]
          
-      - name: Install trufflehog3
-        run: |
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-          go install github.com/feeltheajf/trufflehog3@latest
+      - name: Set up Python (for trufflehog3)
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-      - name: Run trufflehog3 (repo scan)
+      - name: TruffleHog3 (pip)
         run: |
-          trufflehog3 --help
-          # пример: скан рабочей директории/гита
-          trufflehog3 -h
+          python -m pip install --upgrade pip
+          pip install "trufflehog3==3.0.10"
+          trufflehog3 --no-history \
+            --exclude "lotus-warden/docs/template,docs/template" \
+            --format json \
+            -o trufflehog3.json \
+            backend frontend python_api scripts .github nginx
+
+      - name: Upload trufflehog3 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trufflehog3-report
+          path: trufflehog3.json
 
   security:
     name: Trivy scan (fs + config)
