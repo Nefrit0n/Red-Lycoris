@@ -426,8 +426,6 @@ jobs:
 
       - name: Run trufflehog3 (no config)
         run: |
-          rm -f .trufflehog3.yml .trufflehog3.yaml trufflehog3.yml trufflehog3.yaml || true
-
           trufflehog3 \
             --no-history \
             --format JSON \
