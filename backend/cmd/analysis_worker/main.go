@@ -507,7 +507,12 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 	scannerCfg := scanners.RunnerConfig{
 		ContainerNetwork: cfg.AnalysisContainerNetwork,
 		SemgrepImage:     cfg.AnalysisSemgrepImage,
+		OpenGrepImage:    cfg.AnalysisOpenGrepImage,
 		TrivyImage:       cfg.AnalysisTrivyImage,
+		CheckovImage:     cfg.AnalysisCheckovImage,
+		KICSImage:        cfg.AnalysisKICSImage,
+		GitleaksImage:    cfg.AnalysisGitleaksImage,
+		GrypeImage:       cfg.AnalysisGrypeImage,
 		Timeout:          parseDuration(cfg.AnalysisScannerTimeout, 20*time.Minute),
 	}
 	slaMatrix := sla.MatrixFromConfig(cfg)
@@ -559,14 +564,31 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publisher *events.Publisher, job *storage.AnalysisJobDetail, scanner string, jobDir string, workspace string, slaMatrix sla.Matrix, cfg scanners.RunnerConfig) (*importing.ImportResult, error) {
 	resultPath := filepath.Join(jobDir, fmt.Sprintf("result_%s.json", scanner))
 
+	scannerStartedAt := time.Now().UTC()
+	// Track in new analysis_job_scanners table
+	_ = storage.UpdateAnalysisJobScannerStatus(ctx, db, job.ID, scanner, "running", nil, nil, nil, &scannerStartedAt, nil, nil)
+
 	var scanErr error
 	switch scanner {
 	case "semgrep":
 		scanErr = scanners.RunSemgrep(ctx, cfg, workspace, resultPath)
+	case "opengrep":
+		scanErr = scanners.RunOpenGrep(ctx, cfg, workspace, resultPath)
 	case "trivy":
 		scanErr = scanners.RunTrivy(ctx, cfg, workspace, resultPath)
+	case "checkov":
+		scanErr = scanners.RunCheckov(ctx, cfg, workspace, resultPath)
+	case "kics":
+		scanErr = scanners.RunKICS(ctx, cfg, workspace, resultPath)
+	case "gitleaks":
+		scanErr = scanners.RunGitleaks(ctx, cfg, workspace, resultPath)
+	case "grype":
+		scanErr = scanners.RunGrype(ctx, cfg, workspace, resultPath)
 	default:
-		return nil, permanent(fmt.Errorf("unsupported scanner: %s", scanner))
+		errMsg := fmt.Sprintf("unsupported scanner: %s", scanner)
+		finNow := time.Now().UTC()
+		_ = storage.UpdateAnalysisJobScannerStatus(ctx, db, job.ID, scanner, models.AnalysisScannerFailed, nil, nil, &errMsg, nil, &finNow, nil)
+		return nil, permanent(fmt.Errorf("%s", errMsg))
 	}
 
 	status := models.AnalysisScannerSucceeded
@@ -593,7 +615,8 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 		artifactKeyPtr = &artifactKey
 	}
 
-	// Import findings
+	// Import findings — for opengrep, use "opengrep" as scanner name so the alias plugin picks it up
+	importScanner := scanner
 	var importJobID *uuid.UUID
 	var importResult *importing.ImportResult
 	var importErr error
@@ -601,7 +624,7 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 	if artifactUploaded {
 		if bytes, err := os.ReadFile(resultPath); err == nil {
 			importResult, importErr = importing.ImportFindings(ctx, db, importing.ImportParams{
-				Scanner:      scanner,
+				Scanner:      importScanner,
 				Report:       bytes,
 				SourceType:   "scanner",
 				ProductID:    importing.NullUUIDPtr(job.ProductID),
@@ -643,9 +666,23 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 		status = models.AnalysisScannerFailed
 	}
 
+	// Update legacy per-scanner columns (backward compat)
 	if err := storage.UpdateAnalysisJobScanner(ctx, db, job.ID, scanner, status, importJobID, artifactKeyPtr); err != nil {
 		return importResult, err
 	}
+
+	// Update new analysis_job_scanners table
+	scannerFinishedAt := time.Now().UTC()
+	durationMs := int(scannerFinishedAt.Sub(scannerStartedAt).Milliseconds())
+	var scanErrMsg *string
+	if scanErr != nil {
+		msg := scanErr.Error()
+		scanErrMsg = &msg
+	} else if importErr != nil {
+		msg := importErr.Error()
+		scanErrMsg = &msg
+	}
+	_ = storage.UpdateAnalysisJobScannerStatus(ctx, db, job.ID, scanner, status, artifactKeyPtr, importJobID, scanErrMsg, nil, &scannerFinishedAt, &durationMs)
 
 	if scanErr != nil {
 		return importResult, scanErr
