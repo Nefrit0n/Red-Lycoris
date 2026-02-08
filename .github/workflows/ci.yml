@@ -202,6 +202,12 @@ jobs:
       - name: Run Schemathesis
         run: scripts/contracts/run_schemathesis.sh
 
+      - name: Dump backend log on failure
+        if: failure()
+        run: |
+          echo "----- /tmp/backend.log -----"
+          cat /tmp/backend.log || true
+
       - name: OpenAPI backward compatibility
         run: |
           go install github.com/tufin/oasdiff/cmd/oasdiff@latest
