@@ -1,13 +1,24 @@
 const TOKEN_KEY = "lotus_warden_token";
+const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
 
 // A tiny, explicit signal to the app shell that auth was invalidated.
 // We use an event because localStorage changes do NOT trigger rerenders in the same tab.
 export const AUTH_INVALIDATED_EVENT = "lotus_warden:auth_invalidated";
+export const AUTH_PASSWORD_CHANGE_REQUIRED_EVENT =
+  "lotus_warden:auth_password_change_required";
 
 const notifyAuthInvalidated = (): void => {
   try {
     // CustomEvent isn't strictly required, but it keeps the door open for payloads later.
     window.dispatchEvent(new CustomEvent(AUTH_INVALIDATED_EVENT));
+  } catch {
+    // ignore
+  }
+};
+
+const notifyPasswordChangeRequired = (): void => {
+  try {
+    window.dispatchEvent(new CustomEvent(AUTH_PASSWORD_CHANGE_REQUIRED_EVENT));
   } catch {
     // ignore
   }
@@ -119,6 +130,35 @@ const extractErrorMessage = (
   return `HTTP ${status}`;
 };
 
+const extractErrorCode = (payload: unknown, rawText: string): string | undefined => {
+  if (isObject(payload)) {
+    const p = payload as Record<string, unknown>;
+    if (typeof p.error === "string" && p.error) {
+      return p.error;
+    }
+    if (typeof p.message === "string" && p.message) {
+      return p.message;
+    }
+  }
+
+  const trimmed = (rawText || "").trim();
+  return trimmed ? trimmed.slice(0, 300) : undefined;
+};
+
+const normalizeErrorMessage = (message: string): string => {
+  const map: Record<string, string> = {
+    PASSWORD_CHANGE_REQUIRED: "Требуется смена пароля.",
+    "tenant context is required": "Контекст арендатора недоступен.",
+    "missing tenant context": "Контекст арендатора недоступен.",
+    "invalid tenant claims": "Некорректный контекст арендатора.",
+    "invalid claims": "Некорректная сессия.",
+    "missing token": "Отсутствует токен авторизации.",
+    "invalid token": "Недействительный токен авторизации.",
+  };
+  const trimmed = message.trim();
+  return map[trimmed] ?? message;
+};
+
 const unwrapSuccessEnvelope = (payload: unknown): unknown => {
   if (!isObject(payload)) return payload;
   if (!("success" in payload)) return payload;
@@ -156,7 +196,19 @@ const readPayloadOrThrow = async (response: Response): Promise<unknown> => {
           ? "FORBIDDEN"
           : "HTTP_ERROR";
 
-    const msg = extractErrorMessage(payload, rawText, status);
+    const errorCode = extractErrorCode(payload, rawText);
+    let msg = extractErrorMessage(payload, rawText, status);
+
+    if (status === 403 && errorCode === "PASSWORD_CHANGE_REQUIRED") {
+      try {
+        localStorage.setItem(NEEDS_PWD_CHANGE_KEY, "true");
+      } catch {
+        // ignore
+      }
+      notifyPasswordChangeRequired();
+    }
+
+    msg = normalizeErrorMessage(msg);
 
     // >>> CHANGE: если токен протух/стал невалидным — чистим, чтобы UI не зацикливался на 401
     if (status === 401) {
@@ -174,7 +226,7 @@ const readPayloadOrThrow = async (response: Response): Promise<unknown> => {
 
     throw new ApiError(msg, {
       status,
-      code,
+      code: errorCode ?? code,
       details: payload ?? rawText,
     });
   }
