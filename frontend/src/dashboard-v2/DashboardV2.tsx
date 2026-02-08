@@ -268,16 +268,20 @@ const DashboardV2 = () => {
               sx={{
                 p: 2,
                 borderRadius: 2,
-                border: `1px dashed rgba(255, 255, 255, 0.12)`,
+                border: hasUnsavedChanges
+                  ? `1px dashed ${primitives.amber[500]}`
+                  : `1px dashed rgba(255, 255, 255, 0.12)`,
                 display: "flex",
                 alignItems: "center",
                 gap: 2,
                 ...glass.light,
               }}
             >
-              <GridView fontSize="small" />
-              <Typography variant="body2" color="text.secondary">
-                Режим редактирования включён. Перетаскивайте виджеты и меняйте размер рамки.
+              <GridView fontSize="small" color={hasUnsavedChanges ? "warning" : "inherit"} />
+              <Typography variant="body2" color={hasUnsavedChanges ? "warning.main" : "text.secondary"}>
+                {hasUnsavedChanges
+                  ? "Есть несохранённые изменения. Не забудьте сохранить layout."
+                  : "Режим редактирования включён. Перетаскивайте виджеты и меняйте размер рамки."}
               </Typography>
             </Box>
           )}
@@ -425,6 +429,7 @@ const DashboardV2 = () => {
         open={isAddWidgetOpen}
         widgets={widgetRegistry}
         dataMap={dataMap}
+        placedWidgetIds={layout.map((item) => item.widgetId)}
         onClose={() => setIsAddWidgetOpen(false)}
         onAdd={handleAddWidget}
       />
