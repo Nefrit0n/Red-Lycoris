@@ -80,9 +80,11 @@ func newParserPluginWithAlias(alias string, p parser.Parser, detectVersion func(
 	}
 }
 
-func (a *aliasParserPlugin) ScannerType() string                                    { return a.alias }
-func (a *aliasParserPlugin) DetectReport(data []byte) (bool, string, int)           { return a.inner.DetectReport(data) }
-func (a *aliasParserPlugin) Parse(data []byte) ([]parser.Finding, error)            { return a.inner.Parse(data) }
+func (a *aliasParserPlugin) ScannerType() string { return a.alias }
+func (a *aliasParserPlugin) DetectReport(data []byte) (bool, string, int) {
+	return a.inner.DetectReport(data)
+}
+func (a *aliasParserPlugin) Parse(data []byte) ([]parser.Finding, error) { return a.inner.Parse(data) }
 func (a *aliasParserPlugin) Normalize(in []parser.Finding, rv string) ([]CanonicalFinding, error) {
 	return a.inner.Normalize(in, rv)
 }
