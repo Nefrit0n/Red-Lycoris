@@ -12,6 +12,9 @@ type ProductSourceSnapshot struct {
 	ID             uuid.UUID  `db:"id"`
 	TenantID       *uuid.UUID `db:"tenant_id"`
 	ProductID      uuid.UUID  `db:"product_id"`
+	OriginalName   *string    `db:"original_filename"`
+	Label          *string    `db:"label"`
+	Notes          *string    `db:"notes"`
 	ObjectKey      string     `db:"object_key"`
 	ArchiveSize    int64      `db:"archive_size"`
 	SHA256         *string    `db:"sha256"`
