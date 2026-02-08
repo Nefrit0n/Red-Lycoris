@@ -13,16 +13,21 @@ on:
     - cron: "20 2 * * 1"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 env:
   GO_VERSION: "1.24"
   NODE_VERSION: "20"
   PYTHON_VERSION: "3.12"
+  GHAS_ENABLED: ${{ vars.GHAS_ENABLED || 'false' }}
 
 jobs:
   backend:
@@ -66,25 +71,31 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+          # setup-go v6 caches based on go.mod by default; use go.sum for tighter invalidation
+          cache-dependency-path: backend/go.sum
 
       - name: Go format & vet
         working-directory: backend
         run: |
+          set -euo pipefail
           if [ -n "$(gofmt -l .)" ]; then
             echo "Go files must be formatted with gofmt"
-            gofmt -w .
-            echo "Autoformatted. Commit the changes."
+            gofmt -l .
             exit 1
           fi
           go vet ./...
 
       - name: Run migrations
         working-directory: backend
-        run: go run ./cmd/migrate
+        run: |
+          set -euo pipefail
+          go run ./cmd/migrate
 
       - name: Go tests
         working-directory: backend
-        run: go test ./...
+        run: |
+          set -euo pipefail
+          go test ./...
 
   contracts:
     name: Contract tests
@@ -138,15 +149,20 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+          cache-dependency-path: backend/go.sum
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+          # рекомендую завести файл, чтобы кеш был детерминированным:
+          # scripts/contracts/requirements.txt (schemathesis, jsonschema, etc)
+          cache-dependency-path: scripts/contracts/requirements.txt
 
       - name: Start MinIO (workaround GHA services can't pass command args)
         run: |
+          set -euo pipefail
           docker run -d --name minio \
             -p 9000:9000 -p 9001:9001 \
             -e MINIO_ROOT_USER=minioadmin \
@@ -155,6 +171,7 @@ jobs:
 
       - name: Wait for MinIO
         run: |
+          set -euo pipefail
           for i in {1..30}; do
             if curl -sf http://localhost:9000/minio/health/live > /dev/null; then
               exit 0
@@ -165,27 +182,39 @@ jobs:
           docker logs minio || true
           exit 1
 
-      - name: Add Go bin to PATH
-        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
       - name: Install contract test dependencies
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
-          pip install schemathesis jsonschema
+          if [ -f scripts/contracts/requirements.txt ]; then
+            pip install -r scripts/contracts/requirements.txt
+          else
+            pip install schemathesis jsonschema
+          fi
 
       - name: Run migrations
         working-directory: backend
-        run: go run ./cmd/migrate
+        run: |
+          set -euo pipefail
+          go run ./cmd/migrate
+
+      - name: Build backend
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          go build -o /tmp/backend ./cmd/server
 
       - name: Start backend
         working-directory: backend
         run: |
-          go run ./cmd/server > /tmp/backend.log 2>&1 &
+          set -euo pipefail
+          /tmp/backend > /tmp/backend.log 2>&1 &
           echo $! > /tmp/backend.pid
 
       - name: Wait for backend
         run: |
-          for i in {1..45}; do
+          set -euo pipefail
+          for i in {1..30}; do
             if curl -sf http://localhost:8080/health > /dev/null; then
               exit 0
             fi
@@ -193,14 +222,24 @@ jobs:
           done
 
           echo "Backend did not become healthy"
-          cat /tmp/backend.log
+          cat /tmp/backend.log || true
           exit 1
 
       - name: Validate contract fixtures
-        run: python scripts/contracts/validate_fixtures.py
+        run: |
+          set -euo pipefail
+          python scripts/contracts/validate_fixtures.py
 
       - name: Run Schemathesis
-        run: scripts/contracts/run_schemathesis.sh
+        run: |
+          set -euo pipefail
+          scripts/contracts/run_schemathesis.sh
+
+      - name: OpenAPI backward compatibility
+        run: |
+          set -euo pipefail
+          go install github.com/oasdiff/oasdiff@v1.11.7
+          scripts/contracts/check_openapi_compat.sh
 
       - name: Dump backend log on failure
         if: failure()
@@ -208,10 +247,12 @@ jobs:
           echo "----- /tmp/backend.log -----"
           cat /tmp/backend.log || true
 
-      - name: OpenAPI backward compatibility
+      - name: Cleanup backend
+        if: always()
         run: |
-          go install github.com/oasdiff/oasdiff@v1.11.7
-          scripts/contracts/check_openapi_compat.sh
+          if [ -f /tmp/backend.pid ]; then
+            kill "$(cat /tmp/backend.pid)" || true
+          fi
 
   frontend:
     name: Frontend checks
@@ -231,15 +272,21 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: |
+          set -euo pipefail
+          npm ci
 
       - name: Lint
         working-directory: frontend
-        run: npm run lint
+        run: |
+          set -euo pipefail
+          npm run lint
 
       - name: Test
         working-directory: frontend
-        run: npm run test
+        run: |
+          set -euo pipefail
+          npm run test
 
   python:
     name: Python API checks
@@ -275,6 +322,7 @@ jobs:
       - name: Install dependencies
         working-directory: python_api
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install ruff pytest pytest-cov
@@ -282,12 +330,18 @@ jobs:
       - name: Lint with ruff
         working-directory: python_api
         run: |
+          set -euo pipefail
           ruff check .
           ruff format --check .
 
       - name: Run tests
         working-directory: python_api
-        run: pytest --cov=app --cov-report=term-missing || true
+        run: |
+          set -euo pipefail
+          pytest --cov=app --cov-report=term-missing
+
+        # если хочешь “мягкий” режим — включай так:
+        # continue-on-error: true
 
   docker:
     name: Docker build
@@ -310,8 +364,8 @@ jobs:
           target: runtime
           push: false
           tags: lotus-warden-backend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
       - name: Build frontend image
         uses: docker/build-push-action@v6
@@ -321,8 +375,8 @@ jobs:
           target: runtime
           push: false
           tags: lotus-warden-frontend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
       - name: Build nginx image
         uses: docker/build-push-action@v6
@@ -331,8 +385,8 @@ jobs:
           file: nginx/Dockerfile
           push: false
           tags: lotus-warden-nginx:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=nginx
+          cache-to: type=gha,mode=max,scope=nginx
 
       - name: Build python-api image
         uses: docker/build-push-action@v6
@@ -342,35 +396,33 @@ jobs:
           target: runtime
           push: false
           tags: lotus-warden-python-api:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=python_api
+          cache-to: type=gha,mode=max,scope=python_api
 
-  # NOTE: repo is private; if GH Advanced Security / Code Scanning is not enabled,
-  # CodeQL cannot upload results. We run analysis and upload SARIF as an artifact instead.
-  security-codeql-go:
-    name: SAST (CodeQL) (go)
+  # ---------- Security ----------
+
+  security-codeql:
+    name: SAST (CodeQL)
+    if: env.GHAS_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       actions: read
       security-events: write
-
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, python, javascript-typescript]
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: go
+          languages: ${{ matrix.language }}
           config: |
             queries:
               - uses: security-extended
@@ -378,37 +430,34 @@ jobs:
               - "lotus-warden/docs/template/**"
               - "docs/template/**"
 
-      - name: Manual build (compile only)
-        working-directory: backend
-        run: |
-          go test -c ./... >/dev/null
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
 
-      - name: Analyze (SARIF only)
+      - name: Analyze
         uses: github/codeql-action/analyze@v4
-        with:
-          upload: false
-          output: codeql-sarif-go
 
-      - name: Upload SARIF artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: codeql-sarif-go
-          path: codeql-sarif-go/**/*.sarif
-
-  security-codeql-python:
-    name: SAST (CodeQL) (python)
+  # OSS fallback когда GHAS/Code Security нет:
+  security-sast-lite:
+    name: SAST lite (gosec + bandit)
+    if: env.GHAS_ENABLED != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
-
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          fetch-depth: 0
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: gosec (Go SAST)
+        working-directory: backend
+        uses: securego/gosec@master
+        with:
+          args: ./...
+        # gosec — OSS анализатор безопасности Go :contentReference[oaicite:3]{index=3}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -417,90 +466,18 @@ jobs:
           cache: "pip"
           cache-dependency-path: python_api/requirements.txt
 
-      - name: Install python deps (better extraction)
+      - name: bandit (Python SAST)
         working-directory: python_api
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: python
-          config: |
-            queries:
-              - uses: security-extended
-            paths-ignore:
-              - "lotus-warden/docs/template/**"
-              - "docs/template/**"
-
-      - name: Analyze (SARIF only)
-        uses: github/codeql-action/analyze@v4
-        with:
-          upload: false
-          output: codeql-sarif-python
-
-      - name: Upload SARIF artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: codeql-sarif-python
-          path: codeql-sarif-python/**/*.sarif
-
-  security-codeql-js:
-    name: SAST (CodeQL) (javascript-typescript)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend deps
-        working-directory: frontend
-        run: npm ci
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: javascript-typescript
-          config: |
-            queries:
-              - uses: security-extended
-            paths-ignore:
-              - "lotus-warden/docs/template/**"
-              - "docs/template/**"
-
-      - name: Analyze (SARIF only)
-        uses: github/codeql-action/analyze@v4
-        with:
-          upload: false
-          output: codeql-sarif-js
-
-      - name: Upload SARIF artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: codeql-sarif-js
-          path: codeql-sarif-js/**/*.sarif
+          pip install bandit
+          bandit -r .
 
   security-secrets:
-    name: Secrets scan (Gitleaks + TruffleHog3)
+    name: Secrets scan (Gitleaks + TruffleHog)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - uses: actions/checkout@v6
         with:
@@ -508,6 +485,7 @@ jobs:
 
       - name: Create gitleaks config (ignore docs templates)
         run: |
+          set -euo pipefail
           cat > /tmp/gitleaks.toml <<'TOML'
           title = "Lotus-Warden CI gitleaks config"
 
@@ -528,59 +506,50 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: /tmp/gitleaks.toml
 
-      - name: Set up Python (for trufflehog3)
-        uses: actions/setup-python@v6
+      # TruffleHog есть в виде GitHub Action/Marketplace :contentReference[oaicite:4]{index=4}
+      - name: TruffleHog (OSS)
+        uses: trufflesecurity/trufflehog@main
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: "pip"
+          path: .
+          base: ${{ github.event.pull_request.base.sha || '' }}
+          head: ${{ github.sha }}
+        continue-on-error: false
 
-      - name: Install trufflehog3
-        run: |
-          python -m pip install --upgrade pip
-          pip install "trufflehog3==3.0.10"
-
-      - name: Run trufflehog3 (fail only on HIGH)
-        run: |
-          set -euo pipefail
-
-          # Run scan, capture exit code (trufflehog3 uses non-zero for findings / errors)
-          trufflehog3 \
-            --config .trufflehog3.yml \
-            -f JSON \
-            -o trufflehog3.json \
-            -s HIGH \
-            . || TH_EXIT=$?
-
-          TH_EXIT=${TH_EXIT:-0}
-
-          # If tool crashed (exit 2 is commonly used for errors), fail the job.
-          # If findings exist at HIGH, allow it to fail (exit 1 is common).
-          # If it returned 0 -> OK.
-          if [ "$TH_EXIT" -eq 2 ]; then
-            echo "trufflehog3 error (exit 2)."
-            exit 2
-          fi
-
-          if [ "$TH_EXIT" -ne 0 ]; then
-            echo "trufflehog3 found HIGH severity secrets."
-            exit 1
-          fi
-
-          echo "trufflehog3: no HIGH severity findings."
-
-      - name: Upload trufflehog3 report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trufflehog3-report
-          path: trufflehog3.json
-
-  security:
+  # Trivy для CI (после тестов) — как у тебя было
+  security-trivy-ci:
     name: Trivy scan (fs + config)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [backend, frontend, python]
+    steps:
+      - uses: actions/checkout@v6
 
+      - name: Trivy vulnerability scanner (filesystem)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+          skip-dirs: "lotus-warden/docs/template,docs/template"
+
+      - name: Trivy config scanner
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: "config"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+          skip-dirs: "lotus-warden/docs/template,docs/template"
+
+  # Trivy для schedule (без needs -> реально запускается)
+  security-trivy-scheduled:
+    name: Trivy scan (scheduled)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 
@@ -605,14 +574,12 @@ jobs:
 
   dependency-review:
     name: Dependency Review (PR only)
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && env.GHAS_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-
     steps:
       - uses: actions/checkout@v6
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
-        continue-on-error: true
