@@ -95,7 +95,7 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 
 	tenantID := tenantIDFromContext(c)
 	if tenantID == nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "tenant context is required"})
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
 	}
 
 	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, productID, tenantID)
