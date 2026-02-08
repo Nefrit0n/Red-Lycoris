@@ -430,8 +430,8 @@ jobs:
             --no-history \
             --format JSON \
             --output trufflehog3.json \
-            --exclude "lotus-warden/docs/template/**" \
-            --exclude "docs/template/**" \
+            --exclude "lotus-warden/docs/template/*" \
+            --exclude "docs/template/*" \
             .
 
       - name: Upload trufflehog3 report
