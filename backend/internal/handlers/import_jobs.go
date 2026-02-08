@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	v1dto "lotus-warden/backend/internal/dto/v1"
 	v1mapper "lotus-warden/backend/internal/mapper/v1"
@@ -50,11 +51,21 @@ func (h *ImportJobsHandler) List(c *fiber.Ctx) error {
 		}
 		tenantID = &parsed
 	}
+	scanner := strings.TrimSpace(c.Query("scanner"))
+	if scanner != "" && (!utf8.ValidString(scanner) || strings.ContainsRune(scanner, 0)) {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid scanner"})
+	}
+
+	status := strings.TrimSpace(c.Query("status"))
+	if status != "" && (!utf8.ValidString(status) || strings.ContainsRune(status, 0)) {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid status"})
+	}
+
 	filters := storage.ImportJobFilters{
 		TenantID:  tenantID,
 		ProductID: productID,
-		Scanner:   strings.TrimSpace(c.Query("scanner")),
-		Status:    strings.TrimSpace(c.Query("status")),
+		Scanner:   scanner,
+		Status:    status,
 		Limit:     limit,
 		Offset:    offset,
 	}
