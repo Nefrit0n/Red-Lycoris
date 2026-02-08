@@ -6,6 +6,7 @@ API_URL="${API_URL%/}"
 
 OPENAPI_SPEC="${OPENAPI_SPEC:-backend/openapi.json}"
 
+# python heredoc читает env, поэтому экспортируем
 export ROOT_EMAIL="${ROOT_EMAIL:-root@localhost}"
 export ROOT_PASSWORD="${ROOT_PASSWORD:-root}"
 export CONTRACTS_PASSWORD="${CONTRACTS_PASSWORD:-root-contract-1234}"
@@ -36,6 +37,7 @@ debug_last() {
 }
 
 http() {
+  # Usage: http METHOD URL [curl args...]
   local method="$1"; shift
   local url="$1"; shift
 
@@ -45,10 +47,6 @@ http() {
   LAST_BODY="$tmpdir/body_$(date +%s%N)"
   LAST_CODE=""
 
-  # --location: follow redirects
-  # --post301/302/303: keep POST on 301/302/303 redirects
-  # --fail-with-body: non-zero on >=400 but keeps body for debugging
-  # docs: everything.curl.dev + curl --fail-with-body notes :contentReference[oaicite:4]{index=4}
   local code rc
   set +e
   code="$(curl -sS \
@@ -82,10 +80,12 @@ http() {
   cat "$LAST_BODY"
 }
 
-token_from_json() {
-  python - <<'PY'
+token_from_file() {
+  local path="$1"
+  python - <<PY
 import json,sys
-raw = sys.stdin.read()
+p = "${path}"
+raw = open(p, "rb").read().decode("utf-8", "replace")
 if not raw.strip():
   print("ERROR: empty response body (expected JSON)", file=sys.stderr)
   sys.exit(1)
@@ -96,7 +96,6 @@ except Exception as e:
   print("---- response (first 1200 bytes) ----", file=sys.stderr)
   print(raw[:1200], file=sys.stderr)
   sys.exit(1)
-
 try:
   print(obj["data"]["token"])
 except Exception as e:
@@ -115,7 +114,7 @@ if [[ ! -s "$OPENAPI_SPEC" ]]; then
   exit 1
 fi
 
-login_payload() {
+make_login_payload() {
   local pass="$1"
   python - <<PY
 import json,os
@@ -123,81 +122,81 @@ print(json.dumps({"login": os.environ["ROOT_EMAIL"], "password": "${pass}"}))
 PY
 }
 
-# Ретрай логина, чтобы убрать гонки readiness
+# ---- LOGIN (retry) ----
 echo "Login with ROOT_PASSWORD..."
+
+login_resp="$tmpdir/login.json"
 login_token=""
+
 for i in {1..30}; do
-  set +e
-  resp="$(http POST "${API_URL}/api/v1/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "$(login_payload "$ROOT_PASSWORD")")"
-  rc=$?
-  set -e
+  rm -f "$login_resp"
+  if http POST "${API_URL}/api/v1/auth/login" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -d "$(make_login_payload "$ROOT_PASSWORD")" > "$login_resp"; then
 
-  if [[ $rc -ne 0 ]]; then
-    echo "Login attempt $i failed; retrying..." >&2
-    sleep 2
-    continue
-  fi
+    if [[ ! -s "$login_resp" ]]; then
+      echo "Login attempt $i: empty body" >&2
+      debug_last
+      sleep 2
+      continue
+    fi
 
-  if [[ ! -s "$LAST_BODY" ]]; then
-    echo "Login attempt $i returned empty body; retrying..." >&2
+    if login_token="$(token_from_file "$login_resp")"; then
+      break
+    fi
+
+    echo "Login attempt $i: JSON but no data.token" >&2
     debug_last
     sleep 2
     continue
+  else
+    echo "Login attempt $i: HTTP failed" >&2
+    # debug_last already printed in http()
+    sleep 2
+    continue
   fi
-
-  set +e
-  login_token="$(printf "%s" "$resp" | token_from_json)"
-  tok_rc=$?
-  set -e
-
-  if [[ $tok_rc -eq 0 ]]; then
-    break
-  fi
-
-  echo "Login attempt $i returned non-token JSON; retrying..." >&2
-  debug_last
-  sleep 2
 done
 
 if [[ -z "$login_token" ]]; then
   echo "ERROR: login did not succeed after retries" >&2
-  debug_last
   exit 1
 fi
 
-change_payload="$(python - <<'PY'
-import json,os
-print(json.dumps({
-  "currentPassword": os.environ["ROOT_PASSWORD"],
-  "newPassword": os.environ["CONTRACTS_PASSWORD"],
-  "newPasswordConfirm": os.environ["CONTRACTS_PASSWORD"],
-}))
-PY
-)"
+# ---- CHANGE PASSWORD (optional) ----
+change_payload="$tmpdir/change_payload.json"
+cat > "$change_payload" <<EOF
+{"currentPassword":"${ROOT_PASSWORD}","newPassword":"${CONTRACTS_PASSWORD}","newPasswordConfirm":"${CONTRACTS_PASSWORD}"}
+EOF
+
+change_resp="$tmpdir/change.json"
+api_token=""
 
 echo "Change password (may fail if already changed)..."
 set +e
-change_resp="$(http POST "${API_URL}/api/v1/auth/change-password" \
+rm -f "$change_resp"
+http POST "${API_URL}/api/v1/auth/change-password" \
   -H "Authorization: Bearer ${login_token}" \
   -H "Content-Type: application/json" \
-  -d "$change_payload")"
+  -H "Accept: application/json" \
+  -d @"$change_payload" > "$change_resp"
 change_rc=$?
 set -e
 
-api_token=""
-if [[ $change_rc -eq 0 && -s "$LAST_BODY" ]]; then
-  api_token="$(printf "%s" "$change_resp" | token_from_json)"
+if [[ $change_rc -eq 0 && -s "$change_resp" ]]; then
+  api_token="$(token_from_file "$change_resp")"
 else
   echo "Change-password failed or empty; fallback to login with CONTRACTS_PASSWORD" >&2
-  resp="$(http POST "${API_URL}/api/v1/auth/login" \
+  rm -f "$login_resp"
+  http POST "${API_URL}/api/v1/auth/login" \
     -H "Content-Type: application/json" \
-    -d "$(login_payload "$CONTRACTS_PASSWORD")")"
-  api_token="$(printf "%s" "$resp" | token_from_json)"
+    -H "Accept: application/json" \
+    -d "$(make_login_payload "$CONTRACTS_PASSWORD")" > "$login_resp"
+
+  api_token="$(token_from_file "$login_resp")"
 fi
 
-# Schemathesis accepts file path or URL as schema input :contentReference[oaicite:5]{index=5}
+# ---- SCHEMATHESIS ----
 schemathesis run "$OPENAPI_SPEC" \
   --base-url "$API_URL" \
   --header "Authorization: Bearer ${api_token}" \
