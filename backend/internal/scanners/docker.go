@@ -98,7 +98,6 @@ func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 		"--format", "json",
 		"--output", "/out/"+filepath.Base(outputPath),
 		"--exit-code", "0",
-		"--skip-db-update",
 		"/src",
 	)
 	output, err := cmd.CombinedOutput()

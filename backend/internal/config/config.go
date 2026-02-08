@@ -96,7 +96,7 @@ func Load() Config {
 		AnalysisKICSImage:        getEnv("ANALYSIS_KICS_IMAGE", "checkmarx/kics:latest"),
 		AnalysisGitleaksImage:    getEnv("ANALYSIS_GITLEAKS_IMAGE", "zricethezav/gitleaks:latest"),
 		AnalysisGrypeImage:       getEnv("ANALYSIS_GRYPE_IMAGE", "anchore/grype:latest"),
-		AnalysisContainerNetwork: getEnv("ANALYSIS_CONTAINER_NETWORK", "none"),
+		AnalysisContainerNetwork: getEnv("ANALYSIS_CONTAINER_NETWORK", "bridge"),
 		NVDAPIKey:                getEnv("NVD_API_KEY", ""),
 		EPSSEnabled:              getEnvAsBool("EPSS_ENABLED", true),
 		KEVURL:                   getEnv("KEV_URL", ""),
