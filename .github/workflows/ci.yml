@@ -145,7 +145,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
-      - name: Start MinIO (workaround: GHA services can't pass command args)
+      - name: Start MinIO (workaround GHA services can't pass command args)
         run: |
           docker run -d --name minio \
             -p 9000:9000 -p 9001:9001 \
