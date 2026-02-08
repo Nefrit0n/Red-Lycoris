@@ -1,11 +1,13 @@
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
   CircularProgress,
-  Divider,
   FormControl,
   FormControlLabel,
   FormLabel,
@@ -14,9 +16,6 @@ import {
   Radio,
   RadioGroup,
   Stack,
-  Step,
-  StepLabel,
-  Stepper,
   Tab,
   Tabs,
   TextField,
@@ -24,6 +23,7 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   AnalysisJob,
   createAnalysisJob,
@@ -41,15 +41,13 @@ import PaginationControl from "../components/PaginationControl";
 import { ProductAutocomplete } from "../components/ProductAutocomplete";
 import { useNotification } from "../contexts/NotificationContext";
 
-const productSteps = ["Продукт", "Исходники", "Сканеры и запуск"];
-
 type ProductMode = "existing" | "new";
 
 type SourceMode = "latest" | "snapshot" | "job";
 
 const AnalyzeJobsPage = () => {
   const { showError, showSuccess } = useNotification();
-  const maxArchiveMb = 100;
+  const maxArchiveMb = 200;
 
   const [productMode, setProductMode] = useState<ProductMode>("existing");
   const [selectedProductId, setSelectedProductId] = useState<string>("");
@@ -326,7 +324,7 @@ const AnalyzeJobsPage = () => {
   };
 
   return (
-    <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }}>
+    <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }} sx={{ maxWidth: 1200, mx: "auto" }}>
       <Stack spacing={3}>
         <Box>
           <Typography variant="h4" gutterBottom>
@@ -337,190 +335,225 @@ const AnalyzeJobsPage = () => {
           </Typography>
         </Box>
 
-        <Card>
-          <CardContent>
-            <Stack spacing={3}>
-              <Stepper activeStep={2} alternativeLabel>
-                {productSteps.map((label) => (
-                  <Step key={label}>
-                    <StepLabel>{label}</StepLabel>
-                  </Step>
-                ))}
-              </Stepper>
-
-              <Divider />
-
+        <Stack direction={{ xs: "column", lg: "row" }} spacing={3} alignItems="flex-start">
+          <Card sx={{ flex: 1 }}>
+            <CardContent>
               <Stack spacing={2}>
-                <Typography variant="h6">Шаг 1. Продукт</Typography>
-                <Tabs
-                  value={productMode}
-                  onChange={(_, value) => setProductMode(value)}
-                  variant="fullWidth"
-                >
-                  <Tab value="existing" label="Существующий" />
-                  <Tab value="new" label="Новый" />
-                </Tabs>
-
-                {productMode === "existing" ? (
-                  <ProductAutocomplete
-                    value={selectedProductId}
-                    returnId
-                    onChange={(value) => setSelectedProductId(value)}
-                    onLabelChange={setSelectedProductLabel}
-                  />
-                ) : (
-                  <Stack spacing={2}>
-                    <Typography color="text.secondary" variant="body2">
-                      Создайте продукт перед запуском анализа. Поля версии и identifier опциональны.
-                    </Typography>
-                    <TextField
-                      label="Название продукта *"
-                      value={newProductName}
-                      onChange={(event) => setNewProductName(event.target.value)}
-                      placeholder="Lotus Platform"
-                      fullWidth
-                    />
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                      <TextField
-                        label="Версия"
-                        value={newProductVersion}
-                        onChange={(event) => setNewProductVersion(event.target.value)}
-                        placeholder="v1.0.0"
-                        fullWidth
-                      />
-                      <TextField
-                        label="Identifier"
-                        value={newProductIdentifier}
-                        onChange={(event) => setNewProductIdentifier(event.target.value)}
-                        placeholder="lotus-platform"
-                        fullWidth
-                      />
+                <Accordion defaultExpanded>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle1">Шаг 1. Продукт</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {productSummary}
+                      </Typography>
                     </Stack>
-                  </Stack>
-                )}
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={2}>
+                      <Tabs
+                        value={productMode}
+                        onChange={(_, value) => setProductMode(value)}
+                        variant="fullWidth"
+                      >
+                        <Tab value="existing" label="Существующий" />
+                        <Tab value="new" label="Новый" />
+                      </Tabs>
+
+                      {productMode === "existing" ? (
+                        <ProductAutocomplete
+                          value={selectedProductId}
+                          returnId
+                          onChange={(value) => setSelectedProductId(value)}
+                          onLabelChange={setSelectedProductLabel}
+                        />
+                      ) : (
+                        <Stack spacing={2}>
+                          <Typography color="text.secondary" variant="body2">
+                            Создайте продукт перед запуском анализа. Поля версии и identifier опциональны.
+                          </Typography>
+                          <TextField
+                            label="Название продукта *"
+                            value={newProductName}
+                            onChange={(event) => setNewProductName(event.target.value)}
+                            placeholder="Lotus Platform"
+                            fullWidth
+                          />
+                          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                            <TextField
+                              label="Версия"
+                              value={newProductVersion}
+                              onChange={(event) => setNewProductVersion(event.target.value)}
+                              placeholder="v1.0.0"
+                              fullWidth
+                            />
+                            <TextField
+                              label="Identifier"
+                              value={newProductIdentifier}
+                              onChange={(event) => setNewProductIdentifier(event.target.value)}
+                              placeholder="lotus-platform"
+                              fullWidth
+                            />
+                          </Stack>
+                        </Stack>
+                      )}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
+
+                <Accordion defaultExpanded>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle1">Шаг 2. Исходники</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {sourceSummary}
+                      </Typography>
+                    </Stack>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={2}>
+                      <FormControl>
+                        <FormLabel>Источник архива</FormLabel>
+                        <RadioGroup
+                          value={sourceMode}
+                          onChange={(event) => setSourceMode(event.target.value as SourceMode)}
+                        >
+                          <FormControlLabel
+                            value="latest"
+                            control={<Radio />}
+                            disabled={productMode === "new" || (!latestSnapshot && !latestSnapshotLoading)}
+                            label="Использовать последний загруженный архив"
+                          />
+                          <FormControlLabel
+                            value="snapshot"
+                            control={<Radio />}
+                            label="Загрузить и сохранить новый архив для продукта"
+                          />
+                          <FormControlLabel
+                            value="job"
+                            control={<Radio />}
+                            label="Загрузить архив только для этой задачи"
+                          />
+                        </RadioGroup>
+                      </FormControl>
+
+                      {latestSnapshotLoading && (
+                        <Typography variant="body2" color="text.secondary">
+                          Проверяем наличие снапшота...
+                        </Typography>
+                      )}
+
+                      {sourceMode !== "latest" && (
+                        <ArchiveDropzone
+                          value={archive}
+                          onChange={setArchive}
+                          helperText="Поддерживаются .zip, .tar.gz, .tgz"
+                        />
+                      )}
+
+                      {sourceMode === "latest" && latestSnapshot && (
+                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                          <Typography variant="subtitle2">Последний снапшот</Typography>
+                          <Typography color="text.secondary" variant="body2">
+                            Создан: {new Date(latestSnapshot.createdAt).toLocaleString("ru-RU")}
+                          </Typography>
+                          <Typography color="text.secondary" variant="body2">
+                            Размер: {Math.round(latestSnapshot.size / 1024)} KB
+                          </Typography>
+                        </Paper>
+                      )}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
+
+                <Accordion defaultExpanded>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle1">Шаг 3. Сканеры</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {scannerSummary}
+                      </Typography>
+                    </Stack>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={2}>
+                      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                        <Card variant="outlined" sx={{ flex: 1 }}>
+                          <CardContent>
+                            <Stack spacing={1}>
+                              <Typography variant="subtitle1">Semgrep</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Поиск уязвимостей в коде и конфигурации.
+                              </Typography>
+                              <Button
+                                variant={runSemgrep ? "contained" : "outlined"}
+                                onClick={() => setRunSemgrep((prev) => !prev)}
+                              >
+                                {runSemgrep ? "Включен" : "Выключен"}
+                              </Button>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                        <Card variant="outlined" sx={{ flex: 1 }}>
+                          <CardContent>
+                            <Stack spacing={1}>
+                              <Typography variant="subtitle1">Trivy</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Анализ контейнеров и зависимостей.
+                              </Typography>
+                              <Button
+                                variant={runTrivy ? "contained" : "outlined"}
+                                onClick={() => setRunTrivy((prev) => !prev)}
+                              >
+                                {runTrivy ? "Включен" : "Выключен"}
+                              </Button>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      </Stack>
+
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                        <Button variant="outlined" onClick={() => handlePreset("fast")}>
+                          Быстро (Semgrep)
+                        </Button>
+                        <Button variant="outlined" onClick={() => handlePreset("full")}>
+                          Полный (Semgrep + Trivy)
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
               </Stack>
+            </CardContent>
+          </Card>
 
-              <Divider />
-
+          <Card
+            sx={{
+              width: { xs: "100%", lg: 320 },
+              position: { lg: "sticky" },
+              top: { lg: 24 },
+            }}
+          >
+            <CardContent>
               <Stack spacing={2}>
-                <Typography variant="h6">Шаг 2. Исходники</Typography>
-                <FormControl>
-                  <FormLabel>Источник архива</FormLabel>
-                  <RadioGroup
-                    value={sourceMode}
-                    onChange={(event) => setSourceMode(event.target.value as SourceMode)}
-                  >
-                    <FormControlLabel
-                      value="latest"
-                      control={<Radio />}
-                      disabled={productMode === "new" || (!latestSnapshot && !latestSnapshotLoading)}
-                      label="Использовать последний загруженный архив"
-                    />
-                    <FormControlLabel
-                      value="snapshot"
-                      control={<Radio />}
-                      label="Загрузить и сохранить новый архив для продукта"
-                    />
-                    <FormControlLabel
-                      value="job"
-                      control={<Radio />}
-                      label="Загрузить архив только для этой задачи"
-                    />
-                  </RadioGroup>
-                </FormControl>
-
-                {latestSnapshotLoading && (
+                <Typography variant="subtitle1">Итоговая сводка</Typography>
+                <Stack spacing={0.5}>
                   <Typography variant="body2" color="text.secondary">
-                    Проверяем наличие снапшота...
+                    Продукт: {productSummary}
                   </Typography>
-                )}
-
-                {sourceMode !== "latest" && (
-                  <ArchiveDropzone
-                    value={archive}
-                    onChange={setArchive}
-                    helperText="Поддерживаются .zip, .tar.gz, .tgz"
-                  />
-                )}
-
-                {sourceMode === "latest" && latestSnapshot && (
-                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                    <Typography variant="subtitle2">Последний снапшот</Typography>
-                    <Typography color="text.secondary" variant="body2">
-                      Создан: {new Date(latestSnapshot.createdAt).toLocaleString("ru-RU")}
-                    </Typography>
-                    <Typography color="text.secondary" variant="body2">
-                      Размер: {Math.round(latestSnapshot.size / 1024)} KB
-                    </Typography>
-                  </Paper>
-                )}
-              </Stack>
-
-              <Divider />
-
-              <Stack spacing={2}>
-                <Typography variant="h6">Шаг 3. Сканеры и запуск</Typography>
-                <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                  <Card variant="outlined" sx={{ flex: 1 }}>
-                    <CardContent>
-                      <Stack spacing={1}>
-                        <Typography variant="subtitle1">Semgrep</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Поиск уязвимостей в коде и конфигурации.
-                        </Typography>
-                        <Button
-                          variant={runSemgrep ? "contained" : "outlined"}
-                          onClick={() => setRunSemgrep((prev) => !prev)}
-                        >
-                          {runSemgrep ? "Включен" : "Выключен"}
-                        </Button>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                  <Card variant="outlined" sx={{ flex: 1 }}>
-                    <CardContent>
-                      <Stack spacing={1}>
-                        <Typography variant="subtitle1">Trivy</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Анализ контейнеров и зависимостей.
-                        </Typography>
-                        <Button
-                          variant={runTrivy ? "contained" : "outlined"}
-                          onClick={() => setRunTrivy((prev) => !prev)}
-                        >
-                          {runTrivy ? "Включен" : "Выключен"}
-                        </Button>
-                      </Stack>
-                    </CardContent>
-                  </Card>
+                  <Typography variant="body2" color="text.secondary">
+                    Источник: {sourceSummary}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Сканеры: {scannerSummary}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Максимальный архив: {maxArchiveMb} MB
+                  </Typography>
                 </Stack>
-
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Button variant="outlined" onClick={() => handlePreset("fast")}>
-                    Быстро (Semgrep)
-                  </Button>
-                  <Button variant="outlined" onClick={() => handlePreset("full")}>
-                    Полный (Semgrep + Trivy)
-                  </Button>
-                </Stack>
-
-                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="subtitle1">Итоговая сводка</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Продукт: {productSummary}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Источник: {sourceSummary}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Сканеры: {scannerSummary}
-                    </Typography>
-                  </Stack>
-                </Paper>
 
                 <Stack direction="row" spacing={2} alignItems="center">
                   <Button
+                    fullWidth
                     variant="contained"
                     onClick={handleSubmit}
                     disabled={submitting}
@@ -531,6 +564,7 @@ const AnalyzeJobsPage = () => {
                     {submitting && <CircularProgress size={18} />}
                   </Box>
                 </Stack>
+
                 {uploadProgress !== null && (
                   <Stack spacing={1}>
                     <Typography variant="body2" color="text.secondary">
@@ -539,6 +573,7 @@ const AnalyzeJobsPage = () => {
                     <LinearProgress variant="determinate" value={uploadProgress} />
                   </Stack>
                 )}
+
                 {submitError && (
                   <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: "error.main" }}>
                     <Stack spacing={1}>
@@ -554,9 +589,9 @@ const AnalyzeJobsPage = () => {
                   </Paper>
                 )}
               </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Stack>
 
         <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
           {loading ? (
