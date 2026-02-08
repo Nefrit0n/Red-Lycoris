@@ -382,7 +382,7 @@ jobs:
         uses: github/codeql-action/analyze@v4
 
   security-secrets:
-    name: Secrets scan (Gitleaks + TruffleHog)
+    name: Secrets scan (Gitleaks + TruffleHog3)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -391,24 +391,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Create gitleaks config (ignore docs templates)
+        run: |
+          cat > /tmp/gitleaks.toml <<'TOML'
+          title = "Lotus-Warden CI gitleaks config"
+
+          [extend]
+          useDefault = true
+
+          [[allowlists]]
+          description = "Ignore docs templates directory"
+          paths = [
+            '''^lotus-warden/docs/template/''',
+            '''^docs/template/'''
+          ]
+          TOML
+
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # If this is an ORG repo, you may need a license; personal repos typically don't. (See action docs.)
-          # GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-          GITLEAKS_CONFIG_TOML: |
-            title = "CI gitleaks config"
-            [extend]
-            useDefault = true
+          GITLEAKS_CONFIG: /tmp/gitleaks.toml
 
-            [[allowlists]]
-            description = "Ignore docs templates directory"
-            paths = [
-              '''^lotus-warden/docs/template/''',
-              '''^docs/template/'''
-            ]
-         
       - name: Set up Python (for trufflehog3)
         uses: actions/setup-python@v6
         with:
@@ -420,7 +424,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install "trufflehog3==3.0.10"
 
-      - name: Create trufflehog3 config (ignore templates)
+      - name: Create trufflehog3 config (ignore docs templates)
         run: |
           cat > .trufflehog3.yml <<'YAML'
           exclude_paths:
@@ -431,6 +435,13 @@ jobs:
       - name: Run trufflehog3 (files only, no git history)
         run: |
           trufflehog3 --no-history --format json --output trufflehog3.json .
+
+      - name: Upload trufflehog3 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trufflehog3-report
+          path: trufflehog3.json
 
   security:
     name: Trivy scan (fs + config)
