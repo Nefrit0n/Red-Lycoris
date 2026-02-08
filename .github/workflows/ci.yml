@@ -427,9 +427,11 @@ jobs:
       - name: Run trufflehog3
         run: |
           trufflehog3 \
-            --no-history \
-            -e "backend/internal/parser/**" \
+            --config .trufflehog3.yml \
+            -f JSON \
+            -o trufflehog3.json \
             .
+
 
       - name: Upload trufflehog3 report
         if: always()
