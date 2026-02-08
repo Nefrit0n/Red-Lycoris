@@ -2,37 +2,106 @@
 set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:8080}"
+API_URL="${API_URL%/}" # убрать trailing slash, чтобы не получить // в URL
+
 OPENAPI_SPEC="${OPENAPI_SPEC:-backend/openapi.json}"
 
-# ВАЖНО: python читает из os.environ, поэтому экспортируем
+# Важно: python в heredoc читает из os.environ, поэтому экспортируем
 export ROOT_EMAIL="${ROOT_EMAIL:-root@localhost}"
 export ROOT_PASSWORD="${ROOT_PASSWORD:-root}"
 export CONTRACTS_PASSWORD="${CONTRACTS_PASSWORD:-root-contract-1234}"
 
-if ! command -v schemathesis >/dev/null 2>&1; then
-  echo "schemathesis is required (pip install schemathesis)" >&2
-  exit 1
-fi
+require_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "ERROR: '$1' is required" >&2
+    exit 1
+  fi
+}
 
-if ! command -v curl >/dev/null 2>&1; then
-  echo "curl is required" >&2
-  exit 1
-fi
+require_cmd curl
+require_cmd python
+require_cmd schemathesis
 
-# ---- helpers ----
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
 
-curl_json() {
-  # Usage: curl_json METHOD URL [headers...]
-  # Prints response body to stdout. Fails on HTTP >= 400 AND prints body.
+# globals for debugging last request
+LAST_HTTP_CODE=""
+LAST_HTTP_HDR=""
+LAST_HTTP_BODY=""
+LAST_HTTP_URL=""
+LAST_HTTP_METHOD=""
+
+debug_last_http() {
+  echo "---- HTTP DEBUG ----" >&2
+  echo "${LAST_HTTP_METHOD} ${LAST_HTTP_URL}" >&2
+  echo "HTTP: ${LAST_HTTP_CODE}" >&2
+  echo "---- headers ----" >&2
+  if [[ -n "${LAST_HTTP_HDR}" && -f "${LAST_HTTP_HDR}" ]]; then
+    cat "${LAST_HTTP_HDR}" >&2 || true
+  fi
+  echo "---- body (first 1200 bytes) ----" >&2
+  if [[ -n "${LAST_HTTP_BODY}" && -f "${LAST_HTTP_BODY}" ]]; then
+    head -c 1200 "${LAST_HTTP_BODY}" >&2 || true
+  fi
+  echo "--------------------" >&2
+}
+
+http() {
+  # Usage: http METHOD URL [curl args...]
   local method="$1"; shift
   local url="$1"; shift
 
-  # --fail-with-body: падаем на 4xx/5xx, но не теряем body (удобно для дебага)
-  curl -sS --fail-with-body -X "$method" "$url" "$@"
+  local hdr_file body_file
+  hdr_file="${TMPDIR}/hdr_$(date +%s%N)"
+  body_file="${TMPDIR}/body_$(date +%s%N)"
+
+  LAST_HTTP_METHOD="$method"
+  LAST_HTTP_URL="$url"
+  LAST_HTTP_HDR="$hdr_file"
+  LAST_HTTP_BODY="$body_file"
+  LAST_HTTP_CODE=""
+
+  # ВАЖНО:
+  # - --location: следовать редиректам
+  # - --post301/302/303: сохранять POST при редиректах 301/302/303
+  # - --fail-with-body: при 4xx/5xx вернёт non-zero, но body не потеряется
+  # См. документацию curl / everything curl :contentReference[oaicite:3]{index=3}
+  local code rc
+  set +e
+  code="$(curl -sS \
+    --connect-timeout 5 \
+    --max-time 30 \
+    --location --max-redirs 5 \
+    --post301 --post302 --post303 \
+    --fail-with-body \
+    -X "$method" "$url" \
+    -D "$hdr_file" \
+    -o "$body_file" \
+    -w '%{http_code}' \
+    "$@")"
+  rc=$?
+  set -e
+
+  LAST_HTTP_CODE="$code"
+
+  if [[ $rc -ne 0 ]]; then
+    echo "ERROR: curl failed (exit=$rc)" >&2
+    debug_last_http
+    return 1
+  fi
+
+  # Если после --location всё равно не 2xx — покажем Location/headers/body и упадём
+  if [[ "$code" -lt 200 || "$code" -ge 300 ]]; then
+    echo "ERROR: HTTP status is not 2xx" >&2
+    debug_last_http
+    return 1
+  fi
+
+  cat "$body_file"
 }
 
-json_get_token() {
-  # Reads JSON from stdin and prints .data.token or fails with diagnostics
+json_token_from_stdin() {
   python - <<'PY'
 import json,sys
 raw = sys.stdin.read()
@@ -43,62 +112,66 @@ try:
   obj = json.loads(raw)
 except Exception as e:
   print("ERROR: response is not valid JSON:", e, file=sys.stderr)
-  print("---- response (first 800 bytes) ----", file=sys.stderr)
-  print(raw[:800], file=sys.stderr)
+  print("---- response (first 1200 bytes) ----", file=sys.stderr)
+  print(raw[:1200], file=sys.stderr)
   sys.exit(1)
-
 try:
   print(obj["data"]["token"])
 except Exception as e:
   print("ERROR: JSON does not contain data.token:", e, file=sys.stderr)
-  print("---- parsed JSON (first 800 bytes) ----", file=sys.stderr)
-  s = json.dumps(obj, ensure_ascii=False)
-  print(s[:800], file=sys.stderr)
+  print("---- parsed JSON (first 1200 bytes) ----", file=sys.stderr)
+  print(json.dumps(obj, ensure_ascii=False)[:1200], file=sys.stderr)
   sys.exit(1)
 PY
 }
 
-# ---- sanity checks ----
-
-echo "Checking API health: $API_URL/health"
-curl -sSf "$API_URL/health" >/dev/null
+echo "Checking API health: ${API_URL}/health"
+http GET "${API_URL}/health" >/dev/null
 
 if [[ ! -s "$OPENAPI_SPEC" ]]; then
-  echo "OpenAPI spec file not found or empty: $OPENAPI_SPEC" >&2
-  echo "Tip: set OPENAPI_SPEC to a URL if your API serves it (e.g. $API_URL/openapi.json)" >&2
+  echo "ERROR: OpenAPI spec file not found or empty: $OPENAPI_SPEC" >&2
+  echo "Tip: ensure it's committed or set OPENAPI_SPEC to correct path." >&2
   exit 1
 fi
 
-# ---- auth flow (idempotent) ----
-
-login() {
-  local password="$1"
-  local payload
-  payload="$(python - <<PY
+login_payload="$(python - <<'PY'
 import json,os
-print(json.dumps({"login": os.environ["ROOT_EMAIL"], "password": "${password}"}))
+print(json.dumps({"login": os.environ["ROOT_EMAIL"], "password": os.environ["ROOT_PASSWORD"]}))
 PY
 )"
-  curl_json POST "$API_URL/api/v1/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "$payload"
-}
 
 echo "Login with ROOT_PASSWORD..."
 set +e
-login_response="$(login "$ROOT_PASSWORD")"
+login_response="$(http POST "${API_URL}/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "$login_payload")"
 login_rc=$?
 set -e
 
 if [[ $login_rc -ne 0 ]]; then
-  echo "Login with ROOT_PASSWORD failed, trying CONTRACTS_PASSWORD (idempotent run)..." >&2
-  login_response="$(login "$CONTRACTS_PASSWORD")"
-fi
+  echo "Login with ROOT_PASSWORD failed; trying CONTRACTS_PASSWORD (idempotent run)..." >&2
 
-login_token="$(printf "%s" "$login_response" | json_get_token)"
+  login_payload="$(python - <<'PY'
+import json,os
+print(json.dumps({"login": os.environ["ROOT_EMAIL"], "password": os.environ["CONTRACTS_PASSWORD"]}))
+PY
+)"
+  login_response="$(http POST "${API_URL}/api/v1/auth/login" \
+    -H "Content-Type: application/json" \
+    -d "$login_payload")"
 
-# пытаемся сменить пароль; если уже сменён — будет ошибка, тогда просто используем CONTRACTS_PASSWORD
-change_payload="$(python - <<'PY'
+  # если дошли сюда — пароль уже сменён, можно использовать этот токен как api_token
+  api_token="$(printf "%s" "$login_response" | json_token_from_stdin)"
+else
+  # login ok — должен быть JSON
+  if [[ ! -s "$LAST_HTTP_BODY" ]]; then
+    echo "ERROR: empty login response body (expected JSON)" >&2
+    debug_last_http
+    exit 1
+  fi
+  login_token="$(printf "%s" "$login_response" | json_token_from_stdin)"
+
+  change_payload="$(python - <<'PY'
 import json,os
 print(json.dumps({
   "currentPassword": os.environ["ROOT_PASSWORD"],
@@ -108,24 +181,37 @@ print(json.dumps({
 PY
 )"
 
-echo "Change password (may fail if already changed)..."
-set +e
-change_response="$(curl_json POST "$API_URL/api/v1/auth/change-password" \
-  -H "Authorization: Bearer ${login_token}" \
-  -H "Content-Type: application/json" \
-  -d "$change_payload")"
-change_rc=$?
-set -e
+  echo "Change password (may fail if already changed)..."
+  set +e
+  change_response="$(http POST "${API_URL}/api/v1/auth/change-password" \
+    -H "Authorization: Bearer ${login_token}" \
+    -H "Content-Type: application/json" \
+    -d "$change_payload")"
+  change_rc=$?
+  set -e
 
-if [[ $change_rc -eq 0 ]]; then
-  api_token="$(printf "%s" "$change_response" | json_get_token)"
-else
-  echo "Change-password failed; proceeding with CONTRACTS_PASSWORD login token..." >&2
-  # логинимся новым паролем и берём токен
-  api_token="$(printf "%s" "$(login "$CONTRACTS_PASSWORD")" | json_get_token)"
+  if [[ $change_rc -eq 0 ]]; then
+    if [[ ! -s "$LAST_HTTP_BODY" ]]; then
+      echo "ERROR: empty change-password response body (expected JSON)" >&2
+      debug_last_http
+      exit 1
+    fi
+    api_token="$(printf "%s" "$change_response" | json_token_from_stdin)"
+  else
+    echo "Change-password failed; fallback to login with CONTRACTS_PASSWORD..." >&2
+    login_payload="$(python - <<'PY'
+import json,os
+print(json.dumps({"login": os.environ["ROOT_EMAIL"], "password": os.environ["CONTRACTS_PASSWORD"]}))
+PY
+)"
+    login_response="$(http POST "${API_URL}/api/v1/auth/login" \
+      -H "Content-Type: application/json" \
+      -d "$login_payload")"
+    api_token="$(printf "%s" "$login_response" | json_token_from_stdin)"
+  fi
 fi
 
-# ---- schemathesis ----
+# Schemathesis: для file-based схем base-url обязателен :contentReference[oaicite:4]{index=4}
 schemathesis run "$OPENAPI_SPEC" \
   --base-url "$API_URL" \
   --header "Authorization: Bearer ${api_token}" \
