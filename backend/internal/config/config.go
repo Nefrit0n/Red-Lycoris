@@ -78,7 +78,7 @@ func Load() Config {
 		JWTSecret:                getSecureEnv("JWT_SECRET"),
 		RootEmail:                getEnv("ROOT_EMAIL", "root@localhost"),
 		RootPassword:             getSecureEnvWithDefault("ROOT_PASSWORD", "root"),
-		AnalysisMaxArchiveBytes:  getEnv("ANALYSIS_MAX_ARCHIVE_BYTES", "104857600"),
+		AnalysisMaxArchiveBytes:  getEnv("ANALYSIS_MAX_ARCHIVE_BYTES", "209715200"),
 		AnalysisMaxExtractBytes:  getEnv("ANALYSIS_MAX_EXTRACT_BYTES", "524288000"),
 		AnalysisTempDir:          getEnv("ANALYSIS_TEMP_DIR", "/tmp/lotus-warden-analysis"),
 		AnalysisScannerTimeout:   getEnv("ANALYSIS_SCANNER_TIMEOUT", "20m"),

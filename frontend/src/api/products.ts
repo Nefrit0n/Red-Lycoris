@@ -109,6 +109,23 @@ export const fetchProducts = async (
   });
 };
 
+export interface CreateProductPayload {
+  name: string;
+  identifier?: string;
+  version?: string;
+}
+
+export const createProduct = async (payload: CreateProductPayload): Promise<ProductDetailDTO> => {
+  return request<ProductDetailDTO>("/api/v1/products", {
+    method: "POST",
+    body: {
+      name: payload.name,
+      identifier: payload.identifier || undefined,
+      version: payload.version || undefined,
+    },
+  });
+};
+
 export const fetchProductsWithStats = async (
   limit: number,
   offset: number,

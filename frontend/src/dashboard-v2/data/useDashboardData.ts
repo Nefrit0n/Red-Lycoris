@@ -140,7 +140,7 @@ export const useDashboardData = (options: DashboardDataOptions = {}) => {
           {
             limit: 8,
             offset: 0,
-            filterSeverity: "critical",
+            filterSeverity: ["critical"],
             sortField: "createdAt",
             sortOrder: "desc",
             dateFrom: dateFrom.toISOString(),

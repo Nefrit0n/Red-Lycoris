@@ -3,7 +3,6 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
-	"strings"
 
 	v1dto "lotus-warden/backend/internal/dto/v1"
 	v1mapper "lotus-warden/backend/internal/mapper/v1"
@@ -25,7 +24,6 @@ type CreateProductRequest struct {
 	Identifier       *string `json:"identifier,omitempty" validate:"omitempty,max=200"`
 	Version          *string `json:"version,omitempty" validate:"omitempty,max=100"`
 	AssetCriticality *string `json:"assetCriticality,omitempty" validate:"omitempty,oneof=low medium high critical"`
-	TenantID         *string `json:"tenantId,omitempty" validate:"omitempty,uuid4"`
 }
 
 func NewProductsHandler(db *sql.DB) *ProductsHandler {
@@ -39,13 +37,9 @@ func (h *ProductsHandler) List(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid pagination"})
 	}
 
-	var tenantID *uuid.UUID
-	if raw := strings.TrimSpace(c.Query("tenantId")); raw != "" {
-		parsed, err := uuid.Parse(raw)
-		if err != nil {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid tenantId"})
-		}
-		tenantID = &parsed
+	tenantID := tenantIDFromContext(c)
+	if tenantID == nil {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
 	}
 
 	items, total, err := storage.ListProducts(c.Context(), h.db, tenantID, limit, offset)
@@ -69,14 +63,15 @@ func (h *ProductsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": err.Error()})
 	}
 
-	product := &models.Product{
-		Name: req.Name,
-		Slug: slugify(req.Name),
+	tenantID := tenantIDFromContext(c)
+	if tenantID == nil {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
 	}
-	if req.TenantID != nil && *req.TenantID != "" {
-		if parsed, err := uuid.Parse(*req.TenantID); err == nil {
-			product.TenantID = &parsed
-		}
+
+	product := &models.Product{
+		Name:     req.Name,
+		Slug:     slugify(req.Name),
+		TenantID: tenantID,
 	}
 	if req.Identifier != nil && *req.Identifier != "" {
 		product.Identifier = req.Identifier
@@ -104,6 +99,19 @@ func (h *ProductsHandler) Get(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid product id"})
 	}
 
+	tenantID := tenantIDFromContext(c)
+	if tenantID == nil {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
+	}
+
+	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, id, tenantID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch product"})
+	}
+	if !exists {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"success": false, "error": "product not found"})
+	}
+
 	product, err := storage.GetProductListItem(c.Context(), h.db, id)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch product"})
@@ -124,8 +132,7 @@ func (h *ProductsHandler) Stats(c *fiber.Ctx) error {
 
 	tenantID := tenantIDFromContext(c)
 	if tenantID == nil {
-		zero := uuid.Nil
-		tenantID = &zero
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
 	}
 
 	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, id, tenantID)
@@ -138,7 +145,7 @@ func (h *ProductsHandler) Stats(c *fiber.Ctx) error {
 
 	filters := storage.FindingFilters{
 		TenantID:       tenantID,
-		ProductID:      &id,
+		ProductIDs:     []uuid.UUID{id},
 		CanonicalOnly:  true,
 		IncludeRepeats: false,
 	}
@@ -160,7 +167,7 @@ func (h *ProductsHandler) Stats(c *fiber.Ctx) error {
 
 	severityCounts := make(map[string]int)
 	for _, status := range openStatuses {
-		filters.Status = status
+		filters.Statuses = []string{status}
 		counts, err := storage.CountFindingsBySeverity(c.Context(), h.db, filters)
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute findings severity stats"})
