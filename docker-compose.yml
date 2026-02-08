@@ -27,6 +27,11 @@ x-analysis-env: &analysis-env
   ANALYSIS_CLEANUP_TTL: ${ANALYSIS_CLEANUP_TTL:-24h}
   ANALYSIS_SEMGREP_IMAGE: ${ANALYSIS_SEMGREP_IMAGE:-semgrep/semgrep:1.102.0}
   ANALYSIS_TRIVY_IMAGE: ${ANALYSIS_TRIVY_IMAGE:-aquasec/trivy:0.58.1}
+  ANALYSIS_OPENGREP_IMAGE: ${ANALYSIS_OPENGREP_IMAGE:-ghcr.io/opengrep/opengrep:latest}
+  ANALYSIS_CHECKOV_IMAGE: ${ANALYSIS_CHECKOV_IMAGE:-bridgecrew/checkov:latest}
+  ANALYSIS_KICS_IMAGE: ${ANALYSIS_KICS_IMAGE:-checkmarx/kics:latest}
+  ANALYSIS_GITLEAKS_IMAGE: ${ANALYSIS_GITLEAKS_IMAGE:-zricethezav/gitleaks:latest}
+  ANALYSIS_GRYPE_IMAGE: ${ANALYSIS_GRYPE_IMAGE:-anchore/grype:latest}
   ANALYSIS_CONTAINER_NETWORK: ${ANALYSIS_CONTAINER_NETWORK:-none}
 
 x-intel-env: &intel-env
@@ -177,6 +182,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ROOT_EMAIL: ${ROOT_EMAIL:-root@localhost}
       ROOT_PASSWORD: ${ROOT_PASSWORD:-root}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Run as root for Docker socket access
+    user: "0:0"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
