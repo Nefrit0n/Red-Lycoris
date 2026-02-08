@@ -17,6 +17,7 @@ exclude:
       - "docs/template/**"
       - "docs/**/*.html"
       - "docs/examples/**"
+      - "docs/guides/**"
 
   - message: Fake credentials used in tests
     pattern: "AKIA[A-Z0-9]{16}"
