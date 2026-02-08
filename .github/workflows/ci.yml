@@ -409,16 +409,28 @@ jobs:
               '''^docs/template/'''
             ]
          
+      - name: Set up Python (for trufflehog3)
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
       - name: Install trufflehog3
         run: |
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-          go install github.com/feeltheajf/trufflehog3@latest
+          python -m pip install --upgrade pip
+          pip install "trufflehog3==3.0.10"
 
-      - name: Run trufflehog3 (repo scan)
+      - name: Create trufflehog3 config (ignore templates)
         run: |
-          trufflehog3 --help
-          # пример: скан рабочей директории/гита
-          trufflehog3 -h
+          cat > .trufflehog3.yml <<'YAML'
+          exclude_paths:
+            - lotus-warden/docs/template
+            - docs/template
+          YAML
+
+      - name: Run trufflehog3 (files only, no git history)
+        run: |
+          trufflehog3 --no-history --format json --output trufflehog3.json .
 
   security:
     name: Trivy scan (fs + config)
