@@ -31,6 +31,15 @@ type AnalysisJobsHandler struct {
 	cfg       config.Config
 }
 
+type AnalysisJobScannerResponse struct {
+	Scanner      string  `json:"scanner"`
+	Status       string  `json:"status"`
+	HasArtifact  bool    `json:"hasArtifact"`
+	ImportJobID  *string `json:"importJobId,omitempty"`
+	ErrorMessage *string `json:"errorMessage,omitempty"`
+	DurationMs   *int    `json:"durationMs,omitempty"`
+}
+
 type AnalysisJobResponse struct {
 	ID                 string   `json:"id"`
 	TenantID           *string  `json:"tenantId,omitempty"`
@@ -55,6 +64,8 @@ type AnalysisJobResponse struct {
 	SemgrepImportJobID *string  `json:"semgrepImportJobId,omitempty"`
 	TrivyImportJobID   *string  `json:"trivyImportJobId,omitempty"`
 	ErrorMessage       *string  `json:"errorMessage,omitempty"`
+	// New: per-scanner breakdown
+	ScannerDetails []AnalysisJobScannerResponse `json:"scannerDetails,omitempty"`
 }
 
 type AnalysisJobCreateResponse struct {
@@ -118,7 +129,7 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 
 	scanners := parseScanners(c.FormValue("scanners"))
 	if len(scanners) == 0 {
-		scanners = []string{"semgrep", "trivy"}
+		scanners = []string{"opengrep", "trivy"}
 	}
 	if err := validateScanners(scanners); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
@@ -234,6 +245,9 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create analysis job"})
 	}
 
+	// Insert per-scanner tracking rows
+	_ = storage.CreateAnalysisJobScannersBatch(c.Context(), h.db, job.ID, scanners)
+
 	payload := fiber.Map{
 		"job_id":     job.ID.String(),
 		"product_id": productID.String(),
@@ -290,6 +304,30 @@ func (h *AnalysisJobsHandler) Get(c *fiber.Ctx) error {
 	}
 
 	resp := mapAnalysisJobDetail(*job)
+
+	// Load per-scanner breakdown from new table
+	scannerRows, err := storage.ListAnalysisJobScanners(c.Context(), h.db, id)
+	if err == nil && len(scannerRows) > 0 {
+		details := make([]AnalysisJobScannerResponse, 0, len(scannerRows))
+		for _, s := range scannerRows {
+			d := AnalysisJobScannerResponse{
+				Scanner:     s.Scanner,
+				Status:      s.Status,
+				HasArtifact: s.ArtifactKey != nil && *s.ArtifactKey != "",
+				DurationMs:  s.DurationMs,
+			}
+			if s.ImportJobID != nil {
+				v := s.ImportJobID.String()
+				d.ImportJobID = &v
+			}
+			if s.ErrorMessage != nil {
+				d.ErrorMessage = s.ErrorMessage
+			}
+			details = append(details, d)
+		}
+		resp.ScannerDetails = details
+	}
+
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": resp})
 }
 
@@ -310,19 +348,35 @@ func (h *AnalysisJobsHandler) DownloadArtifact(c *fiber.Ctx) error {
 
 	var key *string
 	var filename string
-	switch artifact {
-	case "semgrep":
-		if job.ArtifactSemgrep.Valid {
-			key = &job.ArtifactSemgrep.String
+
+	// First try new scanner table
+	scannerRows, scanErr := storage.ListAnalysisJobScanners(c.Context(), h.db, id)
+	if scanErr == nil {
+		for _, s := range scannerRows {
+			if s.Scanner == artifact && s.ArtifactKey != nil && *s.ArtifactKey != "" {
+				key = s.ArtifactKey
+				filename = fmt.Sprintf("result_%s.json", artifact)
+				break
+			}
 		}
-		filename = "result_semgrep.json"
-	case "trivy":
-		if job.ArtifactTrivy.Valid {
-			key = &job.ArtifactTrivy.String
+	}
+
+	// Fallback to legacy columns for backward compat
+	if key == nil {
+		switch artifact {
+		case "semgrep":
+			if job.ArtifactSemgrep.Valid {
+				key = &job.ArtifactSemgrep.String
+			}
+			filename = "result_semgrep.json"
+		case "trivy":
+			if job.ArtifactTrivy.Valid {
+				key = &job.ArtifactTrivy.String
+			}
+			filename = "trivy_result.json"
+		default:
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "unknown artifact"})
 		}
-		filename = "trivy_result.json"
-	default:
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "unknown artifact"})
 	}
 
 	if key == nil || *key == "" {
@@ -420,12 +474,10 @@ func parseScanners(raw string) []string {
 	return output
 }
 
-func validateScanners(scanners []string) error {
-	for _, scanner := range scanners {
-		switch scanner {
-		case "semgrep", "trivy":
-		default:
-			return fmt.Errorf("unsupported scanner: %s", scanner)
+func validateScanners(scannerList []string) error {
+	for _, s := range scannerList {
+		if !models.IsScannerSupported(s) {
+			return fmt.Errorf("unsupported scanner: %s", s)
 		}
 	}
 	return nil

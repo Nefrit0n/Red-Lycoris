@@ -15,7 +15,12 @@ import (
 type RunnerConfig struct {
 	ContainerNetwork string
 	SemgrepImage     string
+	OpenGrepImage    string
 	TrivyImage       string
+	CheckovImage     string
+	KICSImage        string
+	GitleaksImage    string
+	GrypeImage       string
 	Timeout          time.Duration
 }
 
@@ -42,6 +47,34 @@ func RunSemgrep(ctx context.Context, cfg RunnerConfig, workspace string, outputP
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("semgrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// RunOpenGrep runs OpenGrep (Semgrep-compatible fork) in a Docker container.
+// Output format is identical to Semgrep JSON, so the same parser can be used.
+func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		"docker",
+		"run",
+		"--rm",
+		"--network", cfg.ContainerNetwork,
+		"-v", fmt.Sprintf("%s:/src:ro", workspace),
+		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
+		cfg.OpenGrepImage,
+		"opengrep",
+		"--config=auto",
+		"--json",
+		"--output", "/out/"+filepath.Base(outputPath),
+		"/src",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }
@@ -73,4 +106,133 @@ func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 		return fmt.Errorf("trivy failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
 	return nil
+}
+
+// RunCheckov runs Checkov IaC scanner in a Docker container.
+func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		"docker",
+		"run",
+		"--rm",
+		"--network", cfg.ContainerNetwork,
+		"-v", fmt.Sprintf("%s:/src:ro", workspace),
+		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
+		cfg.CheckovImage,
+		"--directory", "/src",
+		"--output", "sarif",
+		"--output-file-path", "/out",
+		"--soft-fail",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("checkov failed: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	// Checkov writes results.sarif — rename to expected output path
+	sarifPath := filepath.Join(filepath.Dir(outputPath), "results_sarif.sarif")
+	if err := renameIfExists(sarifPath, outputPath); err != nil {
+		return fmt.Errorf("checkov output rename: %v", err)
+	}
+	return nil
+}
+
+// RunKICS runs KICS IaC scanner in a Docker container.
+func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		"docker",
+		"run",
+		"--rm",
+		"--network", cfg.ContainerNetwork,
+		"-v", fmt.Sprintf("%s:/src:ro", workspace),
+		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
+		cfg.KICSImage,
+		"scan",
+		"--path", "/src",
+		"--output-path", "/out",
+		"--output-name", "result",
+		"--report-formats", "sarif",
+		"--no-progress",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// KICS exits non-zero when findings are present — only fail on actual errors
+		if !strings.Contains(string(output), "Files scanned") {
+			return fmt.Errorf("kics failed: %v (%s)", err, strings.TrimSpace(string(output)))
+		}
+	}
+	sarifPath := filepath.Join(filepath.Dir(outputPath), "result.sarif")
+	if err := renameIfExists(sarifPath, outputPath); err != nil {
+		return fmt.Errorf("kics output rename: %v", err)
+	}
+	return nil
+}
+
+// RunGitleaks runs Gitleaks secret scanner in a Docker container.
+func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		"docker",
+		"run",
+		"--rm",
+		"--network", cfg.ContainerNetwork,
+		"-v", fmt.Sprintf("%s:/src:ro", workspace),
+		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
+		cfg.GitleaksImage,
+		"detect",
+		"--source", "/src",
+		"--report-format", "json",
+		"--report-path", "/out/"+filepath.Base(outputPath),
+		"--no-git",
+		"--exit-code", "0",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("gitleaks failed: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// RunGrype runs Grype SCA vulnerability scanner in a Docker container.
+func RunGrype(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		"docker",
+		"run",
+		"--rm",
+		"--network", cfg.ContainerNetwork,
+		"-v", fmt.Sprintf("%s:/src:ro", workspace),
+		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
+		cfg.GrypeImage,
+		"dir:/src",
+		"--output", "json",
+		"--file", "/out/"+filepath.Base(outputPath),
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("grype failed: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// renameIfExists renames src to dst if src exists, otherwise is a no-op.
+func renameIfExists(src, dst string) error {
+	if src == dst {
+		return nil
+	}
+	// Use os.Rename via exec to avoid importing os here (already imported via exec)
+	// Actually we need os — but it's fine for this helper.
+	return osRename(src, dst)
 }

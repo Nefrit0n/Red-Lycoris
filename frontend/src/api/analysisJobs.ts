@@ -1,6 +1,15 @@
 import { request, requestBlob, requestList } from "./client";
 import { uploadFormDataWithProgress } from "./upload";
 
+export interface AnalysisJobScannerDetail {
+  scanner: string;
+  status: string;
+  hasArtifact: boolean;
+  importJobId?: string;
+  errorMessage?: string;
+  durationMs?: number;
+}
+
 export interface AnalysisJob {
   id: string;
   productId?: string;
@@ -24,6 +33,7 @@ export interface AnalysisJob {
   semgrepImportJobId?: string;
   trivyImportJobId?: string;
   errorMessage?: string;
+  scannerDetails?: AnalysisJobScannerDetail[];
 }
 
 export interface CreateAnalysisJobRequest {
@@ -41,6 +51,35 @@ export interface CreateAnalysisJobResponse {
   id: string;
   status: string;
 }
+
+/** Canonical scanner catalog — must match backend models.ScannerCatalog */
+export type ScannerCategory = "SAST" | "SCA" | "IAC" | "SECRETS";
+
+export interface ScannerInfo {
+  id: string;
+  name: string;
+  category: ScannerCategory;
+  description: string;
+  estimatedTime: string;
+}
+
+export const SCANNER_CATALOG: ScannerInfo[] = [
+  { id: "opengrep", name: "OpenGrep", category: "SAST", description: "Поиск уязвимостей в коде и конфигурации", estimatedTime: "2-5 мин" },
+  { id: "trivy", name: "Trivy", category: "SCA", description: "Зависимости, CVE, секреты, misconfig", estimatedTime: "1-3 мин" },
+  { id: "checkov", name: "Checkov", category: "IAC", description: "Terraform, K8s, CloudFormation, Dockerfiles", estimatedTime: "1-2 мин" },
+  { id: "kics", name: "KICS", category: "IAC", description: "IaC misconfigurations", estimatedTime: "1-3 мин" },
+  { id: "gitleaks", name: "Gitleaks", category: "SECRETS", description: "Поиск секретов и ключей в коде", estimatedTime: "~30 сек" },
+  { id: "grype", name: "Grype", category: "SCA", description: "SCA уязвимости зависимостей", estimatedTime: "1-2 мин" },
+];
+
+export const SCANNER_PRESETS = {
+  fast: { label: "Быстрый", scanners: ["opengrep", "trivy"] },
+  full: { label: "Полный", scanners: ["opengrep", "trivy", "checkov", "kics", "gitleaks", "grype"] },
+  iac: { label: "IaC", scanners: ["checkov", "kics", "trivy"] },
+  secrets: { label: "Секреты", scanners: ["gitleaks", "trivy"] },
+} as const;
+
+export type PresetKey = keyof typeof SCANNER_PRESETS;
 
 export const fetchAnalysisJobs = async (
   limit: number,
@@ -111,7 +150,7 @@ export const createAnalysisJob = async (
 
 export const downloadAnalysisArtifact = async (
   jobId: string,
-  artifact: "semgrep" | "trivy"
+  artifact: string
 ): Promise<Blob> => {
   return requestBlob(`/api/v1/analysis-jobs/${jobId}/artifacts/${artifact}`);
 };
