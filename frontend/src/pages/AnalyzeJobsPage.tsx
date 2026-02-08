@@ -282,8 +282,17 @@ const AnalyzeJobsPage = () => {
           showError(`Архив слишком большой. Максимум: ${maxArchiveMb} MB.`);
           return;
         }
-        if (err.status === 401 || err.status === 403) {
-          showError("Сессия/tenant context недоступны, перелогиньтесь.");
+        if (err.code === "PASSWORD_CHANGE_REQUIRED") {
+          return;
+        }
+        if (err.status === 401) {
+          showError("Сессия истекла. Войдите снова.");
+          return;
+        }
+        if (err.status === 403) {
+          showError(
+            "Контекст арендатора недоступен. Обратитесь к администратору."
+          );
           return;
         }
         if (err.status >= 500) {

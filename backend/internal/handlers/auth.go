@@ -86,6 +86,10 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"success": false, "error": "invalid credentials"})
 	}
 
+	if user.TenantID == uuid.Nil {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
+	}
+
 	roles, err := storage.GetUserRoles(c.Context(), h.db, user.ID)
 	if err != nil || len(roles) == 0 {
 		roles = []string{"user"}
