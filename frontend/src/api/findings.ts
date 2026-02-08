@@ -7,7 +7,45 @@ import {
   FindingStatus,
   FindingsListResponse,
 } from "../types/findings";
+import { FiltersState } from "../features/filters/types";
+import { normalizeDateFrom, normalizeDateTo } from "../features/filters/api";
 import { request, requestWithMeta } from "./client";
+
+const isUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+
+export const buildFindingsParamsFromFilters = (
+  filters: FiltersState,
+  options?: { includeMeta?: boolean; searchOverride?: string }
+): FetchFindingsParams => {
+  const productUuidIds = filters.productIds.filter((id) => isUuid(id));
+  const productKeys = filters.productIds.filter((id) => !isUuid(id));
+
+  return {
+    limit: filters.pageSize,
+    offset: filters.page * filters.pageSize,
+    includeMeta: options?.includeMeta,
+    filterProductId: productUuidIds.length ? productUuidIds : undefined,
+    filterProduct: productKeys.length ? productKeys : undefined,
+    filterSeverity: filters.severities,
+    filterStatus: filters.statuses,
+    filterRiskBand: filters.riskBands,
+    filterOccurrence: filters.occurrences,
+    filterScannerType: filters.scannerTypes,
+    filterLanguage: filters.languages,
+    filterPolicyDecision: filters.policyDecisions,
+    filterCategory: filters.categories,
+    search: options?.searchOverride ?? filters.search,
+    dateFrom: normalizeDateFrom(filters.dateFrom),
+    dateTo: normalizeDateTo(filters.dateTo),
+    canonicalOnly: !filters.showRepeats,
+    includeRepeats: filters.showRepeats,
+    sortField: filters.sortField,
+    sortOrder: filters.sortOrder,
+  };
+};
 
 export const fetchFindings = async (
   params: FetchFindingsParams,
@@ -19,20 +57,28 @@ export const fetchFindings = async (
   if (params.includeMeta) searchParams.set("includeMeta", "true");
 
   // product filter (productId основной, product оставляем для совместимости)
-  if (params.filterProductId) {
-    searchParams.set("productId", params.filterProductId);
-  } else if (params.filterProduct) {
-    searchParams.set("product", params.filterProduct);
+  const appendArrayParam = (key: string, values?: string[]) => {
+    values?.forEach((value) => {
+      if (value) {
+        searchParams.append(key, value);
+      }
+    });
+  };
+
+  if (params.filterProductId?.length) {
+    appendArrayParam("productId", params.filterProductId);
+  } else if (params.filterProduct?.length) {
+    appendArrayParam("product", params.filterProduct);
   }
 
-  if (params.filterSeverity) searchParams.set("severity", params.filterSeverity);
-  if (params.filterStatus) searchParams.set("status", params.filterStatus);
-  if (params.filterRiskBand) searchParams.set("riskBand", params.filterRiskBand);
-  if (params.filterOccurrence) searchParams.set("occurrenceStatus", params.filterOccurrence);
-  if (params.filterScannerType) searchParams.set("scannerType", params.filterScannerType);
-  if (params.filterPolicyDecision) {
-    searchParams.set("policyDecision", params.filterPolicyDecision);
-  }
+  appendArrayParam("severity", params.filterSeverity);
+  appendArrayParam("status", params.filterStatus);
+  appendArrayParam("riskBand", params.filterRiskBand);
+  appendArrayParam("occurrenceStatus", params.filterOccurrence);
+  appendArrayParam("scannerType", params.filterScannerType);
+  appendArrayParam("language", params.filterLanguage);
+  appendArrayParam("policyDecision", params.filterPolicyDecision);
+  appendArrayParam("category", params.filterCategory);
 
   if (params.search) searchParams.set("search", params.search);
 
@@ -59,6 +105,8 @@ export const fetchFindings = async (
       total?: number;
       severityCounts?: Record<string, number>;
       statusCounts?: Record<string, number>;
+      categoryCounts?: Array<{ category: string; count: number }>;
+      scannerCounts?: Record<string, number>;
     };
   }>("/api/v1/findings", {
     signal,
@@ -129,12 +177,14 @@ export const bulkUpdateFindings = async (payload: {
   ids: string[];
   select_all?: boolean;
   filters?: {
-    product?: string;
-    severity?: string;
-    status?: string;
-    occurrenceStatus?: string;
-    scannerType?: string;
-    policyDecision?: string;
+    product?: string | string[];
+    severity?: string | string[];
+    status?: string | string[];
+    occurrenceStatus?: string | string[];
+    scannerType?: string | string[];
+    policyDecision?: string | string[];
+    riskBand?: string | string[];
+    category?: string | string[];
     q?: string;
     import_job_id?: string;
     dateFrom?: string;
