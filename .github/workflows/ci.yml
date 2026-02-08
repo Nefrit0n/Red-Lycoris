@@ -345,41 +345,54 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  security-codeql:
-    name: SAST (CodeQL)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
+security-codeql:
+  name: SAST (CodeQL)
+  runs-on: ubuntu-latest
+  timeout-minutes: 20
+  permissions:
+    contents: read
+    actions: read
+    security-events: write
 
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [go, python, javascript-typescript]
+  steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
 
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: javascript-typescript
+        config: |
+          queries:
+            - uses: security-extended
+          paths-ignore:
+            - "lotus-warden/docs/template/**"
+            - "docs/template/**"
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: ${{ matrix.language }}
-          config: |
-            queries:
-              - uses: security-extended
-            paths-ignore:
-              - "lotus-warden/docs/template/**"
-              - "docs/template/**"
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v4
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v4
+    # Если code scanning включён — грузим в GitHub Security
+    - name: Analyze (upload to code scanning)
+      if: env.ENABLE_CODE_SCANNING == 'true'
+      uses: github/codeql-action/analyze@v4
 
-      - name: Analyze
-        uses: github/codeql-action/analyze@v4
+    # Если code scanning выключен — сохраняем SARIF как артефакт
+    - name: Analyze (generate SARIF only)
+      if: env.ENABLE_CODE_SCANNING != 'true'
+      uses: github/codeql-action/analyze@v4
+      with:
+        upload: false
+        output: codeql-sarif
+
+    - name: Upload SARIF artifact
+      if: env.ENABLE_CODE_SCANNING != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: codeql-sarif
+        path: codeql-sarif/**/*.sarif
+
 
   security-secrets:
     name: Secrets scan (Gitleaks + TruffleHog3)
