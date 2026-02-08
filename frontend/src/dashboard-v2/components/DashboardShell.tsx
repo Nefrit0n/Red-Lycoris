@@ -1,13 +1,16 @@
 import {
   Box,
   Button,
+  CircularProgress,
+  IconButton,
   MenuItem,
   Select,
   Stack,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import type { ReactNode } from "react";
-import { Add, Edit, Restore, Save, Tune } from "@mui/icons-material";
+import { Add, Edit, Refresh, Restore, Save, Tune } from "@mui/icons-material";
 import { glass, radius, textStyles } from "../../design-system/tokens";
 
 interface DashboardShellProps {
@@ -23,7 +26,21 @@ interface DashboardShellProps {
   onReset: () => void;
   onOpenTemplates: () => void;
   onOpenAddWidget: () => void;
+  lastUpdated?: Date | null;
+  isRefreshing?: boolean;
+  onRefresh?: () => void;
 }
+
+const formatLastUpdated = (date: Date | null | undefined): string => {
+  if (!date) return "";
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "только что";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} мин назад`;
+  return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+};
 
 const DashboardShell = ({
   title,
@@ -38,6 +55,9 @@ const DashboardShell = ({
   onReset,
   onOpenTemplates,
   onOpenAddWidget,
+  lastUpdated,
+  isRefreshing,
+  onRefresh,
 }: DashboardShellProps) => {
   return (
     <Box
@@ -74,6 +94,31 @@ const DashboardShell = ({
             <MenuItem value="90d">Последние 90 дней</MenuItem>
             <MenuItem value="365d">Последние 12 месяцев</MenuItem>
           </Select>
+
+          {onRefresh && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Tooltip title="Обновить данные">
+                <IconButton
+                  size="small"
+                  onClick={onRefresh}
+                  disabled={isRefreshing}
+                  sx={{ color: "text.secondary" }}
+                >
+                  {isRefreshing ? (
+                    <CircularProgress size={18} color="inherit" />
+                  ) : (
+                    <Refresh fontSize="small" />
+                  )}
+                </IconButton>
+              </Tooltip>
+              {lastUpdated && (
+                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
+                  {formatLastUpdated(lastUpdated)}
+                </Typography>
+              )}
+            </Stack>
+          )}
+
           {filters}
 
           <Button
