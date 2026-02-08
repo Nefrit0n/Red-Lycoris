@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -92,10 +91,6 @@ func (h *ProductSourceSnapshotsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": fmt.Sprintf("archive exceeds %d bytes", maxSize)})
 	}
 
-	if !isSupportedArchive(fileHeader.Filename) {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "unsupported archive type"})
-	}
-
 	snapshot := &models.ProductSourceSnapshot{
 		TenantID:    tenantID,
 		ProductID:   productID,
@@ -107,17 +102,24 @@ func (h *ProductSourceSnapshotsHandler) Create(c *fiber.Ctx) error {
 	}
 	snapshot.PrepareForInsert()
 
-	ext := archiveExtension(fileHeader.Filename)
-	objectKey := fmt.Sprintf("products/%s/source-snapshots/%s/archive%s", productID.String(), snapshot.ID.String(), ext)
-	snapshot.ObjectKey = objectKey
-
 	file, err := fileHeader.Open()
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "failed to read archive"})
 	}
 	defer file.Close()
 
-	if err := h.store.PutObject(c.Context(), objectKey, file, fileHeader.Size, "application/octet-stream"); err != nil {
+	format, buffered, err := detectArchiveFormat(file)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "failed to read archive"})
+	}
+	if !isSupportedArchiveFormat(format) {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": supportedArchiveMessage})
+	}
+
+	objectKey := fmt.Sprintf("products/%s/source-snapshots/%s/archive%s", productID.String(), snapshot.ID.String(), format.Extension())
+	snapshot.ObjectKey = objectKey
+
+	if err := h.store.PutObject(c.Context(), objectKey, buffered, fileHeader.Size, "application/octet-stream"); err != nil {
 		logSnapshotError(c, tenantID, productID, snapshot.ID, "failed to store archive", err)
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to store archive"})
 	}
@@ -212,14 +214,6 @@ func (h *ProductSourceSnapshotsHandler) Latest(c *fiber.Ctx) error {
 			"createdAt": item.CreatedAt.Format(time.RFC3339),
 		},
 	})
-}
-
-func archiveExtension(filename string) string {
-	lower := strings.ToLower(filename)
-	if strings.HasSuffix(lower, ".tar.gz") {
-		return ".tar.gz"
-	}
-	return filepath.Ext(filename)
 }
 
 func logSnapshotError(c *fiber.Ctx, tenantID *uuid.UUID, productID uuid.UUID, snapshotID uuid.UUID, message string, err error) {
