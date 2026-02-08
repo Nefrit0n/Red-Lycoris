@@ -1,4 +1,17 @@
-import { Box, Button, IconButton, MenuItem, Select, Stack, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  IconButton,
+  MenuItem,
+  Select,
+  Stack,
+  Typography,
+} from "@mui/material";
 import {
   ArrowDownward,
   ArrowUpward,
@@ -6,7 +19,7 @@ import {
   GridView,
   PushPin,
 } from "@mui/icons-material";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 // react-grid-layout v2: WidthProvider живёт в legacy
@@ -23,6 +36,7 @@ import { glass, primitives, textStyles } from "../design-system/tokens";
 import { widgetRegistry } from "./widgets/registry";
 import { useDashboardLayout } from "./state/useDashboardLayout";
 import { useDashboardData } from "./data/useDashboardData";
+import { fetchProductsWithStats } from "../api/products";
 
 const columns = 12;
 const rowHeight = 96;
@@ -36,6 +50,7 @@ const DashboardV2 = () => {
     selectedTemplate,
     layout,
     isEditing,
+    hasUnsavedChanges,
     startEditing,
     cancelEditing,
     saveLayout,
@@ -52,8 +67,44 @@ const DashboardV2 = () => {
   const [developerEnv, setDeveloperEnv] = useState("Прод");
   const [isTemplateOpen, setIsTemplateOpen] = useState(false);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [productOptions, setProductOptions] = useState<string[]>([]);
+  const { dataMap, lastUpdated, isRefreshing, refresh } = useDashboardData({ timeRange });
 
-  const { dataMap } = useDashboardData();
+  // Load product options from API
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchProductsWithStats(50, 0, controller.signal)
+      .then((response) => {
+        const names = response.data.map((p) => p.name).sort();
+        setProductOptions(names);
+      })
+      .catch(() => {
+        // Ignore errors, use empty list
+      });
+    return () => controller.abort();
+  }, []);
+
+  // Warn user before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const handleResetClick = () => {
+    setIsResetConfirmOpen(true);
+  };
+
+  const handleResetConfirm = () => {
+    resetLayout();
+    setIsResetConfirmOpen(false);
+  };
 
   const widgetMap = useMemo(() => {
     return new Map(widgetRegistry.map((widget) => [widget.id, widget]));
@@ -88,15 +139,13 @@ const DashboardV2 = () => {
   const handlePin = (widgetId: string) => {
     const target = layout.find((item) => item.widgetId === widgetId);
     if (!target) return;
-
+    // Move target to top and shift all other widgets down by target's height
     const nextLayout = layout.map((item) => {
       if (item.widgetId === widgetId) {
         return { ...item, y: 0 };
       }
-      if (item.y < target.h) {
-        return { ...item, y: item.y + target.h };
-      }
-      return item;
+      // Shift all other widgets down to make room for pinned widget
+      return { ...item, y: item.y + target.h };
     });
 
     updateLayout(nextLayout);
@@ -105,7 +154,8 @@ const DashboardV2 = () => {
   const handleAddWidget = (widgetId: string) => {
     const widget = widgetMap.get(widgetId);
     if (!widget) return;
-
+    // Prevent adding duplicate widgets
+    if (layout.some((item) => item.widgetId === widgetId)) return;
     const nextY = layout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
 
     updateLayout([
@@ -145,10 +195,9 @@ const DashboardV2 = () => {
                 sx={{ minWidth: 180 }}
               >
                 <MenuItem value="Все продукты">Все продукты</MenuItem>
-                <MenuItem value="Payments API">Payments API</MenuItem>
-                <MenuItem value="Identity Gateway">Identity Gateway</MenuItem>
-                <MenuItem value="Core Platform">Core Platform</MenuItem>
-                <MenuItem value="Mobile Wallet">Mobile Wallet</MenuItem>
+                {productOptions.map((name) => (
+                  <MenuItem key={name} value={name}>{name}</MenuItem>
+                ))}
               </Select>
 
               <Select
@@ -175,10 +224,13 @@ const DashboardV2 = () => {
                 onChange={(event) => setDeveloperRepo(event.target.value)}
                 sx={{ minWidth: 180 }}
               >
-                <MenuItem value="Payments API">Payments API</MenuItem>
-                <MenuItem value="Identity Gateway">Identity Gateway</MenuItem>
-                <MenuItem value="Core Platform">Core Platform</MenuItem>
-                <MenuItem value="Mobile Wallet">Mobile Wallet</MenuItem>
+                {productOptions.length > 0 ? (
+                  productOptions.map((name) => (
+                    <MenuItem key={name} value={name}>{name}</MenuItem>
+                  ))
+                ) : (
+                  <MenuItem value={developerRepo}>{developerRepo}</MenuItem>
+                )}
               </Select>
 
               <Select
@@ -213,9 +265,12 @@ const DashboardV2 = () => {
         onEdit={startEditing}
         onSave={saveLayout}
         onCancel={cancelEditing}
-        onReset={resetLayout}
+        onReset={handleResetClick}
         onOpenTemplates={() => setIsTemplateOpen(true)}
         onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+        lastUpdated={lastUpdated}
+        isRefreshing={isRefreshing}
+        onRefresh={refresh}
       />
 
       <Box sx={{ px: { xs: 3, md: 6, xl: 8 }, py: 4 }}>
@@ -225,16 +280,20 @@ const DashboardV2 = () => {
               sx={{
                 p: 2,
                 borderRadius: 2,
-                border: `1px dashed rgba(255, 255, 255, 0.12)`,
+                border: hasUnsavedChanges
+                  ? `1px dashed ${primitives.amber[500]}`
+                  : `1px dashed rgba(255, 255, 255, 0.12)`,
                 display: "flex",
                 alignItems: "center",
                 gap: 2,
                 ...glass.light,
               }}
             >
-              <GridView fontSize="small" />
-              <Typography variant="body2" color="text.secondary">
-                Режим редактирования включён. Перетаскивайте виджеты и меняйте размер рамки.
+              <GridView fontSize="small" color={hasUnsavedChanges ? "warning" : "inherit"} />
+              <Typography variant="body2" color={hasUnsavedChanges ? "warning.main" : "text.secondary"}>
+                {hasUnsavedChanges
+                  ? "Есть несохранённые изменения. Не забудьте сохранить layout."
+                  : "Режим редактирования включён. Перетаскивайте виджеты и меняйте размер рамки."}
               </Typography>
             </Box>
           )}
@@ -389,9 +448,29 @@ const DashboardV2 = () => {
         open={isAddWidgetOpen}
         widgets={widgetRegistry}
         dataMap={dataMap}
+        placedWidgetIds={layout.map((item) => item.widgetId)}
         onClose={() => setIsAddWidgetOpen(false)}
         onAdd={handleAddWidget}
       />
+
+      <Dialog
+        open={isResetConfirmOpen}
+        onClose={() => setIsResetConfirmOpen(false)}
+        aria-labelledby="reset-dialog-title"
+      >
+        <DialogTitle id="reset-dialog-title">Сбросить дашборд?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Все ваши изменения layout будут потеряны, и дашборд вернётся к шаблону по умолчанию.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsResetConfirmOpen(false)}>Отмена</Button>
+          <Button onClick={handleResetConfirm} color="error" variant="contained">
+            Сбросить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
