@@ -1,5 +1,15 @@
 # Lotus Warden
 
+[![CI](https://img.shields.io/github/actions/workflow/status/<OWNER>/<REPO>/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/<OWNER>/<REPO>/codeql.yml?branch=main&style=flat-square&label=CodeQL)](https://github.com/<OWNER>/<REPO>/actions/workflows/codeql.yml)
+[![Secrets](https://img.shields.io/github/actions/workflow/status/<OWNER>/<REPO>/secrets.yml?branch=main&style=flat-square&label=secrets)](https://github.com/<OWNER>/<REPO>/actions/workflows/secrets.yml)
+[![Trivy](https://img.shields.io/github/actions/workflow/status/<OWNER>/<REPO>/trivy.yml?branch=main&style=flat-square&label=trivy)](https://github.com/<OWNER>/<REPO>/actions/workflows/trivy.yml)
+[![License](https://img.shields.io/github/license/<OWNER>/<REPO>?style=flat-square)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/<OWNER>/<REPO>/badge)](https://scorecard.dev/viewer/?uri=github.com/<OWNER>/<REPO>)
+[![Go Report Card](https://goreportcard.com/badge/github.com/<OWNER>/<REPO>)](https://goreportcard.com/report/github.com/<OWNER>/<REPO>)
+[![Release](https://img.shields.io/github/v/release/<OWNER>/<REPO>?sort=semver&style=flat-square)](https://github.com/<OWNER>/<REPO>/releases)
+
+
 ASOC-платформа для импорта и триажа уязвимостей с обогащением (CVSS/EPSS/KEV), React + TypeScript (MUI), Go Fiber API, Python + Celery для фоновых задач, PostgreSQL/Redis/NATS/MinIO.
 
 ## Архитектура (кратко)
