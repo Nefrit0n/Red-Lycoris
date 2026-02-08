@@ -210,7 +210,7 @@ jobs:
 
       - name: OpenAPI backward compatibility
         run: |
-          go install github.com/tufin/oasdiff/cmd/oasdiff@latest
+          go install github.com/tufin/oasdiff/cmd/oasdiff@v1.11.7
           scripts/contracts/check_openapi_compat.sh
 
   frontend:
