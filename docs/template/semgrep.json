@@ -1,89 +1,47 @@
 {
-  "check_id": "yaml.github-actions.security.run-shell-injection.run-shell-injection",
-  "path": "STRING",
-  "start": 
-  {
-    "line": 18,
-    "col": 9,
-    "offset": 300
-  },
-  "end": {
-    "line": 18,
-    "col": 82,
-    "offset": 373
-  },
-  "extra": {
-    "metavars": {
-      "$SHELL": {
-        "start": {
-          "line": 18,
-          "col": 14,
-          "offset": 305
+  "version": "1.59.0",
+  "results": [
+    {
+      "check_id": "yaml.github-actions.security.run-shell-injection.run-shell-injection",
+      "path": ".github/workflows/ci.yml",
+      "start": {
+        "line": 18,
+        "col": 9,
+        "offset": 300
+      },
+      "end": {
+        "line": 18,
+        "col": 82,
+        "offset": 373
+      },
+      "extra": {
+        "message": "Using variable interpolation with untrusted GitHub context data in a run step could allow script injection.",
+        "metadata": {
+          "category": "security",
+          "cwe": [
+            "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+          ],
+          "owasp": [
+            "A03:2021 - Injection"
+          ],
+          "references": [
+            "https://docs.github.com/en/actions/learn-github-actions/security-hardening-for-github-actions#understanding-the-risk-of-script-injections"
+          ],
+          "technology": [
+            "github-actions"
+          ]
         },
-        "end": {
-          "line": 18,
-          "col": 82,
-          "offset": 373
-        },
-        "abstract_content": "echo \"was the box ticked? ${BOX_TICKED}! (${{ inputs.box_ticked }})\""
+        "severity": "ERROR",
+        "fingerprint": "...",
+        "lines": "- run: echo \"was the box ticked? ${BOX_TICKED}! (${{ inputs.box_ticked }})\""
       }
-    },
-    "message": "Using variable interpolation `${{...}}` with `github` context data in a `run:` step could allow an attacker to inject their own code into the runner. This would allow them to steal secrets and code. `github` context data can have arbitrary user input and should be treated as untrusted. Instead, use an intermediate environment variable with `env:` to store the data and use the environment variable in the `run:` script. Be sure to use double-quotes the environment variable, like this: \"$ENVVAR\".",
-    "metadata": {
-      "category": "security",
-      "cwe": [
-        "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
-      ],
-      "owasp": [
-        "A01:2017 - Injection",
-        "A03:2021 - Injection"
-      ],
-      "references": [
-        "https://docs.github.com/en/actions/learn-github-actions/security-hardening-for-github-actions#understanding-the-risk-of-script-injections",
-        "https://securitylab.github.com/research/github-actions-untrusted-input/"
-      ],
-      "technology": [
-        "github-actions"
-      ],
-      "cwe2022-top25": true,
-      "cwe2021-top25": true,
-      "subcategory": [
-        "vuln"
-      ],
-      "likelihood": "HIGH",
-      "impact": "HIGH",
-      "confidence": "HIGH",
-      "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
-      "vulnerability_class": [
-        "Command Injection"
-      ],
-      "source": "https://semgrep.dev/r/yaml.github-actions.security.run-shell-injection.run-shell-injection",
-      "shortlink": "https://sg.run/11zk",
-      "semgrep.dev": {
-        "rule": {
-          "origin": "community",
-          "r_id": 13162,
-          "rule_id": "v8UQj2",
-          "rv_id": 1025108,
-          "url": "https://semgrep.dev/playground/r/akTViyp/yaml.github-actions.security.run-shell-injection.run-shell-injection",
-          "version_id": "akTViyp"
-        }
-      },
-      "dev.semgrep.actions": [
-        "comment"
-      ],
-      "semgrep.policy": {
-        "id": 91181987,
-        "name": "Rule Board - PR Comments column",
-        "slug": "rule-board-pr-comments"
-      },
-      "semgrep.url": "https://semgrep.dev/r/yaml.github-actions.security.run-shell-injection.run-shell-injection"
-    },
-    "severity": "ERROR",
-    "fingerprint": "...",
-    "lines": "      - run: echo \"was the box ticked? ${BOX_TICKED}! (${{ inputs.box_ticked }})\"",
-    "is_ignored": false,
-    "validation_state": "NO_VALIDATOR",
-    "engine_kind": "PRO"
+    }
+  ],
+  "errors": [],
+  "paths": {
+    "scanned": [
+      ".github/workflows/ci.yml"
+    ],
+    "skipped": []
   }
 }
