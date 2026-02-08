@@ -7,6 +7,7 @@ export interface AnalysisJob {
   productName?: string;
   engagementId?: string;
   sourceSnapshotId?: string;
+  sourceKind?: string;
   status: string;
   scanners: string[];
   semgrepStatus: string;
@@ -31,6 +32,7 @@ export interface CreateAnalysisJobRequest {
   scanners: string[];
   archive?: File;
   sourceSnapshotId?: string;
+  sourceMode?: "latest";
   idempotencyKey?: string;
   onProgress?: (progress: number) => void;
 }
@@ -63,10 +65,13 @@ export const fetchAnalysisJob = async (id: string): Promise<AnalysisJob> => {
 export const createAnalysisJob = async (
   payload: CreateAnalysisJobRequest
 ): Promise<CreateAnalysisJobResponse> => {
-  if (payload.archive && payload.sourceSnapshotId) {
-    throw new Error("Укажите только архив или только источник снапшота.");
+  const hasArchive = Boolean(payload.archive);
+  const hasSnapshot = Boolean(payload.sourceSnapshotId);
+  const hasLatest = payload.sourceMode === "latest";
+  if ((hasArchive && (hasSnapshot || hasLatest)) || (hasSnapshot && hasLatest)) {
+    throw new Error("Архив, снапшот и режим latest нельзя комбинировать.");
   }
-  if (!payload.archive && !payload.sourceSnapshotId) {
+  if (!hasArchive && !hasSnapshot && !hasLatest) {
     throw new Error("Добавьте архив или выберите снапшот.");
   }
   const formData = new FormData();
@@ -82,6 +87,9 @@ export const createAnalysisJob = async (
   }
   if (payload.sourceSnapshotId) {
     formData.append("source_snapshot_id", payload.sourceSnapshotId);
+  }
+  if (payload.sourceMode === "latest") {
+    formData.append("source_mode", "latest");
   }
 
   if (payload.archive && payload.onProgress) {

@@ -38,6 +38,7 @@ type AnalysisJobResponse struct {
 	ProductName        *string  `json:"productName,omitempty"`
 	EngagementID       *string  `json:"engagementId,omitempty"`
 	SourceSnapshotID   *string  `json:"sourceSnapshotId,omitempty"`
+	SourceKind         string   `json:"sourceKind"`
 	Status             string   `json:"status"`
 	Scanners           []string `json:"scanners"`
 	SemgrepStatus      string   `json:"semgrepStatus"`
@@ -95,7 +96,7 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 
 	tenantID := tenantIDFromContext(c)
 	if tenantID == nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "tenant context is required"})
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
 	}
 
 	exists, err := storage.ProductExistsForTenant(c.Context(), h.db, productID, tenantID)
@@ -132,14 +133,26 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		sourceSnapshotID = &parsed
 	}
 
+	sourceMode := strings.TrimSpace(c.FormValue("source_mode"))
+	if sourceMode != "" && sourceMode != "latest" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid source_mode"})
+	}
+
 	fileHeader, fileErr := c.FormFile("archive")
 	hasArchive := fileErr == nil && fileHeader != nil
 	hasSnapshot := sourceSnapshotID != nil
-	if hasArchive == hasSnapshot {
+	hasLatest := sourceMode == "latest"
+	if (hasArchive && (hasSnapshot || hasLatest)) || (hasSnapshot && hasLatest) {
 		if fileErr != nil && errors.Is(fileErr, fiber.ErrRequestEntityTooLarge) {
 			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": "archive exceeds request limit"})
 		}
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "exactly one of archive or source_snapshot_id must be provided"})
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "archive, source_snapshot_id, and source_mode are mutually exclusive"})
+	}
+	if !hasArchive && !hasSnapshot && !hasLatest {
+		if fileErr != nil && errors.Is(fileErr, fiber.ErrRequestEntityTooLarge) {
+			return c.Status(http.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": "archive exceeds request limit"})
+		}
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "archive, source_snapshot_id, or source_mode=latest is required"})
 	}
 
 	if hasArchive {
@@ -163,8 +176,13 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 	}
 	job.PrepareForInsert()
 
-	if hasSnapshot {
-		snapshot, err := storage.GetProductSourceSnapshotByID(c.Context(), h.db, *sourceSnapshotID)
+	if hasSnapshot || hasLatest {
+		var snapshot *storage.ProductSourceSnapshotItem
+		if hasLatest {
+			snapshot, err = storage.GetLatestProductSourceSnapshot(c.Context(), h.db, tenantID, productID)
+		} else {
+			snapshot, err = storage.GetProductSourceSnapshotByID(c.Context(), h.db, *sourceSnapshotID)
+		}
 		if err != nil {
 			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load source snapshot"})
 		}
@@ -177,9 +195,15 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 		if !snapshot.TenantID.Valid || snapshot.TenantID.UUID != *tenantID {
 			return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "source snapshot does not belong to tenant"})
 		}
-		job.SourceSnapshotID = sourceSnapshotID
+		if hasLatest {
+			job.SourceSnapshotID = &snapshot.ID
+		} else {
+			job.SourceSnapshotID = sourceSnapshotID
+		}
+		job.SourceKind = models.AnalysisJobSourceSnapshot
 		job.ArchiveSize = snapshot.ArchiveSize
 	} else {
+		job.SourceKind = models.AnalysisJobSourceEphemeral
 		job.ArchiveSize = fileHeader.Size
 		file, err := fileHeader.Open()
 		if err != nil {
@@ -221,6 +245,7 @@ func (h *AnalysisJobsHandler) Create(c *fiber.Ctx) error {
 	if job.SourceSnapshotID != nil {
 		payload["source_snapshot_id"] = job.SourceSnapshotID.String()
 	}
+	payload["source_kind"] = job.SourceKind
 	_ = h.publisher.PublishJSON(c.Context(), "analysis.requested", payload)
 	_ = h.publisher.PublishJSON(c.Context(), events.AnalysisJobsSubject, payload)
 
@@ -319,6 +344,7 @@ func mapAnalysisJobListItem(item storage.AnalysisJobListItem) AnalysisJobRespons
 	resp := AnalysisJobResponse{
 		ID:              item.ID.String(),
 		Status:          item.Status,
+		SourceKind:      item.SourceKind,
 		Scanners:        item.Scanners,
 		SemgrepStatus:   item.SemgrepStatus,
 		TrivyStatus:     item.TrivyStatus,
