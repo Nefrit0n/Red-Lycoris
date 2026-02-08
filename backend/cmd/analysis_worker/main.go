@@ -506,6 +506,7 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 
 	scannerCfg := scanners.RunnerConfig{
 		ContainerNetwork: cfg.AnalysisContainerNetwork,
+		OpenGrepBinary:   cfg.AnalysisOpenGrepBinary,
 		OpenGrepImage:    cfg.AnalysisOpenGrepImage,
 		TrivyImage:       cfg.AnalysisTrivyImage,
 		CheckovImage:     cfg.AnalysisCheckovImage,
@@ -568,19 +569,20 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 	_ = storage.UpdateAnalysisJobScannerStatus(ctx, db, job.ID, scanner, "running", nil, nil, nil, &scannerStartedAt, nil, nil)
 
 	var scanErr error
+	var scanOutput string
 	switch scanner {
 	case "opengrep":
-		scanErr = scanners.RunOpenGrep(ctx, cfg, workspace, resultPath)
+		scanOutput, scanErr = scanners.RunOpenGrep(ctx, cfg, workspace, resultPath)
 	case "trivy":
-		scanErr = scanners.RunTrivy(ctx, cfg, workspace, resultPath)
+		scanOutput, scanErr = scanners.RunTrivy(ctx, cfg, workspace, resultPath)
 	case "checkov":
-		scanErr = scanners.RunCheckov(ctx, cfg, workspace, resultPath)
+		scanOutput, scanErr = scanners.RunCheckov(ctx, cfg, workspace, resultPath)
 	case "kics":
-		scanErr = scanners.RunKICS(ctx, cfg, workspace, resultPath)
+		scanOutput, scanErr = scanners.RunKICS(ctx, cfg, workspace, resultPath)
 	case "gitleaks":
-		scanErr = scanners.RunGitleaks(ctx, cfg, workspace, resultPath)
+		scanOutput, scanErr = scanners.RunGitleaks(ctx, cfg, workspace, resultPath)
 	case "grype":
-		scanErr = scanners.RunGrype(ctx, cfg, workspace, resultPath)
+		scanOutput, scanErr = scanners.RunGrype(ctx, cfg, workspace, resultPath)
 	default:
 		errMsg := fmt.Sprintf("unsupported scanner: %s", scanner)
 		finNow := time.Now().UTC()
@@ -595,12 +597,22 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 
 	// Upload artifact
 	artifactKey := fmt.Sprintf("analysis/%s/artifacts/%s.json", job.ID.String(), scanner)
+	artifactPath := resultPath
+	contentType := "application/json"
+	if scanErr != nil {
+		artifactPath = filepath.Join(jobDir, fmt.Sprintf("result_%s.log", scanner))
+		contentType = "text/plain"
+		if err := os.WriteFile(artifactPath, []byte(scanOutput), 0o640); err != nil {
+			artifactPath = resultPath
+		}
+		artifactKey = fmt.Sprintf("analysis/%s/artifacts/%s.log", job.ID.String(), scanner)
+	}
 	var artifactUploaded bool
-	if _, err := os.Stat(resultPath); err == nil {
-		if file, err := os.Open(resultPath); err == nil {
+	if _, err := os.Stat(artifactPath); err == nil {
+		if file, err := os.Open(artifactPath); err == nil {
 			defer file.Close()
 			if info, err := file.Stat(); err == nil {
-				if err := store.PutObject(ctx, artifactKey, file, info.Size(), "application/json"); err == nil {
+				if err := store.PutObject(ctx, artifactKey, file, info.Size(), contentType); err == nil {
 					artifactUploaded = true
 				}
 			}
@@ -618,7 +630,7 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 	var importResult *importing.ImportResult
 	var importErr error
 
-	if artifactUploaded {
+	if artifactUploaded && scanErr == nil {
 		if bytes, err := os.ReadFile(resultPath); err == nil {
 			importResult, importErr = importing.ImportFindings(ctx, db, importing.ImportParams{
 				Scanner:      importScanner,

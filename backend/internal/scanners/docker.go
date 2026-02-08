@@ -14,6 +14,7 @@ import (
 // RunnerConfig contains configuration for running scanners
 type RunnerConfig struct {
 	ContainerNetwork string
+	OpenGrepBinary   string
 	OpenGrepImage    string
 	TrivyImage       string
 	CheckovImage     string
@@ -25,9 +26,19 @@ type RunnerConfig struct {
 
 // RunOpenGrep runs OpenGrep (Semgrep-compatible fork) in a Docker container.
 // Output format is identical to Semgrep JSON, so the same parser can be used.
-func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
+
+	if binary := resolveOpenGrepBinary(cfg.OpenGrepBinary); binary != "" {
+		if output, err := runOpenGrepBinary(ctx, binary, workspace, outputPath); err == nil {
+			return output, nil
+		}
+	}
+
+	if cfg.OpenGrepImage == "" {
+		return "", fmt.Errorf("opengrep binary not found and ANALYSIS_OPENGREP_IMAGE is not set")
+	}
 
 	cmd := exec.CommandContext(
 		ctx,
@@ -46,13 +57,41 @@ func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, output
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
+		return string(output), fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	return nil
+	return string(output), nil
+}
+
+func resolveOpenGrepBinary(configuredPath string) string {
+	if configuredPath != "" {
+		if resolved, err := exec.LookPath(configuredPath); err == nil {
+			return resolved
+		}
+	}
+	if resolved, err := exec.LookPath("opengrep"); err == nil {
+		return resolved
+	}
+	return ""
+}
+
+func runOpenGrepBinary(ctx context.Context, binary string, workspace string, outputPath string) (string, error) {
+	cmd := exec.CommandContext(
+		ctx,
+		binary,
+		"--config=auto",
+		"--json",
+		"--output", outputPath,
+		workspace,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return string(output), nil
 }
 
 // RunTrivy runs Trivy scanner in a Docker container.
-func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
@@ -74,13 +113,13 @@ func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("trivy failed: %v (%s)", err, strings.TrimSpace(string(output)))
+		return string(output), fmt.Errorf("trivy failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	return nil
+	return string(output), nil
 }
 
 // RunCheckov runs Checkov IaC scanner in a Docker container.
-func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
@@ -100,18 +139,18 @@ func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputP
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("checkov failed: %v (%s)", err, strings.TrimSpace(string(output)))
+		return string(output), fmt.Errorf("checkov failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
 	// Checkov writes results.sarif — rename to expected output path
 	sarifPath := filepath.Join(filepath.Dir(outputPath), "results_sarif.sarif")
 	if err := renameIfExists(sarifPath, outputPath); err != nil {
-		return fmt.Errorf("checkov output rename: %v", err)
+		return string(output), fmt.Errorf("checkov output rename: %v", err)
 	}
-	return nil
+	return string(output), nil
 }
 
 // RunKICS runs KICS IaC scanner in a Docker container.
-func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
@@ -135,18 +174,18 @@ func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath
 	if err != nil {
 		// KICS exits non-zero when findings are present — only fail on actual errors
 		if !strings.Contains(string(output), "Files scanned") {
-			return fmt.Errorf("kics failed: %v (%s)", err, strings.TrimSpace(string(output)))
+			return string(output), fmt.Errorf("kics failed: %v (%s)", err, strings.TrimSpace(string(output)))
 		}
 	}
 	sarifPath := filepath.Join(filepath.Dir(outputPath), "result.sarif")
 	if err := renameIfExists(sarifPath, outputPath); err != nil {
-		return fmt.Errorf("kics output rename: %v", err)
+		return string(output), fmt.Errorf("kics output rename: %v", err)
 	}
-	return nil
+	return string(output), nil
 }
 
 // RunGitleaks runs Gitleaks secret scanner in a Docker container.
-func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
@@ -168,13 +207,13 @@ func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, output
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("gitleaks failed: %v (%s)", err, strings.TrimSpace(string(output)))
+		return string(output), fmt.Errorf("gitleaks failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	return nil
+	return string(output), nil
 }
 
 // RunGrype runs Grype SCA vulnerability scanner in a Docker container.
-func RunGrype(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
+func RunGrype(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
@@ -193,9 +232,9 @@ func RunGrype(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("grype failed: %v (%s)", err, strings.TrimSpace(string(output)))
+		return string(output), fmt.Errorf("grype failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	return nil
+	return string(output), nil
 }
 
 // renameIfExists renames src to dst if src exists, otherwise is a no-op.
