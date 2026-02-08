@@ -430,6 +430,7 @@ jobs:
             --config .trufflehog3.yml \
             -f JSON \
             -o trufflehog3.json \
+            -s HIGH \
             .
 
 
