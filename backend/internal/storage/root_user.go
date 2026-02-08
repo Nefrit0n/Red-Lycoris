@@ -12,6 +12,10 @@ import (
 
 const adminRoleName = "admin"
 
+// systemTenantID is a well-known tenant UUID assigned to the root user.
+// This must not be uuid.Nil, otherwise the login handler rejects the user.
+var systemTenantID = uuid.MustParse("10000000-0000-0000-0000-000000000001")
+
 var ErrMissingRootCredentials = errors.New("root email and password are required")
 
 // EnsureRootUserExists creates or updates the root admin user.
@@ -72,12 +76,13 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 
 		insertRow := tx.QueryRowContext(
 			ctx,
-			`INSERT INTO users (username, email, hashed_password, password_changed, must_change_password)
-			 VALUES ($1, $2, $3, FALSE, TRUE)
+			`INSERT INTO users (username, email, hashed_password, password_changed, must_change_password, tenant_id)
+			 VALUES ($1, $2, $3, FALSE, TRUE, $4)
 			 RETURNING id`,
 			"root",
 			resolvedEmail,
 			string(hashed),
+			systemTenantID,
 		)
 		if scanErr := insertRow.Scan(&userID); scanErr != nil {
 			return scanErr
@@ -105,6 +110,14 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 			if _, err = tx.ExecContext(ctx, `UPDATE users SET must_change_password = TRUE WHERE id = $1`, userID); err != nil {
 				return err
 			}
+		}
+
+		// Fix existing root users that have nil tenant_id (causes 403 on login)
+		if _, err = tx.ExecContext(ctx,
+			`UPDATE users SET tenant_id = $1 WHERE id = $2 AND tenant_id = '00000000-0000-0000-0000-000000000000'`,
+			systemTenantID, userID,
+		); err != nil {
+			return err
 		}
 	}
 
