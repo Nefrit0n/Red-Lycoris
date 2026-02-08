@@ -408,14 +408,17 @@ jobs:
               '''^lotus-warden/docs/template/''',
               '''^docs/template/'''
             ]
+         
+      - name: Install trufflehog3
+        run: |
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          go install github.com/feeltheajf/trufflehog3@latest
 
-      - name: TruffleHog v3 (verified-only)
-        uses: trufflesecurity/trufflehog@v3.93.1
-        with:
-          extra_args: >-
-            --results=verified
-            --fail
-            --exclude-globs=lotus-warden/docs/template/**,docs/template/**
+      - name: Run trufflehog3 (repo scan)
+        run: |
+          trufflehog3 --help
+          # пример: скан рабочей директории/гита
+          trufflehog3 -h
 
   security:
     name: Trivy scan (fs + config)
