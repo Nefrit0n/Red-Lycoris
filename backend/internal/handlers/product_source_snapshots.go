@@ -69,10 +69,13 @@ func (h *ProductSourceSnapshotsHandler) Create(c *fiber.Ctx) error {
 			return c.Status(http.StatusOK).JSON(fiber.Map{
 				"success": true,
 				"data": map[string]interface{}{
-					"id":        existing.ID.String(),
-					"productId": existing.ProductID.String(),
-					"size":      existing.ArchiveSize,
-					"createdAt": existing.CreatedAt.Format(time.RFC3339),
+					"id":               existing.ID.String(),
+					"productId":        existing.ProductID.String(),
+					"size":             existing.ArchiveSize,
+					"originalFilename": nullStringPointer(existing.OriginalName),
+					"label":            nullStringPointer(existing.Label),
+					"notes":            nullStringPointer(existing.Notes),
+					"createdAt":        existing.CreatedAt.Format(time.RFC3339),
 				},
 			})
 		}
@@ -92,10 +95,17 @@ func (h *ProductSourceSnapshotsHandler) Create(c *fiber.Ctx) error {
 	}
 
 	snapshot := &models.ProductSourceSnapshot{
-		TenantID:    tenantID,
-		ProductID:   productID,
-		ArchiveSize: fileHeader.Size,
-		CreatedBy:   uploaderID,
+		TenantID:     tenantID,
+		ProductID:    productID,
+		ArchiveSize:  fileHeader.Size,
+		OriginalName: stringPointer(fileHeader.Filename),
+		CreatedBy:    uploaderID,
+	}
+	if label := strings.TrimSpace(c.FormValue("label")); label != "" {
+		snapshot.Label = stringPointer(label)
+	}
+	if notes := strings.TrimSpace(c.FormValue("notes")); notes != "" {
+		snapshot.Notes = stringPointer(notes)
 	}
 	if idempotencyKey != "" {
 		snapshot.IdempotencyKey = &idempotencyKey
@@ -116,7 +126,13 @@ func (h *ProductSourceSnapshotsHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": supportedArchiveMessage})
 	}
 
-	objectKey := fmt.Sprintf("products/%s/source-snapshots/%s/archive%s", productID.String(), snapshot.ID.String(), format.Extension())
+	objectKey := fmt.Sprintf(
+		"tenants/%s/products/%s/snapshots/%s/source%s",
+		tenantID.String(),
+		productID.String(),
+		snapshot.ID.String(),
+		format.Extension(),
+	)
 	snapshot.ObjectKey = objectKey
 
 	if err := h.store.PutObject(c.Context(), objectKey, buffered, fileHeader.Size, "application/octet-stream"); err != nil {
@@ -143,10 +159,13 @@ func (h *ProductSourceSnapshotsHandler) Create(c *fiber.Ctx) error {
 	return c.Status(http.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"data": map[string]interface{}{
-			"id":        snapshot.ID.String(),
-			"productId": snapshot.ProductID.String(),
-			"size":      snapshot.ArchiveSize,
-			"createdAt": snapshot.CreatedAt.Format(time.RFC3339),
+			"id":               snapshot.ID.String(),
+			"productId":        snapshot.ProductID.String(),
+			"size":             snapshot.ArchiveSize,
+			"originalFilename": snapshot.OriginalName,
+			"label":            snapshot.Label,
+			"notes":            snapshot.Notes,
+			"createdAt":        snapshot.CreatedAt.Format(time.RFC3339),
 		},
 	})
 }
@@ -176,10 +195,13 @@ func (h *ProductSourceSnapshotsHandler) List(c *fiber.Ctx) error {
 	response := make([]map[string]interface{}, 0, len(items))
 	for _, item := range items {
 		response = append(response, map[string]interface{}{
-			"id":        item.ID.String(),
-			"productId": item.ProductID.String(),
-			"size":      item.ArchiveSize,
-			"createdAt": item.CreatedAt.Format(time.RFC3339),
+			"id":               item.ID.String(),
+			"productId":        item.ProductID.String(),
+			"size":             item.ArchiveSize,
+			"originalFilename": nullStringPointer(item.OriginalName),
+			"label":            nullStringPointer(item.Label),
+			"notes":            nullStringPointer(item.Notes),
+			"createdAt":        item.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
@@ -208,12 +230,22 @@ func (h *ProductSourceSnapshotsHandler) Latest(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"data": map[string]interface{}{
-			"id":        item.ID.String(),
-			"productId": item.ProductID.String(),
-			"size":      item.ArchiveSize,
-			"createdAt": item.CreatedAt.Format(time.RFC3339),
+			"id":               item.ID.String(),
+			"productId":        item.ProductID.String(),
+			"size":             item.ArchiveSize,
+			"originalFilename": nullStringPointer(item.OriginalName),
+			"label":            nullStringPointer(item.Label),
+			"notes":            nullStringPointer(item.Notes),
+			"createdAt":        item.CreatedAt.Format(time.RFC3339),
 		},
 	})
+}
+
+func nullStringPointer(value sql.NullString) *string {
+	if value.Valid {
+		return &value.String
+	}
+	return nil
 }
 
 func logSnapshotError(c *fiber.Ctx, tenantID *uuid.UUID, productID uuid.UUID, snapshotID uuid.UUID, message string, err error) {

@@ -438,9 +438,21 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 	}
 	_ = publisher.PublishJSON(ctx, "analysis.started", buildEventPayload(job, models.AnalysisJobProcessing, startedAt, nil, nil))
 
+	sourceKind := strings.ToLower(strings.TrimSpace(job.SourceKind))
+	if sourceKind == "" {
+		if job.SourceSnapshotID.Valid {
+			sourceKind = models.AnalysisJobSourceSnapshot
+		} else {
+			sourceKind = models.AnalysisJobSourceEphemeral
+		}
+	}
+
 	archiveKey := job.ArchiveKey
-	sourceType := "ephemeral"
-	if job.SourceSnapshotID.Valid {
+	sourceType := sourceKind
+	if sourceKind == models.AnalysisJobSourceSnapshot {
+		if !job.SourceSnapshotID.Valid {
+			return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("source snapshot missing"))
+		}
 		snapshot, err := storage.GetProductSourceSnapshotByID(ctx, db, job.SourceSnapshotID.UUID)
 		if err != nil {
 			return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, err)
@@ -449,7 +461,6 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 			return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("source snapshot missing"))
 		}
 		archiveKey = sql.NullString{String: snapshot.ObjectKey, Valid: true}
-		sourceType = "snapshot"
 	}
 	if !archiveKey.Valid || archiveKey.String == "" {
 		return finalizeJob(ctx, db, publisher, job, models.AnalysisJobFailed, startedAt, fmt.Errorf("archive key missing"))
@@ -465,7 +476,7 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 	log.Printf("analysis job processing job_id=%s tenant_id=%s product_id=%s source=%s", job.ID.String(), tenantID, productID, sourceType)
 
 	jobDir := filepath.Join(cfg.AnalysisTempDir, jobID.String())
-	archivePath := filepath.Join(jobDir, "archive")
+	archivePath := archivePathForKey(jobDir, archiveKey.String)
 	workspace := filepath.Join(jobDir, "src")
 
 	if err := os.MkdirAll(jobDir, 0o750); err != nil {
@@ -527,7 +538,7 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 	job.FindingsNew = totalNew
 	job.DuplicatesTotal = totalDuplicates
 
-	if !job.SourceSnapshotID.Valid {
+	if sourceKind == models.AnalysisJobSourceEphemeral {
 		if err := store.DeleteObject(ctx, archiveKey.String); err != nil {
 			scanErrors = append(scanErrors, fmt.Sprintf("failed to delete archive: %v", err))
 		} else {
@@ -788,6 +799,21 @@ func buildEventPayload(job *storage.AnalysisJobDetail, status string, startedAt 
 		payload["source_snapshot_id"] = job.SourceSnapshotID.UUID.String()
 	}
 	return payload
+}
+
+func archivePathForKey(jobDir string, key string) string {
+	filename := "archive"
+	lowerKey := strings.ToLower(strings.TrimSpace(key))
+	if strings.HasSuffix(lowerKey, ".tar.gz") {
+		filename += ".tar.gz"
+	} else if strings.HasSuffix(lowerKey, ".tgz") {
+		filename += ".tar.gz"
+	} else if strings.HasSuffix(lowerKey, ".zip") {
+		filename += ".zip"
+	} else if strings.HasSuffix(lowerKey, ".tar") {
+		filename += ".tar"
+	}
+	return filepath.Join(jobDir, filename)
 }
 
 func periodicCleanup(db *sql.DB, store objectstore.Store, tempDir string, ttl time.Duration, interval time.Duration) {
