@@ -16,32 +16,15 @@ require() {
   }
 }
 
+# IMPORTANT: do NOT use `python - <<PY` here. `python -` consumes stdin for code.
+# We need stdin for JSON, so use `-c`. :contentReference[oaicite:2]{index=2}
 extract_token() {
-  python - <<'PY' 2>/dev/null || true
-import json, sys
+  python -c 'import json,sys
 try:
     obj = json.load(sys.stdin)
-    print(obj.get("data", {}).get("token", "") or "")
+    print((obj.get("data") or {}).get("token") or "")
 except Exception:
-    print("")
-PY
-}
-
-http_post_json() {
-  # prints body only (can be empty). never fails the script
-  local url="$1"
-  local data="$2"
-  local auth="${3:-}"
-  if [[ -n "$auth" ]]; then
-    curl -sS -X POST "$url" \
-      -H "Authorization: Bearer ${auth}" \
-      -H "Content-Type: application/json" \
-      -d "$data" || true
-  else
-    curl -sS -X POST "$url" \
-      -H "Content-Type: application/json" \
-      -d "$data" || true
-  fi
+    print("")'
 }
 
 wait_for_health() {
@@ -59,8 +42,26 @@ wait_for_health() {
   exit 1
 }
 
+http_post_json() {
+  # body only; may be empty
+  local url="$1"
+  local data="$2"
+  local auth="${3:-}"
+  if [[ -n "$auth" ]]; then
+    curl -sS -X POST "$url" \
+      -H "Authorization: Bearer ${auth}" \
+      -H "Content-Type: application/json" \
+      -d "$data" || true
+  else
+    curl -sS -X POST "$url" \
+      -H "Content-Type: application/json" \
+      -d "$data" || true
+  fi
+}
+
 login_with_password() {
   local password="$1"
+
   local payload
   payload="$(
     LOGIN_PASSWORD="$password" python - <<'PY'
@@ -69,27 +70,27 @@ print(json.dumps({"login": os.environ["ROOT_EMAIL"], "password": os.environ["LOG
 PY
   )"
 
-  # retry, потому что на старте иногда бывает пустой body
   local resp token
   for i in {1..20}; do
     resp="$(http_post_json "${API_URL}/api/v1/auth/login" "$payload")"
     if [[ -n "$resp" ]]; then
-      token="$(printf '%s' "$resp" | extract_token)"
+      token="$(extract_token <<<"$resp")"
       if [[ -n "$token" ]]; then
-        echo "$token"
+        printf "%s" "$token"
         return 0
       fi
     fi
     sleep 2
   done
 
-  echo ""
+  printf ""
   return 0
 }
 
-change_password() {
+change_password_maybe() {
   local login_token="$1"
-  local payload resp token
+
+  local payload
   payload="$(
     python - <<'PY'
 import json, os
@@ -101,9 +102,10 @@ print(json.dumps({
 PY
   )"
 
+  local resp token
   resp="$(http_post_json "${API_URL}/api/v1/auth/change-password" "$payload" "$login_token")"
-  token="$(printf '%s' "$resp" | extract_token)"
-  printf '%s' "$token"
+  token="$(extract_token <<<"$resp")"
+  printf "%s" "$token"
 }
 
 main() {
@@ -136,15 +138,14 @@ main() {
 
   api_token="$login_token"
 
-  # Пытаемся сменить пароль — но НЕ падаем, если уже сменён / политика другая
   echo "Change password (may fail if already changed)..."
-  maybe_new_token="$(change_password "$login_token")"
+  maybe_new_token="$(change_password_maybe "$login_token")"
   if [[ -n "$maybe_new_token" ]]; then
     api_token="$maybe_new_token"
   fi
 
-  # В новых версиях Schemathesis базовый URL задаётся через --url :contentReference[oaicite:2]{index=2}
-  # Фильтрация: --include-path / --include-method :contentReference[oaicite:3]{index=3}
+  # Schemathesis: base URL задаётся через --url. :contentReference[oaicite:3]{index=3}
+  # Фильтрация эндпоинтов: --include-path / --include-method. :contentReference[oaicite:4]{index=4}
   schemathesis run "$OPENAPI_SPEC" \
     --url "$API_URL" \
     --header "Authorization: Bearer ${api_token}" \
