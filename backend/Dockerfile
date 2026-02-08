@@ -1,6 +1,6 @@
 FROM golang:1.24-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache ca-certificates wget
+RUN apk add --no-cache ca-certificates wget docker-cli
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -43,17 +43,17 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 CMD ["/app/server"]
 
 # Analysis worker target
+# Needs Docker CLI to spawn scanner containers (Docker-out-of-Docker)
 FROM alpine:3.23 AS analysis-worker
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates wget && \
+RUN apk add --no-cache ca-certificates wget docker-cli && \
     addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
 COPY --from=build /app/analysis_worker /app/analysis_worker
 RUN chown -R appuser:appgroup /app
 
-USER appuser
 CMD ["/app/analysis_worker"]
 
 # Intel worker target
