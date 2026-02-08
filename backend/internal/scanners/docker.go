@@ -14,7 +14,6 @@ import (
 // RunnerConfig contains configuration for running scanners
 type RunnerConfig struct {
 	ContainerNetwork string
-	SemgrepImage     string
 	OpenGrepImage    string
 	TrivyImage       string
 	CheckovImage     string
@@ -22,33 +21,6 @@ type RunnerConfig struct {
 	GitleaksImage    string
 	GrypeImage       string
 	Timeout          time.Duration
-}
-
-// RunSemgrep runs Semgrep scanner in a Docker container.
-func RunSemgrep(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) error {
-	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(
-		ctx,
-		"docker",
-		"run",
-		"--rm",
-		"--network", cfg.ContainerNetwork,
-		"-v", fmt.Sprintf("%s:/src:ro", workspace),
-		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
-		cfg.SemgrepImage,
-		"semgrep",
-		"--config=auto",
-		"--json",
-		"--output", "/out/"+filepath.Base(outputPath),
-		"/src",
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("semgrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
-	}
-	return nil
 }
 
 // RunOpenGrep runs OpenGrep (Semgrep-compatible fork) in a Docker container.
