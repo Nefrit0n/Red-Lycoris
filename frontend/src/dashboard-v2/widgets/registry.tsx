@@ -75,7 +75,7 @@ import RemediationGuidance from "../../components/RemediationGuidance";
 import CodeBlock from "../../components/CodeBlock";
 import { Link } from "react-router-dom";
 
-const useStaticData = <T,>(data: T) => ({
+const createStaticData = <T,>(data: T) => ({
   data,
   loading: false,
   error: null,
@@ -1019,7 +1019,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
-    getData: () => useStaticData(selectExecutiveKpis()),
+    getData: () => createStaticData(selectExecutiveKpis()),
     render: (data: typeof executiveKpis | null) => {
       if (!data) return null;
       return (
@@ -1043,7 +1043,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
-    getData: () => useStaticData(selectExecutiveKpis()),
+    getData: () => createStaticData(selectExecutiveKpis()),
     render: (data: typeof executiveKpis | null) => {
       if (!data) return null;
       return (
@@ -1067,7 +1067,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
-    getData: () => useStaticData(selectExecutiveKpis()),
+    getData: () => createStaticData(selectExecutiveKpis()),
     render: (data: typeof executiveKpis | null) => {
       if (!data || data.productsAtRisk === null) return null;
       return (
@@ -1091,7 +1091,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
-    getData: () => useStaticData(selectExecutiveKpis()),
+    getData: () => createStaticData(selectExecutiveKpis()),
     render: (data: typeof executiveKpis | null) => {
       if (!data || data.scanFreshnessMinutes === null) return null;
       return (
@@ -1115,7 +1115,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 7, h: 4 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectExecutiveRiskTrend()),
+    getData: () => createStaticData(selectExecutiveRiskTrend()),
     render: (data: typeof executiveRiskTrend | null) => <ExecutiveRiskTrendWidget data={data} />,
     linkTo: findingsLink({ view: "risk-trend" }),
   },
@@ -1126,7 +1126,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 5, h: 4 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectTopRiskyProducts()),
+    getData: () => createStaticData(selectTopRiskyProducts()),
     render: (data: typeof topRiskyProducts | null) => <TopRiskyProductsWidget data={data} />,
     linkTo: findingsLink({ view: "top-risky-products" }),
   },
@@ -1137,7 +1137,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectSlaBreaches()),
+    getData: () => createStaticData(selectSlaBreaches()),
     render: (data: typeof slaBreaches | null) => <SlaBreachesWidget data={data} />,
     linkTo: findingsLink({ view: "sla" }),
     pinnable: true,
@@ -1149,7 +1149,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectRecentCriticalActivity()),
+    getData: () => createStaticData(selectRecentCriticalActivity()),
     render: (data: typeof recentCriticalActivity | null) => <RecentCriticalActivityWidget data={data} />,
     linkTo: findingsLink({ severity: "critical" }),
     pinnable: true,
@@ -1161,7 +1161,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Executive",
     defaultSize: { w: 12, h: 3 },
     minSize: { w: 6, h: 3 },
-    getData: () => useStaticData(selectCoverageSnapshot()),
+    getData: () => createStaticData(selectCoverageSnapshot()),
     render: (data: typeof coverageSnapshot | null) => <CoverageSnapshotWidget data={data} />,
     linkTo: findingsLink({ view: "coverage" }),
   },
@@ -1172,7 +1172,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "AppSec",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
-    getData: () => useStaticData(selectAppsecKpis()),
+    getData: () => createStaticData(selectAppsecKpis()),
     render: (data: typeof appsecKpis | null) => {
       if (!data || data.newFindings === null || data.newFindingsDelta === null) return null;
       return (
@@ -1197,7 +1197,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "AppSec",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
-    getData: () => useStaticData(selectAppsecKpis()),
+    getData: () => createStaticData(selectAppsecKpis()),
     render: (data: typeof appsecKpis | null) => {
       if (!data || data.mttrDays === null) return null;
       return (
@@ -1221,7 +1221,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "DevSecOps",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
-    getData: () => useStaticData(selectAppsecKpis()),
+    getData: () => createStaticData(selectAppsecKpis()),
     render: (data: typeof appsecKpis | null) => {
       if (!data || data.coveragePercent === null) return null;
       return (
@@ -1245,7 +1245,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "DevSecOps",
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
-    getData: () => useStaticData(selectAppsecKpis()),
+    getData: () => createStaticData(selectAppsecKpis()),
     render: (data: typeof appsecKpis | null) => {
       if (!data || data.policyPassRate === null) return null;
       return (
@@ -1269,7 +1269,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "AppSec",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectFindingsFlow()),
+    getData: () => createStaticData(selectFindingsFlow()),
     render: (data: typeof findingsFlow | null) => <FindingsFlowWidget data={data} />,
     linkTo: findingsLink({ view: "flow" }),
     pinnable: true,
@@ -1281,7 +1281,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "AppSec",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectSeverityStatusMatrix()),
+    getData: () => createStaticData(selectSeverityStatusMatrix()),
     render: (data: typeof severityStatusMatrix | null) => <SeverityStatusMatrixWidget data={data} />,
     linkTo: findingsLink({ view: "matrix" }),
     pinnable: true,
@@ -1293,7 +1293,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "AppSec",
     defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
-    getData: () => useStaticData(selectSeverityStatusMatrix()),
+    getData: () => createStaticData(selectSeverityStatusMatrix()),
     render: (data: typeof severityStatusMatrix | null) => <SeverityStatusDistributionWidget data={data} />,
     linkTo: findingsLink({ view: "distribution" }),
     pinnable: true,
@@ -1305,7 +1305,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectCoverageFreshness()),
+    getData: () => createStaticData(selectCoverageFreshness()),
     render: (data: typeof coverageFreshness | null) => <CoverageFreshnessWidget data={data} />,
     linkTo: findingsLink({ view: "freshness" }),
   },
@@ -1316,7 +1316,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectPolicyGateSummary()),
+    getData: () => createStaticData(selectPolicyGateSummary()),
     render: (data: typeof policyGateSummary | null) => <PolicyGatesSummaryWidget data={data} />,
     linkTo: findingsLink({ status: "failed", view: "policy" }),
     pinnable: true,
@@ -1328,7 +1328,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "AppSec",
     defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
-    getData: () => useStaticData(selectTopNoisyRules()),
+    getData: () => createStaticData(selectTopNoisyRules()),
     render: (data: typeof topNoisyRules | null) => <TopNoisyRulesWidget data={data} />,
     linkTo: findingsLink({ view: "rules" }),
   },
@@ -1339,7 +1339,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "DevSecOps",
     defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
-    getData: () => useStaticData(selectPipelineHealth()),
+    getData: () => createStaticData(selectPipelineHealth()),
     render: (data: typeof pipelineHealth | null) => <PipelineHealthWidget data={data} />,
     linkTo: findingsLink({ view: "pipeline" }),
     pinnable: true,
@@ -1351,7 +1351,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "AppSec",
     defaultSize: { w: 12, h: 3 },
     minSize: { w: 6, h: 3 },
-    getData: () => useStaticData(selectWorkloadFlow()),
+    getData: () => createStaticData(selectWorkloadFlow()),
     render: (data: typeof workloadFlow | null) => <WorkloadFlowWidget data={data} />,
     linkTo: findingsLink({ view: "backlog" }),
     pinnable: true,
@@ -1363,7 +1363,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectDevDeliveryMetrics()),
+    getData: () => createStaticData(selectDevDeliveryMetrics()),
     render: (data: typeof devDeliveryMetrics | null) => <DevDeliveryMetricsWidget data={data} />,
     linkTo: findingsLink({ view: "dora" }),
   },
@@ -1374,7 +1374,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
-    getData: () => useStaticData(selectDeveloperKpis()),
+    getData: () => createStaticData(selectDeveloperKpis()),
     render: (data: typeof developerKpis | null) => {
       if (!data) return null;
       return (
@@ -1398,7 +1398,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
-    getData: () => useStaticData(selectDeveloperKpis()),
+    getData: () => createStaticData(selectDeveloperKpis()),
     render: (data: typeof developerKpis | null) => {
       if (!data) return null;
       return (
@@ -1422,7 +1422,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
-    getData: () => useStaticData(selectDeveloperKpis()),
+    getData: () => createStaticData(selectDeveloperKpis()),
     render: (data: typeof developerKpis | null) => {
       if (!data) return null;
       return (
@@ -1446,7 +1446,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 12, h: 2 },
     minSize: { w: 6, h: 2 },
-    getData: () => useStaticData({}),
+    getData: () => createStaticData({}),
     render: () => <DeveloperQuickFiltersWidget />,
     linkTo: findingsLink({ view: "filters" }),
   },
@@ -1457,7 +1457,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 7, h: 7 },
     minSize: { w: 6, h: 4 },
-    getData: () => useStaticData(selectDeveloperQueue()),
+    getData: () => createStaticData(selectDeveloperQueue()),
     render: (data: typeof developerQueue | null) => <DeveloperQueueWidget data={data} />,
     linkTo: findingsLink({ assignee: "me" }),
     pinnable: true,
@@ -1469,7 +1469,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 5, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(selectDeveloperRemediation()),
+    getData: () => createStaticData(selectDeveloperRemediation()),
     render: (data: typeof developerRemediation | null) => <DeveloperGuidanceWidget data={data} />,
     linkTo: findingsLink({ view: "guidance" }),
     pinnable: true,
@@ -1481,7 +1481,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 5, h: 2 },
     minSize: { w: 4, h: 2 },
-    getData: () => useStaticData(selectDeveloperHotspots()),
+    getData: () => createStaticData(selectDeveloperHotspots()),
     render: (data: typeof developerHotspots | null) => <DeveloperHotspotsWidget data={data} />,
     linkTo: findingsLink({ view: "hotspots" }),
   },
@@ -1492,7 +1492,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 5, h: 2 },
     minSize: { w: 4, h: 2 },
-    getData: () => useStaticData(selectDeveloperRecentIntroduced()),
+    getData: () => createStaticData(selectDeveloperRecentIntroduced()),
     render: (data: typeof developerRecentIntroduced | null) => (
       <DeveloperRecentlyIntroducedWidget data={data} />
     ),
@@ -1506,7 +1506,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Risk",
     defaultSize: { w: 8, h: 4 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(riskTrend),
+    getData: () => createStaticData(riskTrend),
     render: (data: typeof riskTrend | null) => <RiskTrendWidget data={data} />,
     linkTo: findingsLink({ view: "risk-trend" }),
   },
@@ -1517,7 +1517,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Risk",
     defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
-    getData: () => useStaticData(topRisks),
+    getData: () => createStaticData(topRisks),
     render: (data: typeof topRisks | null) => <TopRisksWidget data={data} />,
     linkTo: findingsLink({ view: "top-risks" }),
   },
@@ -1528,7 +1528,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(coverageByDomain),
+    getData: () => createStaticData(coverageByDomain),
     render: (data: typeof coverageByDomain | null) => <CoverageWidget data={data} />,
     linkTo: findingsLink({ view: "coverage" }),
   },
@@ -1539,7 +1539,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "DevSecOps",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(pipelineGates),
+    getData: () => createStaticData(pipelineGates),
     render: (data: typeof pipelineGates | null) => <PipelineGatesWidget data={data} />,
     linkTo: findingsLink({ view: "gates" }),
   },
@@ -1550,7 +1550,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "AppSec",
     defaultSize: { w: 6, h: 3 },
     minSize: { w: 4, h: 3 },
-    getData: () => useStaticData(policyHealth),
+    getData: () => createStaticData(policyHealth),
     render: (data: typeof policyHealth | null) => <PolicyHealthWidget data={data} />,
     linkTo: findingsLink({ view: "policy" }),
   },
@@ -1561,7 +1561,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Operations",
     defaultSize: { w: 4, h: 3 },
     minSize: { w: 3, h: 3 },
-    getData: () => useStaticData(recentActivity),
+    getData: () => createStaticData(recentActivity),
     render: (data: typeof recentActivity | null) => <RecentActivityWidget data={data} />,
     linkTo: findingsLink({ view: "activity" }),
   },
@@ -1573,7 +1573,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
     getData: () =>
-      useStaticData({
+      createStaticData({
         message: "3 критических направления требуют внимания",
       }),
     render: (data: { message: string } | null) => {
@@ -1619,7 +1619,7 @@ export const widgetRegistry: WidgetDefinition[] = [
     category: "Engineering",
     defaultSize: { w: 4, h: 2 },
     minSize: { w: 3, h: 2 },
-    getData: () => useStaticData({ rate: 91, label: "Remediation SLA" }),
+    getData: () => createStaticData({ rate: 91, label: "Remediation SLA" }),
     render: (data: { rate: number; label: string } | null) => {
       if (!data) return null;
       return (

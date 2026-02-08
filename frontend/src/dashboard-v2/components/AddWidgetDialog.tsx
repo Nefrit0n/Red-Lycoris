@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -12,6 +13,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { Check } from "@mui/icons-material";
 import { useMemo, useState } from "react";
 import WidgetCard from "./WidgetCard";
 import type { WidgetCategory, WidgetDefinition } from "../types";
@@ -21,6 +23,7 @@ interface AddWidgetDialogProps {
   open: boolean;
   widgets: WidgetDefinition[];
   dataMap: Record<string, { data: unknown | null; loading: boolean; error: string | null }>;
+  placedWidgetIds?: string[];
   onClose: () => void;
   onAdd: (widgetId: string) => void;
 }
@@ -45,10 +48,12 @@ const categoryLabels: Record<(typeof categoryOptions)[number], string> = {
   DevSecOps: "DevSecOps",
 };
 
-const AddWidgetDialog = ({ open, widgets, dataMap, onClose, onAdd }: AddWidgetDialogProps) => {
+const AddWidgetDialog = ({ open, widgets, dataMap, placedWidgetIds = [], onClose, onAdd }: AddWidgetDialogProps) => {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<(typeof categoryOptions)[number]>("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const placedSet = useMemo(() => new Set(placedWidgetIds), [placedWidgetIds]);
 
   const filteredWidgets = useMemo(() => {
     return widgets.filter((widget) => {
@@ -57,6 +62,11 @@ const AddWidgetDialog = ({ open, widgets, dataMap, onClose, onAdd }: AddWidgetDi
       return matchesQuery && matchesCategory;
     });
   }, [widgets, query, category]);
+
+  // Available widgets (not yet placed)
+  const availableWidgets = useMemo(() => {
+    return filteredWidgets.filter((widget) => !placedSet.has(widget.id));
+  }, [filteredWidgets, placedSet]);
 
   const selectedWidget = widgets.find((widget) => widget.id === selectedId) ?? filteredWidgets[0];
 
@@ -88,24 +98,41 @@ const AddWidgetDialog = ({ open, widgets, dataMap, onClose, onAdd }: AddWidgetDi
               </Select>
             </Stack>
             <Stack spacing={1.5} sx={{ maxHeight: 360, overflowY: "auto" }}>
-              {filteredWidgets.map((widget) => (
-                <Box
-                  key={widget.id}
-                  onClick={() => setSelectedId(widget.id)}
-                  sx={{
-                    p: 2,
-                    borderRadius: radius.card,
-                    border: widget.id === selectedWidget?.id ? bordersDark.lotus : bordersDark.default,
-                    cursor: "pointer",
-                    transition: "border-color 0.2s ease",
-                  }}
-                >
-                  <Typography variant="subtitle2">{widget.title}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {widget.description}
-                  </Typography>
-                </Box>
-              ))}
+              {filteredWidgets.map((widget) => {
+                const isPlaced = placedSet.has(widget.id);
+                return (
+                  <Box
+                    key={widget.id}
+                    onClick={() => !isPlaced && setSelectedId(widget.id)}
+                    sx={{
+                      p: 2,
+                      borderRadius: radius.card,
+                      border: widget.id === selectedWidget?.id ? bordersDark.lotus : bordersDark.default,
+                      cursor: isPlaced ? "default" : "pointer",
+                      opacity: isPlaced ? 0.5 : 1,
+                      transition: "border-color 0.2s ease, opacity 0.2s ease",
+                    }}
+                  >
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                      <Box>
+                        <Typography variant="subtitle2">{widget.title}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {widget.description}
+                        </Typography>
+                      </Box>
+                      {isPlaced && (
+                        <Chip
+                          icon={<Check fontSize="small" />}
+                          label="Добавлен"
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                        />
+                      )}
+                    </Stack>
+                  </Box>
+                );
+              })}
             </Stack>
           </Stack>
 
@@ -142,11 +169,14 @@ const AddWidgetDialog = ({ open, widgets, dataMap, onClose, onAdd }: AddWidgetDi
         </Stack>
       </DialogContent>
       <DialogActions>
+        <Typography variant="caption" color="text.secondary" sx={{ mr: "auto", ml: 2 }}>
+          {availableWidgets.length} из {filteredWidgets.length} доступно
+        </Typography>
         <Button onClick={onClose}>Отмена</Button>
         <Button
           variant="contained"
           onClick={() => selectedWidget && onAdd(selectedWidget.id)}
-          disabled={!selectedWidget}
+          disabled={!selectedWidget || placedSet.has(selectedWidget.id)}
         >
           Добавить виджет
         </Button>

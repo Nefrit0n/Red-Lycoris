@@ -1,4 +1,5 @@
 import { Alert, Box, Skeleton, Stack, Typography } from "@mui/material";
+import { DragIndicator } from "@mui/icons-material";
 import type { ReactNode } from "react";
 import { GlassCard } from "../../design-system";
 import { bordersDark, focusRing, radius } from "../../design-system/tokens";
@@ -49,14 +50,22 @@ const WidgetCard = ({
           className="widget-drag-handle"
           sx={{ cursor: isEditing ? "grab" : "default" }}
         >
-          <Box>
-            <Typography variant="subtitle1">{title}</Typography>
-            {subtitle && (
-              <Typography variant="caption" color="text.secondary">
-                {subtitle}
-              </Typography>
+          <Stack direction="row" alignItems="flex-start" spacing={1}>
+            {isEditing && (
+              <DragIndicator
+                fontSize="small"
+                sx={{ color: "text.secondary", opacity: 0.6, mt: 0.25 }}
+              />
             )}
-          </Box>
+            <Box>
+              <Typography variant="subtitle1">{title}</Typography>
+              {subtitle && (
+                <Typography variant="caption" color="text.secondary">
+                  {subtitle}
+                </Typography>
+              )}
+            </Box>
+          </Stack>
           {actions && <Box>{actions}</Box>}
         </Stack>
 
