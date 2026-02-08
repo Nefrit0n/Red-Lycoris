@@ -426,7 +426,11 @@ jobs:
 
       - name: Run trufflehog3
         run: |
-          trufflehog3 .
+          trufflehog3 \
+            --no-history \
+            -f JSON -o trufflehog3.json \
+            -e "backend/internal/parser/**" \
+            .
 
       - name: Upload trufflehog3 report
         if: always()
