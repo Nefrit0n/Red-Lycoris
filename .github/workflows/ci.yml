@@ -424,12 +424,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install "trufflehog3==3.0.10"
 
-      - name: Run trufflehog3 (no config)
+      - name: Run trufflehog3
+        shell: bash
         run: |
           trufflehog3 \
-            --no-history \
             --format JSON \
             --output trufflehog3.json \
+            --exclude "lotus-warden/docs/template/*" \
+            --exclude "docs/template/*" \
             .
 
       - name: Upload trufflehog3 report
