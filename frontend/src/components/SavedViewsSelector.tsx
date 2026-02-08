@@ -1,23 +1,17 @@
 import {
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
   IconButton,
-  List,
-  ListItemButton,
   ListItemIcon,
-  ListItemSecondaryAction,
   ListItemText,
   Menu,
   MenuItem,
-  Stack,
   TextField,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import {
@@ -27,9 +21,9 @@ import {
   Save as SaveIcon,
   Star as StarIcon,
 } from "@mui/icons-material";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { SavedView, useSavedViews } from "../hooks/useSavedViews";
-import { FiltersState } from "../hooks/useUrlFiltersSync";
+import { FiltersState } from "../features/filters/types";
 
 interface SavedViewsSelectorProps {
   currentFilters: FiltersState;
@@ -41,8 +35,6 @@ const SavedViewsSelector = ({ currentFilters, onApplyView }: SavedViewsSelectorP
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [newViewName, setNewViewName] = useState("");
-
-  const allViews = useMemo(() => [...builtInViews, ...views], [builtInViews, views]);
 
   const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -77,13 +69,17 @@ const SavedViewsSelector = ({ currentFilters, onApplyView }: SavedViewsSelectorP
   };
 
   const hasActiveFilters = Boolean(
-    currentFilters.productId ||
-      currentFilters.searchInput ||
-      currentFilters.filterSeverity ||
-      currentFilters.filterStatus ||
-      currentFilters.filterOccurrence ||
-      currentFilters.filterScannerType ||
-      currentFilters.filterPolicyDecision ||
+    currentFilters.productIds.length ||
+      currentFilters.search ||
+      currentFilters.severities.length ||
+      currentFilters.statuses.length ||
+      currentFilters.occurrences.length ||
+      currentFilters.scannerTypes.length ||
+      currentFilters.languages.length ||
+      currentFilters.policyDecisions.length ||
+      currentFilters.riskBands.length ||
+      currentFilters.categories.length ||
+      currentFilters.datePreset ||
       currentFilters.dateFrom ||
       currentFilters.dateTo ||
       currentFilters.showRepeats
@@ -99,7 +95,7 @@ const SavedViewsSelector = ({ currentFilters, onApplyView }: SavedViewsSelectorP
         startIcon={<BookmarkIcon />}
         sx={{ whiteSpace: "nowrap" }}
       >
-        Views
+        Виды
       </Button>
 
       <Menu
@@ -118,18 +114,13 @@ const SavedViewsSelector = ({ currentFilters, onApplyView }: SavedViewsSelectorP
           horizontal: "right",
         }}
       >
-        {/* Built-in views */}
         <Box sx={{ px: 2, py: 1 }}>
           <Typography variant="overline" color="text.secondary">
-            Quick Filters
+            Быстрые наборы
           </Typography>
         </Box>
         {builtInViews.map((view) => (
-          <MenuItem
-            key={view.id}
-            onClick={() => handleApplyView(view)}
-            sx={{ py: 1 }}
-          >
+          <MenuItem key={view.id} onClick={() => handleApplyView(view)} sx={{ py: 1 }}>
             <ListItemIcon sx={{ minWidth: 32 }}>
               <StarIcon fontSize="small" color="warning" />
             </ListItemIcon>
@@ -142,15 +133,11 @@ const SavedViewsSelector = ({ currentFilters, onApplyView }: SavedViewsSelectorP
             <Divider sx={{ my: 1 }} />
             <Box sx={{ px: 2, py: 1 }}>
               <Typography variant="overline" color="text.secondary">
-                Custom Views
+                Сохранённые виды
               </Typography>
             </Box>
             {views.map((view) => (
-              <MenuItem
-                key={view.id}
-                onClick={() => handleApplyView(view)}
-                sx={{ py: 1, pr: 6 }}
-              >
+              <MenuItem key={view.id} onClick={() => handleApplyView(view)} sx={{ py: 1, pr: 6 }}>
                 <ListItemIcon sx={{ minWidth: 32 }}>
                   <BookmarkIcon fontSize="small" />
                 </ListItemIcon>
@@ -182,39 +169,35 @@ const SavedViewsSelector = ({ currentFilters, onApplyView }: SavedViewsSelectorP
             <SaveIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary="Save Current View"
-            secondary={hasActiveFilters ? undefined : "No filters applied"}
+            primary="Сохранить текущий вид"
+            secondary={hasActiveFilters ? undefined : "Фильтры не выбраны"}
             secondaryTypographyProps={{ variant: "caption" }}
           />
         </MenuItem>
       </Menu>
 
-      {/* Save Dialog */}
       <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Save View</DialogTitle>
+        <DialogTitle>Сохранить вид</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            label="View Name"
+            label="Название вида"
             fullWidth
             value={newViewName}
-            onChange={(e) => setNewViewName(e.target.value)}
-            placeholder="e.g., My Critical Issues"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
+            onChange={(event) => setNewViewName(event.target.value)}
+            placeholder="Например, критичные за неделю"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && newViewName.trim()) {
                 handleSaveView();
               }
             }}
           />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-            Current filters will be saved with this view.
-          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setSaveDialogOpen(false)}>Отмена</Button>
           <Button onClick={handleSaveView} variant="contained" disabled={!newViewName.trim()}>
-            Save
+            Сохранить
           </Button>
         </DialogActions>
       </Dialog>

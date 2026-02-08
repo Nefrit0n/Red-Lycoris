@@ -14,19 +14,15 @@ import {
   Button,
   FormControl,
   IconButton,
-  InputAdornment,
   MenuItem,
   Select,
   Snackbar,
   Slide,
   Stack,
-  TextField,
   Tooltip,
   Typography,
   alpha,
 } from "@mui/material";
-import FilterListIcon from "@mui/icons-material/FilterList";
-import SearchIcon from "@mui/icons-material/Search";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
@@ -34,21 +30,18 @@ import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { getCurrentUser } from "../api/auth";
-import ExportMenu from "../components/ExportMenu";
-import { FilterChips } from "../components/FilterChips";
 import FindingsTable from "../components/FindingsTable";
 import PaginationControl from "../components/PaginationControl";
-import ViewsDropdown from "../components/ViewsDropdown";
-import FilterDrawer from "../components/FilterDrawer";
-import FiltersPanel from "../components/FiltersPanel";
 import { primitives } from "../design-system/tokens/colors";
-import { useUrlFiltersSync, FiltersState } from "../hooks/useUrlFiltersSync";
+import { useFiltersState } from "../hooks/useFiltersState";
 import { useFindingsData } from "../hooks/useFindingsData";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { useDrawerState } from "../hooks/useDrawerState";
 import { useUploadRedirect } from "../hooks/useUploadRedirect";
 import useDebouncedValue from "../hooks/useDebouncedValue";
 import { FindingListItemDTO, FindingStatus } from "../types/findings";
+import { FiltersState } from "../features/filters/types";
+import FindingsTopBar from "../features/findings/toolbar/FindingsTopBar";
 
 import FindingDetailsDrawer from "../components/FindingDetailsDrawer";
 
@@ -60,9 +53,9 @@ const FindingsList = () => {
   const location = useLocation();
 
   // URL <-> state
-  const [filters, actions, hydrated] = useUrlFiltersSync();
+  const { state: filters, setPartial, resetAll } = useFiltersState();
 
-  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
 
   // Bulk action state
   const [bulkStatus, setBulkStatus] = useState<FindingStatus>("under_review");
@@ -84,11 +77,10 @@ const FindingsList = () => {
     handleRetry,
   } = useFindingsData({
     filters,
-    hydrated,
   });
 
   // Debounced search for highlighting
-  const debouncedSearch = useDebouncedValue(filters.searchInput, 400);
+  const debouncedSearch = useDebouncedValue(filters.search, 400);
 
   // Bulk actions
   const totalCount = totalKnown ? total ?? 0 : data.length;
@@ -103,8 +95,8 @@ const FindingsList = () => {
 
   // Drawer state
   const drawer = useDrawerState({
-    selectedFindingId: filters.selectedFindingId,
-    setSelectedFindingId: actions.setSelectedFindingId,
+    selectedFindingId,
+    setSelectedFindingId,
     selectionCount: bulk.selectionCount,
     listStateKey: LIST_STATE_KEY,
   });
@@ -116,12 +108,18 @@ const FindingsList = () => {
     return `${location.pathname}${qs ? `?${qs}` : ""}`;
   }, [location.pathname, location.search]);
 
+  const handleApplyView = useCallback(
+    (partial: Partial<FiltersState>) => {
+      setPartial({ ...partial, page: 0 });
+    },
+    [setPartial]
+  );
+
   const handleSortChange = useCallback(
     (field: keyof FindingListItemDTO) => {
       if (filters.sortField === field) {
-        actions.setSortOrder(filters.sortOrder === "asc" ? "desc" : "asc");
+        setPartial({ sortOrder: filters.sortOrder === "asc" ? "desc" : "asc" });
       } else {
-        actions.setSortField(field);
         const defaultOrder: "asc" | "desc" =
           field === "severity" ||
           field === "riskScore" ||
@@ -130,11 +128,11 @@ const FindingsList = () => {
           field === "updatedAt"
             ? "desc"
             : "asc";
-        actions.setSortOrder(defaultOrder);
+        setPartial({ sortField: field, sortOrder: defaultOrder });
       }
-      actions.setPage(0);
+      setPartial({ page: 0 });
     },
-    [actions, filters.sortField, filters.sortOrder]
+    [filters.sortField, filters.sortOrder, setPartial]
   );
 
   const user = getCurrentUser();
@@ -147,55 +145,6 @@ const FindingsList = () => {
       JSON.stringify({ path: listPath, scrollY: window.scrollY })
     );
   }, [location.pathname, location.search]);
-
-  const activeFiltersCount = useMemo(() => {
-    const countable = [
-      filters.productId,
-      filters.searchInput.trim(),
-      filters.filterSeverity,
-      filters.filterStatus,
-      filters.filterRiskBand,
-      filters.filterOccurrence,
-      filters.filterScannerType,
-      filters.filterPolicyDecision,
-      filters.dateFrom,
-      filters.dateTo,
-    ];
-    const baseCount = countable.filter(Boolean).length;
-    return filters.showRepeats ? baseCount + 1 : baseCount;
-  }, [
-    filters.productId,
-    filters.searchInput,
-    filters.filterSeverity,
-    filters.filterStatus,
-    filters.filterRiskBand,
-    filters.filterOccurrence,
-    filters.filterScannerType,
-    filters.filterPolicyDecision,
-    filters.dateFrom,
-    filters.dateTo,
-    filters.showRepeats,
-  ]);
-
-  // Apply saved view filters
-  const handleApplyView = useCallback(
-    (viewFilters: Partial<FiltersState>) => {
-      if (viewFilters.productId !== undefined) actions.setProductId(viewFilters.productId);
-      if (viewFilters.searchInput !== undefined) actions.setSearchInput(viewFilters.searchInput);
-      if (viewFilters.filterSeverity !== undefined) actions.setFilterSeverity(viewFilters.filterSeverity);
-      if (viewFilters.filterStatus !== undefined) actions.setFilterStatus(viewFilters.filterStatus);
-      if (viewFilters.filterRiskBand !== undefined) actions.setFilterRiskBand(viewFilters.filterRiskBand);
-      if (viewFilters.filterOccurrence !== undefined) actions.setFilterOccurrence(viewFilters.filterOccurrence);
-      if (viewFilters.filterScannerType !== undefined) actions.setFilterScannerType(viewFilters.filterScannerType);
-      if (viewFilters.filterPolicyDecision !== undefined) {
-        actions.setFilterPolicyDecision(viewFilters.filterPolicyDecision);
-      }
-      if (viewFilters.dateFrom !== undefined) actions.setDateFrom(viewFilters.dateFrom);
-      if (viewFilters.dateTo !== undefined) actions.setDateTo(viewFilters.dateTo);
-      if (viewFilters.showRepeats !== undefined) actions.setShowRepeats(viewFilters.showRepeats);
-    },
-    [actions]
-  );
 
   // Handle bulk apply
   const handleBulkApply = () => {
@@ -216,145 +165,18 @@ const FindingsList = () => {
         overflow: "hidden",
       }}
     >
-      {/* Compact Toolbar - Single row, never shifts */}
-      <Box
-        sx={{
-          px: { xs: 2, md: 3 },
-          py: 1.5,
-          borderBottom: "1px solid",
-          borderColor: primitives.night[700],
-          bgcolor: primitives.night[800],
-          flexShrink: 0,
-        }}
-      >
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          spacing={2}
-        >
-          {/* Left: Title + count */}
-          <Stack direction="row" alignItems="center" spacing={1.5}>
-            <Typography
-              variant="h6"
-              component="h1"
-              sx={{
-                fontWeight: 600,
-                color: primitives.night[100],
-                flexShrink: 0,
-              }}
-            >
-              Findings
-            </Typography>
-            {totalKnown && (
-              <Typography variant="caption" sx={{ color: primitives.night[500] }}>
-                {totalCount}
-              </Typography>
-            )}
-          </Stack>
-
-          {/* Right: Actions */}
-          <Stack direction="row" spacing={1} alignItems="center">
-            <TextField
-              value={filters.searchInput}
-              onChange={(e) => actions.setSearchInput(e.target.value)}
-              placeholder="Search"
-              size="small"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" sx={{ color: primitives.night[400] }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                width: { xs: 120, sm: 180 },
-                "& .MuiOutlinedInput-root": {
-                  height: 32,
-                  bgcolor: alpha(primitives.night[700], 0.5),
-                  "&:hover": {
-                    bgcolor: alpha(primitives.night[600], 0.5),
-                  },
-                },
-              }}
-            />
-
-            <ViewsDropdown currentFilters={filters} onApplyView={handleApplyView} />
-
-            <ExportMenu
-              data={data}
-              filename="findings"
-              disabled={loading}
-              totalCount={totalCount}
-              selectAllMatching={bulk.selectAllMatching}
-              filters={filters}
-              debouncedSearch={debouncedSearch}
-            />
-
-            <Tooltip title={`Filters${activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ""}`}>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => setFiltersDrawerOpen(true)}
-                startIcon={<FilterListIcon />}
-                sx={{
-                  minWidth: 80,
-                  height: 32,
-                  borderColor: activeFiltersCount > 0 ? primitives.lotus[500] : primitives.night[600],
-                  color: activeFiltersCount > 0 ? primitives.lotus[400] : primitives.night[300],
-                  "&:hover": {
-                    borderColor: primitives.lotus[500],
-                    bgcolor: alpha(primitives.lotus[500], 0.1),
-                  },
-                }}
-              >
-                {activeFiltersCount > 0 ? activeFiltersCount : "Filters"}
-              </Button>
-            </Tooltip>
-          </Stack>
-        </Stack>
-      </Box>
-
-      {/* Filter Chips (if active) */}
-      {activeFiltersCount > 0 && (
-        <Box
-          sx={{
-            px: { xs: 2, md: 3 },
-            py: 1,
-            borderBottom: "1px solid",
-            borderColor: primitives.night[700],
-            bgcolor: alpha(primitives.night[750], 0.5),
-            flexShrink: 0,
-          }}
-        >
-          <FilterChips
-            productId={filters.productId}
-            productLabel={filters.productId}
-            search={filters.searchInput}
-            filterSeverity={filters.filterSeverity}
-            filterStatus={filters.filterStatus}
-            filterRiskBand={filters.filterRiskBand}
-            filterOccurrence={filters.filterOccurrence}
-            filterScannerType={filters.filterScannerType}
-            filterPolicyDecision={filters.filterPolicyDecision}
-            dateFrom={filters.dateFrom}
-            dateTo={filters.dateTo}
-            showRepeats={filters.showRepeats}
-            onProductIdChange={actions.setProductId}
-            onSearchChange={actions.setSearchInput}
-            onSeverityChange={actions.setFilterSeverity}
-            onStatusChange={actions.setFilterStatus}
-            onRiskBandChange={actions.setFilterRiskBand}
-            onOccurrenceChange={actions.setFilterOccurrence}
-            onScannerTypeChange={actions.setFilterScannerType}
-            onPolicyDecisionChange={actions.setFilterPolicyDecision}
-            onDateFromChange={actions.setDateFrom}
-            onDateToChange={actions.setDateTo}
-            onShowRepeatsChange={actions.setShowRepeats}
-            onResetAll={actions.resetFilters}
-          />
-        </Box>
-      )}
+      <FindingsTopBar
+        totalCount={totalCount}
+        totalKnown={totalKnown}
+        filters={filters}
+        onSearchChange={(value) => setPartial({ search: value, page: 0 })}
+        onApplyView={handleApplyView}
+        exportData={data}
+        exportDisabled={loading}
+        exportTotalCount={totalCount}
+        exportSelectAllMatching={bulk.selectAllMatching}
+        debouncedSearch={debouncedSearch}
+      />
 
       {/* Error Alert */}
       {error && (
@@ -391,12 +213,12 @@ const FindingsList = () => {
           loading={loading || bulk.loading}
           errorMessage={error || bulk.error}
           onRetry={handleRetry}
-          onResetFilters={actions.resetFilters}
+          onResetFilters={resetAll}
           batchMode={bulk.selectionCount > 0}
           highlightQuery={debouncedSearch}
           rowCount={filters.pageSize}
           onOpenDetails={(id) => drawer.openDrawer(id)}
-          activeFindingId={filters.selectedFindingId}
+          activeFindingId={selectedFindingId}
           returnTo={listReturnTo}
           onNavigateToDetail={handleNavigateToDetail}
           compactMode
@@ -423,10 +245,10 @@ const FindingsList = () => {
           currentCount={data.length}
           onPageChange={(nextPage) => {
             if (nextPage > filters.page && !hasNextPage) return;
-            actions.setPage(nextPage);
+            setPartial({ page: nextPage });
           }}
           onPageSizeChange={(v) => {
-            actions.setPageSize(v);
+            setPartial({ pageSize: v, page: 0 });
             bulk.handleClearSelection();
           }}
           loading={statsLoading}
@@ -570,46 +392,11 @@ const FindingsList = () => {
 
       {/* Finding Details Drawer */}
       <FindingDetailsDrawer
-        findingId={filters.selectedFindingId}
+        findingId={selectedFindingId}
         returnTo={listReturnTo}
         onClose={drawer.closeDrawer}
       />
 
-      {/* Filters Drawer */}
-      <FilterDrawer
-        open={filtersDrawerOpen}
-        onClose={() => setFiltersDrawerOpen(false)}
-        onReset={actions.resetFilters}
-        width={{ xs: "100vw", md: 420 }}
-      >
-        <FiltersPanel
-          productId={filters.productId}
-          search={filters.searchInput}
-          filterSeverity={filters.filterSeverity}
-          filterStatus={filters.filterStatus}
-          filterRiskBand={filters.filterRiskBand}
-          filterOccurrence={filters.filterOccurrence}
-          filterScannerType={filters.filterScannerType}
-          filterPolicyDecision={filters.filterPolicyDecision}
-          dateFrom={filters.dateFrom}
-          dateTo={filters.dateTo}
-          showRepeats={filters.showRepeats}
-          onProductIdChange={actions.setProductId}
-          onSearchChange={actions.setSearchInput}
-          onSeverityChange={actions.setFilterSeverity}
-          onStatusChange={actions.setFilterStatus}
-          onRiskBandChange={actions.setFilterRiskBand}
-          onOccurrenceChange={actions.setFilterOccurrence}
-          onScannerTypeChange={actions.setFilterScannerType}
-          onPolicyDecisionChange={actions.setFilterPolicyDecision}
-          onDateFromChange={actions.setDateFrom}
-          onDateToChange={actions.setDateTo}
-          onShowRepeatsChange={actions.setShowRepeats}
-          onReset={actions.resetFilters}
-          showHeader={false}
-          showChips={false}
-        />
-      </FilterDrawer>
     </Box>
   );
 };

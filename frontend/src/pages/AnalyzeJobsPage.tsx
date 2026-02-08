@@ -1,49 +1,51 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Checkbox,
-  CircularProgress,
-  Divider,
-  FormControl,
-  FormControlLabel,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-  Link as MuiLink,
-  Paper,
-} from "@mui/material";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Box, Card, CardContent, Stack, Typography } from "@mui/material";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AnalysisJob,
   createAnalysisJob,
   fetchAnalysisJobs,
 } from "../api/analysisJobs";
-import { fetchProducts } from "../api/products";
+import { ApiError } from "../api/client";
+import {
+  createSourceSnapshot,
+  fetchLatestSourceSnapshot,
+  listSourceSnapshots,
+  SourceSnapshot,
+} from "../api/sourceSnapshots";
 import PaginationControl from "../components/PaginationControl";
-import { ProductListItemDTO } from "../types/products";
+import { useNotification } from "../contexts/NotificationContext";
+import AnalyzeHeader from "../features/analyze/components/AnalyzeHeader";
+import ProductSection from "../features/analyze/components/ProductSection";
+import RunSummary from "../features/analyze/components/RunSummary";
+import ScannerSection from "../features/analyze/components/ScannerSection";
+import RecentAnalyses from "../features/analyze/components/RecentAnalyses";
+import SourceSection, { SourceMode } from "../features/analyze/components/SourceSection";
+
+const maxArchiveMb = 200;
+const snapshotsPageSize = 50;
 
 const AnalyzeJobsPage = () => {
-  const [products, setProducts] = useState<ProductListItemDTO[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState<string>("");
-  const [engagementId, setEngagementId] = useState<string>("");
+  const { showError, showSuccess } = useNotification();
+  const historyRef = useRef<HTMLDivElement | null>(null);
+
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedProductLabel, setSelectedProductLabel] = useState("");
+
+  const [sourceMode, setSourceMode] = useState<SourceMode>("latest");
   const [archive, setArchive] = useState<File | null>(null);
+  const [latestSnapshot, setLatestSnapshot] = useState<SourceSnapshot | null>(null);
+  const [latestSnapshotLoading, setLatestSnapshotLoading] = useState(false);
+  const [snapshots, setSnapshots] = useState<SourceSnapshot[]>([]);
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
+
   const [runSemgrep, setRunSemgrep] = useState(true);
   const [runTrivy, setRunTrivy] = useState(true);
+
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+  const [lastJobId, setLastJobId] = useState<string | null>(null);
 
   const [data, setData] = useState<AnalysisJob[]>([]);
   const [total, setTotal] = useState(0);
@@ -59,16 +61,33 @@ const AnalyzeJobsPage = () => {
     return list;
   }, [runSemgrep, runTrivy]);
 
-  const isValid = Boolean(selectedProductId && archive && scanners.length > 0);
+  const productSummary = useMemo(() => {
+    if (!selectedProductId) return "Продукт не выбран";
+    return selectedProductLabel || selectedProductId;
+  }, [selectedProductId, selectedProductLabel]);
 
-  const loadProducts = useCallback(async () => {
-    try {
-      const response = await fetchProducts(200, 0);
-      setProducts(response.data);
-    } catch {
-      setProducts([]);
+  const sourceSummary = useMemo(() => {
+    switch (sourceMode) {
+      case "latest":
+        return latestSnapshot
+          ? `Последний снапшот · ${new Date(latestSnapshot.createdAt).toLocaleDateString("ru-RU")}`
+          : "Последний снапшот";
+      case "select": {
+        const snapshot = snapshots.find((item) => item.id === selectedSnapshotId);
+        return snapshot?.label || snapshot?.originalFilename || "Выбранный снапшот";
+      }
+      case "upload":
+        return archive ? `Новый снапшот · ${archive.name}` : "Новый снапшот";
+      case "ephemeral":
+      default:
+        return archive ? `Архив задачи · ${archive.name}` : "Архив задачи";
     }
-  }, []);
+  }, [archive, latestSnapshot, selectedSnapshotId, snapshots, sourceMode]);
+
+  const scannerSummary = useMemo(() => {
+    if (scanners.length === 0) return "Сканеры не выбраны";
+    return scanners.join(" + ");
+  }, [scanners]);
 
   const loadJobs = useCallback(
     async (signal?: AbortSignal) => {
@@ -90,189 +109,248 @@ const AnalyzeJobsPage = () => {
   );
 
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
-
-  useEffect(() => {
     const controller = new AbortController();
     loadJobs(controller.signal);
     return () => controller.abort();
   }, [loadJobs]);
 
-  const handleSubmit = async () => {
-    if (!archive || !selectedProductId || scanners.length === 0) {
-      setSubmitError("Заполните продукт, файл и список сканеров.");
+  useEffect(() => {
+    if (!selectedProductId) {
+      setLatestSnapshot(null);
+      setSnapshots([]);
+      setSelectedSnapshotId("");
       return;
     }
-    setSubmitError(null);
-    setSubmitSuccess(null);
+
+    const controller = new AbortController();
+    const loadSnapshots = async () => {
+      setLatestSnapshotLoading(true);
+      setSnapshotsLoading(true);
+      try {
+        const [latestResult, listResult] = await Promise.allSettled([
+          fetchLatestSourceSnapshot(selectedProductId),
+          listSourceSnapshots(selectedProductId, snapshotsPageSize, 0),
+        ]);
+        if (latestResult.status === "fulfilled") {
+          setLatestSnapshot(latestResult.value);
+          if (sourceMode === "latest") {
+            setSelectedSnapshotId(latestResult.value?.id ?? "");
+          }
+        } else {
+          setLatestSnapshot(null);
+        }
+        if (listResult.status === "fulfilled") {
+          setSnapshots(listResult.value.data);
+        } else {
+          setSnapshots([]);
+        }
+      } catch {
+        setLatestSnapshot(null);
+        setSnapshots([]);
+      } finally {
+        setLatestSnapshotLoading(false);
+        setSnapshotsLoading(false);
+      }
+    };
+
+    loadSnapshots();
+    return () => controller.abort();
+  }, [selectedProductId, sourceMode]);
+
+  useEffect(() => {
+    if (sourceMode === "latest") {
+      setArchive(null);
+      if (latestSnapshot?.id) {
+        setSelectedSnapshotId(latestSnapshot.id);
+      }
+    }
+    if (sourceMode === "select") {
+      setArchive(null);
+    }
+  }, [latestSnapshot, sourceMode]);
+
+  const handlePreset = useCallback((preset: "fast" | "full") => {
+    if (preset === "fast") {
+      setRunSemgrep(true);
+      setRunTrivy(false);
+    } else {
+      setRunSemgrep(true);
+      setRunTrivy(true);
+    }
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    if (submitting) return;
+    if (scanners.length === 0) {
+      showError("Выберите хотя бы один сканер.");
+      return;
+    }
+    if (!selectedProductId) {
+      showError("Выберите продукт.");
+      return;
+    }
+
+    if (sourceMode === "latest" && !latestSnapshot) {
+      showError("Для этого продукта нет сохранённых снапшотов.");
+      return;
+    }
+
+    if (sourceMode === "select" && !selectedSnapshotId) {
+      showError("Выберите снапшот из списка.");
+      return;
+    }
+
+    if ((sourceMode === "upload" || sourceMode === "ephemeral") && !archive) {
+      showError("Добавьте архив исходников.");
+      return;
+    }
+
     setSubmitting(true);
+    setUploadProgress(null);
+    setSubmitError(null);
+
     try {
+      let sourceSnapshotId: string | undefined;
+      let archiveToUpload: File | undefined;
+
+      if (sourceMode === "latest") {
+        sourceSnapshotId = undefined;
+      } else if (sourceMode === "select") {
+        sourceSnapshotId = selectedSnapshotId;
+      } else if (sourceMode === "upload" && archive) {
+        const snapshotIdempotencyKey = crypto.randomUUID();
+        setUploadProgress(0);
+        const snapshot = await createSourceSnapshot(selectedProductId, archive, {
+          idempotencyKey: snapshotIdempotencyKey,
+          onProgress: setUploadProgress,
+        });
+        sourceSnapshotId = snapshot.id;
+      } else if (sourceMode === "ephemeral" && archive) {
+        archiveToUpload = archive;
+      }
+
+      const jobIdempotencyKey = crypto.randomUUID();
+      if (archiveToUpload) {
+        setUploadProgress(0);
+      }
+
       const response = await createAnalysisJob({
         productId: selectedProductId,
-        engagementId: engagementId || undefined,
         scanners,
-        archive,
+        archive: archiveToUpload,
+        sourceSnapshotId,
+        sourceMode: sourceMode === "latest" ? "latest" : undefined,
+        idempotencyKey: jobIdempotencyKey,
+        onProgress: archiveToUpload ? setUploadProgress : undefined,
       });
-      setSubmitSuccess(`Анализ поставлен в очередь: ${response.id}`);
+
+      showSuccess("Анализ поставлен в очередь.");
       setArchive(null);
+      setLastJobId(response.id);
       await loadJobs();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Не удалось создать анализ");
+      if (err instanceof ApiError) {
+        if (err.status === 413) {
+          showError(`Архив слишком большой. Максимум: ${maxArchiveMb} MB.`);
+          return;
+        }
+        if (err.code === "PASSWORD_CHANGE_REQUIRED") {
+          return;
+        }
+        const message = err.message || "Не удалось создать анализ";
+        setSubmitError(message);
+        showError(message);
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Не удалось создать анализ";
+      setSubmitError(message);
+      showError(message);
     } finally {
+      setUploadProgress(null);
       setSubmitting(false);
     }
-  };
+  }, [
+    archive,
+    latestSnapshot,
+    loadJobs,
+    scanners,
+    selectedProductId,
+    selectedSnapshotId,
+    showError,
+    showSuccess,
+    sourceMode,
+    submitting,
+  ]);
 
-  const formatStats = (job: AnalysisJob) => {
-    const repeats = Math.max(job.findingsTotal - job.findingsNew - job.duplicatesTotal, 0);
-    return `New: ${job.findingsNew} · Repeat: ${repeats} · Duplicates: ${job.duplicatesTotal}`;
-  };
+  const scannerWarnings = useMemo(() => {
+    if (scanners.length === 0) {
+      return ["Нужно выбрать хотя бы один сканер."];
+    }
+    return [];
+  }, [scanners.length]);
+
+  const handleHistoryClick = useCallback(() => {
+    historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   return (
-    <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }}>
+    <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }} sx={{ maxWidth: 1200, mx: "auto" }}>
       <Stack spacing={3}>
-        <Box>
-          <Typography variant="h4" gutterBottom>
-            Analyze
-          </Typography>
-          <Typography color="text.secondary">
-            Запустите анализ кода проекта с помощью Semgrep и Trivy.
-          </Typography>
-        </Box>
+        <AnalyzeHeader onHistoryClick={handleHistoryClick} />
 
-        <Card>
-          <CardContent>
-            <Stack spacing={2}>
-              <FormControl fullWidth>
-                <InputLabel id="product-label">Product</InputLabel>
-                <Select
-                  labelId="product-label"
-                  label="Product"
-                  value={selectedProductId}
-                  onChange={(event) => setSelectedProductId(event.target.value)}
-                >
-                  {products.length === 0 && (
-                    <MenuItem value="">
-                      <em>Нет доступных продуктов</em>
-                    </MenuItem>
-                  )}
-                  {products.map((product) => (
-                    <MenuItem key={product.id} value={product.id}>
-                      {product.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <TextField
-                label="Engagement ID (optional)"
-                value={engagementId}
-                onChange={(event) => setEngagementId(event.target.value)}
-                placeholder="UUID"
-                fullWidth
-              />
-
-              <Button variant="outlined" component="label">
-                {archive ? `Файл: ${archive.name}` : "Загрузить архив (zip/tar.gz)"}
-                <input
-                  hidden
-                  type="file"
-                  accept=".zip,.tar.gz,.tgz"
-                  onChange={(event) => {
-                    const selected = event.target.files?.[0] || null;
-                    setArchive(selected);
-                  }}
+        <Stack direction={{ xs: "column", lg: "row" }} spacing={3} alignItems="flex-start">
+          <Card variant="outlined" sx={{ flex: 1 }}>
+            <CardContent>
+              <Stack spacing={2}>
+                <ProductSection
+                  selectedProductId={selectedProductId}
+                  onProductIdChange={setSelectedProductId}
+                  onProductLabelChange={setSelectedProductLabel}
                 />
-              </Button>
 
-              <Divider />
-
-              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={runSemgrep}
-                      onChange={(event) => setRunSemgrep(event.target.checked)}
-                    />
-                  }
-                  label="Semgrep"
+                <SourceSection
+                  sourceMode={sourceMode}
+                  onSourceModeChange={setSourceMode}
+                  hasProduct={Boolean(selectedProductId)}
+                  archive={archive}
+                  onArchiveChange={setArchive}
+                  latestSnapshot={latestSnapshot}
+                  latestSnapshotLoading={latestSnapshotLoading}
+                  snapshots={snapshots}
+                  snapshotsLoading={snapshotsLoading}
+                  selectedSnapshotId={selectedSnapshotId}
+                  onSnapshotChange={setSelectedSnapshotId}
+                  showSnapshotWarnings={!archive && (sourceMode === "upload" || sourceMode === "ephemeral")}
                 />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={runTrivy}
-                      onChange={(event) => setRunTrivy(event.target.checked)}
-                    />
-                  }
-                  label="Trivy"
+
+                <ScannerSection
+                  runSemgrep={runSemgrep}
+                  runTrivy={runTrivy}
+                  onToggleSemgrep={() => setRunSemgrep((prev) => !prev)}
+                  onToggleTrivy={() => setRunTrivy((prev) => !prev)}
+                  onPreset={handlePreset}
+                  warnings={scannerWarnings}
                 />
               </Stack>
+            </CardContent>
+          </Card>
 
-              {submitting && <CircularProgress size={24} />}
+          <RunSummary
+            productSummary={productSummary}
+            sourceSummary={sourceSummary}
+            scannerSummary={scannerSummary}
+            submitting={submitting}
+            uploadProgress={uploadProgress}
+            lastJobId={lastJobId}
+            onSubmit={handleSubmit}
+            submitError={submitError}
+            onRetry={submitError ? handleSubmit : undefined}
+          />
+        </Stack>
 
-              <Button
-                variant="contained"
-                onClick={handleSubmit}
-                disabled={!isValid || submitting}
-              >
-                Запустить анализ
-              </Button>
-
-              {submitError && <Alert severity="error">{submitError}</Alert>}
-              {submitSuccess && <Alert severity="success">{submitSuccess}</Alert>}
-            </Stack>
-          </CardContent>
-        </Card>
-
-        <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-          {loading ? (
-            <Box display="flex" justifyContent="center" py={8}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Job</TableCell>
-                  <TableCell>Продукт</TableCell>
-                  <TableCell>Сканеры</TableCell>
-                  <TableCell>Статус</TableCell>
-                  <TableCell>Статистика</TableCell>
-                  <TableCell>Создано</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {data.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                      <Typography color="text.secondary">
-                        Анализов пока нет.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  data.map((item) => (
-                    <TableRow key={item.id} hover>
-                      <TableCell>
-                        <MuiLink component={Link} to={`/analyze/${item.id}`} underline="hover">
-                          {item.id}
-                        </MuiLink>
-                      </TableCell>
-                      <TableCell>{item.productName || "—"}</TableCell>
-                      <TableCell>{item.scanners.join(", ")}</TableCell>
-                      <TableCell>{item.status}</TableCell>
-                      <TableCell>{formatStats(item)}</TableCell>
-                      <TableCell>{new Date(item.createdAt).toLocaleString("ru-RU")}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </Paper>
-
-        {error && <Alert severity="error">{error}</Alert>}
+        <Box ref={historyRef}>
+          <RecentAnalyses jobs={data} loading={loading} error={error} />
+        </Box>
 
         <PaginationControl
           page={page}
