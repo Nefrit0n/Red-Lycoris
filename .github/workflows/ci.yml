@@ -415,22 +415,22 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
-      - name: TruffleHog3 (pip)
+      - name: Install trufflehog3
         run: |
           python -m pip install --upgrade pip
           pip install "trufflehog3==3.0.10"
-          trufflehog3 --no-history \
-            --exclude "lotus-warden/docs/template,docs/template" \
-            --format json \
-            -o trufflehog3.json \
-            backend frontend python_api scripts .github nginx
 
-      - name: Upload trufflehog3 report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trufflehog3-report
-          path: trufflehog3.json
+      - name: Create trufflehog3 config (ignore templates)
+        run: |
+          cat > .trufflehog3.yml <<'YAML'
+          exclude_paths:
+            - lotus-warden/docs/template
+            - docs/template
+          YAML
+
+      - name: Run trufflehog3 (files only, no git history)
+        run: |
+          trufflehog3 --no-history --format json --output trufflehog3.json .
 
   security:
     name: Trivy scan (fs + config)
