@@ -1,9 +1,19 @@
-import { Box, Card, CardContent, Stack, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Stack,
+  Step,
+  StepLabel,
+  Stepper,
+} from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AnalysisJob,
   createAnalysisJob,
   fetchAnalysisJobs,
+  SCANNER_PRESETS,
 } from "../api/analysisJobs";
 import { ApiError } from "../api/client";
 import {
@@ -23,10 +33,15 @@ import SourceSection, { SourceMode } from "../features/analyze/components/Source
 
 const maxArchiveMb = 200;
 const snapshotsPageSize = 50;
+const AUTO_REFRESH_INTERVAL = 10_000;
+
+const STEPS = ["Продукт", "Источник", "Сканеры"];
 
 const AnalyzeJobsPage = () => {
   const { showError, showSuccess } = useNotification();
   const historyRef = useRef<HTMLDivElement | null>(null);
+
+  const [activeStep, setActiveStep] = useState(0);
 
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedProductLabel, setSelectedProductLabel] = useState("");
@@ -39,8 +54,9 @@ const AnalyzeJobsPage = () => {
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
-  const [runSemgrep, setRunSemgrep] = useState(true);
-  const [runTrivy, setRunTrivy] = useState(true);
+  const [selectedScanners, setSelectedScanners] = useState<string[]>([
+    ...SCANNER_PRESETS.fast.scanners,
+  ]);
 
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -53,13 +69,6 @@ const AnalyzeJobsPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
-
-  const scanners = useMemo(() => {
-    const list: string[] = [];
-    if (runSemgrep) list.push("semgrep");
-    if (runTrivy) list.push("trivy");
-    return list;
-  }, [runSemgrep, runTrivy]);
 
   const productSummary = useMemo(() => {
     if (!selectedProductId) return "Продукт не выбран";
@@ -85,9 +94,9 @@ const AnalyzeJobsPage = () => {
   }, [archive, latestSnapshot, selectedSnapshotId, snapshots, sourceMode]);
 
   const scannerSummary = useMemo(() => {
-    if (scanners.length === 0) return "Сканеры не выбраны";
-    return scanners.join(" + ");
-  }, [scanners]);
+    if (selectedScanners.length === 0) return "Сканеры не выбраны";
+    return selectedScanners.join(" + ");
+  }, [selectedScanners]);
 
   const loadJobs = useCallback(
     async (signal?: AbortSignal) => {
@@ -113,6 +122,19 @@ const AnalyzeJobsPage = () => {
     loadJobs(controller.signal);
     return () => controller.abort();
   }, [loadJobs]);
+
+  // Auto-refresh when there are running jobs
+  useEffect(() => {
+    const hasRunning = data.some(
+      (j) => j.status === "queued" || j.status === "processing"
+    );
+    if (!hasRunning) return;
+
+    const interval = setInterval(() => {
+      loadJobs();
+    }, AUTO_REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [data, loadJobs]);
 
   useEffect(() => {
     if (!selectedProductId) {
@@ -169,19 +191,9 @@ const AnalyzeJobsPage = () => {
     }
   }, [latestSnapshot, sourceMode]);
 
-  const handlePreset = useCallback((preset: "fast" | "full") => {
-    if (preset === "fast") {
-      setRunSemgrep(true);
-      setRunTrivy(false);
-    } else {
-      setRunSemgrep(true);
-      setRunTrivy(true);
-    }
-  }, []);
-
   const handleSubmit = useCallback(async () => {
     if (submitting) return;
-    if (scanners.length === 0) {
+    if (selectedScanners.length === 0) {
       showError("Выберите хотя бы один сканер.");
       return;
     }
@@ -236,7 +248,7 @@ const AnalyzeJobsPage = () => {
 
       const response = await createAnalysisJob({
         productId: selectedProductId,
-        scanners,
+        scanners: selectedScanners,
         archive: archiveToUpload,
         sourceSnapshotId,
         sourceMode: sourceMode === "latest" ? "latest" : undefined,
@@ -273,7 +285,7 @@ const AnalyzeJobsPage = () => {
     archive,
     latestSnapshot,
     loadJobs,
-    scanners,
+    selectedScanners,
     selectedProductId,
     selectedSnapshotId,
     showError,
@@ -283,15 +295,84 @@ const AnalyzeJobsPage = () => {
   ]);
 
   const scannerWarnings = useMemo(() => {
-    if (scanners.length === 0) {
+    if (selectedScanners.length === 0) {
       return ["Нужно выбрать хотя бы один сканер."];
     }
     return [];
-  }, [scanners.length]);
+  }, [selectedScanners.length]);
 
   const handleHistoryClick = useCallback(() => {
     historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
+
+  const canProceed = useMemo(() => {
+    switch (activeStep) {
+      case 0:
+        return Boolean(selectedProductId);
+      case 1: {
+        if (sourceMode === "latest") return Boolean(latestSnapshot);
+        if (sourceMode === "select") return Boolean(selectedSnapshotId);
+        if (sourceMode === "upload" || sourceMode === "ephemeral") return Boolean(archive);
+        return false;
+      }
+      case 2:
+        return selectedScanners.length > 0;
+      default:
+        return false;
+    }
+  }, [activeStep, selectedProductId, sourceMode, latestSnapshot, selectedSnapshotId, archive, selectedScanners]);
+
+  const stepContent = useMemo(() => {
+    switch (activeStep) {
+      case 0:
+        return (
+          <ProductSection
+            selectedProductId={selectedProductId}
+            onProductIdChange={setSelectedProductId}
+            onProductLabelChange={setSelectedProductLabel}
+          />
+        );
+      case 1:
+        return (
+          <SourceSection
+            sourceMode={sourceMode}
+            onSourceModeChange={setSourceMode}
+            hasProduct={Boolean(selectedProductId)}
+            archive={archive}
+            onArchiveChange={setArchive}
+            latestSnapshot={latestSnapshot}
+            latestSnapshotLoading={latestSnapshotLoading}
+            snapshots={snapshots}
+            snapshotsLoading={snapshotsLoading}
+            selectedSnapshotId={selectedSnapshotId}
+            onSnapshotChange={setSelectedSnapshotId}
+            showSnapshotWarnings={!archive && (sourceMode === "upload" || sourceMode === "ephemeral")}
+          />
+        );
+      case 2:
+        return (
+          <ScannerSection
+            selectedScanners={selectedScanners}
+            onScannersChange={setSelectedScanners}
+            warnings={scannerWarnings}
+          />
+        );
+      default:
+        return null;
+    }
+  }, [
+    activeStep,
+    archive,
+    latestSnapshot,
+    latestSnapshotLoading,
+    scannerWarnings,
+    selectedProductId,
+    selectedScanners,
+    selectedSnapshotId,
+    snapshots,
+    snapshotsLoading,
+    sourceMode,
+  ]);
 
   return (
     <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }} sx={{ maxWidth: 1200, mx: "auto" }}>
@@ -301,36 +382,38 @@ const AnalyzeJobsPage = () => {
         <Stack direction={{ xs: "column", lg: "row" }} spacing={3} alignItems="flex-start">
           <Card variant="outlined" sx={{ flex: 1 }}>
             <CardContent>
-              <Stack spacing={2}>
-                <ProductSection
-                  selectedProductId={selectedProductId}
-                  onProductIdChange={setSelectedProductId}
-                  onProductLabelChange={setSelectedProductLabel}
-                />
+              <Stack spacing={3}>
+                <Stepper activeStep={activeStep} alternativeLabel>
+                  {STEPS.map((label) => (
+                    <Step key={label}>
+                      <StepLabel>{label}</StepLabel>
+                    </Step>
+                  ))}
+                </Stepper>
 
-                <SourceSection
-                  sourceMode={sourceMode}
-                  onSourceModeChange={setSourceMode}
-                  hasProduct={Boolean(selectedProductId)}
-                  archive={archive}
-                  onArchiveChange={setArchive}
-                  latestSnapshot={latestSnapshot}
-                  latestSnapshotLoading={latestSnapshotLoading}
-                  snapshots={snapshots}
-                  snapshotsLoading={snapshotsLoading}
-                  selectedSnapshotId={selectedSnapshotId}
-                  onSnapshotChange={setSelectedSnapshotId}
-                  showSnapshotWarnings={!archive && (sourceMode === "upload" || sourceMode === "ephemeral")}
-                />
+                <Box sx={{ minHeight: 200 }}>
+                  {stepContent}
+                </Box>
 
-                <ScannerSection
-                  runSemgrep={runSemgrep}
-                  runTrivy={runTrivy}
-                  onToggleSemgrep={() => setRunSemgrep((prev) => !prev)}
-                  onToggleTrivy={() => setRunTrivy((prev) => !prev)}
-                  onPreset={handlePreset}
-                  warnings={scannerWarnings}
-                />
+                <Stack direction="row" justifyContent="space-between">
+                  <Button
+                    disabled={activeStep === 0}
+                    onClick={() => setActiveStep((prev) => prev - 1)}
+                  >
+                    Назад
+                  </Button>
+                  {activeStep < STEPS.length - 1 ? (
+                    <Button
+                      variant="contained"
+                      disabled={!canProceed}
+                      onClick={() => setActiveStep((prev) => prev + 1)}
+                    >
+                      Далее
+                    </Button>
+                  ) : (
+                    <Box />
+                  )}
+                </Stack>
               </Stack>
             </CardContent>
           </Card>

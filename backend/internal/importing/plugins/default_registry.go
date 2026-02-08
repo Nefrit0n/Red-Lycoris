@@ -8,6 +8,9 @@ var defaultRegistry = func() *Registry {
 	// Existing parsers with normalizers
 	registry.Register(newParserPlugin(&parser.TrivyParser{}, detectSarifVersion, 100, normalizeTrivyFindings))
 	registry.Register(newParserPlugin(&parser.SemgrepParser{}, detectSemgrepVersion, 100, normalizeSemgrepFindings))
+
+	// OpenGrep produces Semgrep-compatible JSON — reuse the same parser/normalizer under alias
+	registry.Register(newParserPluginWithAlias("opengrep", &parser.SemgrepParser{}, detectSemgrepVersion, 100, normalizeSemgrepFindings))
 	registry.Register(newParserPlugin(&parser.ZapParser{}, detectSarifVersion, 100, normalizeZapFindings))
 	registry.Register(newParserPlugin(&parser.SarifParser{}, detectSarifVersion, 90, normalizeSASTFindings))
 
@@ -41,6 +44,7 @@ var defaultRegistry = func() *Registry {
 	// Text fallback parsers
 	registry.Register(newParserPlugin(parser.NewTextParser("trivy"), nil, 10, nil))
 	registry.Register(newParserPlugin(parser.NewTextParser("semgrep"), nil, 10, nil))
+	registry.Register(newParserPlugin(parser.NewTextParser("opengrep"), nil, 10, nil))
 	registry.Register(newParserPlugin(parser.NewTextParser("zap"), nil, 10, nil))
 	registry.Register(newParserPlugin(parser.NewTextParser("bandit"), nil, 10, nil))
 	registry.Register(newParserPlugin(parser.NewTextParser("codeql"), nil, 10, nil))

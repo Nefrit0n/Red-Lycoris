@@ -1,16 +1,17 @@
 import {
   Box,
-  Button,
+  Chip,
   CircularProgress,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AnalysisJob } from "../../../api/analysisJobs";
+import { AnalysisJob, SCANNER_CATALOG } from "../../../api/analysisJobs";
 
 type RecentAnalysesProps = {
   jobs: AnalysisJob[];
@@ -18,19 +19,24 @@ type RecentAnalysesProps = {
   error?: string | null;
 };
 
-const statusLabel = (status: string) => {
-  switch (status) {
-    case "queued":
-      return "В очереди";
-    case "processing":
-      return "В работе";
-    case "succeeded":
-      return "Успешно";
-    case "failed":
-      return "Ошибка";
-    default:
-      return status;
-  }
+const STATUS_CONFIG: Record<string, { label: string; color: "default" | "warning" | "info" | "success" | "error" }> = {
+  queued: { label: "В очереди", color: "warning" },
+  processing: { label: "В работе", color: "info" },
+  succeeded: { label: "Успешно", color: "success" },
+  failed: { label: "Ошибка", color: "error" },
+};
+
+const shortId = (id: string) => id.slice(0, 8);
+
+const scannerLabel = (id: string) => {
+  const info = SCANNER_CATALOG.find((s) => s.id === id);
+  return info?.name || id;
+};
+
+const formatDuration = (seconds?: number) => {
+  if (!seconds) return null;
+  if (seconds < 60) return `${Math.round(seconds)} сек`;
+  return `${Math.round(seconds / 60)} мин`;
 };
 
 const RecentAnalyses = ({ jobs, loading, error }: RecentAnalysesProps) => {
@@ -93,7 +99,7 @@ const RecentAnalyses = ({ jobs, loading, error }: RecentAnalysesProps) => {
             <MenuItem value="all">Все статусы</MenuItem>
             {statusOptions.map((status) => (
               <MenuItem key={status} value={status}>
-                {statusLabel(status)}
+                {STATUS_CONFIG[status]?.label || status}
               </MenuItem>
             ))}
           </Select>
@@ -117,7 +123,7 @@ const RecentAnalyses = ({ jobs, loading, error }: RecentAnalysesProps) => {
             <MenuItem value="all">Все сканеры</MenuItem>
             {scannerOptions.map((scanner) => (
               <MenuItem key={scanner} value={scanner}>
-                {scanner}
+                {scannerLabel(scanner)}
               </MenuItem>
             ))}
           </Select>
@@ -133,7 +139,7 @@ const RecentAnalyses = ({ jobs, loading, error }: RecentAnalysesProps) => {
           <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
             <Box component="thead" sx={{ backgroundColor: "action.hover" }}>
               <Box component="tr">
-                {["ID анализа", "Продукт", "Сканеры", "Статус", "Создан"].map((label) => (
+                {["ID", "Продукт", "Сканеры", "Находки", "Статус", "Время", "Создан"].map((label) => (
                   <Box
                     component="th"
                     key={label}
@@ -147,36 +153,94 @@ const RecentAnalyses = ({ jobs, loading, error }: RecentAnalysesProps) => {
             <Box component="tbody">
               {filteredJobs.length === 0 ? (
                 <Box component="tr">
-                  <Box component="td" colSpan={5} sx={{ py: 5, textAlign: "center" }}>
+                  <Box component="td" colSpan={7} sx={{ py: 5, textAlign: "center" }}>
                     <Typography color="text.secondary">Нет анализов по выбранным фильтрам.</Typography>
                   </Box>
                 </Box>
               ) : (
-                filteredJobs.map((item) => (
-                  <Box
-                    component="tr"
-                    key={item.id}
-                    sx={{ borderTop: "1px solid", borderColor: "divider" }}
-                  >
-                    <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                      <Button component={Link} to={`/analyze/${item.id}`} size="small">
-                        {item.id}
-                      </Button>
+                filteredJobs.map((item) => {
+                  const statusCfg = STATUS_CONFIG[item.status] || { label: item.status, color: "default" as const };
+                  return (
+                    <Box
+                      component="tr"
+                      key={item.id}
+                      sx={{
+                        borderTop: "1px solid",
+                        borderColor: "divider",
+                        "&:hover": { backgroundColor: "action.hover" },
+                      }}
+                    >
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        <Tooltip title={item.id} arrow>
+                          <Typography
+                            component={Link}
+                            to={`/analyze/${item.id}`}
+                            variant="body2"
+                            sx={{
+                              fontFamily: "monospace",
+                              textDecoration: "none",
+                              color: "primary.main",
+                              "&:hover": { textDecoration: "underline" },
+                            }}
+                          >
+                            {shortId(item.id)}
+                          </Typography>
+                        </Tooltip>
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        <Typography variant="body2">{item.productName || "—"}</Typography>
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                          {item.scanners.map((s) => (
+                            <Chip key={s} label={scannerLabel(s)} size="small" variant="outlined" />
+                          ))}
+                        </Stack>
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        {item.findingsTotal > 0 ? (
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <Typography variant="body2" fontWeight={600}>
+                              {item.findingsTotal}
+                            </Typography>
+                            {item.findingsNew > 0 && (
+                              <Chip label={`+${item.findingsNew}`} size="small" color="error" variant="outlined" />
+                            )}
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">—</Typography>
+                        )}
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        <Chip
+                          label={statusCfg.label}
+                          size="small"
+                          color={statusCfg.color}
+                          variant="filled"
+                          sx={{
+                            ...(item.status === "processing" && {
+                              animation: "pulse 1.5s ease-in-out infinite",
+                              "@keyframes pulse": {
+                                "0%, 100%": { opacity: 1 },
+                                "50%": { opacity: 0.6 },
+                              },
+                            }),
+                          }}
+                        />
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          {formatDuration(item.durationSeconds) || "—"}
+                        </Typography>
+                      </Box>
+                      <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          {new Date(item.createdAt).toLocaleString("ru-RU")}
+                        </Typography>
+                      </Box>
                     </Box>
-                    <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                      {item.productName || "—"}
-                    </Box>
-                    <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                      {item.scanners.join(", ")}
-                    </Box>
-                    <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                      {statusLabel(item.status)}
-                    </Box>
-                    <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                      {new Date(item.createdAt).toLocaleString("ru-RU")}
-                    </Box>
-                  </Box>
-                ))
+                  );
+                })
               )}
             </Box>
           </Box>

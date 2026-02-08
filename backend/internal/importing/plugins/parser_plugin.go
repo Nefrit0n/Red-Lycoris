@@ -67,6 +67,26 @@ func detectSarifVersion(data []byte) string {
 	return report.Version
 }
 
+// aliasParserPlugin wraps an existing parser under a different scanner name.
+type aliasParserPlugin struct {
+	alias string
+	inner ImportPlugin
+}
+
+func newParserPluginWithAlias(alias string, p parser.Parser, detectVersion func([]byte) string, detectionScore int, normalizer func([]parser.Finding, string) ([]CanonicalFinding, error)) ImportPlugin {
+	return &aliasParserPlugin{
+		alias: alias,
+		inner: newParserPlugin(p, detectVersion, detectionScore, normalizer),
+	}
+}
+
+func (a *aliasParserPlugin) ScannerType() string                                    { return a.alias }
+func (a *aliasParserPlugin) DetectReport(data []byte) (bool, string, int)           { return a.inner.DetectReport(data) }
+func (a *aliasParserPlugin) Parse(data []byte) ([]parser.Finding, error)            { return a.inner.Parse(data) }
+func (a *aliasParserPlugin) Normalize(in []parser.Finding, rv string) ([]CanonicalFinding, error) {
+	return a.inner.Normalize(in, rv)
+}
+
 type semgrepVersionReport struct {
 	Version string `json:"version"`
 }
