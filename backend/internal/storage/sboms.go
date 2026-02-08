@@ -219,7 +219,6 @@ func UpdateSbomIndexStatus(ctx context.Context, db *sql.DB, sbomID uuid.UUID, st
 	return nil
 }
 
-
 func GetLatestSbomByProduct(ctx context.Context, db *sql.DB, productID uuid.UUID) (*SbomItem, error) {
 	row := db.QueryRowContext(
 		ctx,
