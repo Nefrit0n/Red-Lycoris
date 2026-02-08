@@ -93,7 +93,7 @@ def psql(
 
     p = run(cmd, input_text=sql, check=True)
     out = p.stdout.decode("utf-8", "ignore") if p.stdout else ""
-    lines = [l.strip() for l in out.splitlines() if l.strip()]
+    lines = [line.strip() for line in out.splitlines() if line.strip()]
     return lines[0] if lines else ""
 
 
