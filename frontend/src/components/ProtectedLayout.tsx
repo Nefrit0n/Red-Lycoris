@@ -1,6 +1,10 @@
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { AUTH_INVALIDATED_EVENT, getToken } from "../api/http";
+import {
+  AUTH_INVALIDATED_EVENT,
+  AUTH_PASSWORD_CHANGE_REQUIRED_EVENT,
+  getToken,
+} from "../api/http";
 import SidebarLayout from "./SidebarLayout";
 
 const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
@@ -22,9 +26,20 @@ const ProtectedLayout = () => {
         state: { from: `${location.pathname}${location.search}` },
       });
     };
+    const onPasswordChangeRequired = () => {
+      navigate("/change-password", { replace: true });
+    };
     window.addEventListener(AUTH_INVALIDATED_EVENT, onAuthInvalidated);
+    window.addEventListener(
+      AUTH_PASSWORD_CHANGE_REQUIRED_EVENT,
+      onPasswordChangeRequired
+    );
     return () => {
       window.removeEventListener(AUTH_INVALIDATED_EVENT, onAuthInvalidated);
+      window.removeEventListener(
+        AUTH_PASSWORD_CHANGE_REQUIRED_EVENT,
+        onPasswordChangeRequired
+      );
     };
   }, [navigate, location.pathname, location.search]);
 
