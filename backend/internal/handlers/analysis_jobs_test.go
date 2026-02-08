@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -82,7 +83,7 @@ func TestCreateProductSourceSnapshotOK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create form file failed: %v", err)
 	}
-	if _, err := part.Write([]byte("content")); err != nil {
+	if _, err := part.Write(buildZipFixture(t, map[string]string{"README.md": "content"})); err != nil {
 		t.Fatalf("write form file failed: %v", err)
 	}
 	if err := writer.Close(); err != nil {
@@ -176,7 +177,7 @@ func TestCreateAnalysisJobFromSnapshotOK(t *testing.T) {
 	mock.ExpectExec("INSERT INTO analysis_jobs").
 		WithArgs(
 			sqlmock.AnyArg(),
-			sqlmock.AnyArg(),
+			tenantID,
 			productID,
 			nil,
 			sqlmock.AnyArg(),
@@ -273,7 +274,7 @@ func TestCreateAnalysisJobWithArchiveAndSnapshotReturnsBadRequest(t *testing.T) 
 	if err != nil {
 		t.Fatalf("create form file failed: %v", err)
 	}
-	if _, err := part.Write([]byte("content")); err != nil {
+	if _, err := part.Write(buildZipFixture(t, map[string]string{"file.txt": "content"})); err != nil {
 		t.Fatalf("write form file failed: %v", err)
 	}
 	if err := writer.Close(); err != nil {
@@ -461,4 +462,23 @@ func TestCreateAnalysisJobIdempotencyReturnsExisting(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet db expectations: %v", err)
 	}
+}
+
+func buildZipFixture(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range files {
+		entry, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("create zip entry failed: %v", err)
+		}
+		if _, err := entry.Write([]byte(content)); err != nil {
+			t.Fatalf("write zip entry failed: %v", err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip writer failed: %v", err)
+	}
+	return buf.Bytes()
 }
