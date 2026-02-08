@@ -506,7 +506,6 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 
 	scannerCfg := scanners.RunnerConfig{
 		ContainerNetwork: cfg.AnalysisContainerNetwork,
-		SemgrepImage:     cfg.AnalysisSemgrepImage,
 		OpenGrepImage:    cfg.AnalysisOpenGrepImage,
 		TrivyImage:       cfg.AnalysisTrivyImage,
 		CheckovImage:     cfg.AnalysisCheckovImage,
@@ -570,8 +569,6 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 
 	var scanErr error
 	switch scanner {
-	case "semgrep":
-		scanErr = scanners.RunSemgrep(ctx, cfg, workspace, resultPath)
 	case "opengrep":
 		scanErr = scanners.RunOpenGrep(ctx, cfg, workspace, resultPath)
 	case "trivy":
