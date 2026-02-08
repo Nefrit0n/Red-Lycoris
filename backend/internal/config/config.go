@@ -38,7 +38,6 @@ type Config struct {
 	AnalysisScannerTimeout   string
 	AnalysisCleanupInterval  string
 	AnalysisCleanupTTL       string
-	AnalysisSemgrepImage     string
 	AnalysisOpenGrepImage    string
 	AnalysisTrivyImage       string
 	AnalysisCheckovImage     string
@@ -89,14 +88,13 @@ func Load() Config {
 		AnalysisScannerTimeout:   getEnv("ANALYSIS_SCANNER_TIMEOUT", "20m"),
 		AnalysisCleanupInterval:  getEnv("ANALYSIS_CLEANUP_INTERVAL", "1h"),
 		AnalysisCleanupTTL:       getEnv("ANALYSIS_CLEANUP_TTL", "24h"),
-		AnalysisSemgrepImage:     getEnv("ANALYSIS_SEMGREP_IMAGE", "semgrep/semgrep:latest"),
 		AnalysisOpenGrepImage:    getEnv("ANALYSIS_OPENGREP_IMAGE", "ghcr.io/opengrep/opengrep:latest"),
 		AnalysisTrivyImage:       getEnv("ANALYSIS_TRIVY_IMAGE", "aquasec/trivy:latest"),
 		AnalysisCheckovImage:     getEnv("ANALYSIS_CHECKOV_IMAGE", "bridgecrew/checkov:latest"),
 		AnalysisKICSImage:        getEnv("ANALYSIS_KICS_IMAGE", "checkmarx/kics:latest"),
 		AnalysisGitleaksImage:    getEnv("ANALYSIS_GITLEAKS_IMAGE", "zricethezav/gitleaks:latest"),
 		AnalysisGrypeImage:       getEnv("ANALYSIS_GRYPE_IMAGE", "anchore/grype:latest"),
-		AnalysisContainerNetwork: getEnv("ANALYSIS_CONTAINER_NETWORK", "none"),
+		AnalysisContainerNetwork: getEnv("ANALYSIS_CONTAINER_NETWORK", "bridge"),
 		NVDAPIKey:                getEnv("NVD_API_KEY", ""),
 		EPSSEnabled:              getEnvAsBool("EPSS_ENABLED", true),
 		KEVURL:                   getEnv("KEV_URL", ""),

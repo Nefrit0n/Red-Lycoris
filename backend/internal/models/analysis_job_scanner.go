@@ -19,7 +19,6 @@ type ScannerMeta struct {
 
 var ScannerCatalog = map[string]ScannerMeta{
 	"opengrep": {Name: "OpenGrep", Category: "SAST"},
-	"semgrep":  {Name: "Semgrep", Category: "SAST"},
 	"trivy":    {Name: "Trivy", Category: "SCA"},
 	"checkov":  {Name: "Checkov", Category: "IAC"},
 	"kics":     {Name: "KICS", Category: "IAC"},
