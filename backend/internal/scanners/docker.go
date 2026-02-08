@@ -14,6 +14,7 @@ import (
 // RunnerConfig contains configuration for running scanners
 type RunnerConfig struct {
 	ContainerNetwork string
+	OpenGrepBinary   string
 	OpenGrepImage    string
 	TrivyImage       string
 	CheckovImage     string
@@ -29,6 +30,16 @@ func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, output
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
+	if binary := resolveOpenGrepBinary(cfg.OpenGrepBinary); binary != "" {
+		if err := runOpenGrepBinary(ctx, binary, workspace, outputPath); err == nil {
+			return nil
+		}
+	}
+
+	if cfg.OpenGrepImage == "" {
+		return fmt.Errorf("opengrep binary not found and ANALYSIS_OPENGREP_IMAGE is not set")
+	}
+
 	cmd := exec.CommandContext(
 		ctx,
 		"docker",
@@ -43,6 +54,34 @@ func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, output
 		"--json",
 		"--output", "/out/"+filepath.Base(outputPath),
 		"/src",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func resolveOpenGrepBinary(configuredPath string) string {
+	if configuredPath != "" {
+		if resolved, err := exec.LookPath(configuredPath); err == nil {
+			return resolved
+		}
+	}
+	if resolved, err := exec.LookPath("opengrep"); err == nil {
+		return resolved
+	}
+	return ""
+}
+
+func runOpenGrepBinary(ctx context.Context, binary string, workspace string, outputPath string) error {
+	cmd := exec.CommandContext(
+		ctx,
+		binary,
+		"--config=auto",
+		"--json",
+		"--output", outputPath,
+		workspace,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
