@@ -100,11 +100,28 @@ export const useDashboardLayout = () => {
     setLayout(nextLayout);
   };
 
+  // Check if current layout differs from saved layout
+  const hasUnsavedChanges = useMemo(() => {
+    if (!isEditing) return false;
+    if (layout.length !== savedLayout.length) return true;
+    return layout.some((item, index) => {
+      const saved = savedLayout[index];
+      return (
+        item.widgetId !== saved?.widgetId ||
+        item.x !== saved?.x ||
+        item.y !== saved?.y ||
+        item.w !== saved?.w ||
+        item.h !== saved?.h
+      );
+    });
+  }, [isEditing, layout, savedLayout]);
+
   return {
     templates: dashboardTemplates,
     selectedTemplate,
     layout,
     isEditing,
+    hasUnsavedChanges,
     startEditing,
     cancelEditing,
     saveLayout,
