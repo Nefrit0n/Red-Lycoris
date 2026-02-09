@@ -184,6 +184,7 @@ services:
       ROOT_PASSWORD: ${ROOT_PASSWORD:-root}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${ANALYSIS_TEMP_DIR:-/tmp/red-lycoris-analysis}:${ANALYSIS_TEMP_DIR:-/tmp/red-lycoris-analysis}
     # Run as root for Docker socket access
     user: "0:0"
     depends_on:
