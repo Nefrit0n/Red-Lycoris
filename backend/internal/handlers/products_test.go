@@ -33,7 +33,7 @@ func TestCreateProductUsesTenantID(t *testing.T) {
 		WithArgs(
 			sqlmock.AnyArg(),
 			tenantID,
-			"Lotus",
+			"Red Lycoris",
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
@@ -45,7 +45,7 @@ func TestCreateProductUsesTenantID(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	payload := map[string]string{
-		"name": "Lotus",
+		"name": "Red Lycoris",
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

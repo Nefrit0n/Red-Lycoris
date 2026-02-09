@@ -108,7 +108,7 @@ const ProductSection = ({
               label="Название продукта"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Lotus Platform"
+              placeholder="Red Lycoris Platform"
               required
               autoFocus
             />
@@ -122,7 +122,7 @@ const ProductSection = ({
               label="Identifier (опционально)"
               value={identifier}
               onChange={(event) => setIdentifier(event.target.value)}
-              placeholder="lotus-platform"
+              placeholder="red-lycoris-platform"
             />
           </Stack>
         </DialogContent>
