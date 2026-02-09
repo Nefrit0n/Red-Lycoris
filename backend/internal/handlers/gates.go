@@ -307,10 +307,14 @@ func countFindingsByCategory(ctx context.Context, db *sql.DB, filters storage.Fi
 		where = append(where, "duplicate_id IS NULL")
 	}
 
-	query := `SELECT category, COUNT(*)
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString(`SELECT category, COUNT(*)
 			FROM findings
-			WHERE ` + strings.Join(where, " AND ") + `
-			GROUP BY category`
+			WHERE `)
+	queryBuilder.WriteString(strings.Join(where, " AND "))
+	queryBuilder.WriteString(`
+			GROUP BY category`)
+	query := queryBuilder.String()
 
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
