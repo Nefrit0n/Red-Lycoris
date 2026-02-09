@@ -234,7 +234,7 @@ const CardFooter = styled(Box)({
  * // Basic glass card
  * <GlassCard variant="light">Content</GlassCard>
  *
- * // Lotus themed with glow
+ * // Red Lycoris themed with glow
  * <GlassCard variant="lotus" glowColor="lotus" glowAlways>
  *   Premium content
  * </GlassCard>
