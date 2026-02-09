@@ -3,7 +3,7 @@ package dedup
 import (
 	"testing"
 
-	"lotus-warden/backend/internal/parser"
+	"red-lycoris/backend/internal/parser"
 )
 
 func TestComputeFingerprintSameFinding(t *testing.T) {

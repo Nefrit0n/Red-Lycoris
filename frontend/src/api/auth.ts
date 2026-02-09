@@ -10,8 +10,8 @@ import {
 } from "./http";
 import { ApiError, request } from "./client";
 
-const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
-const USER_PROFILE_KEY = "lotus_warden_user_profile";
+const NEEDS_PWD_CHANGE_KEY = "red_lycoris_needs_pwd_change";
+const USER_PROFILE_KEY = "red_lycoris_user_profile";
 
 /**
  * Login

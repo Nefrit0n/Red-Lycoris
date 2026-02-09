@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"lotus-warden/backend/internal/middleware"
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/middleware"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"

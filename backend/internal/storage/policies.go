@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"lotus-warden/backend/internal/policies"
+	"red-lycoris/backend/internal/policies"
 )
 
 type PolicyRepository struct {

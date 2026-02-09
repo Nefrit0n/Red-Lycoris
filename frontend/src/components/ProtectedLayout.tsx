@@ -7,7 +7,7 @@ import {
 } from "../api/http";
 import SidebarLayout from "./SidebarLayout";
 
-const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
+const NEEDS_PWD_CHANGE_KEY = "red_lycoris_needs_pwd_change";
 
 const ProtectedLayout = () => {
   const token = getToken();

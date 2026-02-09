@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // NucleiParser parses Nuclei vulnerability scanner output.

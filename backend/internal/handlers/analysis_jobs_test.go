@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"lotus-warden/backend/internal/config"
-	"lotus-warden/backend/internal/middleware"
-	"lotus-warden/backend/internal/server"
+	"red-lycoris/backend/internal/config"
+	"red-lycoris/backend/internal/middleware"
+	"red-lycoris/backend/internal/server"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-jwt/jwt/v5"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"lotus-warden/backend/internal/parser"
+	"red-lycoris/backend/internal/parser"
 )
 
 // ErrUnsupportedFormat mirrors parser.ErrUnsupportedFormat for compatibility.

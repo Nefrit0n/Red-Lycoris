@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // TerrascanParser parses Terrascan IaC security scanner output.

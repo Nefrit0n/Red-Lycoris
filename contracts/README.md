@@ -17,9 +17,9 @@ docker compose up -d postgres nats minio
 
 ```bash
 cd backend
-export DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=lotus_warden DB_SSLMODE=disable
+export DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=red_lycoris DB_SSLMODE=disable
 export NATS_URL=nats://localhost:4222
-export OBJECT_STORE_ENDPOINT=localhost:9000 OBJECT_STORE_ACCESS_KEY=minioadmin OBJECT_STORE_SECRET_KEY=minioadmin OBJECT_STORE_BUCKET=lotus-warden OBJECT_STORE_USE_SSL=false
+export OBJECT_STORE_ENDPOINT=localhost:9000 OBJECT_STORE_ACCESS_KEY=minioadmin OBJECT_STORE_SECRET_KEY=minioadmin OBJECT_STORE_BUCKET=red-lycoris OBJECT_STORE_USE_SSL=false
 export ROOT_EMAIL=root@localhost ROOT_PASSWORD=root JWT_SECRET=local-contract-secret
 
 go run ./cmd/migrate

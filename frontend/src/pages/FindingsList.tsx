@@ -45,7 +45,7 @@ import FindingsTopBar from "../features/findings/toolbar/FindingsTopBar";
 
 import FindingDetailsDrawer from "../components/FindingDetailsDrawer";
 
-const LIST_STATE_KEY = "lotus_warden_findings_list_state";
+const LIST_STATE_KEY = "red_lycoris_findings_list_state";
 
 type BulkAction = "set_status";
 

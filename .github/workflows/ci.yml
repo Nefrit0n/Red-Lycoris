@@ -39,7 +39,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: lotus_warden
+          POSTGRES_DB: red_lycoris
         ports:
           - 5432:5432
         options: >-
@@ -53,7 +53,7 @@ jobs:
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
-      DB_NAME: lotus_warden
+      DB_NAME: red_lycoris
       DB_SSLMODE: disable
       MIGRATIONS_PATH: migrations
       ROOT_EMAIL: root@localhost
@@ -196,7 +196,7 @@ jobs:
       DB_USER: postgres
       DB_PASSWORD: postgres
       MIGRATIONS_PATH: migrations
-      DB_NAME: lotus_warden
+      DB_NAME: red_lycoris
       DB_SSLMODE: disable
       NATS_URL: nats://localhost:4222
       OBJECT_STORE_ENDPOINT: localhost:9000

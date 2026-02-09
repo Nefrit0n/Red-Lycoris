@@ -380,4 +380,4 @@ When adding new components or tokens:
 
 ## License
 
-Proprietary - Lotus Warden
+Proprietary - Red Lycoris

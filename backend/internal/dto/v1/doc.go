@@ -1,4 +1,4 @@
-// Package v1 defines API contract DTOs for Lotus Warden.
+// Package v1 defines API contract DTOs for Red Lycoris.
 //
 // Contract versioning:
 //   - v1 is the current stable contract.
