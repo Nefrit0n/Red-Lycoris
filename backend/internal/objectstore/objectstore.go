@@ -32,7 +32,8 @@ func NewMinioStore(cfg config.Config) (*MinioStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &MinioStore{client: client, bucket: cfg.ObjectStoreBucket}
+	bucket := strings.ToLower(strings.TrimSpace(cfg.ObjectStoreBucket))
+	store := &MinioStore{client: client, bucket: bucket}
 	if err := store.ensureBucket(context.Background()); err != nil {
 		return nil, err
 	}
