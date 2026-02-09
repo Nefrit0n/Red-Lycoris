@@ -13,10 +13,10 @@ import (
 	"strconv"
 	"time"
 
-	"lotus-warden/backend/internal/config"
-	"lotus-warden/backend/internal/events"
-	"lotus-warden/backend/internal/intel"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/config"
+	"red-lycoris/backend/internal/events"
+	"red-lycoris/backend/internal/intel"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/nats-io/nats.go"
 )

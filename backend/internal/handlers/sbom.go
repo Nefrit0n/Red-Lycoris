@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"lotus-warden/backend/internal/events"
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/objectstore"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/events"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/objectstore"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"

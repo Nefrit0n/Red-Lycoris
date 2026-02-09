@@ -3,8 +3,8 @@ package v1
 import (
 	"encoding/json"
 
-	v1dto "lotus-warden/backend/internal/dto/v1"
-	"lotus-warden/backend/internal/storage"
+	v1dto "red-lycoris/backend/internal/dto/v1"
+	"red-lycoris/backend/internal/storage"
 )
 
 func ProductAssetContext(item storage.ProductAssetContext) v1dto.ProductAssetContextDTO {

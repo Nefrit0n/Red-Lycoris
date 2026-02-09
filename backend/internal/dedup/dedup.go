@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"lotus-warden/backend/internal/parser"
+	"red-lycoris/backend/internal/parser"
 )
 
 // ComputeFingerprint returns a stable fingerprint used for deduplication.

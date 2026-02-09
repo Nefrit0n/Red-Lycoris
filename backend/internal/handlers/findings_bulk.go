@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"lotus-warden/backend/internal/middleware"
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/middleware"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // GitleaksParser parses Gitleaks secret scanner output.

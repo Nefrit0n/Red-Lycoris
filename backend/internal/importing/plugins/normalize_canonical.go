@@ -3,9 +3,9 @@ package plugins
 import (
 	"strings"
 
-	"lotus-warden/backend/internal/intel"
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/parser"
+	"red-lycoris/backend/internal/intel"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/parser"
 )
 
 func normalizeTrivyFindings(findings []parser.Finding, reportVersion string) ([]CanonicalFinding, error) {

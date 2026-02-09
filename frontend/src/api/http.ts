@@ -1,11 +1,11 @@
-const TOKEN_KEY = "lotus_warden_token";
-const NEEDS_PWD_CHANGE_KEY = "lotus_warden_needs_pwd_change";
+const TOKEN_KEY = "red_lycoris_token";
+const NEEDS_PWD_CHANGE_KEY = "red_lycoris_needs_pwd_change";
 
 // A tiny, explicit signal to the app shell that auth was invalidated.
 // We use an event because localStorage changes do NOT trigger rerenders in the same tab.
-export const AUTH_INVALIDATED_EVENT = "lotus_warden:auth_invalidated";
+export const AUTH_INVALIDATED_EVENT = "red_lycoris:auth_invalidated";
 export const AUTH_PASSWORD_CHANGE_REQUIRED_EVENT =
-  "lotus_warden:auth_password_change_required";
+  "red_lycoris:auth_password_change_required";
 
 const notifyAuthInvalidated = (): void => {
   try {
@@ -39,8 +39,8 @@ export const clearToken = (): void => {
 
 export const clearAuthStorage = (): void => {
   clearToken();
-  localStorage.removeItem("lotus_warden_needs_pwd_change");
-  localStorage.removeItem("lotus_warden_user_profile");
+  localStorage.removeItem("red_lycoris_needs_pwd_change");
+  localStorage.removeItem("red_lycoris_user_profile");
 };
 
 export const getAuthHeaders = (): HeadersInit => {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // NpmAuditParser parses npm audit JSON output.

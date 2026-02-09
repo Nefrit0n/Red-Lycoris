@@ -1,4 +1,4 @@
-name: Lotus Warden Gate Check
+name: Red Lycoris Gate Check
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run gate check
         env:
-          LW_API_TOKEN: ${{ secrets.LOTUS_WARDEN_TOKEN }}
+          LW_API_TOKEN: ${{ secrets.RED_LYCORIS_TOKEN }}
         run: |
           chmod +x scripts/gate-check.sh
-          scripts/gate-check.sh "${{ secrets.LOTUS_WARDEN_URL }}" "${{ inputs.import_job_id }}"
+          scripts/gate-check.sh "${{ secrets.RED_LYCORIS_URL }}" "${{ inputs.import_job_id }}"

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 
 	"github.com/google/uuid"
 )

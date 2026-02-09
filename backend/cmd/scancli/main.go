@@ -27,7 +27,7 @@ func main() {
 	productName := flag.String("product", "", "Product name")
 	productVersion := flag.String("version", "", "Product version")
 	productIdentifier := flag.String("identifier", "", "Product identifier")
-	token := flag.String("token", "", "JWT token (or set LOTUS_WARDEN_TOKEN)")
+	token := flag.String("token", "", "JWT token (or set RED_LYCORIS_TOKEN)")
 	flag.Parse()
 
 	if *scanner == "" {
@@ -39,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 	if *token == "" {
-		*token = os.Getenv("LOTUS_WARDEN_TOKEN")
+		*token = os.Getenv("RED_LYCORIS_TOKEN")
 	}
 	if *token == "" {
 		fmt.Fprintln(os.Stderr, "token is required")

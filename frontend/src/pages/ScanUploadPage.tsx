@@ -54,8 +54,8 @@ interface UploadHistoryItem extends UploadScanResponse {
   uploadedAt: string;
 }
 
-const HISTORY_KEY = "lotus_warden_upload_history";
-const LAST_UPLOAD_KEY = "lotus_warden_last_upload";
+const HISTORY_KEY = "red_lycoris_upload_history";
+const LAST_UPLOAD_KEY = "red_lycoris_last_upload";
 
 interface FindingPreview extends FindingListItemDTO {
   evidence?: FindingEvidence | null;

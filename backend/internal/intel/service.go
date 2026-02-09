@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/storage"
 )
 
 const (

@@ -2,7 +2,7 @@
 
 ## Sources and contract
 
-Lotus Warden enriches vulnerability identifiers using three “official” sources:
+Red Lycoris enriches vulnerability identifiers using three “official” sources:
 
 - **NVD** (NIST): CVSS scores and references.
 - **EPSS** (FIRST): exploit probability score and percentile.

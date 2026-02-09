@@ -6,9 +6,9 @@ from fastapi import FastAPI
 from app.tasks import parse_scan
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("lotus_warden.api")
+logger = logging.getLogger("red_lycoris.api")
 
-app = FastAPI(title="Lotus Warden Python API")
+app = FastAPI(title="Red Lycoris Python API")
 
 
 @app.get("/api/health")

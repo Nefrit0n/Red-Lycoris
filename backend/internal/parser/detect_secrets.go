@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // DetectSecretsParser parses detect-secrets scanner output.

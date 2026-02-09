@@ -37,7 +37,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-const THEME_STORAGE_KEY = 'lotus_warden_theme';
+const THEME_STORAGE_KEY = 'red_lycoris_theme';
 
 /**
  * Hook to access theme mode controls

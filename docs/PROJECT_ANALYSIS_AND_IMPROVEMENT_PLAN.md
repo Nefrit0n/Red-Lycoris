@@ -1,8 +1,8 @@
-# Комплексный анализ проекта Lotus-Warden
+# Комплексный анализ проекта Red-Lycoris
 
 ## Краткое описание проекта
 
-**Lotus-Warden** — это ASOC (Application Security Operations Center) платформа для:
+**Red-Lycoris** — это ASOC (Application Security Operations Center) платформа для:
 - Импорта и триажа уязвимостей из различных сканеров (Trivy, Semgrep, ZAP, SARIF)
 - Обогащения данных через NVD, EPSS, KEV
 - Risk-скоринга и SLA-контроля

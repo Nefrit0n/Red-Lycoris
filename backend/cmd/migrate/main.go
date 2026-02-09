@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"lotus-warden/backend/internal/config"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/config"
+	"red-lycoris/backend/internal/storage"
 )
 
 const migrationsLockKey int64 = 719273194 // любое фиксированное число

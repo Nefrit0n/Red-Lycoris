@@ -1,6 +1,6 @@
 package plugins
 
-import "lotus-warden/backend/internal/parser"
+import "red-lycoris/backend/internal/parser"
 
 // CanonicalFinding represents the normalized, scanner-agnostic finding payload.
 // Category/Kind are kept for future extensibility, while legacy processing uses Category.

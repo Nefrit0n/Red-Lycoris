@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"lotus-warden/backend/internal/policies"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/policies"
+	"red-lycoris/backend/internal/storage"
 )
 
 type policyEventPayload struct {
