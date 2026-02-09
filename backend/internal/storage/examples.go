@@ -5,14 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 func ExampleCRUD(ctx context.Context, db *sql.DB) error {
 	productDescription := "Core API security scanner"
 	product := &models.Product{
-		Name:        "Lotus Warden",
-		Slug:        "lotus-warden",
+		Name:        "Red Lycoris",
+		Slug:        "red-lycoris",
 		Description: &productDescription,
 	}
 	if err := CreateProduct(ctx, db, product); err != nil {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"

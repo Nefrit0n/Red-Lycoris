@@ -11,10 +11,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	"lotus-warden/backend/internal/handlers"
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/policies"
-	"lotus-warden/backend/internal/sla"
+	"red-lycoris/backend/internal/handlers"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/policies"
+	"red-lycoris/backend/internal/sla"
 )
 
 type stubPolicyEvaluator struct {

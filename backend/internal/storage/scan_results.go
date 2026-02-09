@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 func UpdateScanResultGateFailed(ctx context.Context, db *sql.DB, id uuid.UUID, gateFailed bool) error {

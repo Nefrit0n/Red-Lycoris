@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"lotus-warden/backend/internal/events"
-	v1mapper "lotus-warden/backend/internal/mapper/v1"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/events"
+	v1mapper "red-lycoris/backend/internal/mapper/v1"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"

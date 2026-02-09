@@ -1,4 +1,4 @@
-module lotus-warden/backend
+module red-lycoris/backend
 
 go 1.24.6
 

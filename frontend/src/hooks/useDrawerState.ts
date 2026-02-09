@@ -24,7 +24,7 @@ export function useDrawerState({
   selectedFindingId,
   setSelectedFindingId,
   selectionCount,
-  listStateKey = 'lotus_warden_findings_list_state',
+  listStateKey = 'red_lycoris_findings_list_state',
   allowSelectionClose = true,
 }: UseDrawerStateOptions): UseDrawerStateResult {
   const location = useLocation();

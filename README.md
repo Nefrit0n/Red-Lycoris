@@ -1,15 +1,15 @@
 <div align="center">
   <img src="docs/ux/logo/logo_full.svg" alt="Red Lycoris logo" width="400" height="400" />
 
-[![release](https://img.shields.io/github/v/release/Lotus-Warden/Lotus-Warden?style=flat-square)](https://github.com/Lotus-Warden/Lotus-Warden/releases)
-[![tests](https://img.shields.io/github/actions/workflow/status/Lotus-Warden/Lotus-Warden/ci.yml?label=tests&style=flat-square)](https://github.com/Lotus-Warden/Lotus-Warden/actions)
+[![release](https://img.shields.io/github/v/release/Red-Lycoris/Red-Lycoris?style=flat-square)](https://github.com/Red-Lycoris/Red-Lycoris/releases)
+[![tests](https://img.shields.io/github/actions/workflow/status/Red-Lycoris/Red-Lycoris/ci.yml?label=tests&style=flat-square)](https://github.com/Red-Lycoris/Red-Lycoris/actions)
 [![license](https://img.shields.io/badge/license-уточняется-blue?style=flat-square)](#лицензия)
-[![issues](https://img.shields.io/github/issues/Lotus-Warden/Lotus-Warden?style=flat-square)](https://github.com/Lotus-Warden/Lotus-Warden/issues)
-[![downloads](https://img.shields.io/github/downloads/Lotus-Warden/Lotus-Warden/total?style=flat-square)](https://github.com/Lotus-Warden/Lotus-Warden/releases)
+[![issues](https://img.shields.io/github/issues/Red-Lycoris/Red-Lycoris?style=flat-square)](https://github.com/Red-Lycoris/Red-Lycoris/issues)
+[![downloads](https://img.shields.io/github/downloads/Red-Lycoris/Red-Lycoris/total?style=flat-square)](https://github.com/Red-Lycoris/Red-Lycoris/releases)
 
 </div>
 
-**Lotus Warden** — платформа для централизованного управления безопасностью приложений и инфраструктуры: от сканирования до triage, политики, метрик и автоматизации ремедиации.
+**Red Lycoris** — платформа для централизованного управления безопасностью приложений и инфраструктуры: от сканирования до triage, политики, метрик и автоматизации ремедиации.
 
 > Проект вдохновлён лучшими практиками OSS‑инструментов экосистемы безопасности (Trivy, Semgrep/OpenGrep, DefectDojo и др.), но сфокусирован на едином потоке: "обнаружить → оценить → приоритизировать → исправить".
 

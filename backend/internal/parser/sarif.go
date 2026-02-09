@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 type sarifReport struct {

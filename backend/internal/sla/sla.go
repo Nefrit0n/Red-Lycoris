@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"lotus-warden/backend/internal/config"
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/config"
+	"red-lycoris/backend/internal/models"
 )
 
 type Matrix struct {

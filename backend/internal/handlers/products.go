@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"net/http"
 
-	v1dto "lotus-warden/backend/internal/dto/v1"
-	v1mapper "lotus-warden/backend/internal/mapper/v1"
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/storage"
+	v1dto "red-lycoris/backend/internal/dto/v1"
+	v1mapper "red-lycoris/backend/internal/mapper/v1"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"

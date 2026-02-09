@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // MarkSLABreaches marks findings as breached when due dates pass and status is still open.

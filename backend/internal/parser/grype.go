@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // GrypeParser parses Grype container vulnerability scanner output.

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // CodeQLParser parses CodeQL SARIF and CSV output.

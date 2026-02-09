@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/parser"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/parser"
 )
 
 func TestNormalizeTrivyVulnerabilityComponent(t *testing.T) {

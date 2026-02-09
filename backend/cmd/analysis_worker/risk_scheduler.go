@@ -10,9 +10,9 @@ import (
 	"math/big"
 	"time"
 
-	"lotus-warden/backend/internal/events"
-	"lotus-warden/backend/internal/metrics"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/events"
+	"red-lycoris/backend/internal/metrics"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"

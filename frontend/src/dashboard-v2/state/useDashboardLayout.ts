@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { DashboardTemplate, WidgetPlacement } from "../types";
 import { dashboardTemplates, defaultTemplateId } from "../layouts/templates";
 
-const STORAGE_KEY = "lotus_warden_dashboard_v2_layout";
+const STORAGE_KEY = "red_lycoris_dashboard_v2_layout";
 const STORAGE_VERSION = 1;
 
 interface StoredLayout {

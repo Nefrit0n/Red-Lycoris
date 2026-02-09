@@ -1,13 +1,13 @@
-# CLAUDE.md — Lotus Warden
+# CLAUDE.md — Red Lycoris
 
 ## Project Overview
 
-Lotus Warden is an **Application Security Orchestration and Correlation (ASOC) platform**. It aggregates vulnerability findings from multiple security scanners (Semgrep, Trivy, Gitleaks, Grype, Checkov, KICS), deduplicates and normalizes them, and provides triage, enrichment, policy automation, and risk scoring through a web UI.
+Red Lycoris is an **Application Security Orchestration and Correlation (ASOC) platform**. It aggregates vulnerability findings from multiple security scanners (Semgrep, Trivy, Gitleaks, Grype, Checkov, KICS), deduplicates and normalizes them, and provides triage, enrichment, policy automation, and risk scoring through a web UI.
 
 ## Repository Structure
 
 ```
-Lotus-Warden/
+Red-Lycoris/
 ├── backend/              # Go 1.24 — Fiber REST API + workers
 │   ├── cmd/
 │   │   ├── server/       # Main API server (port 8080)

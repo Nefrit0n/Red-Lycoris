@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"lotus-warden/backend/internal/parser"
+	"red-lycoris/backend/internal/parser"
 )
 
 func TestNormalizeIdentifiers(t *testing.T) {

@@ -8,20 +8,20 @@ x-db-env: &db-env
   DB_PORT: ${DB_PORT:-5432}
   DB_USER: ${DB_USER:-postgres}
   DB_PASSWORD: ${DB_PASSWORD:-postgres}
-  DB_NAME: ${DB_NAME:-lotus_warden}
+  DB_NAME: ${DB_NAME:-red_lycoris}
   DB_SSLMODE: ${DB_SSLMODE:-disable}
 
 x-object-store-env: &object-store-env
   OBJECT_STORE_ENDPOINT: ${OBJECT_STORE_ENDPOINT:-minio:9000}
   OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:-minioadmin}
   OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:-minioadmin}
-  OBJECT_STORE_BUCKET: ${OBJECT_STORE_BUCKET:-lotus-warden}
+  OBJECT_STORE_BUCKET: ${OBJECT_STORE_BUCKET:-red-lycoris}
   OBJECT_STORE_USE_SSL: ${OBJECT_STORE_USE_SSL:-false}
 
 x-analysis-env: &analysis-env
   ANALYSIS_MAX_ARCHIVE_BYTES: ${ANALYSIS_MAX_ARCHIVE_BYTES:-104857600}
   ANALYSIS_MAX_EXTRACT_BYTES: ${ANALYSIS_MAX_EXTRACT_BYTES:-524288000}
-  ANALYSIS_TEMP_DIR: ${ANALYSIS_TEMP_DIR:-/tmp/lotus-warden-analysis}
+  ANALYSIS_TEMP_DIR: ${ANALYSIS_TEMP_DIR:-/tmp/red-lycoris-analysis}
   ANALYSIS_SCANNER_TIMEOUT: ${ANALYSIS_SCANNER_TIMEOUT:-20m}
   ANALYSIS_CLEANUP_INTERVAL: ${ANALYSIS_CLEANUP_INTERVAL:-1h}
   ANALYSIS_CLEANUP_TTL: ${ANALYSIS_CLEANUP_TTL:-24h}
@@ -275,13 +275,13 @@ services:
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-lotus_warden}
+      POSTGRES_DB: ${DB_NAME:-red_lycoris}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     command: >
       postgres -c max_connections=${POSTGRES_MAX_CONNECTIONS:-200} -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB} -c work_mem=${POSTGRES_WORK_MEM:-4MB}
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-lotus_warden}" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-red_lycoris}" ]
       interval: 10s
       timeout: 5s
       retries: 5

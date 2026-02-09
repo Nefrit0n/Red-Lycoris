@@ -1,8 +1,8 @@
-# Lotus Warden: Анализ и Рекомендации по Развитию ASOC Платформы
+# Red Lycoris: Анализ и Рекомендации по Развитию ASOC Платформы
 
 ## Обзор Текущего Состояния
 
-Lotus Warden — это ASOC (Application Security Orchestration and Correlation) платформа с хорошей базовой архитектурой:
+Red Lycoris — это ASOC (Application Security Orchestration and Correlation) платформа с хорошей базовой архитектурой:
 - ✅ Интеграция сканеров (Semgrep, Trivy)
 - ✅ Дедупликация находок по fingerprint
 - ✅ Управление статусами находок
@@ -100,10 +100,10 @@ Lotus Warden — это ASOC (Application Security Orchestration and Correlation
 ```yaml
 # .github/workflows/security.yml
 - name: Run Security Scan
-  uses: lotus-warden/scan-action@v1
+  uses: red-lycoris/scan-action@v1
   with:
-    api-url: ${{ secrets.LOTUS_WARDEN_URL }}
-    api-token: ${{ secrets.LOTUS_WARDEN_TOKEN }}
+    api-url: ${{ secrets.RED_LYCORIS_URL }}
+    api-token: ${{ secrets.RED_LYCORIS_TOKEN }}
     product: my-app
     scanners: [semgrep, trivy]
     fail-on: critical,high  # Break build on findings
@@ -454,7 +454,7 @@ Lotus Warden — это ASOC (Application Security Orchestration and Correlation
 
 ## Заключение
 
-Lotus Warden имеет солидный фундамент. Ключевые направления развития:
+Red Lycoris имеет солидный фундамент. Ключевые направления развития:
 
 1. **UX**: Dashboard + улучшенная навигация + визуализация трендов
 2. **DevSecOps**: CI/CD интеграция + webhooks + API tokens

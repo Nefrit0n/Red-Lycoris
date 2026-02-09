@@ -1,4 +1,4 @@
-# Доменные сущности Lotus Warden
+# Доменные сущности Red Lycoris
 
 Документ описывает базовые доменные сущности и их поля, выравнивая naming и типы с текущими таблицами в `backend/migrations`. Все типы указаны в терминах PostgreSQL (`UUID`, `TEXT`, `JSONB`, `TIMESTAMPTZ`, `INT`).
 

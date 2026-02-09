@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"lotus-warden/backend/internal/config"
-	"lotus-warden/backend/internal/events"
-	"lotus-warden/backend/internal/metrics"
-	"lotus-warden/backend/internal/objectstore"
-	"lotus-warden/backend/internal/server"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/config"
+	"red-lycoris/backend/internal/events"
+	"red-lycoris/backend/internal/metrics"
+	"red-lycoris/backend/internal/objectstore"
+	"red-lycoris/backend/internal/server"
+	"red-lycoris/backend/internal/storage"
 )
 
 func main() {

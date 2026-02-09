@@ -773,8 +773,8 @@ import { SavedView, ViewWithCount, FilterState } from '../types/views';
 import { SYSTEM_VIEWS } from '../config/systemViews';
 import { fetchFindingsCount } from '../api/findings';
 
-const STORAGE_KEY = 'lotus_warden_saved_views';
-const FAVORITES_KEY = 'lotus_warden_favorite_views';
+const STORAGE_KEY = 'red_lycoris_saved_views';
+const FAVORITES_KEY = 'red_lycoris_favorite_views';
 
 interface UseSavedViewsResult {
   views: ViewWithCount[];

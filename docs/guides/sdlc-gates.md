@@ -77,14 +77,14 @@ SLA breach flags (`sla_breached`) are refreshed by a background job in the API s
 ## Shell usage (curl)
 
 ```bash
-scripts/gate-check.sh "https://lotus-warden.example.com" "5b3e5d52-8d4a-4e23-8ed2-2cc3c0d7d24a"
+scripts/gate-check.sh "https://red-lycoris.example.com" "5b3e5d52-8d4a-4e23-8ed2-2cc3c0d7d24a"
 ```
 
 Set a bearer token if needed:
 
 ```bash
 export LW_API_TOKEN="your.jwt.token"
-scripts/gate-check.sh "https://lotus-warden.example.com" "5b3e5d52-8d4a-4e23-8ed2-2cc3c0d7d24a"
+scripts/gate-check.sh "https://red-lycoris.example.com" "5b3e5d52-8d4a-4e23-8ed2-2cc3c0d7d24a"
 ```
 
 ## GitHub Actions example
@@ -100,10 +100,10 @@ jobs:
     steps:
       - name: Run gate check
         env:
-          LW_API_TOKEN: ${{ secrets.LOTUS_WARDEN_TOKEN }}
+          LW_API_TOKEN: ${{ secrets.RED_LYCORIS_TOKEN }}
         run: |
           chmod +x scripts/gate-check.sh
-          scripts/gate-check.sh "${{ secrets.LOTUS_WARDEN_URL }}" "${{ inputs.import_job_id }}"
+          scripts/gate-check.sh "${{ secrets.RED_LYCORIS_URL }}" "${{ inputs.import_job_id }}"
 ```
 
 ## GitLab CI example
@@ -116,9 +116,9 @@ gate_check:
   stage: security
   image: alpine:3.19
   variables:
-    LW_API_TOKEN: "$LOTUS_WARDEN_TOKEN"
+    LW_API_TOKEN: "$RED_LYCORIS_TOKEN"
   script:
     - apk add --no-cache bash curl jq
     - chmod +x scripts/gate-check.sh
-    - scripts/gate-check.sh "$LOTUS_WARDEN_URL" "$IMPORT_JOB_ID"
+    - scripts/gate-check.sh "$RED_LYCORIS_URL" "$IMPORT_JOB_ID"
 ```
