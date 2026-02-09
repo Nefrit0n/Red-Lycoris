@@ -59,6 +59,9 @@ func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, output
 	if err != nil {
 		return string(output), fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
+	if err := ensureOutputFile(outputPath, "opengrep"); err != nil {
+		return string(output), err
+	}
 	return string(output), nil
 }
 
@@ -112,6 +115,9 @@ func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	if err != nil {
 		return string(output), fmt.Errorf("trivy failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
+	if err := ensureOutputFile(outputPath, "trivy"); err != nil {
+		return string(output), err
+	}
 	return string(output), nil
 }
 
@@ -135,10 +141,18 @@ func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputP
 	if err != nil {
 		return string(output), fmt.Errorf("checkov failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	// Checkov writes results.sarif — rename to expected output path
-	sarifPath := filepath.Join(filepath.Dir(outputPath), "results_sarif.sarif")
+	// Checkov writes results.sarif (some versions use results_sarif.sarif) — rename to expected output path
+	outputDir := filepath.Dir(outputPath)
+	sarifPath := filepath.Join(outputDir, "results_sarif.sarif")
 	if err := renameIfExists(sarifPath, outputPath); err != nil {
 		return string(output), fmt.Errorf("checkov output rename: %v", err)
+	}
+	sarifPath = filepath.Join(outputDir, "results.sarif")
+	if err := renameIfExists(sarifPath, outputPath); err != nil {
+		return string(output), fmt.Errorf("checkov output rename: %v", err)
+	}
+	if err := ensureOutputFile(outputPath, "checkov"); err != nil {
+		return string(output), err
 	}
 	return string(output), nil
 }
@@ -172,6 +186,9 @@ func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath
 	if err := renameIfExists(sarifPath, outputPath); err != nil {
 		return string(output), fmt.Errorf("kics output rename: %v", err)
 	}
+	if err := ensureOutputFile(outputPath, "kics"); err != nil {
+		return string(output), err
+	}
 	return string(output), nil
 }
 
@@ -197,6 +214,9 @@ func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, output
 	if err != nil {
 		return string(output), fmt.Errorf("gitleaks failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
+	if err := ensureOutputFile(outputPath, "gitleaks"); err != nil {
+		return string(output), err
+	}
 	return string(output), nil
 }
 
@@ -218,6 +238,9 @@ func RunGrype(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("grype failed: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	if err := ensureOutputFile(outputPath, "grype"); err != nil {
+		return string(output), err
 	}
 	return string(output), nil
 }
