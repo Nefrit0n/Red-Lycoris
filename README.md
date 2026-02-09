@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/ux/logo/logo_full.svg" alt="Red Lycoris logo" width="360" height="360" />
+  <img src="docs/ux/logo/logo_full.svg" alt="Red Lycoris logo" width="400" height="400" />
 
 [![release](https://img.shields.io/github/v/release/Lotus-Warden/Lotus-Warden?style=flat-square)](https://github.com/Lotus-Warden/Lotus-Warden/releases)
 [![tests](https://img.shields.io/github/actions/workflow/status/Lotus-Warden/Lotus-Warden/ci.yml?label=tests&style=flat-square)](https://github.com/Lotus-Warden/Lotus-Warden/actions)
