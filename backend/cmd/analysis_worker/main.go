@@ -562,7 +562,10 @@ func handleAnalysisMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, store
 }
 
 func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publisher *events.Publisher, job *storage.AnalysisJobDetail, scanner string, jobDir string, workspace string, slaMatrix sla.Matrix, cfg scanners.RunnerConfig) (*importing.ImportResult, error) {
-	resultPath := filepath.Join(jobDir, fmt.Sprintf("result_%s.json", scanner))
+	resultPath, err := safePathWithinDir(jobDir, filepath.Join(jobDir, fmt.Sprintf("result_%s.json", scanner)))
+	if err != nil {
+		return nil, err
+	}
 
 	scannerStartedAt := time.Now().UTC()
 	// Track in new analysis_job_scanners table
@@ -600,15 +603,19 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 	artifactPath := resultPath
 	contentType := "application/json"
 	if scanErr != nil {
-		artifactPath = filepath.Join(jobDir, fmt.Sprintf("result_%s.log", scanner))
+		artifactPath, err = safePathWithinDir(jobDir, filepath.Join(jobDir, fmt.Sprintf("result_%s.log", scanner)))
+		if err != nil {
+			return nil, err
+		}
 		contentType = "text/plain"
-		if err := os.WriteFile(artifactPath, []byte(scanOutput), 0o640); err != nil {
+		if err := os.WriteFile(artifactPath, []byte(scanOutput), 0o600); err != nil {
 			artifactPath = resultPath
 		}
 		artifactKey = fmt.Sprintf("analysis/%s/artifacts/%s.log", job.ID.String(), scanner)
 	}
 	var artifactUploaded bool
 	if _, err := os.Stat(artifactPath); err == nil {
+		// #nosec G304 -- artifactPath is validated to stay within jobDir.
 		if file, err := os.Open(artifactPath); err == nil {
 			defer file.Close()
 			if info, err := file.Stat(); err == nil {
@@ -631,6 +638,7 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 	var importErr error
 
 	if artifactUploaded && scanErr == nil {
+		// #nosec G304 -- resultPath is validated to stay within jobDir.
 		if bytes, err := os.ReadFile(resultPath); err == nil {
 			importResult, importErr = importing.ImportFindings(ctx, db, importing.ImportParams{
 				Scanner:      importScanner,
@@ -785,6 +793,7 @@ func downloadArchive(ctx context.Context, store objectstore.Store, key string, d
 	}
 	defer reader.Close()
 
+	// #nosec G304 -- destination is validated by the caller to remain under jobDir.
 	out, err := os.Create(destination)
 	if err != nil {
 		return err
@@ -860,6 +869,24 @@ func archivePathForKey(jobDir string, key string) string {
 		filename += ".tar"
 	}
 	return filepath.Join(jobDir, filename)
+}
+
+func safePathWithinDir(root string, target string) (string, error) {
+	if strings.ContainsRune(target, '\x00') {
+		return "", fmt.Errorf("invalid path: contains null byte")
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve root path: %w", err)
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return "", fmt.Errorf("resolve target path: %w", err)
+	}
+	if absTarget != absRoot && !strings.HasPrefix(absTarget, absRoot+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path escapes root directory")
+	}
+	return absTarget, nil
 }
 
 func periodicCleanup(db *sql.DB, store objectstore.Store, tempDir string, ttl time.Duration, interval time.Duration) {

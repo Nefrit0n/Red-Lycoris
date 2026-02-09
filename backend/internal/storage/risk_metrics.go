@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,14 +75,16 @@ func GetRiskMetrics(ctx context.Context, db *sql.DB, filters RiskMetricsFilters,
 	whereClause, args := buildRiskMetricsWhereClause(filters, 0)
 
 	bands := RiskBands{}
-	bandQuery := fmt.Sprintf(`
+	var bandBuilder strings.Builder
+	bandBuilder.WriteString(`
 		SELECT fr.risk_band, COUNT(*)
 		FROM findings f
 		INNER JOIN finding_risk fr ON fr.finding_id = f.id
-		%s
-		GROUP BY fr.risk_band`,
-		whereClause,
-	)
+		`)
+	bandBuilder.WriteString(whereClause)
+	bandBuilder.WriteString(`
+		GROUP BY fr.risk_band`)
+	bandQuery := bandBuilder.String()
 	bandRows, err := db.QueryContext(ctx, bandQuery, args...)
 	if err != nil {
 		return bands, nil, nil, err
@@ -112,16 +116,18 @@ func GetRiskMetrics(ctx context.Context, db *sql.DB, filters RiskMetricsFilters,
 	argsWithLimit := append([]interface{}{}, args...)
 	argsWithLimit = append(argsWithLimit, limit)
 	limitPH := len(argsWithLimit)
-	topQuery := fmt.Sprintf(`
+	var topBuilder strings.Builder
+	topBuilder.WriteString(`
 		SELECT f.id, f.title, f.severity, fr.risk_score, fr.risk_band, f.product_id
 		FROM findings f
 		INNER JOIN finding_risk fr ON fr.finding_id = f.id
-		%s
+		`)
+	topBuilder.WriteString(whereClause)
+	topBuilder.WriteString(`
 		ORDER BY fr.risk_score DESC NULLS LAST, fr.computed_at DESC
-		LIMIT $%d`,
-		whereClause,
-		limitPH,
-	)
+		LIMIT $`)
+	topBuilder.WriteString(strconv.Itoa(limitPH))
+	topQuery := topBuilder.String()
 	topRows, err := db.QueryContext(ctx, topQuery, argsWithLimit...)
 	if err != nil {
 		return bands, nil, nil, err
@@ -148,17 +154,19 @@ func GetRiskMetrics(ctx context.Context, db *sql.DB, filters RiskMetricsFilters,
 	}
 	_ = topRows.Close()
 
-	trendQuery := fmt.Sprintf(`
+	var trendBuilder strings.Builder
+	trendBuilder.WriteString(`
 		SELECT date_trunc('day', fr.computed_at) AS day,
 			AVG(fr.risk_score) AS avg_risk,
 			COUNT(*) FILTER (WHERE fr.risk_band = 'critical') AS critical_count
 		FROM findings f
 		INNER JOIN finding_risk fr ON fr.finding_id = f.id
-		%s
+		`)
+	trendBuilder.WriteString(whereClause)
+	trendBuilder.WriteString(`
 		GROUP BY day
-		ORDER BY day ASC`,
-		whereClause,
-	)
+		ORDER BY day ASC`)
+	trendQuery := trendBuilder.String()
 	trendRows, err := db.QueryContext(ctx, trendQuery, args...)
 	if err != nil {
 		return bands, nil, nil, err
