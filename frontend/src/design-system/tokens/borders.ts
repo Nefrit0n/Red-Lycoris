@@ -2,8 +2,8 @@
  * RED LYCORIS Design System - Border Tokens
  *
  * Borders define the shape and boundaries of UI elements.
- * The Lotus design uses soft, rounded corners that evoke
- * the gentle curves of lotus petals.
+ * The Red Lycoris design uses soft, rounded corners that evoke
+ * the gentle curves of lycoris petals.
  */
 
 import { primitives, darkTheme, lightTheme } from './colors';

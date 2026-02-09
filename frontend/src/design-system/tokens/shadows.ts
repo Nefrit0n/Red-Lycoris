@@ -2,7 +2,7 @@
  * RED LYCORIS Design System - Shadow & Glow Tokens
  *
  * Shadows create depth and hierarchy in the interface.
- * Glows add the signature "Lotus" ethereal feeling.
+ * Glows add the signature "Red Lycoris" ethereal feeling.
  *
  * The system includes:
  * - Elevation shadows (depth)
@@ -72,7 +72,7 @@ export const elevationDark = {
 // ============================================================
 
 export const glow = {
-  // Lotus glow - primary brand
+  // Red Lycoris glow - primary brand
   lotus: {
     sm: `0 0 10px ${primitives.lotus[500]}40, 0 0 20px ${primitives.lotus[500]}20`,
     md: `0 0 15px ${primitives.lotus[500]}50, 0 0 30px ${primitives.lotus[500]}30`,
@@ -137,7 +137,7 @@ export const glow = {
 // ============================================================
 
 export const focusRing = {
-  // Default focus ring (lotus branded)
+  // Default focus ring (Red Lycoris branded)
   default: `0 0 0 2px ${primitives.night[800]}, 0 0 0 4px ${primitives.lotus[500]}`,
 
   // Offset focus ring (with gap)

@@ -69,7 +69,7 @@ export const glass = {
     border: '1px solid rgba(0, 0, 0, 0.1)',
   },
 
-  // Lotus tinted glass - branded
+  // Red Lycoris tinted glass - branded
   lotus: {
     background: `linear-gradient(135deg, ${alpha.lotus[5]} 0%, rgba(232, 85, 168, 0.03) 100%)`,
     backdropFilter: blur.lg,

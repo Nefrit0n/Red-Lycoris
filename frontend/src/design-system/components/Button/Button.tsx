@@ -1,5 +1,5 @@
 /**
- * Lotus Button Component
+ * Red Lycoris Button Component
  *
  * Enhanced button with brand variants, glow effects, and loading states.
  * Built on MUI Button with RED LYCORIS design system integration.
@@ -185,7 +185,7 @@ const ContentWrapper = styled('span')<{ hide?: boolean }>(({ hide }) => ({
 // ============================================================
 
 /**
- * Lotus Button
+ * Red Lycoris Button
  *
  * @example
  * // Basic usage
