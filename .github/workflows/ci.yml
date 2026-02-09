@@ -7,7 +7,7 @@ on:
     branches: ["main"]
   pull_request:
     paths-ignore:
-      - "lotus-warden/docs/template/**"
+      - "Red-Lycoris/docs/template/**"
       - "docs/template/**"
   workflow_dispatch:
 
@@ -202,7 +202,7 @@ jobs:
       OBJECT_STORE_ENDPOINT: localhost:9000
       OBJECT_STORE_ACCESS_KEY: minioadmin
       OBJECT_STORE_SECRET_KEY: minioadmin
-      OBJECT_STORE_BUCKET: lotus-warden
+      OBJECT_STORE_BUCKET: Red-Lycoris
       OBJECT_STORE_USE_SSL: false
       ROOT_EMAIL: root@localhost
       ROOT_PASSWORD: root
@@ -336,7 +336,7 @@ jobs:
           file: backend/Dockerfile
           target: runtime
           push: false
-          tags: lotus-warden-backend:${{ github.sha }}
+          tags: Red-Lycoris-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -347,7 +347,7 @@ jobs:
           file: frontend/Dockerfile
           target: runtime
           push: false
-          tags: lotus-warden-frontend:${{ github.sha }}
+          tags: Red-Lycoris-frontend:${{ github.sha }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -357,7 +357,7 @@ jobs:
           context: .
           file: nginx/Dockerfile
           push: false
-          tags: lotus-warden-nginx:${{ github.sha }}
+          tags: Red-Lycoris-nginx:${{ github.sha }}
           cache-from: type=gha,scope=nginx
           cache-to: type=gha,mode=max,scope=nginx
 
@@ -368,7 +368,7 @@ jobs:
           file: python_api/Dockerfile
           target: runtime
           push: false
-          tags: lotus-warden-python-api:${{ github.sha }}
+          tags: Red-Lycoris-python-api:${{ github.sha }}
           cache-from: type=gha,scope=python_api
           cache-to: type=gha,mode=max,scope=python_api
 
@@ -416,7 +416,7 @@ jobs:
           severity: "CRITICAL,HIGH"
           exit-code: "1"
           ignore-unfixed: true
-          skip-dirs: "lotus-warden/docs/template,docs/template"
+          skip-dirs: "Red-Lycoris/docs/template,docs/template"
 
       - name: Trivy (config)
         uses: aquasecurity/trivy-action@0.33.1
@@ -425,7 +425,7 @@ jobs:
           scan-ref: "."
           severity: "CRITICAL,HIGH"
           exit-code: "0"
-          skip-dirs: "lotus-warden/docs/template,docs/template"
+          skip-dirs: "Red-Lycoris/docs/template,docs/template"
 
       - name: Set up Go (gosec)
         uses: actions/setup-go@v6
@@ -478,7 +478,7 @@ jobs:
             queries:
               - uses: security-extended
             paths-ignore:
-              - "lotus-warden/docs/template/**"
+              - "Red-Lycoris/docs/template/**"
               - "docs/template/**"
 
       - name: Autobuild
