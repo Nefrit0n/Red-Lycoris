@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/lotus-warden-logo.svg" alt="Lotus Warden logo" width="180" height="180" />
+  <img src="docs/ux/logo/logo_full.svg" alt="Red Lycoris logo" width="180" height="180" />
 
 # Lotus Warden
 
