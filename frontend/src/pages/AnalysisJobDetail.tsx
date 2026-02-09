@@ -42,6 +42,13 @@ const formatDuration = (ms?: number) => {
   return `${Math.round(sec / 60)} мин`;
 };
 
+const formatLogTime = (value?: string) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString("ru-RU");
+};
+
 const AUTO_REFRESH_INTERVAL = 5_000;
 
 const AnalysisJobDetail = () => {
@@ -178,13 +185,18 @@ const AnalysisJobDetail = () => {
                   {job.scannerDetails && job.scannerDetails.length > 0 ? (
                     job.scannerDetails.map((s) => {
                       const sCfg = STATUS_CONFIG[s.status] || { label: s.status, color: "default" as const };
+                      const logEntries = [
+                        s.startedAt && { label: "Запуск сканера", time: formatLogTime(s.startedAt) },
+                        s.startedAt && !s.finishedAt && { label: `Выполняется: ${sCfg.label}` },
+                        s.finishedAt && { label: `Завершение: ${sCfg.label}`, time: formatLogTime(s.finishedAt) },
+                        s.hasArtifact && { label: "Артефакт результата готов" },
+                        s.errorMessage && { label: `Ошибка: ${s.errorMessage}` },
+                        !s.startedAt && { label: sCfg.label === "В очереди" || sCfg.label === "Ожидание" ? "Ожидает запуска" : `Статус: ${sCfg.label}` },
+                      ].filter(Boolean) as { label: string; time?: string }[];
                       return (
                         <Stack
                           key={s.scanner}
-                          direction={{ xs: "column", sm: "row" }}
-                          spacing={2}
-                          alignItems={{ sm: "center" }}
-                          justifyContent="space-between"
+                          spacing={1}
                           sx={{
                             py: 1.5,
                             borderBottom: "1px solid",
@@ -192,33 +204,52 @@ const AnalysisJobDetail = () => {
                             "&:last-child": { borderBottom: "none" },
                           }}
                         >
-                          <Stack direction="row" spacing={1.5} alignItems="center" flex={1}>
-                            <Typography variant="body2" fontWeight={600} sx={{ minWidth: 100 }}>
-                              {scannerDisplayName(s.scanner)}
-                            </Typography>
-                            <Chip label={sCfg.label} color={sCfg.color} size="small" variant="filled" />
-                            {s.durationMs != null && (
-                              <Typography variant="caption" color="text.secondary">
-                                {formatDuration(s.durationMs)}
+                          <Stack
+                            direction={{ xs: "column", sm: "row" }}
+                            spacing={2}
+                            alignItems={{ sm: "center" }}
+                            justifyContent="space-between"
+                          >
+                            <Stack direction="row" spacing={1.5} alignItems="center" flex={1}>
+                              <Typography variant="body2" fontWeight={600} sx={{ minWidth: 100 }}>
+                                {scannerDisplayName(s.scanner)}
                               </Typography>
-                            )}
+                              <Chip label={sCfg.label} color={sCfg.color} size="small" variant="filled" />
+                              {s.durationMs != null && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {formatDuration(s.durationMs)}
+                                </Typography>
+                              )}
+                            </Stack>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              {s.errorMessage && (
+                                <Tooltip title={s.errorMessage} arrow>
+                                  <Chip label="Ошибка" size="small" color="error" variant="outlined" />
+                                </Tooltip>
+                              )}
+                              {s.hasArtifact && (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => handleDownload(s.scanner)}
+                                >
+                                  JSON
+                                </Button>
+                              )}
+                            </Stack>
                           </Stack>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            {s.errorMessage && (
-                              <Tooltip title={s.errorMessage} arrow>
-                                <Chip label="Ошибка" size="small" color="error" variant="outlined" />
-                              </Tooltip>
-                            )}
-                            {s.hasArtifact && (
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => handleDownload(s.scanner)}
-                              >
-                                JSON
-                              </Button>
-                            )}
-                          </Stack>
+                          <Box sx={{ pl: { sm: 7 } }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Лог выполнения
+                            </Typography>
+                            <Stack spacing={0.25} mt={0.5}>
+                              {logEntries.map((entry, index) => (
+                                <Typography key={`${s.scanner}-log-${index}`} variant="caption" color="text.secondary">
+                                  • {entry.label}{entry.time ? ` — ${entry.time}` : ""}
+                                </Typography>
+                              ))}
+                            </Stack>
+                          </Box>
                         </Stack>
                       );
                     })
@@ -233,25 +264,35 @@ const AnalysisJobDetail = () => {
                         (scanner === "semgrep" && job.artifactSemgrep) ||
                         (scanner === "trivy" && job.artifactTrivy);
                       return (
-                        <Stack
-                          key={scanner}
-                          direction="row"
-                          spacing={2}
-                          alignItems="center"
-                          justifyContent="space-between"
-                          sx={{ py: 1 }}
-                        >
-                          <Stack direction="row" spacing={1.5} alignItems="center">
-                            <Typography variant="body2" fontWeight={600}>
-                              {scannerDisplayName(scanner)}
-                            </Typography>
-                            <Chip label={sCfg.label} color={sCfg.color} size="small" variant="filled" />
+                        <Stack key={scanner} spacing={1} sx={{ py: 1 }}>
+                          <Stack
+                            direction="row"
+                            spacing={2}
+                            alignItems="center"
+                            justifyContent="space-between"
+                          >
+                            <Stack direction="row" spacing={1.5} alignItems="center">
+                              <Typography variant="body2" fontWeight={600}>
+                                {scannerDisplayName(scanner)}
+                              </Typography>
+                              <Chip label={sCfg.label} color={sCfg.color} size="small" variant="filled" />
+                            </Stack>
+                            {hasArtifact && (
+                              <Button size="small" variant="outlined" onClick={() => handleDownload(scanner)}>
+                                JSON
+                              </Button>
+                            )}
                           </Stack>
-                          {hasArtifact && (
-                            <Button size="small" variant="outlined" onClick={() => handleDownload(scanner)}>
-                              JSON
-                            </Button>
-                          )}
+                          <Box sx={{ pl: { sm: 7 } }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Лог выполнения
+                            </Typography>
+                            <Stack spacing={0.25} mt={0.5}>
+                              <Typography variant="caption" color="text.secondary">
+                                • Статус: {sCfg.label}
+                              </Typography>
+                            </Stack>
+                          </Box>
                         </Stack>
                       );
                     })
