@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
-	"sync"
+	"math/big"
 	"time"
 
 	"lotus-warden/backend/internal/events"
@@ -23,9 +23,6 @@ const (
 	riskSchedulerSleepMin  = 100 * time.Millisecond
 	riskSchedulerSleepMax  = 250 * time.Millisecond
 )
-
-var schedulerRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-var schedulerRandMu sync.Mutex
 
 func handleIntelRefreshMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, publisher *events.Publisher, subject string) error {
 	updatedAt, source, err := parseIntelRefreshPayload(msg.Data, subject)
@@ -296,15 +293,24 @@ func riskRecomputeMsgID(findingID uuid.UUID, source string, cause string, causeA
 }
 
 func jitterSleep() {
-	schedulerRandMu.Lock()
-	defer schedulerRandMu.Unlock()
 	if riskSchedulerSleepMax <= 0 || riskSchedulerSleepMax <= riskSchedulerSleepMin {
 		time.Sleep(riskSchedulerSleepMin)
 		return
 	}
 	delta := riskSchedulerSleepMax - riskSchedulerSleepMin
-	sleep := riskSchedulerSleepMin + time.Duration(schedulerRand.Int63n(int64(delta)))
+	sleep := riskSchedulerSleepMin + randomDuration(delta)
 	time.Sleep(sleep)
+}
+
+func randomDuration(max time.Duration) time.Duration {
+	if max <= 0 {
+		return 0
+	}
+	value, err := rand.Int(rand.Reader, big.NewInt(max.Nanoseconds()))
+	if err != nil {
+		return 0
+	}
+	return time.Duration(value.Int64())
 }
 
 func stringPointer(value string) *string {

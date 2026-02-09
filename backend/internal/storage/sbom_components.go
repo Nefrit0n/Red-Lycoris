@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -50,10 +51,13 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 
 	where, args := buildSbomComponentFilters(filters)
 
-	countQuery := fmt.Sprintf(`SELECT COUNT(*)
+	var countBuilder strings.Builder
+	countBuilder.WriteString(`SELECT COUNT(*)
 		FROM sbom_component_occurrences sco
 		JOIN sca_components c ON c.id = sco.component_id
-		WHERE %s`, where)
+		WHERE `)
+	countBuilder.WriteString(where)
+	countQuery := countBuilder.String()
 
 	var total int
 	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
@@ -63,7 +67,8 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 	argsWithLimit := append([]any{}, args...)
 	argsWithLimit = append(argsWithLimit, filters.Limit, filters.Offset)
 
-	listQuery := fmt.Sprintf(`WITH vuln AS (
+	var listBuilder strings.Builder
+	listBuilder.WriteString(`WITH vuln AS (
 		SELECT sco.component_id,
 			COUNT(DISTINCT sf.vulnerability_id) AS total,
 			COUNT(DISTINCT sf.vulnerability_id) FILTER (WHERE f.severity = 'critical') AS critical,
@@ -85,9 +90,15 @@ func ListSbomComponents(ctx context.Context, db *sql.DB, filters SbomComponentFi
 	FROM sbom_component_occurrences sco
 	JOIN sca_components c ON c.id = sco.component_id
 	LEFT JOIN vuln v ON v.component_id = sco.component_id
-	WHERE %s
+	WHERE `)
+	listBuilder.WriteString(where)
+	listBuilder.WriteString(`
 	ORDER BY COALESCE(v.total, 0) DESC, c.name, sco.version
-	LIMIT $%d OFFSET $%d`, where, len(argsWithLimit)-1, len(argsWithLimit))
+	LIMIT $`)
+	listBuilder.WriteString(strconv.Itoa(len(argsWithLimit) - 1))
+	listBuilder.WriteString(` OFFSET $`)
+	listBuilder.WriteString(strconv.Itoa(len(argsWithLimit)))
+	listQuery := listBuilder.String()
 
 	rows, err := db.QueryContext(ctx, listQuery, argsWithLimit...)
 	if err != nil {

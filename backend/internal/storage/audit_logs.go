@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -113,26 +114,31 @@ func ListAuditLogs(ctx context.Context, db *sql.DB, filters AuditLogFilters) ([]
 		where = append(where, fmt.Sprintf("(action ILIKE $%d OR target_type ILIKE $%d OR target_id ILIKE $%d OR payload_json::text ILIKE $%d)", len(args), len(args), len(args), len(args)))
 	}
 
-	whereClause := "WHERE " + strings.Join(where, " AND ")
+	whereClause := strings.Join(where, " AND ")
 
 	var total int
-	countQuery := "SELECT COUNT(*) FROM audit_log " + whereClause
+	var countBuilder strings.Builder
+	countBuilder.WriteString("SELECT COUNT(*) FROM audit_log WHERE ")
+	countBuilder.WriteString(whereClause)
+	countQuery := countBuilder.String()
 	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	args = append(args, filters.Limit, filters.Offset)
-	listQuery := fmt.Sprintf(
-		`SELECT a.id, a.occurred_at, a.actor_id, a.actor_type, a.action, a.target_type, a.target_id, a.scope, a.scope_id, a.payload_json, u.username
+	var listBuilder strings.Builder
+	listBuilder.WriteString(`SELECT a.id, a.occurred_at, a.actor_id, a.actor_type, a.action, a.target_type, a.target_id, a.scope, a.scope_id, a.payload_json, u.username
 		 FROM audit_log a
 		 LEFT JOIN users u ON u.id = a.actor_id
-		 %s
+		 WHERE `)
+	listBuilder.WriteString(whereClause)
+	listBuilder.WriteString(`
 		 ORDER BY a.occurred_at DESC
-		 LIMIT $%d OFFSET $%d`,
-		whereClause,
-		len(args)-1,
-		len(args),
-	)
+		 LIMIT $`)
+	listBuilder.WriteString(strconv.Itoa(len(args) - 1))
+	listBuilder.WriteString(` OFFSET $`)
+	listBuilder.WriteString(strconv.Itoa(len(args)))
+	listQuery := listBuilder.String()
 
 	rows, err := db.QueryContext(ctx, listQuery, args...)
 	if err != nil {
