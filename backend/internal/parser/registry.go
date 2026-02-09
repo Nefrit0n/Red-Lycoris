@@ -160,7 +160,7 @@ func ParseReport(scannerType string, data []byte) ([]Finding, error) {
 		}
 	}
 
-	if len(findings) == 0 && json.Valid(data) && !strings.EqualFold(scannerType, "semgrep") {
+	if len(findings) == 0 && json.Valid(data) && !AllowEmptyFindings(scannerType) {
 		return nil, fmt.Errorf("report contains no findings")
 	}
 

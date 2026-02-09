@@ -88,6 +88,15 @@ func (p *TrivyParser) Parse(data []byte) ([]Finding, error) {
 		for _, vuln := range result.Vulnerabilities {
 			findings = append(findings, p.buildVulnerabilityFinding(result, vuln))
 		}
+		for _, secret := range result.Secrets {
+			findings = append(findings, p.buildSecretFinding(result, secret))
+		}
+		for _, misconf := range result.Misconfigurations {
+			findings = append(findings, p.buildMisconfigurationFinding(result, misconf))
+		}
+		for _, license := range result.Licenses {
+			findings = append(findings, p.buildLicenseFinding(result, license))
+		}
 	}
 
 	return findings, nil

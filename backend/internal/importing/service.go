@@ -148,7 +148,7 @@ func ImportFindings(ctx context.Context, db *sql.DB, params ImportParams) (*Impo
 		return nil, err
 	}
 
-	if len(canonicalFindings) == 0 && json.Valid(params.Report) && !strings.EqualFold(params.Scanner, "semgrep") {
+	if len(canonicalFindings) == 0 && json.Valid(params.Report) && !parser.AllowEmptyFindings(params.Scanner) {
 		finishedAt := time.Now().UTC()
 		errMsg := "report contains no findings"
 		_ = storage.UpdateImportJobStatus(ctx, db, importJob.ID, models.ImportJobFailed, nil, &finishedAt, &errMsg)
