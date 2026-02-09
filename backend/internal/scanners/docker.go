@@ -59,7 +59,7 @@ func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, output
 	if err != nil {
 		return string(output), fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	if err := ensureOutputFile(outputPath, "opengrep"); err != nil {
+	if err := ensureOutputFile(outputPath, "opengrep", string(output)); err != nil {
 		return string(output), err
 	}
 	return string(output), nil
@@ -115,7 +115,7 @@ func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	if err != nil {
 		return string(output), fmt.Errorf("trivy failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	if err := ensureOutputFile(outputPath, "trivy"); err != nil {
+	if err := ensureOutputFile(outputPath, "trivy", string(output)); err != nil {
 		return string(output), err
 	}
 	return string(output), nil
@@ -151,7 +151,7 @@ func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputP
 	if err := renameIfExists(sarifPath, outputPath); err != nil {
 		return string(output), fmt.Errorf("checkov output rename: %v", err)
 	}
-	if err := ensureOutputFile(outputPath, "checkov"); err != nil {
+	if err := ensureOutputFile(outputPath, "checkov", string(output)); err != nil {
 		return string(output), err
 	}
 	return string(output), nil
@@ -186,7 +186,7 @@ func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath
 	if err := renameIfExists(sarifPath, outputPath); err != nil {
 		return string(output), fmt.Errorf("kics output rename: %v", err)
 	}
-	if err := ensureOutputFile(outputPath, "kics"); err != nil {
+	if err := ensureOutputFile(outputPath, "kics", string(output)); err != nil {
 		return string(output), err
 	}
 	return string(output), nil
@@ -214,7 +214,7 @@ func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, output
 	if err != nil {
 		return string(output), fmt.Errorf("gitleaks failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	if err := ensureOutputFile(outputPath, "gitleaks"); err != nil {
+	if err := ensureOutputFile(outputPath, "gitleaks", string(output)); err != nil {
 		return string(output), err
 	}
 	return string(output), nil
@@ -239,7 +239,7 @@ func RunGrype(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	if err != nil {
 		return string(output), fmt.Errorf("grype failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
-	if err := ensureOutputFile(outputPath, "grype"); err != nil {
+	if err := ensureOutputFile(outputPath, "grype", string(output)); err != nil {
 		return string(output), err
 	}
 	return string(output), nil
