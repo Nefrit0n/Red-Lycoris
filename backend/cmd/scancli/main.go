@@ -99,7 +99,19 @@ func main() {
 }
 
 func buildMultipartBody(filePath, scanner, productName, productVersion, productIdentifier string) (io.Reader, string, error) {
-	file, err := os.Open(filePath)
+	cleanPath, err := filepath.Abs(filepath.Clean(filePath))
+	if err != nil {
+		return nil, "", err
+	}
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		return nil, "", err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, "", fmt.Errorf("report file is not a regular file")
+	}
+	// #nosec G304 -- file path is validated and opened as a regular file.
+	file, err := os.Open(cleanPath)
 	if err != nil {
 		return nil, "", err
 	}
@@ -108,7 +120,7 @@ func buildMultipartBody(filePath, scanner, productName, productVersion, productI
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
-	part, err := writer.CreateFormFile("report", filepath.Base(filePath))
+	part, err := writer.CreateFormFile("report", filepath.Base(cleanPath))
 	if err != nil {
 		return nil, "", err
 	}

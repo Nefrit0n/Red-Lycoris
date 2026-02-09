@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"lotus-warden/backend/internal/models"
@@ -71,37 +73,42 @@ func CreateProductSourceSnapshot(ctx context.Context, db *sql.DB, snapshot *mode
 
 func ListProductSourceSnapshots(ctx context.Context, db *sql.DB, tenantID *uuid.UUID, productID uuid.UUID, limit int, offset int) ([]ProductSourceSnapshotItem, int, error) {
 	where, args := buildProductSourceSnapshotFilter(tenantID, productID)
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM product_source_snapshots %s", where)
+	var countBuilder strings.Builder
+	countBuilder.WriteString("SELECT COUNT(*) FROM product_source_snapshots ")
+	countBuilder.WriteString(where)
+	countQuery := countBuilder.String()
 	var total int
 	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	args = append(args, limit, offset)
+	var listBuilder strings.Builder
+	listBuilder.WriteString(`SELECT id,
+	        tenant_id,
+	        product_id,
+	        original_filename,
+	        label,
+	        notes,
+	        object_key,
+	        archive_size,
+	        sha256,
+	        idempotency_key,
+	        created_by,
+	        created_at,
+	        deleted_at
+	 FROM product_source_snapshots
+	 `)
+	listBuilder.WriteString(where)
+	listBuilder.WriteString(`
+	 ORDER BY created_at DESC
+	 LIMIT $`)
+	listBuilder.WriteString(strconv.Itoa(len(args) - 1))
+	listBuilder.WriteString(` OFFSET $`)
+	listBuilder.WriteString(strconv.Itoa(len(args)))
 	rows, err := db.QueryContext(
 		ctx,
-		fmt.Sprintf(
-			`SELECT id,
-		        tenant_id,
-		        product_id,
-		        original_filename,
-		        label,
-		        notes,
-		        object_key,
-		        archive_size,
-		        sha256,
-		        idempotency_key,
-		        created_by,
-		        created_at,
-		        deleted_at
-		 FROM product_source_snapshots
-		 %s
-		 ORDER BY created_at DESC
-		 LIMIT $%d OFFSET $%d`,
-			where,
-			len(args)-1,
-			len(args),
-		),
+		listBuilder.String(),
 		args...,
 	)
 	if err != nil {
@@ -139,7 +146,8 @@ func ListProductSourceSnapshots(ctx context.Context, db *sql.DB, tenantID *uuid.
 
 func GetLatestProductSourceSnapshot(ctx context.Context, db *sql.DB, tenantID *uuid.UUID, productID uuid.UUID) (*ProductSourceSnapshotItem, error) {
 	where, args := buildProductSourceSnapshotFilter(tenantID, productID)
-	query := fmt.Sprintf(`SELECT id,
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString(`SELECT id,
 	        tenant_id,
 	        product_id,
 	        original_filename,
@@ -153,10 +161,12 @@ func GetLatestProductSourceSnapshot(ctx context.Context, db *sql.DB, tenantID *u
 	        created_at,
 	        deleted_at
 	 FROM product_source_snapshots
-	 %s
+	 `)
+	queryBuilder.WriteString(where)
+	queryBuilder.WriteString(`
 	 ORDER BY created_at DESC
-	 LIMIT 1`, where)
-	row := db.QueryRowContext(ctx, query, args...)
+	 LIMIT 1`)
+	row := db.QueryRowContext(ctx, queryBuilder.String(), args...)
 	return scanProductSourceSnapshotRow(row)
 }
 
