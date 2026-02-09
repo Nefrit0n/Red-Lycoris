@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/storage"
 )
 
 func TestShouldRefresh(t *testing.T) {

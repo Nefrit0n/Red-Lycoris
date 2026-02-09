@@ -3,7 +3,7 @@ package plugins
 import (
 	"encoding/json"
 
-	"lotus-warden/backend/internal/parser"
+	"red-lycoris/backend/internal/parser"
 )
 
 type parserPlugin struct {

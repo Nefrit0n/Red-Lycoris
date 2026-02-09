@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/parser"
-	"lotus-warden/backend/internal/policies"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/parser"
+	"red-lycoris/backend/internal/policies"
+	"red-lycoris/backend/internal/storage"
 )
 
 type policyFindingParams struct {

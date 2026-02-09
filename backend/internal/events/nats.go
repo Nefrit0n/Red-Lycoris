@@ -33,7 +33,7 @@ type Publisher struct {
 func NewPublisher(url string) (*Publisher, error) {
 	nc, err := nats.Connect(
 		url,
-		nats.Name("lotus-warden"),
+		nats.Name("red-lycoris"),
 		nats.Timeout(5*time.Second),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),

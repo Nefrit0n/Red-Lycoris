@@ -1,6 +1,6 @@
 package plugins
 
-import "lotus-warden/backend/internal/parser"
+import "red-lycoris/backend/internal/parser"
 
 var defaultRegistry = func() *Registry {
 	registry := NewRegistry()

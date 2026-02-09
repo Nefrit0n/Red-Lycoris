@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 type SbomItem struct {

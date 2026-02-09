@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 func TestParseTrivyReport(t *testing.T) {

@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Lotus Warden API",
+    "title": "Red Lycoris API",
     "version": "1.0.0",
     "description": "Stable API contracts for v1. Responses are additive-only (new optional fields). Request bodies ignore unknown fields; clients must avoid unknown fields on PUT replace operations."
   },

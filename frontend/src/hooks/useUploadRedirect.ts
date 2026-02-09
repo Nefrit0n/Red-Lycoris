@@ -16,7 +16,7 @@ export function useUploadRedirect(pageSize: number) {
     // Don't redirect if already has product or import_job_id in URL
     if (queryProduct || queryImportJobId) return;
 
-    const raw = localStorage.getItem('lotus_warden_last_upload');
+    const raw = localStorage.getItem('red_lycoris_last_upload');
     if (!raw) return;
 
     try {
@@ -34,7 +34,7 @@ export function useUploadRedirect(pageSize: number) {
         );
       }
     } finally {
-      localStorage.removeItem('lotus_warden_last_upload');
+      localStorage.removeItem('red_lycoris_last_upload');
     }
   }, [location.pathname, location.search, navigate, pageSize]);
 }

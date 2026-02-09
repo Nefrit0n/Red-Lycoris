@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	v1dto "lotus-warden/backend/internal/dto/v1"
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/policies"
-	"lotus-warden/backend/internal/storage"
+	v1dto "red-lycoris/backend/internal/dto/v1"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/policies"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"

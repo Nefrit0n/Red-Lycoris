@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"io"
 
-	"lotus-warden/backend/internal/archive"
+	"red-lycoris/backend/internal/archive"
 )
 
 const supportedArchiveMessage = "Неподдерживаемый формат архива. Поддерживаются: zip, tar.gz, tgz."

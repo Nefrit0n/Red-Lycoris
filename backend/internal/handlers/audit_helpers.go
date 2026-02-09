@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"

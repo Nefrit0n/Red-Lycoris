@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"lotus-warden/backend/internal/handlers"
-	"lotus-warden/backend/internal/models"
-	"lotus-warden/backend/internal/sla"
+	"red-lycoris/backend/internal/handlers"
+	"red-lycoris/backend/internal/models"
+	"red-lycoris/backend/internal/sla"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gofiber/fiber/v2"

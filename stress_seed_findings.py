@@ -11,7 +11,7 @@ DEFAULT_TENANT = "00000000-0000-0000-0000-000000000000"
 
 DB_SERVICE = "postgres"
 DB_USER = "postgres"
-DB_NAME = "lotus_warden"
+DB_NAME = "red_lycoris"
 
 SOURCE_TYPE = "stress-seed"
 SOURCE_VERSION = "v1"
@@ -386,7 +386,7 @@ def sql_quote(s: str) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Seed Lotus-Warden Postgres with Semgrep-like findings (evidence+raw_data)."
+        description="Seed Red-Lycoris Postgres with Semgrep-like findings (evidence+raw_data)."
     )
     ap.add_argument(
         "--count",

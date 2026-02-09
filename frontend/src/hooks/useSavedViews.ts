@@ -9,7 +9,7 @@ export interface SavedView {
   createdAt: string;
 }
 
-const STORAGE_KEY = "lotus_warden_saved_views";
+const STORAGE_KEY = "red_lycoris_saved_views";
 
 // Built-in views that are always available
 const BUILT_IN_VIEWS: SavedView[] = [

@@ -8,12 +8,12 @@ import (
 	"log"
 	"time"
 
-	"lotus-warden/backend/internal/config"
-	"lotus-warden/backend/internal/events"
-	"lotus-warden/backend/internal/metrics"
-	"lotus-warden/backend/internal/objectstore"
-	"lotus-warden/backend/internal/sbomindex"
-	"lotus-warden/backend/internal/storage"
+	"red-lycoris/backend/internal/config"
+	"red-lycoris/backend/internal/events"
+	"red-lycoris/backend/internal/metrics"
+	"red-lycoris/backend/internal/objectstore"
+	"red-lycoris/backend/internal/sbomindex"
+	"red-lycoris/backend/internal/storage"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"

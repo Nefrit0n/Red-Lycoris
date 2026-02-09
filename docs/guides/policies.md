@@ -2,7 +2,7 @@
 
 ## Canonical format: Rego (OPA)
 
-Rego (OPA) is the canonical, executable source of truth for policies in Lotus Warden. The choice is driven by:
+Rego (OPA) is the canonical, executable source of truth for policies in Red Lycoris. The choice is driven by:
 
 - **Purpose-built for policy-as-code**: Rego is declarative and optimized for expressing allow/deny decisions and exceptions.
 - **Deterministic evaluation**: policies are pure functions over input, which makes decisions reproducible and auditable.

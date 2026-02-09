@@ -13,7 +13,7 @@ exclude:
 
   - message: Docs templates and examples
     paths:
-      - "lotus-warden/docs/template/**"
+      - "red_lycoris/docs/template/**"
       - "docs/template/**"
       - "docs/**/*.html"
       - "docs/examples/**"

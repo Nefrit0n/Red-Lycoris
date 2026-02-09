@@ -5,8 +5,8 @@ gate_check:
   stage: security
   image: alpine:3.19
   variables:
-    LW_API_TOKEN: "$LOTUS_WARDEN_TOKEN"
+    LW_API_TOKEN: "$RED_LYCORIS_TOKEN"
   script:
     - apk add --no-cache bash curl jq
     - chmod +x scripts/gate-check.sh
-    - scripts/gate-check.sh "$LOTUS_WARDEN_URL" "$IMPORT_JOB_ID"
+    - scripts/gate-check.sh "$RED_LYCORIS_URL" "$IMPORT_JOB_ID"

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"lotus-warden/backend/internal/models"
+	"red-lycoris/backend/internal/models"
 )
 
 // TruffleHogParser parses TruffleHog secret scanner output (v3 format).

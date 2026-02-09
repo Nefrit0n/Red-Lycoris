@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"lotus-warden/backend/internal/config"
+	"red-lycoris/backend/internal/config"
 
 	_ "github.com/lib/pq"
 )
