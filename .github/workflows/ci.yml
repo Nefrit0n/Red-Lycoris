@@ -1,4 +1,6 @@
-name: CI
+name: "CI • build & test"
+
+run-name: "${{ github.event_name }} • ${{ github.ref_name }} • ${{ github.sha }}"
 
 on:
   push:
@@ -8,9 +10,6 @@ on:
       - "lotus-warden/docs/template/**"
       - "docs/template/**"
   workflow_dispatch:
-  schedule:
-    # weekly security sweep (UTC)
-    - cron: "20 2 * * 1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
@@ -30,13 +29,12 @@ env:
 
 jobs:
   backend:
-    name: Backend checks
-    if: github.event_name != 'schedule'
+    name: "🧪 Backend"
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     services:
-      postgres:
+      postgres: &postgres_service
         image: postgres:16-alpine
         env:
           POSTGRES_USER: postgres
@@ -70,7 +68,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-          cache-dependency-path: backend/go.sum # setup-go v6: можно привязать кеш к go.sum :contentReference[oaicite:5]{index=5}
+          cache-dependency-path: backend/go.sum
 
       - name: Go format & vet
         working-directory: backend
@@ -95,26 +93,98 @@ jobs:
           set -euo pipefail
           go test ./...
 
-  contracts:
-    name: Contract tests
-    if: github.event_name != 'schedule'
+  frontend:
+    name: "🧩 Frontend"
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm run lint
+
+      - name: Test
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm run test
+
+  python:
+    name: "🐍 Python API"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: lotus_warden
+      redis:
+        image: redis:7-alpine
         ports:
-          - 5432:5432
+          - 6379:6379
         options: >-
-          --health-cmd="pg_isready -U postgres"
+          --health-cmd="redis-cli ping"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+
+    env:
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: python_api/requirements.txt
+
+      - name: Install dependencies
+        working-directory: python_api
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff pytest pytest-cov
+
+      - name: Lint with ruff
+        working-directory: python_api
+        run: |
+          set -euo pipefail
+          ruff check .
+          ruff format --check .
+
+      - name: Run tests
+        working-directory: python_api
+        run: |
+          set -euo pipefail
+          pytest --cov=app --cov-report=term-missing
+
+  contracts:
+    name: "🔗 Contracts"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [backend]  # делает граф аккуратнее: backend -> contracts
+
+    services:
+      postgres: *postgres_service
       nats:
         image: nats:2.10-alpine
         ports:
@@ -155,7 +225,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
-      - name: Start MinIO (workaround GHA services can't pass command args)
+      - name: Start MinIO (workaround: services can't pass command args)
         run: |
           set -euo pipefail
           docker run -d --name minio \
@@ -247,98 +317,11 @@ jobs:
           fi
           docker rm -f minio >/dev/null 2>&1 || true
 
-  frontend:
-    name: Frontend checks
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: |
-          set -euo pipefail
-          npm ci
-
-      - name: Lint
-        working-directory: frontend
-        run: |
-          set -euo pipefail
-          npm run lint
-
-      - name: Test
-        working-directory: frontend
-        run: |
-          set -euo pipefail
-          npm run test
-
-  python:
-    name: Python API checks
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
-    env:
-      CELERY_BROKER_URL: redis://localhost:6379/0
-      CELERY_RESULT_BACKEND: redis://localhost:6379/1
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: "pip"
-          cache-dependency-path: python_api/requirements.txt
-
-      - name: Install dependencies
-        working-directory: python_api
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install ruff pytest pytest-cov
-
-      - name: Lint with ruff
-        working-directory: python_api
-        run: |
-          set -euo pipefail
-          ruff check .
-          ruff format --check .
-
-      - name: Run tests
-        working-directory: python_api
-        run: |
-          set -euo pipefail
-          pytest --cov=app --cov-report=term-missing
-
   docker:
-    name: Docker build
-    if: github.event_name != 'schedule'
+    name: "🐳 Docker build"
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [backend, frontend, python]
+    needs: [backend, frontend, python, contracts]
 
     steps:
       - uses: actions/checkout@v5
@@ -389,10 +372,86 @@ jobs:
           cache-from: type=gha,scope=python_api
           cache-to: type=gha,mode=max,scope=python_api
 
-  # ---------------- Security ----------------
+  security-fast:
+    name: "🔒 Security • fast"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [backend, frontend, python]  # аккуратно рядом со стадией checks
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python (trufflehog3)
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install & run trufflehog3
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install "trufflehog3==3.0.10"
+          trufflehog3 --config .trufflehog3.yml -f JSON -o trufflehog3.json -s HIGH .
+
+      - name: Upload trufflehog3 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trufflehog3-report
+          path: trufflehog3.json
+
+      - name: Trivy (fs)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+          skip-dirs: "lotus-warden/docs/template,docs/template"
+
+      - name: Trivy (config)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: "config"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+          skip-dirs: "lotus-warden/docs/template,docs/template"
+
+      - name: Set up Go (gosec)
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: gosec (backend)
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          gosec ./...
+
+      - name: bandit (python_api)
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r python_api/requirements.txt
+          pip install bandit
+          (cd python_api && bandit -r .)
 
   security-codeql:
-    name: SAST (CodeQL) - public only
+    name: "🧠 SAST (CodeQL) • public"
     if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -428,177 +487,48 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@v4
 
-  security-lite:
-    name: SAST lite (private fallback)
-    if: ${{ github.event.repository.private == true }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: backend/go.sum
-
-      - name: gosec (Go SAST)
-        working-directory: backend
-        run: |
-          set -euo pipefail
-          # Install gosec CLI and ensure GOPATH/bin is on PATH
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          # Run gosec on the backend module
-          gosec ./...
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: "pip"
-          cache-dependency-path: python_api/requirements.txt
-
-      - name: bandit (Python SAST)
-        working-directory: python_api
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install bandit
-          bandit -r .
-
-  security-secrets:
-    name: Secrets scan (Gitleaks + TruffleHog3)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Create gitleaks config (ignore docs templates)
-        run: |
-          set -euo pipefail
-          cat > /tmp/gitleaks.toml <<'TOML'
-          title = "Lotus-Warden CI gitleaks config"
-
-          [extend]
-          useDefault = true
-
-          [[allowlists]]
-          description = "Ignore docs templates directory"
-          paths = [
-            '''^lotus-warden/docs/template/''',
-            '''^docs/template/'''
-          ]
-          TOML
-
-      - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: /tmp/gitleaks.toml
-
-      - name: Set up Python (for trufflehog3)
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: "pip"
-
-      - name: Install trufflehog3
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          pip install "trufflehog3==3.0.10"
-
-      - name: Run trufflehog3
-        run: |
-          set -euo pipefail
-          trufflehog3 \
-            --config .trufflehog3.yml \
-            -f JSON \
-            -o trufflehog3.json \
-            -s HIGH \
-            .
-
-      - name: Upload trufflehog3 report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trufflehog3-report
-          path: trufflehog3.json
-
-  security-trivy-ci:
-    name: Trivy scan (fs + config) - CI
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: [backend, frontend, python]
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Trivy vulnerability scanner (filesystem)
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: "fs"
-          scan-ref: "."
-          severity: "CRITICAL,HIGH"
-          exit-code: "1"
-          ignore-unfixed: true
-          skip-dirs: "lotus-warden/docs/template,docs/template"
-
-      - name: Trivy config scanner
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: "config"
-          scan-ref: "."
-          severity: "CRITICAL,HIGH"
-          exit-code: "0"
-          skip-dirs: "lotus-warden/docs/template,docs/template"
-
-  security-trivy-scheduled:
-    name: Trivy scan (fs + config) - scheduled
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Trivy vulnerability scanner (filesystem)
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: "fs"
-          scan-ref: "."
-          severity: "CRITICAL,HIGH"
-          exit-code: "1"
-          ignore-unfixed: true
-          skip-dirs: "lotus-warden/docs/template,docs/template"
-
-      - name: Trivy config scanner
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: "config"
-          scan-ref: "."
-          severity: "CRITICAL,HIGH"
-          exit-code: "0"
-          skip-dirs: "lotus-warden/docs/template,docs/template"
-
   dependency-review:
-    name: Dependency Review (PR only, public only)
+    name: "📦 Dependency Review • public PR"
     if: ${{ github.event_name == 'pull_request' && github.event.repository.private == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write # action docs/examples упоминают доп. права для PR feedback :contentReference[oaicite:6]{index=6}
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v5
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
+
+  summary:
+    name: "✅ Summary"
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - backend
+      - frontend
+      - python
+      - contracts
+      - docker
+      - security-fast
+      - security-codeql
+      - dependency-review
+
+    steps:
+      - name: Write run summary
+        run: |
+          {
+            echo "## CI Summary"
+            echo ""
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| Backend | ${{ needs.backend.result }} |"
+            echo "| Frontend | ${{ needs.frontend.result }} |"
+            echo "| Python API | ${{ needs.python.result }} |"
+            echo "| Contracts | ${{ needs.contracts.result }} |"
+            echo "| Docker build | ${{ needs.docker.result }} |"
+            echo "| Security fast | ${{ needs.security-fast.result }} |"
+            echo "| CodeQL (public) | ${{ needs.security-codeql.result }} |"
+            echo "| Dependency Review (public PR) | ${{ needs.dependency-review.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
