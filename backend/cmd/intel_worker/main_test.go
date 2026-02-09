@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math/rand"
 	"testing"
 	"time"
 )
@@ -22,10 +21,6 @@ func TestParseDuration(t *testing.T) {
 }
 
 func TestComputeBackoff(t *testing.T) {
-	jitterMu.Lock()
-	jitterRand = rand.New(rand.NewSource(1))
-	jitterMu.Unlock()
-
 	base := 2 * time.Second
 	backoff := computeBackoff(base, 1)
 	if backoff < base*2 || backoff >= base*3 {
