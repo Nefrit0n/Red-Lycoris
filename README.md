@@ -1,151 +1,281 @@
-<div align="center">
-  <img src="docs/ux/logo/logo_full.svg" alt="Red Lycoris logo" width="400" height="400" />
+<p align="center">
+  <img src="docs/ux/logo/logo_full.svg" alt="Red Lycoris" width="420"/>
+</p>
 
-[![release](https://img.shields.io/github/v/release/Red-Lycoris/Red-Lycoris?style=flat-square)](https://github.com/Red-Lycoris/Red-Lycoris/releases)
-[![tests](https://img.shields.io/github/actions/workflow/status/Red-Lycoris/Red-Lycoris/ci.yml?label=tests&style=flat-square)](https://github.com/Red-Lycoris/Red-Lycoris/actions)
-[![license](https://img.shields.io/badge/license-уточняется-blue?style=flat-square)](#лицензия)
-[![issues](https://img.shields.io/github/issues/Red-Lycoris/Red-Lycoris?style=flat-square)](https://github.com/Red-Lycoris/Red-Lycoris/issues)
-[![downloads](https://img.shields.io/github/downloads/Red-Lycoris/Red-Lycoris/total?style=flat-square)](https://github.com/Red-Lycoris/Red-Lycoris/releases)
+<h3 align="center">Application Security Orchestration & Correlation Platform</h3>
 
-</div>
-
-**Red Lycoris** — платформа для централизованного управления безопасностью приложений и инфраструктуры: от сканирования до triage, политики, метрик и автоматизации ремедиации.
-
-> Проект вдохновлён лучшими практиками OSS‑инструментов экосистемы безопасности (Trivy, Semgrep/OpenGrep, DefectDojo и др.), но сфокусирован на едином потоке: "обнаружить → оценить → приоритизировать → исправить".
-
----
-
-## Содержание
-
-- [Ключевые возможности](#ключевые-возможности)
-- [Кому подходит](#кому-подходит)
-- [Как это работает](#как-это-работает)
-- [Архитектура](#архитектура)
-- [Быстрый старт](#быстрый-старт)
-- [Сканеры и интеграции](#сканеры-и-интеграции)
-- [Политики и качество](#политики-и-качество)
-- [Управление рисками](#управление-рисками)
-- [Отчёты и метрики](#отчёты-и-метрики)
-- [Безопасность и соответствие](#безопасность-и-соответствие)
-- [Вклад в проект](#вклад-в-проект)
-- [Лицензия](#лицензия)
+<p align="center">
+  <a href="https://github.com/Nefrit0n/Red-Lycoris/actions"><img src="https://github.com/Nefrit0n/Red-Lycoris/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white" alt="Go 1.24">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19">
+  <img src="https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white" alt="Python 3.12+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+</p>
 
 ---
 
-## Ключевые возможности
+## 🇬🇧 English
 
-- **Единый центр безопасности**: агрегирует результаты SAST/DAST/SCA, облачных проверок и инфраструктурных сканирований.
-- **Нормализация находок**: дедупликация, унификация статусов, единый формат уязвимостей и артефактов.
-- **Приоритизация по риску**: учитывает критичность, эксплуатационность, контекст сервиса и бизнес‑значимость.
-- **Автоматизация**: автосоздание задач в трекерах, уведомления, правила эскалации, SLA.
-- **Политики качества**: гейты на CI/CD, контроль требований безопасности и best practices.
-- **Гибкие интеграции**: API, вебхуки, коннекторы, расширяемость.
+### 🔍 What is Red Lycoris?
 
----
+Your team runs a dozen security scanners — Semgrep, Trivy, Gitleaks, Snyk, and more. Each one produces its own report in its own format. Vulnerabilities get duplicated, priorities are unclear, and nothing talks to each other.
 
-## Кому подходит
+**Red Lycoris fixes that.** It pulls findings from 20 scanners into a single dashboard, removes duplicates, enriches them with real-world threat data, scores risk automatically, and lets you set policies so the important stuff gets handled first.
 
-- **Командам разработки** — получать понятные и приоритизированные задачи без шума.
-- **DevSecOps** — управлять контролями безопасности и встраивать их в CI/CD.
-- **Security‑командам** — отслеживать состояние рисков и эффективность ремедиации.
-- **Менеджменту** — иметь прозрачную аналитику и метрики соответствия.
+### ✨ Key Features
 
----
+| | Feature | Description |
+|---|---------|-------------|
+| 📥 | **20 Scanner Parsers** | Semgrep, Trivy, Gitleaks, Grype, Checkov, KICS, Bandit, GoSec, CodeQL, Snyk, Nuclei, ZAP, TFSec, Terrascan, Detect-Secrets, TruffleHog, npm-audit, pip-audit, SARIF, plain text |
+| 🧹 | **Smart Deduplication** | Fingerprint-based matching eliminates noise across scanners |
+| 🧠 | **Threat Intelligence** | Auto-enrichment with NVD, EPSS scores, and CISA KEV catalog |
+| 📊 | **Risk Scoring** | Prioritize what matters — calculated from severity, exploitability, and context |
+| 📜 | **Policy Engine** | OPA/Rego rules for auto-assignment, SDLC gates, and SLA enforcement |
+| 🏢 | **Multi-Tenancy** | Full tenant isolation — one instance, many teams |
+| 🔐 | **RBAC** | Role-based access: admin, analyst, viewer |
+| 📦 | **SBOM Support** | Software Bill of Materials indexing and tracking |
 
-## Как это работает
+### 🖼️ Screenshots
 
-1. **Сканирование** — запуск SAST/DAST/SCA/Cloud‑сканеров на пайплайнах и по расписанию.
-2. **Нормализация** — единый формат находок, дедупликация, обогащение данными.
-3. **Приоритизация** — риск‑скоринг и бизнес‑контекст.
-4. **Ремедиация** — создание задач, уведомления, контроль SLA.
-5. **Метрики** — отчёты, динамика, тренды, соответствие политикам.
+<!-- TODO: Add screenshots before release -->
+<!-- <img src="docs/assets/dashboard.png" alt="Dashboard" width="800"/> -->
+<!-- <img src="docs/assets/findings.png" alt="Findings view" width="800"/> -->
 
----
+> Screenshots will be added in the first public release.
 
-## Архитектура
+### 🚀 Quick Start
 
-- **Backend** — обработка данных, нормализация, API.
-- **Frontend** — интерфейс для triage, метрик и управления.
-- **Policy Engine** — правила, гейты, требования.
-- **Integrations** — внешние сканеры и системы управления задачами.
-
----
-
-## Быстрый старт
-
-> Ниже пример базового запуска в dev‑режиме. Уточняйте зависимости и переменные окружения в `docs/`.
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 
 ```bash
-# 1) Поднять сервисы
-make up
+# 1. Clone the repository
+git clone https://github.com/Nefrit0n/Red-Lycoris.git
+cd Red-Lycoris
 
-# 2) Применить миграции (если требуется)
-make migrate
+# 2. Create the config file
+cp .env.example .env
 
-# 3) Открыть UI
-# http://localhost:3000
+# 3. Start everything
+make dev
+
+# 4. Open the UI
+#    https://localhost:8443
 ```
 
+That's it. The platform will start 12 services (database, message broker, workers, API, and frontend) — all configured and ready to go.
+
+### 🏗️ How It Works
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                     Security Scanners                     │
+│  Semgrep · Trivy · Gitleaks · Snyk · ZAP · 15 more...   │
+└──────────────────────┬───────────────────────────────────┘
+                       │ reports (JSON, SARIF, text)
+                       ▼
+              ┌─────────────────┐
+              │   Parse & Norm  │  ← 20 format parsers
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │   Deduplicate   │  ← fingerprint matching
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │     Enrich      │  ← NVD + EPSS + KEV
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │   Score & Rank  │  ← risk calculation
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │  Policy Engine  │  ← OPA/Rego rules
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │    Dashboard    │  ← triage & action
+              └─────────────────┘
+```
+
+### 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Backend API | Go 1.24, Fiber |
+| Frontend | React 19, TypeScript, MUI 7, Vite |
+| Async Workers | Python 3.12, FastAPI, Celery |
+| Database | PostgreSQL 16 |
+| Message Broker | NATS JetStream |
+| Cache / Queue | Redis 7 |
+| Object Storage | MinIO (S3-compatible) |
+| Policy Engine | Open Policy Agent (Rego) |
+| Proxy | NGINX with TLS |
+| Infrastructure | Docker Compose (12 services) |
+
+### 📖 Documentation
+
+Detailed documentation lives in the [`docs/`](docs/) directory:
+
+- Architecture and design decisions
+- API contract specifications
+- Guides: adding scanners, policies, risk scoring
+- UX specifications and brand assets
+
+### 🤝 Contributing
+
+Contributions are welcome! Here's how to get started:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Make your changes
+4. Run the tests:
+   ```bash
+   # Backend
+   cd backend && go test ./...
+
+   # Frontend
+   cd frontend && npm ci && npm run lint && npm run test
+
+   # Python
+   cd python_api && ruff check . && pytest
+   ```
+5. Commit and open a Pull Request
+
+### 📄 License
+
+[Apache License 2.0](LICENSE) — use it freely, contribute back if you can.
+
 ---
 
-## Сканеры и интеграции
+## 🇷🇺 Русский
 
-Поддерживаем и планируем:
+### 🔍 Что такое Red Lycoris?
 
-- **SAST**: Semgrep, OpenGrep, CodeQL
-- **SCA**: Trivy, OSS‑сканеры зависимостей
-- **DAST**: OWASP ZAP, Burp (через импорт отчётов)
-- **Container & Infra**: Trivy, kube‑проверки
-- **Cloud**: CSPM‑сканеры через экспорт отчётов
-- **Trackers**: Jira, YouTrack, GitHub Issues
+Ваша команда использует десяток сканеров безопасности — Semgrep, Trivy, Gitleaks, Snyk и другие. Каждый выдаёт свой отчёт в своём формате. Уязвимости дублируются, приоритеты непонятны, а единой картины нет.
 
-Если хотите добавить интеграцию — смотрите [Вклад в проект](#вклад-в-проект).
+**Red Lycoris решает эту проблему.** Платформа собирает результаты из 20 сканеров в единый дашборд, убирает дубликаты, обогащает данными об актуальных угрозах, автоматически считает риски и позволяет настроить политики, чтобы важное обрабатывалось в первую очередь.
 
----
+### ✨ Ключевые возможности
 
-## Политики и качество
+| | Возможность | Описание |
+|---|------------|----------|
+| 📥 | **20 парсеров сканеров** | Semgrep, Trivy, Gitleaks, Grype, Checkov, KICS, Bandit, GoSec, CodeQL, Snyk, Nuclei, ZAP, TFSec, Terrascan, Detect-Secrets, TruffleHog, npm-audit, pip-audit, SARIF, plain text |
+| 🧹 | **Умная дедупликация** | Сопоставление по отпечаткам устраняет шум между сканерами |
+| 🧠 | **Обогащение данными** | Автоматическое обогащение из NVD, оценки EPSS и каталога CISA KEV |
+| 📊 | **Скоринг рисков** | Приоритизация на основе severity, эксплуатируемости и контекста |
+| 📜 | **Движок политик** | OPA/Rego-правила для авто-назначения, SDLC-гейтов и контроля SLA |
+| 🏢 | **Мультитенантность** | Полная изоляция — один инстанс, много команд |
+| 🔐 | **RBAC** | Ролевая модель: администратор, аналитик, наблюдатель |
+| 📦 | **Поддержка SBOM** | Индексация и отслеживание Software Bill of Materials |
 
-- Политики соответствия (OWASP Top 10, ASVS и др.)
-- Контроль обязательных проверок перед релизом
-- Гибкая настройка гейтов качества
+### 🖼️ Скриншоты
 
----
+<!-- TODO: Добавить скриншоты перед релизом -->
+<!-- <img src="docs/assets/dashboard.png" alt="Дашборд" width="800"/> -->
+<!-- <img src="docs/assets/findings.png" alt="Список находок" width="800"/> -->
 
-## Управление рисками
+> Скриншоты будут добавлены в первом публичном релизе.
 
-- Риск‑скоринг с учётом эксплуатационности
-- Контроль SLA по критичным находкам
-- Единый журнал принятия рисков
+### 🚀 Быстрый старт
 
----
+**Требования:** [Docker](https://docs.docker.com/get-docker/) и [Docker Compose](https://docs.docker.com/compose/install/)
 
-## Отчёты и метрики
+```bash
+# 1. Клонируйте репозиторий
+git clone https://github.com/Nefrit0n/Red-Lycoris.git
+cd Red-Lycoris
 
-- Динамика устранения уязвимостей
-- Среднее время ремедиации (MTTR)
-- Эффективность команд и сервисов
-- Комплаенс‑отчёты
+# 2. Создайте файл конфигурации
+cp .env.example .env
 
----
+# 3. Запустите всё
+make dev
 
-## Безопасность и соответствие
+# 4. Откройте UI
+#    https://localhost:8443
+```
 
-- Встроенные best practices и правила
-- Аудит действий пользователей
-- Гибкая модель ролей и прав
+Готово. Платформа поднимет 12 сервисов (база данных, брокер сообщений, воркеры, API и фронтенд) — всё настроено и готово к работе.
 
----
+### 🏗️ Как это работает
 
-## Вклад в проект
+```
+┌──────────────────────────────────────────────────────────┐
+│                    Сканеры безопасности                    │
+│  Semgrep · Trivy · Gitleaks · Snyk · ZAP · и ещё 15...  │
+└──────────────────────┬───────────────────────────────────┘
+                       │ отчёты (JSON, SARIF, text)
+                       ▼
+              ┌─────────────────┐
+              │  Парсинг и норм │  ← 20 парсеров форматов
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │  Дедупликация   │  ← сопоставление отпечатков
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │   Обогащение    │  ← NVD + EPSS + KEV
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │ Оценка рисков   │  ← расчёт скоринга
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │ Движок политик  │  ← OPA/Rego правила
+              └────────┬────────┘
+                       ▼
+              ┌─────────────────┐
+              │    Дашборд      │  ← триаж и действия
+              └─────────────────┘
+```
 
-Мы приветствуем вклад:
+### 🛠️ Технологический стек
 
-1. Создайте issue с описанием проблемы или предложения.
-2. Форкните репозиторий и подготовьте PR.
-3. Убедитесь, что есть тесты и документация.
+| Слой | Технология |
+|------|------------|
+| Backend API | Go 1.24, Fiber |
+| Frontend | React 19, TypeScript, MUI 7, Vite |
+| Async-воркеры | Python 3.12, FastAPI, Celery |
+| База данных | PostgreSQL 16 |
+| Брокер сообщений | NATS JetStream |
+| Кэш / очередь | Redis 7 |
+| Объектное хранилище | MinIO (S3-совместимый) |
+| Движок политик | Open Policy Agent (Rego) |
+| Прокси | NGINX с TLS |
+| Инфраструктура | Docker Compose (12 сервисов) |
 
----
+### 📖 Документация
 
-## Лицензия
+Подробная документация находится в директории [`docs/`](docs/):
 
-Уточняется. Если проект открывается публично, добавим файл LICENSE.
+- Архитектура и проектные решения
+- Спецификации API-контрактов
+- Гайды: добавление сканеров, политики, скоринг рисков
+- UX-спецификации и брендовые ресурсы
+
+### 🤝 Участие в разработке
+
+Мы рады вкладу! Как начать:
+
+1. Сделайте форк репозитория
+2. Создайте ветку (`git checkout -b feature/my-feature`)
+3. Внесите изменения
+4. Запустите тесты:
+   ```bash
+   # Backend
+   cd backend && go test ./...
+
+   # Frontend
+   cd frontend && npm ci && npm run lint && npm run test
+
+   # Python
+   cd python_api && ruff check . && pytest
+   ```
+5. Закоммитьте и откройте Pull Request
+
+### 📄 Лицензия
+
+[Apache License 2.0](LICENSE) — используйте свободно, будем рады контрибуциям.
