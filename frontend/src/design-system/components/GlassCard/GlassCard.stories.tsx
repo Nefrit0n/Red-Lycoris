@@ -57,7 +57,7 @@ export const GlassVariants: Story = {
           <Typography variant="caption">Heavy</Typography>
         </GlassCard>
         <GlassCard variant="lotus" sx={{ width: 150, height: 100 }}>
-          <Typography variant="caption">Lotus</Typography>
+          <Typography variant="caption">Red Lycoris</Typography>
         </GlassCard>
         <GlassCard variant="solid" sx={{ width: 150, height: 100 }}>
           <Typography variant="caption">Solid</Typography>
@@ -72,7 +72,7 @@ export const GlowEffects: Story = {
   render: () => (
     <Stack direction="row" spacing={2} flexWrap="wrap">
       <GlassCard glowColor="lotus" glowAlways sx={{ width: 150, height: 100 }}>
-        <Typography variant="caption">Lotus Glow</Typography>
+        <Typography variant="caption">Red Lycoris Glow</Typography>
       </GlassCard>
       <GlassCard glowColor="petal" glowAlways sx={{ width: 150, height: 100 }}>
         <Typography variant="caption">Petal Glow</Typography>
@@ -149,7 +149,7 @@ export const InteractiveCards: Story = {
         sx={{ width: 200 }}
       >
         <Typography variant="body2" color="text.secondary">
-          With lotus glow effect
+          With red lycoris glow effect
         </Typography>
       </GlassCard>
     </Stack>
@@ -191,8 +191,8 @@ export const PaddingVariants: Story = {
   ),
 };
 
-// Lotus branded card
-export const LotusBrandedCard: Story = {
+// Red Lycoris branded card
+export const RedLycorisBrandedCard: Story = {
   render: () => (
     <GlassCard
       variant="lotus"

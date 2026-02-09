@@ -2,7 +2,7 @@
  * MetricDisplay Component
  *
  * Beautiful metric display for dashboards with trend indicators,
- * animated counters, and Lotus design system styling.
+ * animated counters, and Red Lycoris design system styling.
  */
 
 import React, { forwardRef, useEffect, useState } from 'react';

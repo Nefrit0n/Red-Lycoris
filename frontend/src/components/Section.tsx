@@ -1,7 +1,7 @@
 /**
  * Section Component
  *
- * Reusable section wrapper built on the Lotus design system.
+ * Reusable section wrapper built on the Red Lycoris design system.
  * Provides consistent styling for content sections.
  */
 
