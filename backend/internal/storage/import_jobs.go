@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"strings"
 	"time"
 
 	"lotus-warden/backend/internal/models"
@@ -194,19 +195,29 @@ func ListImportJobs(ctx context.Context, db *sql.DB, filters ImportJobFilters) (
 	}
 
 	var total int
-	countQuery := "SELECT COUNT(*) FROM import_jobs " + whereClause
+	var countBuilder strings.Builder
+	countBuilder.WriteString("SELECT COUNT(*) FROM import_jobs ")
+	countBuilder.WriteString(whereClause)
+	countQuery := countBuilder.String()
 	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	args = append(args, filters.Limit, filters.Offset)
+	var listBuilder strings.Builder
+	listBuilder.WriteString(`SELECT id, tenant_id, scanner, source_type, source_version, status, findings_total, findings_new, duplicates_total, gate_failed, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by
+		 FROM import_jobs
+		 `)
+	listBuilder.WriteString(whereClause)
+	listBuilder.WriteString(`
+		 ORDER BY created_at DESC
+		 LIMIT $`)
+	listBuilder.WriteString(itoa(len(args) - 1))
+	listBuilder.WriteString(` OFFSET $`)
+	listBuilder.WriteString(itoa(len(args)))
 	rows, err := db.QueryContext(
 		ctx,
-		`SELECT id, tenant_id, scanner, source_type, source_version, status, findings_total, findings_new, duplicates_total, gate_failed, checksum, created_at, started_at, finished_at, product_id, product_name, product_version, product_identifier, created_by
-		 FROM import_jobs
-		 `+whereClause+`
-		 ORDER BY created_at DESC
-		 LIMIT $`+itoa(len(args)-1)+` OFFSET $`+itoa(len(args))+``,
+		listBuilder.String(),
 		args...,
 	)
 	if err != nil {
