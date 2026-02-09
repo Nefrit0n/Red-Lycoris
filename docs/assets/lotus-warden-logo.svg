@@ -1,7 +1,0 @@
-<svg width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="220" height="220" rx="48" fill="#0F172A"/>
-  <circle cx="110" cy="110" r="70" fill="#111827" stroke="#38BDF8" stroke-width="4"/>
-  <path d="M110 58C121 77 138 92 160 100C139 106 122 120 110 140C98 120 81 106 60 100C82 92 99 77 110 58Z" fill="#38BDF8"/>
-  <path d="M110 80C117 92 129 102 144 108C129 112 117 122 110 134C103 122 91 112 76 108C91 102 103 92 110 80Z" fill="#0F172A"/>
-  <text x="110" y="190" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="18" fill="#E2E8F0">Lotus Warden</text>
-</svg>
