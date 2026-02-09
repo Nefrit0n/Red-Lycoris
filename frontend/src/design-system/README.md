@@ -155,7 +155,7 @@ Enhanced button with glassmorphism and glow effects.
 
 // Colors
 <Button color="primary">Primary</Button>
-<Button color="lotus">Lotus Red</Button>
+<Button color="lotus">Red Lycoris</Button>
 <Button color="jade">Jade Teal</Button>
 <Button color="gold">Gold</Button>
 
@@ -174,7 +174,7 @@ Premium card with glassmorphism effects.
 <GlassCard variant="light">Light (default)</GlassCard>
 <GlassCard variant="medium">Medium blur</GlassCard>
 <GlassCard variant="heavy">Heavy blur</GlassCard>
-<GlassCard variant="lotus">Lotus gradient</GlassCard>
+<GlassCard variant="lotus">Red Lycoris gradient</GlassCard>
 <GlassCard variant="solid">Solid background</GlassCard>
 
 // With header

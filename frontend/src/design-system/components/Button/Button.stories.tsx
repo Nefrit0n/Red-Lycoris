@@ -56,14 +56,14 @@ export const Colors: Story = {
   render: () => (
     <Stack spacing={2}>
       <Stack direction="row" spacing={2} flexWrap="wrap">
-        <Button color="lotus">Lotus</Button>
+        <Button color="lotus">Red Lycoris</Button>
         <Button color="petal">Petal</Button>
         <Button color="jade">Jade</Button>
         <Button color="gold">Gold</Button>
         <Button color="error">Error</Button>
       </Stack>
       <Stack direction="row" spacing={2} flexWrap="wrap">
-        <Button variant="glow" color="lotus">Lotus Glow</Button>
+        <Button variant="glow" color="lotus">Red Lycoris Glow</Button>
         <Button variant="glow" color="petal">Petal Glow</Button>
         <Button variant="glow" color="jade">Jade Glow</Button>
         <Button variant="glow" color="gold">Gold Glow</Button>
@@ -142,7 +142,7 @@ export const GlassVariant: Story = {
 export const GlowVariant: Story = {
   render: () => (
     <Stack direction="row" spacing={2}>
-      <Button variant="glow" color="lotus">Lotus Glow</Button>
+      <Button variant="glow" color="lotus">Red Lycoris Glow</Button>
       <Button variant="glow" color="petal">Petal Glow</Button>
       <Button variant="glow" color="jade">Jade Glow</Button>
       <Button variant="glow" color="gold">Gold Glow</Button>
