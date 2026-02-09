@@ -8,8 +8,10 @@ client = TestClient(main.app)
 
 def test_health_check():
     response = client.get("/api/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    if response.status_code != 200:
+        raise AssertionError("Expected status code 200.")
+    if response.json() != {"status": "ok"}:
+        raise AssertionError("Expected health check response payload.")
 
 
 def test_enqueue_scan_queues_task(monkeypatch):
@@ -17,14 +19,17 @@ def test_enqueue_scan_queues_task(monkeypatch):
         id = "task-123"
 
     def fake_delay(payload):
-        assert payload == {"scan_id": "scan-1"}
+        if payload != {"scan_id": "scan-1"}:
+            raise AssertionError("Expected scan payload.")
         return DummyTask()
 
     monkeypatch.setattr(main.parse_scan, "delay", fake_delay)
 
     response = client.post("/api/tasks/scan", json={"scan_id": "scan-1"})
-    assert response.status_code == 200
-    assert response.json() == {"task_id": "task-123", "status": "queued"}
+    if response.status_code != 200:
+        raise AssertionError("Expected status code 200.")
+    if response.json() != {"task_id": "task-123", "status": "queued"}:
+        raise AssertionError("Expected queued task response payload.")
 
 
 def test_task_status_returns_result(monkeypatch):
@@ -36,15 +41,18 @@ def test_task_status_returns_result(monkeypatch):
             return True
 
     def fake_async_result(task_id):
-        assert task_id == "task-123"
+        if task_id != "task-123":
+            raise AssertionError("Expected task id.")
         return DummyResult()
 
     monkeypatch.setattr(main.parse_scan, "AsyncResult", fake_async_result)
 
     response = client.get("/api/tasks/task-123")
-    assert response.status_code == 200
-    assert response.json() == {
+    if response.status_code != 200:
+        raise AssertionError("Expected status code 200.")
+    if response.json() != {
         "task_id": "task-123",
         "state": "SUCCESS",
         "result": {"status": "processed"},
-    }
+    }:
+        raise AssertionError("Expected task status response payload.")
