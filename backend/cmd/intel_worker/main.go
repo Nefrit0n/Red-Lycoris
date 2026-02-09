@@ -195,7 +195,11 @@ func releaseAdvisoryLock(ctx context.Context, db *sql.DB, identifier string) err
 func hashIdentifier(identifier string) int64 {
 	hasher := fnv.New64a()
 	_, _ = hasher.Write([]byte(identifier))
-	return int64(hasher.Sum64() & uint64(maxInt64))
+	sum := hasher.Sum64()
+	if sum > uint64(maxInt64) {
+		sum &= uint64(maxInt64)
+	}
+	return int64(sum)
 }
 
 func parseDuration(raw string, fallback time.Duration) time.Duration {
