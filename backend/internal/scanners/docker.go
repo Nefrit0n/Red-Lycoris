@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -24,6 +25,8 @@ type RunnerConfig struct {
 	Timeout          time.Duration
 }
 
+var dockerRefPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.:/@-]*$`)
+
 // RunOpenGrep runs OpenGrep (Semgrep-compatible fork) in a Docker container.
 // Output format is identical to Semgrep JSON, so the same parser can be used.
 func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
@@ -40,21 +43,18 @@ func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, output
 		return "", fmt.Errorf("opengrep binary not found and ANALYSIS_OPENGREP_IMAGE is not set")
 	}
 
-	cmd := exec.CommandContext(
-		ctx,
-		"docker",
-		"run",
-		"--rm",
-		"--network", cfg.ContainerNetwork,
-		"-v", fmt.Sprintf("%s:/src:ro", workspace),
-		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
-		cfg.OpenGrepImage,
+	args, err := dockerRunArgs(cfg, workspace, outputPath, cfg.OpenGrepImage,
 		"opengrep",
 		"--config=auto",
 		"--json",
 		"--output", "/out/"+filepath.Base(outputPath),
 		"/src",
 	)
+	if err != nil {
+		return "", err
+	}
+	// #nosec G204 -- arguments are validated in dockerRunArgs.
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
@@ -95,15 +95,7 @@ func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		"docker",
-		"run",
-		"--rm",
-		"--network", cfg.ContainerNetwork,
-		"-v", fmt.Sprintf("%s:/src:ro", workspace),
-		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
-		cfg.TrivyImage,
+	args, err := dockerRunArgs(cfg, workspace, outputPath, cfg.TrivyImage,
 		"fs",
 		"--scanners", "vuln,secret,misconfig",
 		"--format", "json",
@@ -111,6 +103,11 @@ func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 		"--exit-code", "0",
 		"/src",
 	)
+	if err != nil {
+		return "", err
+	}
+	// #nosec G204 -- arguments are validated in dockerRunArgs.
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("trivy failed: %v (%s)", err, strings.TrimSpace(string(output)))
@@ -123,20 +120,17 @@ func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputP
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		"docker",
-		"run",
-		"--rm",
-		"--network", cfg.ContainerNetwork,
-		"-v", fmt.Sprintf("%s:/src:ro", workspace),
-		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
-		cfg.CheckovImage,
+	args, err := dockerRunArgs(cfg, workspace, outputPath, cfg.CheckovImage,
 		"--directory", "/src",
 		"--output", "sarif",
 		"--output-file-path", "/out",
 		"--soft-fail",
 	)
+	if err != nil {
+		return "", err
+	}
+	// #nosec G204 -- arguments are validated in dockerRunArgs.
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("checkov failed: %v (%s)", err, strings.TrimSpace(string(output)))
@@ -154,15 +148,7 @@ func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		"docker",
-		"run",
-		"--rm",
-		"--network", cfg.ContainerNetwork,
-		"-v", fmt.Sprintf("%s:/src:ro", workspace),
-		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
-		cfg.KICSImage,
+	args, err := dockerRunArgs(cfg, workspace, outputPath, cfg.KICSImage,
 		"scan",
 		"--path", "/src",
 		"--output-path", "/out",
@@ -170,6 +156,11 @@ func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath
 		"--report-formats", "sarif",
 		"--no-progress",
 	)
+	if err != nil {
+		return "", err
+	}
+	// #nosec G204 -- arguments are validated in dockerRunArgs.
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// KICS exits non-zero when findings are present — only fail on actual errors
@@ -189,15 +180,7 @@ func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, output
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		"docker",
-		"run",
-		"--rm",
-		"--network", cfg.ContainerNetwork,
-		"-v", fmt.Sprintf("%s:/src:ro", workspace),
-		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
-		cfg.GitleaksImage,
+	args, err := dockerRunArgs(cfg, workspace, outputPath, cfg.GitleaksImage,
 		"detect",
 		"--source", "/src",
 		"--report-format", "json",
@@ -205,6 +188,11 @@ func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, output
 		"--no-git",
 		"--exit-code", "0",
 	)
+	if err != nil {
+		return "", err
+	}
+	// #nosec G204 -- arguments are validated in dockerRunArgs.
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("gitleaks failed: %v (%s)", err, strings.TrimSpace(string(output)))
@@ -217,19 +205,16 @@ func RunGrype(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		"docker",
-		"run",
-		"--rm",
-		"--network", cfg.ContainerNetwork,
-		"-v", fmt.Sprintf("%s:/src:ro", workspace),
-		"-v", fmt.Sprintf("%s:/out", filepath.Dir(outputPath)),
-		cfg.GrypeImage,
+	args, err := dockerRunArgs(cfg, workspace, outputPath, cfg.GrypeImage,
 		"dir:/src",
 		"--output", "json",
 		"--file", "/out/"+filepath.Base(outputPath),
 	)
+	if err != nil {
+		return "", err
+	}
+	// #nosec G204 -- arguments are validated in dockerRunArgs.
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("grype failed: %v (%s)", err, strings.TrimSpace(string(output)))
@@ -245,4 +230,39 @@ func renameIfExists(src, dst string) error {
 	// Use os.Rename via exec to avoid importing os here (already imported via exec)
 	// Actually we need os — but it's fine for this helper.
 	return osRename(src, dst)
+}
+
+func dockerRunArgs(cfg RunnerConfig, workspace string, outputPath string, image string, extraArgs ...string) ([]string, error) {
+	if image == "" {
+		return nil, fmt.Errorf("docker image is required")
+	}
+	if !dockerRefPattern.MatchString(image) {
+		return nil, fmt.Errorf("invalid docker image reference: %s", image)
+	}
+	if cfg.ContainerNetwork != "" && !dockerRefPattern.MatchString(cfg.ContainerNetwork) {
+		return nil, fmt.Errorf("invalid docker network name: %s", cfg.ContainerNetwork)
+	}
+	if strings.ContainsRune(workspace, '\x00') || strings.ContainsRune(outputPath, '\x00') {
+		return nil, fmt.Errorf("invalid path: contains null byte")
+	}
+	absWorkspace, err := filepath.Abs(workspace)
+	if err != nil {
+		return nil, fmt.Errorf("resolve workspace path: %w", err)
+	}
+	outputDir := filepath.Dir(outputPath)
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve output path: %w", err)
+	}
+	args := []string{"run", "--rm"}
+	if cfg.ContainerNetwork != "" {
+		args = append(args, "--network", cfg.ContainerNetwork)
+	}
+	args = append(args,
+		"-v", fmt.Sprintf("%s:/src:ro", absWorkspace),
+		"-v", fmt.Sprintf("%s:/out", absOutputDir),
+		image,
+	)
+	args = append(args, extraArgs...)
+	return args, nil
 }
