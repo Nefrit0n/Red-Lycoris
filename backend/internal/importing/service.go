@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -469,13 +470,15 @@ func processFinding(ctx context.Context, db *sql.DB, params processFindingParams
 		}
 	}
 	updateArgs = append(updateArgs, masterRecord.ID)
-	query := fmt.Sprintf(`
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString(`
 		UPDATE findings
-		SET %s
-		WHERE id = $%d`,
-		strings.Join(setClauses, ", "),
-		len(updateArgs),
-	)
+		SET `)
+	queryBuilder.WriteString(strings.Join(setClauses, ", "))
+	queryBuilder.WriteString(`
+		WHERE id = $`)
+	queryBuilder.WriteString(strconv.Itoa(len(updateArgs)))
+	query := queryBuilder.String()
 	if _, err := tx.ExecContext(ctx, query, updateArgs...); err != nil {
 		_ = tx.Rollback()
 		return nil, err

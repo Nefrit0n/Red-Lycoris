@@ -293,28 +293,26 @@ func UpdateAnalysisJobArchiveKey(ctx context.Context, db *sql.DB, id uuid.UUID, 
 }
 
 func UpdateAnalysisJobScanner(ctx context.Context, db *sql.DB, id uuid.UUID, scanner string, status string, importJobID *uuid.UUID, artifactKey *string) error {
-	columnStatus := ""
-	columnImport := ""
-	columnArtifact := ""
+	query := ""
 	switch scanner {
 	case "semgrep":
-		columnStatus = "semgrep_status"
-		columnImport = "semgrep_import_job_id"
-		columnArtifact = "artifact_semgrep_key"
+		query = `UPDATE analysis_jobs
+		 SET semgrep_status = $1,
+		     semgrep_import_job_id = $2,
+		     artifact_semgrep_key = $3
+		 WHERE id = $4`
 	case "trivy":
-		columnStatus = "trivy_status"
-		columnImport = "trivy_import_job_id"
-		columnArtifact = "artifact_trivy_key"
+		query = `UPDATE analysis_jobs
+		 SET trivy_status = $1,
+		     trivy_import_job_id = $2,
+		     artifact_trivy_key = $3
+		 WHERE id = $4`
 	default:
 		return nil
 	}
 	_, err := db.ExecContext(
 		ctx,
-		`UPDATE analysis_jobs
-		 SET `+columnStatus+` = $1,
-		     `+columnImport+` = $2,
-		     `+columnArtifact+` = $3
-		 WHERE id = $4`,
+		query,
 		status,
 		anyUUIDPtr(importJobID),
 		anyStringPtr(artifactKey),

@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"hash/fnv"
 	"log"
-	"math/rand"
+	"math/big"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"lotus-warden/backend/internal/config"
@@ -24,8 +24,7 @@ import (
 const intelConsumer = "intel-worker-enrich-v1"
 const intelBackoffCap = 6
 
-var jitterRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-var jitterMu sync.Mutex
+const maxInt64 = int64(^uint64(0) >> 1)
 
 func main() {
 	cfg := config.Load()
@@ -196,7 +195,7 @@ func releaseAdvisoryLock(ctx context.Context, db *sql.DB, identifier string) err
 func hashIdentifier(identifier string) int64 {
 	hasher := fnv.New64a()
 	_, _ = hasher.Write([]byte(identifier))
-	return int64(hasher.Sum64())
+	return int64(hasher.Sum64() & uint64(maxInt64))
 }
 
 func parseDuration(raw string, fallback time.Duration) time.Duration {
@@ -225,10 +224,19 @@ func computeBackoff(base time.Duration, failCount int) time.Duration {
 		exp = intelBackoffCap
 	}
 	backoff := base * time.Duration(1<<exp)
-	jitterMu.Lock()
-	jitter := time.Duration(jitterRand.Int63n(int64(base)))
-	jitterMu.Unlock()
+	jitter := randomDuration(base)
 	return backoff + jitter
+}
+
+func randomDuration(max time.Duration) time.Duration {
+	if max <= 0 {
+		return 0
+	}
+	value, err := rand.Int(rand.Reader, big.NewInt(max.Nanoseconds()))
+	if err != nil {
+		return 0
+	}
+	return time.Duration(value.Int64())
 }
 
 func init() {

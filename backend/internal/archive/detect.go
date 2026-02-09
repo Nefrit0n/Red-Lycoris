@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
 )
 
 // ArchiveFormat describes a supported archive type.
@@ -84,7 +83,7 @@ func DetectArchiveFormat(r io.Reader) (ArchiveFormat, error) {
 
 // DetectArchiveFormatFromPath opens the file and detects its archive format.
 func DetectArchiveFormatFromPath(path string) (ArchiveFormat, error) {
-	file, err := os.Open(path)
+	file, err := openArchiveFile(path)
 	if err != nil {
 		return ArchiveFormatUnknown, err
 	}
