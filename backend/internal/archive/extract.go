@@ -79,7 +79,7 @@ func ExtractZip(path string, dest string, maxBytes int64) error {
 		// #nosec G304 -- targetPath is validated to stay within dest.
 		out, err := os.Create(targetPath)
 		if err != nil {
-			in.Close()
+			closeWithErr(&err, in)
 			return err
 		}
 		remaining := remainingBytes(maxBytes, extracted)
