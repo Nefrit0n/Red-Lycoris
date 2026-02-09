@@ -8,6 +8,8 @@ export interface AnalysisJobScannerDetail {
   importJobId?: string;
   errorMessage?: string;
   durationMs?: number;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export interface AnalysisJob {
