@@ -38,6 +38,8 @@ type AnalysisJobScannerResponse struct {
 	ImportJobID  *string `json:"importJobId,omitempty"`
 	ErrorMessage *string `json:"errorMessage,omitempty"`
 	DurationMs   *int    `json:"durationMs,omitempty"`
+	StartedAt    *string `json:"startedAt,omitempty"`
+	FinishedAt   *string `json:"finishedAt,omitempty"`
 }
 
 type AnalysisJobResponse struct {
@@ -315,6 +317,14 @@ func (h *AnalysisJobsHandler) Get(c *fiber.Ctx) error {
 				Status:      s.Status,
 				HasArtifact: s.ArtifactKey != nil && *s.ArtifactKey != "",
 				DurationMs:  s.DurationMs,
+			}
+			if s.StartedAt != nil {
+				v := s.StartedAt.Format(time.RFC3339)
+				d.StartedAt = &v
+			}
+			if s.FinishedAt != nil {
+				v := s.FinishedAt.Format(time.RFC3339)
+				d.FinishedAt = &v
 			}
 			if s.ImportJobID != nil {
 				v := s.ImportJobID.String()
