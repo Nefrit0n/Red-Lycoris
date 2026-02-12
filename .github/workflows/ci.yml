@@ -61,7 +61,7 @@ jobs:
       JWT_SECRET: contract-test-secret
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -99,7 +99,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -147,7 +147,7 @@ jobs:
       CELERY_RESULT_BACKEND: redis://localhost:6379/1
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -210,7 +210,7 @@ jobs:
       APP_PORT: 8080
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -324,7 +324,7 @@ jobs:
     needs: [backend, frontend, python, contracts]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -379,7 +379,7 @@ jobs:
     needs: [backend, frontend, python]  # аккуратно рядом со стадией checks
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -466,7 +466,7 @@ jobs:
         language: [go, python, javascript-typescript]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -497,7 +497,7 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
 
