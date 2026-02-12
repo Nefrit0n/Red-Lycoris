@@ -403,7 +403,7 @@ jobs:
 
       - name: Upload trufflehog3 report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: trufflehog3-report
           path: trufflehog3.json
