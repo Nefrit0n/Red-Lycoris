@@ -6,3 +6,5 @@
 
 export { useReducedMotion, reducedMotionStyles, reducedMotionSx } from './useReducedMotion';
 export type { UseReducedMotionReturn } from './useReducedMotion';
+
+export { useProductDetail } from './useProductDetail';
