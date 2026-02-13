@@ -39,6 +39,7 @@ func TestUpsertVulnIntelSuccess(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
 			*record.CVSSScore,
 			*record.CVSSVersion,
 			*record.EPSSScore,

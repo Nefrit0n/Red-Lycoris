@@ -39,6 +39,7 @@ type IntelDetail struct {
 	NVD         map[string]json.RawMessage
 	EPSS        map[string]json.RawMessage
 	KEV         map[string]json.RawMessage
+	BDU         map[string]json.RawMessage
 	References  []IntelReference
 	UpdatedAt   *time.Time
 }
@@ -54,6 +55,7 @@ type VulnIntelRecord struct {
 	NVDPayload      json.RawMessage
 	EPSSPayload     json.RawMessage
 	KEVPayload      json.RawMessage
+	BDUPayload      json.RawMessage
 	References      []IntelReference
 	CVSSScore       *float64
 	CVSSVersion     *string
@@ -290,6 +292,7 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 			vi.nvd_payload,
 			vi.epss_payload,
 			vi.kev_payload,
+			vi.bdu_payload,
 			vi.references_payload,
 			vi.updated_at
 		FROM finding_vuln_identifiers fvi
@@ -306,6 +309,7 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 		NVD:  map[string]json.RawMessage{},
 		EPSS: map[string]json.RawMessage{},
 		KEV:  map[string]json.RawMessage{},
+		BDU:  map[string]json.RawMessage{},
 	}
 	seenID := map[string]struct{}{}
 	referenceMap := map[string]IntelReference{}
@@ -316,6 +320,7 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 		var nvdPayload []byte
 		var epssPayload []byte
 		var kevPayload []byte
+		var bduPayload []byte
 		var referencesPayload []byte
 		var updatedAt sql.NullTime
 
@@ -324,6 +329,7 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 			&nvdPayload,
 			&epssPayload,
 			&kevPayload,
+			&bduPayload,
 			&referencesPayload,
 			&updatedAt,
 		); err != nil {
@@ -343,6 +349,9 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 		}
 		if len(kevPayload) > 0 {
 			detail.KEV[identifier] = json.RawMessage(kevPayload)
+		}
+		if len(bduPayload) > 0 {
+			detail.BDU[identifier] = json.RawMessage(bduPayload)
 		}
 
 		// safety: не парсим гигантский мусор
@@ -435,19 +444,20 @@ func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) er
 
 	query := `
 		INSERT INTO vuln_intel (
-			identifier, source_version, nvd_payload, epss_payload, kev_payload, references_payload,
+			identifier, source_version, nvd_payload, epss_payload, kev_payload, bdu_payload, references_payload,
 			cvss_score, cvss_version, epss_score, epss_percentile, kev,
 			fail_count, last_refreshed_at, next_retry_at, last_error, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11,
-			$12, $13, $14, $15, NOW()
+			$1, $2, $3, $4, $5, $6, $7,
+			$8, $9, $10, $11, $12,
+			$13, $14, $15, $16, NOW()
 		)
 		ON CONFLICT (identifier, source_version)
 		DO UPDATE SET
 			nvd_payload = EXCLUDED.nvd_payload,
 			epss_payload = EXCLUDED.epss_payload,
 			kev_payload = EXCLUDED.kev_payload,
+			bdu_payload = EXCLUDED.bdu_payload,
 			references_payload = EXCLUDED.references_payload,
 			cvss_score = EXCLUDED.cvss_score,
 			cvss_version = EXCLUDED.cvss_version,
@@ -466,6 +476,7 @@ func UpsertVulnIntel(ctx context.Context, db *sql.DB, record VulnIntelRecord) er
 		nullRawMessage(record.NVDPayload),
 		nullRawMessage(record.EPSSPayload),
 		nullRawMessage(record.KEVPayload),
+		nullRawMessage(record.BDUPayload),
 		nullRawMessage(referencesJSON),
 		nullFloatPtr(record.CVSSScore),
 		anyStringPtr(record.CVSSVersion),
