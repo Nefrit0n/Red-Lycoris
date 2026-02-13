@@ -277,6 +277,7 @@ export interface IntelDetail {
   nvd?: Record<string, unknown> | null;
   epss?: Record<string, unknown> | null;
   kev?: Record<string, unknown> | null;
+  bdu?: Record<string, unknown> | null;
   references?: Array<{
     title?: string | null;
     url: string;
