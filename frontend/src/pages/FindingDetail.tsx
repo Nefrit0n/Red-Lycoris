@@ -224,6 +224,19 @@ export const FindingDetailContent = ({
       : null;
   const kevFlag = Boolean(intelSummary?.kev);
   const intelReferences = intelDetails?.references ?? [];
+  const intelBdu = (() => {
+    if (intelDetails?.bdu && Object.keys(intelDetails.bdu).length > 0) {
+      return intelDetails.bdu;
+    }
+    const genericSources = (intelDetails as { sources?: Record<string, unknown> } | null)?.sources;
+    const bduFromSources = genericSources && typeof genericSources === "object"
+      ? (genericSources as Record<string, unknown>).bdu
+      : null;
+    if (bduFromSources && typeof bduFromSources === "object") {
+      return bduFromSources as Record<string, unknown>;
+    }
+    return null;
+  })();
   const metadata = semgrepEvidence?.metadata;
   const metadataRecord = isRecord(metadata) ? metadata : null;
   const cweList = uniq(toStringArray(metadataRecord?.cwe));
@@ -253,7 +266,7 @@ export const FindingDetailContent = ({
   const showIacTab = resolvedDetails.category === "IAC";
   const showContainerTab = resolvedDetails.category === "CONTAINER";
   const showDastTab = resolvedDetails.category === "DAST";
-  const showBduTab = Boolean(intelDetails?.bdu && Object.keys(intelDetails.bdu).length > 0);
+  const showBduTab = Boolean(intelBdu && Object.keys(intelBdu).length > 0);
   const riskScore =
     typeof data.riskScore === "number" ? Math.round(data.riskScore) : null;
   const riskBand = data.riskBand ?? null;
@@ -1298,10 +1311,10 @@ export const FindingDetailContent = ({
       )}
 
       {/* Tab: Semgrep Evidence */}
-      {showBduTab && bduIndex !== null && intelDetails?.bdu && (
+      {showBduTab && bduIndex !== null && intelBdu && (
         <TabPanel value={tab} index={bduIndex}>
           <Section title="БДУ ФСТЭК" dense={compact}>
-            <BduPanel bdu={intelDetails.bdu} />
+            <BduPanel bdu={intelBdu} />
           </Section>
         </TabPanel>
       )}

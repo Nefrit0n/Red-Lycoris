@@ -391,19 +391,21 @@ func (c *bduClient) fetch(ctx context.Context, identifier string) (json.RawMessa
 	c.sem <- struct{}{}
 	defer func() { <-c.sem }()
 
-	payload, err := fetchWithFallback(ctx, c.client, c.requestURL(identifier), c.requestMirrorURL(identifier))
-	if err != nil {
-		log.Printf("bdu fetch warning: %v", err)
-		return nil, nil, false, nil
+	for _, queryKey := range []string{"cve", "cveId", "identifier"} {
+		payload, err := fetchWithFallback(ctx, c.client, c.requestURL(identifier, queryKey), c.requestMirrorURL(identifier, queryKey))
+		if err != nil {
+			continue
+		}
+		normalized, refs, found := parseBDU(payload, identifier)
+		if found {
+			return normalized, refs, true, nil
+		}
 	}
-	normalized, refs, found := parseBDU(payload, identifier)
-	if !found {
-		return nil, nil, false, nil
-	}
-	return normalized, refs, true, nil
+	log.Printf("bdu fetch warning: no matching entry found for %s", identifier)
+	return nil, nil, false, nil
 }
 
-func (c *bduClient) requestURL(identifier string) string {
+func (c *bduClient) requestURL(identifier string, queryKey string) string {
 	if strings.Contains(c.url, "{cve}") {
 		return strings.ReplaceAll(c.url, "{cve}", identifier)
 	}
@@ -411,10 +413,10 @@ func (c *bduClient) requestURL(identifier string) string {
 	if strings.Contains(c.url, "?") {
 		sep = "&"
 	}
-	return c.url + sep + "cve=" + identifier
+	return c.url + sep + queryKey + "=" + identifier
 }
 
-func (c *bduClient) requestMirrorURL(identifier string) string {
+func (c *bduClient) requestMirrorURL(identifier string, queryKey string) string {
 	if c.mirrorURL == "" {
 		return ""
 	}
@@ -425,7 +427,7 @@ func (c *bduClient) requestMirrorURL(identifier string) string {
 	if strings.Contains(c.mirrorURL, "?") {
 		sep = "&"
 	}
-	return c.mirrorURL + sep + "cve=" + identifier
+	return c.mirrorURL + sep + queryKey + "=" + identifier
 }
 
 func parseBDU(payload []byte, identifier string) (json.RawMessage, []storage.IntelReference, bool) {
@@ -446,43 +448,43 @@ func parseBDU(payload []byte, identifier string) (json.RawMessage, []storage.Int
 }
 
 func findBDUEntry(root any, identifier string) (map[string]any, bool) {
-	if m, ok := root.(map[string]any); ok {
-		if matchesBDUIdentifier(m, identifier) {
-			return m, true
-		}
-		for _, key := range []string{"vulnerabilities", "data", "items", "results", "entries"} {
-			v, ok := m[key]
-			if !ok {
-				continue
+	var walk func(any) (map[string]any, bool)
+	walk = func(node any) (map[string]any, bool) {
+		switch v := node.(type) {
+		case map[string]any:
+			if matchesBDUIdentifier(v, identifier) {
+				return v, true
 			}
-			if arr, ok := v.([]any); ok {
-				for _, raw := range arr {
-					if item, ok := raw.(map[string]any); ok && matchesBDUIdentifier(item, identifier) {
-						return item, true
-					}
+			for _, nested := range v {
+				if found, ok := walk(nested); ok {
+					return found, true
+				}
+			}
+		case []any:
+			for _, item := range v {
+				if found, ok := walk(item); ok {
+					return found, true
 				}
 			}
 		}
+		return nil, false
 	}
-	if arr, ok := root.([]any); ok {
-		for _, raw := range arr {
-			if item, ok := raw.(map[string]any); ok && matchesBDUIdentifier(item, identifier) {
-				return item, true
-			}
-		}
-	}
-	return nil, false
+	return walk(root)
 }
 
 func matchesBDUIdentifier(entry map[string]any, identifier string) bool {
-	for _, key := range []string{"cve", "cve_id", "cveId", "identifier", "vulnerability_id"} {
+	for _, key := range []string{"cve", "cve_id", "cveId", "cveID", "CVE", "identifier", "vulnerability_id"} {
 		if v, ok := entry[key].(string); ok && strings.EqualFold(strings.TrimSpace(v), identifier) {
 			return true
 		}
 	}
-	if ext, ok := entry["external_ids"].(map[string]any); ok {
-		if cve, ok := ext["cve"]; ok {
-			return containsIdentifier(cve, identifier)
+	for _, extKey := range []string{"external_ids", "identifiers"} {
+		if ext, ok := entry[extKey].(map[string]any); ok {
+			for _, item := range ext {
+				if containsIdentifier(item, identifier) {
+					return true
+				}
+			}
 		}
 	}
 	if aliases, ok := entry["aliases"]; ok {
@@ -496,6 +498,12 @@ func containsIdentifier(value any, identifier string) bool {
 	case string:
 		return strings.EqualFold(strings.TrimSpace(vv), identifier)
 	case []any:
+		for _, item := range vv {
+			if containsIdentifier(item, identifier) {
+				return true
+			}
+		}
+	case map[string]any:
 		for _, item := range vv {
 			if containsIdentifier(item, identifier) {
 				return true
