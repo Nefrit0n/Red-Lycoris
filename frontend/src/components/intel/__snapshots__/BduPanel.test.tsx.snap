@@ -1,0 +1,564 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`BduPanel > renders empty fields fallback 1`] = `
+<div>
+  <div
+    class="MuiStack-root css-1sazv7p-MuiStack-root"
+  >
+    <div
+      class="MuiBox-root css-osgi58"
+    >
+      <div
+        class="MuiStack-root css-10kbc59-MuiStack-root"
+      >
+        <h6
+          class="MuiTypography-root MuiTypography-subtitle2 css-1ypmsg6-MuiTypography-root"
+        >
+          CVE-1
+        </h6>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Описание уязвимости
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Уязвимое ПО
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            CVSS 2/3/4
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v2: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v3: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v4: 
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Уровень опасности
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Меры устранения / компенсирующие меры
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Статус, дата публикации/обновления
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Статус: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Опубликовано: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Обновлено: 
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Идентификаторы (CVE/FG-IR и т.д.)
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Ссылки
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`BduPanel > renders long remediation list and pre-line content 1`] = `
+<div>
+  <div
+    class="MuiStack-root css-1sazv7p-MuiStack-root"
+  >
+    <div
+      class="MuiBox-root css-osgi58"
+    >
+      <div
+        class="MuiStack-root css-10kbc59-MuiStack-root"
+      >
+        <h6
+          class="MuiTypography-root MuiTypography-subtitle2 css-1ypmsg6-MuiTypography-root"
+        >
+          CVE-2
+        </h6>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Описание уязвимости
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            line1
+line2
+line3
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Уязвимое ПО
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            CVSS 2/3/4
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v2: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v3: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v4: 
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Уровень опасности
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Меры устранения / компенсирующие меры
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            1. step one
+2. step two
+3. step three
+4. step four
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Статус, дата публикации/обновления
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Статус: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Опубликовано: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Обновлено: 
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Идентификаторы (CVE/FG-IR и т.д.)
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            cve: CVE-2
+fg-ir: FG-IR-2
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Ссылки
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`BduPanel > renders multiple CVSS versions and software rows 1`] = `
+<div>
+  <div
+    class="MuiStack-root css-1sazv7p-MuiStack-root"
+  >
+    <div
+      class="MuiBox-root css-osgi58"
+    >
+      <div
+        class="MuiStack-root css-10kbc59-MuiStack-root"
+      >
+        <h6
+          class="MuiTypography-root MuiTypography-subtitle2 css-1ypmsg6-MuiTypography-root"
+        >
+          CVE-3
+        </h6>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Описание уязвимости
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Уязвимое ПО
+          </span>
+          <table
+            class="MuiTable-root css-1xwxv7r-MuiTable-root"
+          >
+            <thead
+              class="MuiTableHead-root css-1a7iywq-MuiTableHead-root"
+            >
+              <tr
+                class="MuiTableRow-root MuiTableRow-head css-1xtozoh-MuiTableRow-root"
+              >
+                <th
+                  class="MuiTableCell-root MuiTableCell-head MuiTableCell-sizeSmall css-g6bqb5-MuiTableCell-root"
+                  scope="col"
+                >
+                  Vendor
+                </th>
+                <th
+                  class="MuiTableCell-root MuiTableCell-head MuiTableCell-sizeSmall css-g6bqb5-MuiTableCell-root"
+                  scope="col"
+                >
+                  Product
+                </th>
+                <th
+                  class="MuiTableCell-root MuiTableCell-head MuiTableCell-sizeSmall css-g6bqb5-MuiTableCell-root"
+                  scope="col"
+                >
+                  Version
+                </th>
+                <th
+                  class="MuiTableCell-root MuiTableCell-head MuiTableCell-sizeSmall css-g6bqb5-MuiTableCell-root"
+                  scope="col"
+                >
+                  Type
+                </th>
+                <th
+                  class="MuiTableCell-root MuiTableCell-head MuiTableCell-sizeSmall css-g6bqb5-MuiTableCell-root"
+                  scope="col"
+                >
+                  Platform
+                </th>
+              </tr>
+            </thead>
+            <tbody
+              class="MuiTableBody-root css-gmh7jj-MuiTableBody-root"
+            >
+              <tr
+                class="MuiTableRow-root css-1xtozoh-MuiTableRow-root"
+              >
+                <td
+                  class="MuiTableCell-root MuiTableCell-body MuiTableCell-sizeSmall css-jiabcu-MuiTableCell-root"
+                >
+                  Acme
+                </td>
+                <td
+                  class="MuiTableCell-root MuiTableCell-body MuiTableCell-sizeSmall css-jiabcu-MuiTableCell-root"
+                >
+                  GW
+                </td>
+                <td
+                  class="MuiTableCell-root MuiTableCell-body MuiTableCell-sizeSmall css-jiabcu-MuiTableCell-root"
+                >
+                  1.2
+                </td>
+                <td
+                  class="MuiTableCell-root MuiTableCell-body MuiTableCell-sizeSmall css-jiabcu-MuiTableCell-root"
+                >
+                  library
+                </td>
+                <td
+                  class="MuiTableCell-root MuiTableCell-body MuiTableCell-sizeSmall css-jiabcu-MuiTableCell-root"
+                >
+                  linux
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            CVSS 2/3/4
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v2: 
+            score: 5; vector: AV:N
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v3: 
+            score: 8.8; vector: CVSS:3.1/AV:N
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            v4: 
+            score: 9.1; vector: CVSS:4.0/AV:N
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Уровень опасности
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Меры устранения / компенсирующие меры
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Статус, дата публикации/обновления
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Статус: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Опубликовано: 
+            —
+          </p>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-7ctihp-MuiTypography-root"
+          >
+            Обновлено: 
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Идентификаторы (CVE/FG-IR и т.д.)
+          </span>
+          <p
+            class="MuiTypography-root MuiTypography-body2 css-p1wdvc-MuiTypography-root"
+          >
+            —
+          </p>
+        </div>
+        <div
+          class="MuiBox-root css-0"
+        >
+          <span
+            class="MuiTypography-root MuiTypography-caption css-1374baf-MuiTypography-root"
+          >
+            Ссылки
+          </span>
+          <div
+            class="MuiStack-root css-j3ygch-MuiStack-root"
+          >
+            <a
+              class="MuiTypography-root MuiTypography-inherit MuiLink-root MuiLink-underlineAlways css-1orsvah-MuiTypography-root-MuiLink-root"
+              href="https://bdu.example/item/3"
+              rel="noreferrer"
+              target="_blank"
+            >
+              BDU
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;

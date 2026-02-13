@@ -32,6 +32,7 @@ import EventTimeline from "../components/EventTimeline";
 import RemediationGuidance from "../components/RemediationGuidance";
 import { Section } from "../components/Section";
 import { TabPanel } from "../components/TabPanel";
+import BduPanel from "../components/intel/BduPanel";
 import { useFindingDetail } from "../hooks/useFindingDetail";
 import { useFindingStatus } from "../hooks/useFindingStatus";
 import { useFindingComments } from "../hooks/useFindingComments";
@@ -252,6 +253,7 @@ export const FindingDetailContent = ({
   const showIacTab = resolvedDetails.category === "IAC";
   const showContainerTab = resolvedDetails.category === "CONTAINER";
   const showDastTab = resolvedDetails.category === "DAST";
+  const showBduTab = Boolean(intelDetails?.bdu && Object.keys(intelDetails.bdu).length > 0);
   const riskScore =
     typeof data.riskScore === "number" ? Math.round(data.riskScore) : null;
   const riskBand = data.riskBand ?? null;
@@ -282,6 +284,7 @@ export const FindingDetailContent = ({
   const iacIndex = showIacTab ? tabIndex++ : null;
   const containerIndex = showContainerTab ? tabIndex++ : null;
   const dastIndex = showDastTab ? tabIndex++ : null;
+  const bduIndex = showBduTab ? tabIndex++ : null;
   const semgrepIndex = semgrepEvidence ? tabIndex++ : null;
   const occurrencesIndex = tabIndex++;
   const commentsIndex = tabIndex++;
@@ -482,6 +485,7 @@ export const FindingDetailContent = ({
         {showIacTab ? <Tab label="IaC" /> : null}
         {showContainerTab ? <Tab label="Container" /> : null}
         {showDastTab ? <Tab label="DAST" /> : null}
+        {showBduTab ? <Tab label="БДУ ФСТЭК" /> : null}
         {semgrepEvidence ? <Tab label="Источник (Semgrep)" /> : null}
         <Tab label={`Occurrences${hasOccurrences ? ` (${occurrences.length})` : ""}`} />
         <Tab label={`Комментарии (${data.comments?.length ?? 0})`} />
@@ -752,6 +756,18 @@ export const FindingDetailContent = ({
               {intelIdentifiers.length > 0 && (
                 <Typography variant="caption" sx={{ color: primitives.night[300], fontFamily: "monospace" }}>
                   {intelIdentifiers[0]}{intelIdentifiers.length > 1 && ` +${intelIdentifiers.length - 1}`}
+                </Typography>
+              )}
+              {showBduTab && bduIndex !== null && (
+                <Typography
+                  variant="caption"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTab(bduIndex);
+                  }}
+                  sx={{ color: primitives.lotus[400], textDecoration: "underline", cursor: "pointer" }}
+                >
+                  Открыть БДУ
                 </Typography>
               )}
             </Stack>
@@ -1282,6 +1298,14 @@ export const FindingDetailContent = ({
       )}
 
       {/* Tab: Semgrep Evidence */}
+      {showBduTab && bduIndex !== null && intelDetails?.bdu && (
+        <TabPanel value={tab} index={bduIndex}>
+          <Section title="БДУ ФСТЭК" dense={compact}>
+            <BduPanel bdu={intelDetails.bdu} />
+          </Section>
+        </TabPanel>
+      )}
+
       {semgrepEvidence && semgrepIndex !== null && (
         <TabPanel value={tab} index={semgrepIndex}>
           <Section title="Источник (Semgrep)" dense={compact}>
