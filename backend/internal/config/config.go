@@ -50,6 +50,10 @@ type Config struct {
 	EPSSEnabled              bool
 	KEVURL                   string
 	KEVMirrorURL             string
+	BDUEnabled               bool
+	BDUURL                   string
+	BDUMirrorURL             string
+	BDUTimeout               string
 	IntelRefreshInterval     string
 	IntelWorkerConcurrency   int
 	IntelRetryBase           string
@@ -101,6 +105,10 @@ func Load() Config {
 		EPSSEnabled:              getEnvAsBool("EPSS_ENABLED", true),
 		KEVURL:                   getEnv("KEV_URL", ""),
 		KEVMirrorURL:             getEnv("KEV_MIRROR_URL", ""),
+		BDUEnabled:               getEnvAsBool("BDU_ENABLED", false),
+		BDUURL:                   getEnv("BDU_URL", ""),
+		BDUMirrorURL:             getEnv("BDU_MIRROR_URL", ""),
+		BDUTimeout:               getEnv("BDU_TIMEOUT", "20s"),
 		IntelRefreshInterval:     getEnv("INTEL_REFRESH_INTERVAL", "24h"),
 		IntelWorkerConcurrency:   getEnvAsInt("INTEL_WORKER_CONCURRENCY", 4),
 		IntelRetryBase:           getEnv("INTEL_RETRY_BASE", "30m"),

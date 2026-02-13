@@ -2236,6 +2236,9 @@
           "kev": {
             "type": "object"
           },
+          "bdu": {
+            "type": "object"
+          },
           "references": {
             "type": "array",
             "items": {

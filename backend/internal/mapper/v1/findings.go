@@ -567,6 +567,7 @@ func IntelDetail(detail *storage.IntelDetail) *v1dto.IntelDetail {
 		NVD:         detail.NVD,
 		EPSS:        detail.EPSS,
 		KEV:         detail.KEV,
+		BDU:         detail.BDU,
 	}
 	if len(detail.References) > 0 {
 		resp.References = make([]v1dto.IntelReference, 0, len(detail.References))
