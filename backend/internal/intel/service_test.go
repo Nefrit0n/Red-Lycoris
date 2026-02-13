@@ -102,6 +102,26 @@ func TestEnrichCVE(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(payload)
 	})
+	mux.HandleFunc("/bdu", func(w http.ResponseWriter, r *http.Request) {
+		payload := map[string]any{
+			"data": []map[string]any{
+				{
+					"cve":               "CVE-2024-0001",
+					"description":       "BDU description",
+					"cvss":              map[string]any{"vector": "CVSS:3.1/AV:N", "score": 9.8},
+					"cwe":               []string{"CWE-79"},
+					"affected_software": []map[string]any{{"vendor": "Acme", "product": "Widget", "version": "1.0", "platform": "linux"}},
+					"remediation":       []string{"Upgrade to 1.0.1"},
+					"status":            "published",
+					"published_at":      "2024-01-01",
+					"updated_at":        "2024-01-02",
+					"external_ids":      map[string]any{"cve": []string{"CVE-2024-0001"}, "bdu": "BDU:2024-0001"},
+					"references":        []map[string]any{{"url": "https://bdu.example/vuln/CVE-2024-0001", "title": "BDU"}},
+				},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(payload)
+	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -119,6 +139,11 @@ func TestEnrichCVE(t *testing.T) {
 		},
 		kev: &kevClient{
 			url:    server.URL + "/kev",
+			client: client,
+			sem:    make(chan struct{}, 1),
+		},
+		bdu: &bduClient{
+			url:    server.URL + "/bdu",
 			client: client,
 			sem:    make(chan struct{}, 1),
 		},
@@ -143,8 +168,14 @@ func TestEnrichCVE(t *testing.T) {
 	if !record.KEV {
 		t.Fatal("expected kev true")
 	}
-	if len(record.NVDPayload) == 0 || len(record.EPSSPayload) == 0 || len(record.KEVPayload) == 0 {
+	if len(record.NVDPayload) == 0 || len(record.EPSSPayload) == 0 || len(record.KEVPayload) == 0 || len(record.BDUPayload) == 0 {
 		t.Fatal("expected payloads to be populated")
+	}
+	if !strings.Contains(string(record.BDUPayload), "BDU description") {
+		t.Fatalf("expected normalized bdu payload, got %s", string(record.BDUPayload))
+	}
+	if len(record.References) < 2 {
+		t.Fatalf("expected aggregated references including bdu, got %d", len(record.References))
 	}
 }
 
@@ -159,5 +190,63 @@ func TestEnrichNonCVE(t *testing.T) {
 	}
 	if record.Identifier != "GHSA-xxxx-xxxx-xxxx" {
 		t.Fatalf("expected identifier to be preserved, got %s", record.Identifier)
+	}
+}
+
+func TestParseBDU_NormalizesExpectedFields(t *testing.T) {
+	payload := []byte(`{
+		"data": [{
+			"cve": "CVE-2024-7777",
+			"description": "<p>Example BDU entry</p>",
+			"cvss_v2": {"vector": "AV:N/AC:L", "score": 5.0},
+			"cvss": {"vector": "CVSS:3.1/AV:N/AC:L", "score": 8.2},
+			"cvss_v4": {"vector": "CVSS:4.0/AV:N", "score": 9.1},
+			"cwe": ["CWE-89"],
+			"affected_software": [{"vendor": "<b>Acme</b>", "product": "DB", "version": "2.1", "type":"library", "platform": "linux"}],
+			"remediation": ["<ul><li>Apply patch</li></ul>", "Rotate creds"],
+			"status": "published",
+			"published_at": "2024-01-10",
+			"updated_at": "2024-01-12",
+			"external_ids": {"cve": ["CVE-2024-7777"], "fg-ir": ["FG-IR-7777"]},
+			"references": [{"url": "https://bdu.example/item/7777", "title": "BDU"}]
+		}]
+	}`)
+
+	normalized, refs, found := parseBDU(payload, "CVE-2024-7777")
+	if !found {
+		t.Fatal("expected BDU entry to be found")
+	}
+	if len(normalized) == 0 {
+		t.Fatal("expected normalized payload")
+	}
+	if len(refs) != 1 || refs[0].URL != "https://bdu.example/item/7777" {
+		t.Fatalf("unexpected refs: %+v", refs)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(normalized, &doc); err != nil {
+		t.Fatalf("failed to unmarshal normalized payload: %v", err)
+	}
+	if doc["description"] != "Example BDU entry" {
+		t.Fatalf("unexpected sanitized description: %v", doc["description"])
+	}
+	cvss, ok := doc["cvss"].(map[string]any)
+	if !ok || cvss["v2"] == nil || cvss["v3"] == nil || cvss["v4"] == nil {
+		t.Fatalf("expected cvss v2/v3/v4, got: %+v", doc["cvss"])
+	}
+	affected, ok := doc["affected_software"].([]any)
+	if !ok || len(affected) != 1 {
+		t.Fatalf("expected affected software rows, got: %+v", doc["affected_software"])
+	}
+	row := affected[0].(map[string]any)
+	if row["vendor"] != "Acme" || row["type"] != "library" {
+		t.Fatalf("unexpected affected software row: %+v", row)
+	}
+	steps, ok := doc["remediation_steps"].([]any)
+	if !ok || len(steps) != 2 {
+		t.Fatalf("expected remediation steps, got: %+v", doc["remediation_steps"])
+	}
+	if steps[0] != "Apply patch" {
+		t.Fatalf("expected sanitized remediation step, got: %v", steps[0])
 	}
 }
