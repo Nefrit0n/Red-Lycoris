@@ -181,6 +181,7 @@ type IntelDetail struct {
 	NVD         map[string]json.RawMessage `json:"nvd,omitempty"`
 	EPSS        map[string]json.RawMessage `json:"epss,omitempty"`
 	KEV         map[string]json.RawMessage `json:"kev,omitempty"`
+	BDU         map[string]json.RawMessage `json:"bdu,omitempty"`
 	References  []IntelReference           `json:"references,omitempty"`
 	UpdatedAt   *string                    `json:"updated_at,omitempty"`
 }

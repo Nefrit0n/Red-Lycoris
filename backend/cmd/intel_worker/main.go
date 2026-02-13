@@ -60,6 +60,10 @@ func main() {
 		EPSSDisabled:        !cfg.EPSSEnabled,
 		KEVURL:              cfg.KEVURL,
 		KEVMirrorURL:        cfg.KEVMirrorURL,
+		BDUEnabled:          cfg.BDUEnabled,
+		BDUURL:              cfg.BDUURL,
+		BDUMirrorURL:        cfg.BDUMirrorURL,
+		BDUTimeout:          parseDuration(cfg.BDUTimeout, 20*time.Second),
 		RefreshInterval:     parseDuration(cfg.IntelRefreshInterval, 24*time.Hour),
 		ProviderConcurrency: cfg.IntelWorkerConcurrency,
 	})
