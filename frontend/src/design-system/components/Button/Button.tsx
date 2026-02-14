@@ -52,16 +52,16 @@ export interface ButtonProps extends Omit<MuiButtonProps, 'variant' | 'color'> {
 
 const StyledButton = styled(MuiButton, {
   shouldForwardProp: (prop) =>
-    !['loading', 'loadingPosition', 'loadingText', 'disableGlow'].includes(prop as string),
+    !['loading', 'loadingPosition', 'loadingText', 'disableGlow', 'rlState'].includes(prop as string),
 })<{
-  ownerState: {
+  rlState: {
     variant: ButtonVariant;
     color: ButtonColor;
     loading?: boolean;
     disableGlow?: boolean;
   };
-}>(({ theme, ownerState }) => {
-  const { variant, color, loading, disableGlow } = ownerState;
+}>(({ theme, rlState }) => {
+  const { variant, color, loading, disableGlow } = rlState;
 
   // Base styles
   const baseStyles = {
@@ -254,7 +254,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         startIcon={showLoadingStart ? renderLoading() : startIcon}
         endIcon={showLoadingEnd ? renderLoading() : endIcon}
-        ownerState={{ variant, color, loading, disableGlow }}
+        rlState={{ variant, color, loading, disableGlow }}
         {...props}
       >
         {showLoadingCenter && renderLoading()}

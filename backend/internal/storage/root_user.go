@@ -112,7 +112,23 @@ func EnsureRootUserExists(ctx context.Context, db *sql.DB, rootEmail string, roo
 			}
 		}
 
-		// Fix existing root users that have nil tenant_id (causes 403 on login)
+		// Fix existing root users that still have the default nil tenant_id.
+		// Since admin-v2 tables reference users via (tenant_id, user_id), we must
+		// remove stale nil-tenant memberships before moving the user to systemTenantID.
+		if _, err = tx.ExecContext(ctx,
+			`DELETE FROM product_user_roles
+			 WHERE tenant_id = '00000000-0000-0000-0000-000000000000' AND user_id = $1`,
+			userID,
+		); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx,
+			`DELETE FROM team_members
+			 WHERE tenant_id = '00000000-0000-0000-0000-000000000000' AND user_id = $1`,
+			userID,
+		); err != nil {
+			return err
+		}
 		if _, err = tx.ExecContext(ctx,
 			`UPDATE users SET tenant_id = $1 WHERE id = $2 AND tenant_id = '00000000-0000-0000-0000-000000000000'`,
 			systemTenantID, userID,
