@@ -200,3 +200,77 @@
 - `metadata.endpoint`: метод/путь/хост.
 - `metadata.tags`: список тегов.
 - `metadata.custom`: вендорские расширения.
+
+## Admin Access Control (Admin v2)
+
+### Команда (`teams`)
+
+**Назначение:** tenant-ограниченная группа пользователей для массового назначения прав на продукты.
+
+**Ключевые поля:**
+- `id` (UUID)
+- `tenant_id` (UUID)
+- `name` (TEXT)
+- `description` (TEXT, nullable)
+- `created_at` (TIMESTAMPTZ)
+
+**Ограничения:**
+- `UNIQUE (tenant_id, name)`
+- `UNIQUE (tenant_id, id)`
+
+### Участники команды (`team_members`)
+
+**Назначение:** связь пользователей с командами в рамках одного tenant.
+
+**Ключевые поля:**
+- `tenant_id` (UUID)
+- `team_id` (UUID)
+- `user_id` (UUID)
+- `created_at` (TIMESTAMPTZ)
+
+**Ограничения:**
+- `PRIMARY KEY (team_id, user_id)`
+- `FK (tenant_id, team_id) -> teams(tenant_id, id)`
+- `FK (tenant_id, user_id) -> users(tenant_id, id)`
+
+### Роли команды в продукте (`product_team_roles`)
+
+**Назначение:** назначение роли команде на продукт (проект).
+
+**Ключевые поля:**
+- `tenant_id` (UUID)
+- `product_id` (UUID)
+- `team_id` (UUID)
+- `role` (TEXT: `maintainer | engineer | viewer`)
+- `created_at` (TIMESTAMPTZ)
+
+**Ограничения:**
+- `PRIMARY KEY (product_id, team_id)`
+- `FK (tenant_id, product_id) -> products(tenant_id, id)`
+- `FK (tenant_id, team_id) -> teams(tenant_id, id)`
+
+### Прямые роли пользователя в продукте (`product_user_roles`)
+
+**Назначение:** исключения/прямые права пользователя на продукт.
+
+**Ключевые поля:**
+- `tenant_id` (UUID)
+- `product_id` (UUID)
+- `user_id` (UUID)
+- `role` (TEXT: `maintainer | engineer | viewer`)
+- `created_at` (TIMESTAMPTZ)
+
+**Ограничения:**
+- `PRIMARY KEY (product_id, user_id)`
+- `FK (tenant_id, product_id) -> products(tenant_id, id)`
+- `FK (tenant_id, user_id) -> users(tenant_id, id)`
+
+### Иерархия ролей проекта (для вычисления эффективных прав)
+
+Порядок сравнения ролей фиксирован:
+
+`viewer < engineer < maintainer`
+
+Эффективная роль пользователя в продукте определяется как максимум из:
+- прямой роли из `product_user_roles`;
+- ролей, полученных через все команды пользователя из `product_team_roles`.

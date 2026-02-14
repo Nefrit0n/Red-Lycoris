@@ -9,16 +9,25 @@ import (
 )
 
 type AuditLog struct {
-	ID         uuid.UUID
-	OccurredAt time.Time
-	ActorID    *uuid.UUID
-	ActorType  string
-	Action     string
-	TargetType string
-	TargetID   *string
-	Scope      string
-	ScopeID    *uuid.UUID
-	Payload    json.RawMessage
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	OccurredAt     time.Time
+	CreatedAt      time.Time
+	ActorID        *uuid.UUID
+	ActorType      string
+	ActorEmail     *string
+	Action         string
+	TargetType     string
+	TargetID       *string
+	Scope          string
+	ScopeID        *uuid.UUID
+	RequestID      *string
+	IdempotencyKey *string
+	IP             *string
+	UserAgent      *string
+	DiffJSON       json.RawMessage
+	MetadataJSON   json.RawMessage
+	Payload        json.RawMessage
 }
 
 func (a *AuditLog) Validate() error {
@@ -43,5 +52,11 @@ func (a *AuditLog) PrepareForInsert() {
 	}
 	if len(a.Payload) == 0 {
 		a.Payload = []byte("{}")
+	}
+	if a.CreatedAt.IsZero() {
+		a.CreatedAt = a.OccurredAt
+	}
+	if len(a.MetadataJSON) == 0 {
+		a.MetadataJSON = []byte("{}")
 	}
 }
