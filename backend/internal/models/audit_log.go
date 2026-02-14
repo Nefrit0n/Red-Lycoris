@@ -50,6 +50,9 @@ func (a *AuditLog) PrepareForInsert() {
 	if a.OccurredAt.IsZero() {
 		a.OccurredAt = time.Now().UTC()
 	}
+	if len(a.DiffJSON) == 0 {
+		a.DiffJSON = nil
+	}
 	if len(a.Payload) == 0 {
 		a.Payload = []byte("{}")
 	}
