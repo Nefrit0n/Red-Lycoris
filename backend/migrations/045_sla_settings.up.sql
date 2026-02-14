@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS sla_settings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL,
     product_id UUID NULL REFERENCES products(id) ON DELETE CASCADE,
     enabled BOOLEAN NOT NULL DEFAULT true,
     critical_days INT NOT NULL,
