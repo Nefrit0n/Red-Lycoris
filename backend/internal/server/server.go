@@ -1,17 +1,20 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"red-lycoris/backend/internal/authz"
 	"red-lycoris/backend/internal/config"
 	"red-lycoris/backend/internal/events"
 	"red-lycoris/backend/internal/handlers"
 	"red-lycoris/backend/internal/metrics"
 	"red-lycoris/backend/internal/middleware"
+	"red-lycoris/backend/internal/models"
 	"red-lycoris/backend/internal/objectstore"
 	"red-lycoris/backend/internal/policies"
 	"red-lycoris/backend/internal/sla"
@@ -20,6 +23,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/google/uuid"
 )
 
 func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) *fiber.App {
@@ -109,6 +113,8 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	api.Post("/auth/logout", authHandler.Logout)
 
 	secured := api.Group("", middleware.RequireJWT(cfg.JWTSecret))
+
+	authzEvaluator := authz.NewEvaluator(storageAccessReader{db: db})
 	secured.Post("/auth/change-password", authHandler.ChangePassword)
 
 	policyRepo := storage.NewPolicyRepository(db)
@@ -182,21 +188,53 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	intelHandler := handlers.NewIntelHandler(db, publisher)
 	secured.Post("/intel/refresh", middleware.AuthorizeRole("admin"), intelHandler.Refresh)
 
-	admin := secured.Group("/admin", middleware.AuthorizeRole("admin"))
+	admin := secured.Group("/admin", middleware.RequireIdempotency(db))
 	auditLogHandler := handlers.NewAuditLogHandler(db)
-	admin.Get("/audit-log", auditLogHandler.List)
+	admin.Get("/audit", middleware.RequirePermission(authzEvaluator, authz.PermAdminAuditRead), auditLogHandler.List)
+	admin.Get("/audit-log", middleware.RequirePermission(authzEvaluator, authz.PermAdminAuditRead), auditLogHandler.List)
+	admin.Get("/audit/export", middleware.RequirePermission(authzEvaluator, authz.PermAdminAuditRead), auditLogHandler.ExportJSONL)
 
-	policiesHandler := handlers.NewPoliciesHandler(db)
-	admin.Get("/policies", policiesHandler.List)
-	admin.Post("/policies", policiesHandler.Create)
-	admin.Get("/policies/:id", policiesHandler.Get)
-	admin.Patch("/policies/:id", policiesHandler.Update)
-	admin.Post("/policies/:id/versions", policiesHandler.AddVersion)
-	admin.Put("/policies/:id/assignments", policiesHandler.UpdateAssignments)
-	admin.Delete("/policies/:id", policiesHandler.Delete)
+	policiesHandler := handlers.NewPoliciesHandler(db, publisher)
+	slaPoliciesHandler := handlers.NewAdminSLAPoliciesHandler(db, authzEvaluator, publisher)
+	admin.Get("/policies", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesRead), policiesHandler.List)
+	admin.Post("/policies", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesWrite), policiesHandler.Create)
+	admin.Get("/policies/:id", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesRead), policiesHandler.Get)
+	admin.Patch("/policies/:id", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesWrite), policiesHandler.Update)
+	admin.Post("/policies/:id/versions", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesWrite), policiesHandler.AddVersion)
+	admin.Put("/policies/:id/assignments", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesWrite), policiesHandler.UpdateAssignments)
+	admin.Delete("/policies/:id", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesWrite), policiesHandler.Delete)
+	admin.Get("/policies/sla", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesRead), slaPoliciesHandler.GetOrgSLA)
+	admin.Put("/policies/sla", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesWrite), slaPoliciesHandler.PutOrgSLA)
+	admin.Get("/products/:productId/policies/sla", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsRead), slaPoliciesHandler.GetProductSLA)
+	admin.Put("/products/:productId/policies/sla", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), slaPoliciesHandler.PutProductSLA)
+	admin.Delete("/products/:productId/policies/sla", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), slaPoliciesHandler.DeleteProductSLA)
 
 	riskModelsHandler := handlers.NewRiskModelsHandler(db, publisher)
-	admin.Post("/risk-models/:id/activate", riskModelsHandler.Activate)
+	admin.Post("/risk-models/:id/activate", middleware.RequirePermission(authzEvaluator, authz.PermAdminPoliciesWrite), riskModelsHandler.Activate)
+
+	adminUsersHandler := handlers.NewAdminUsersHandler(db, authzEvaluator, publisher)
+	admin.Get("/users", middleware.RequirePermission(authzEvaluator, authz.PermAdminUsersRead), adminUsersHandler.List)
+	admin.Post("/users/invite", middleware.RequirePermission(authzEvaluator, authz.PermAdminUsersInvite), adminUsersHandler.Invite)
+	admin.Patch("/users/:userId", adminUsersHandler.Patch)
+	admin.Get("/users/:userId/access", middleware.RequirePermission(authzEvaluator, authz.PermAdminUsersRead), adminUsersHandler.GetAccess)
+	admin.Put("/users/:userId/teams", middleware.RequirePermission(authzEvaluator, authz.PermAdminTeamsWrite), adminUsersHandler.PutTeams)
+	admin.Put("/users/:userId/products/:productId/role", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), adminUsersHandler.PutProductRole)
+	admin.Delete("/users/:userId/products/:productId/role", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), adminUsersHandler.DeleteProductRole)
+	admin.Post("/users/bulk", adminUsersHandler.Bulk)
+
+	teamsProjectsHandler := handlers.NewAdminTeamsProjectsHandler(db, authzEvaluator, publisher)
+	admin.Get("/teams", middleware.RequirePermission(authzEvaluator, authz.PermAdminTeamsRead), teamsProjectsHandler.ListTeams)
+	admin.Post("/teams", middleware.RequirePermission(authzEvaluator, authz.PermAdminTeamsWrite), teamsProjectsHandler.CreateTeam)
+	admin.Patch("/teams/:teamId", middleware.RequirePermission(authzEvaluator, authz.PermAdminTeamsWrite), teamsProjectsHandler.PatchTeam)
+	admin.Get("/teams/:teamId", middleware.RequirePermission(authzEvaluator, authz.PermAdminTeamsRead), teamsProjectsHandler.GetTeam)
+	admin.Put("/teams/:teamId/members", middleware.RequirePermission(authzEvaluator, authz.PermAdminTeamsWrite), teamsProjectsHandler.PutTeamMembers)
+	admin.Get("/products", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsRead), teamsProjectsHandler.ListAdminProducts)
+	admin.Get("/products/:productId/access", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsRead), teamsProjectsHandler.GetProductAccess)
+	admin.Put("/products/:productId/teams/:teamId/role", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), teamsProjectsHandler.PutProductTeamRole)
+	admin.Delete("/products/:productId/teams/:teamId/role", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), teamsProjectsHandler.DeleteProductTeamRole)
+	admin.Put("/products/:productId/users/:userId/role", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), teamsProjectsHandler.PutProductUserRole)
+	admin.Delete("/products/:productId/users/:userId/role", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), teamsProjectsHandler.DeleteProductUserRole)
+	admin.Get("/products/:productId/effective-access/:userId", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsRead), teamsProjectsHandler.GetEffectiveAccess)
 
 	policyResultsHandler := handlers.NewPolicyResultsHandler(db)
 	secured.Get("/policy-results", policyResultsHandler.List)
@@ -208,4 +246,12 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 
 	dashboardHandler := handlers.NewDashboardHandler(db)
 	secured.Get("/dashboard", dashboardHandler.Get)
+}
+
+type storageAccessReader struct {
+	db *sql.DB
+}
+
+func (r storageAccessReader) GetEffectiveProductRole(ctx context.Context, tenantID, userID, productID uuid.UUID) (models.ProjectRole, error) {
+	return storage.GetEffectiveProductRole(ctx, r.db, tenantID, userID, productID)
 }
