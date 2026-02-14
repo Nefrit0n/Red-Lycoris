@@ -39,8 +39,8 @@ x-intel-env: &intel-env
   EPSS_ENABLED: ${EPSS_ENABLED:-true}
   KEV_URL: ${KEV_URL:-}
   KEV_MIRROR_URL: ${KEV_MIRROR_URL:-}
-  BDU_ENABLED: ${BDU_ENABLED:-false}
-  BDU_URL: ${BDU_URL:-}
+  BDU_ENABLED: ${BDU_ENABLED:-true}
+  BDU_URL: ${BDU_URL:-https://bdu.fstec.ru/vul/{cve}}
   BDU_MIRROR_URL: ${BDU_MIRROR_URL:-}
   BDU_TIMEOUT: ${BDU_TIMEOUT:-20s}
   INTEL_REFRESH_INTERVAL: ${INTEL_REFRESH_INTERVAL:-24h}
