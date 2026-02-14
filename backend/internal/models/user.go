@@ -7,14 +7,19 @@ import (
 )
 
 type User struct {
-	ID                 uuid.UUID `db:"id"`
-	TenantID           uuid.UUID `db:"tenant_id"`
-	Username           string    `db:"username"`
-	Email              string    `db:"email"`
-	HashedPassword     string    `db:"hashed_password"`
-	PasswordChanged    bool      `db:"password_changed"`
-	MustChangePassword bool      `db:"must_change_password"`
-	CreatedAt          time.Time `db:"created_at"`
+	ID                 uuid.UUID  `db:"id"`
+	TenantID           uuid.UUID  `db:"tenant_id"`
+	Username           string     `db:"username"`
+	FullName           *string    `db:"full_name"`
+	Email              string     `db:"email"`
+	OrgRole            string     `db:"org_role"`
+	Status             string     `db:"status"`
+	LastLoginAt        *time.Time `db:"last_login_at"`
+	DeactivatedAt      *time.Time `db:"deactivated_at"`
+	HashedPassword     string     `db:"hashed_password"`
+	PasswordChanged    bool       `db:"password_changed"`
+	MustChangePassword bool       `db:"must_change_password"`
+	CreatedAt          time.Time  `db:"created_at"`
 }
 
 func (u *User) Validate() error {

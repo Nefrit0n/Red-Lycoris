@@ -115,3 +115,46 @@ export const fetchPolicyResults = async (params: {
 export const fetchPolicyResultDetail = async (id: string): Promise<PolicyResultDetailDTO> => {
   return request<PolicyResultDetailDTO>(`/api/v1/policy-results/${id}`);
 };
+
+
+const idem = () => ({ "Idempotency-Key": crypto.randomUUID() });
+
+export type SLAPolicySettings = {
+  enabled: boolean;
+  critical_days: number;
+  high_days: number;
+  medium_days: number;
+  low_days: number;
+  due_soon_days: number;
+};
+
+export const getOrgSLAPolicy = () =>
+  request<{ org_default: SLAPolicySettings }>("/api/v1/admin/policies/sla");
+
+export const putOrgSLAPolicy = (payload: SLAPolicySettings) =>
+  request<{ ok: boolean }>("/api/v1/admin/policies/sla", {
+    method: "PUT",
+    body: payload,
+    headers: idem(),
+  });
+
+export const getProductSLAPolicy = (productId: string) =>
+  request<{ effective: SLAPolicySettings; override: SLAPolicySettings | null }>(
+    `/api/v1/admin/products/${productId}/policies/sla`
+  );
+
+export const putProductSLAPolicy = (
+  productId: string,
+  payload: SLAPolicySettings & { override_enabled: boolean }
+) =>
+  request<{ ok: boolean }>(`/api/v1/admin/products/${productId}/policies/sla`, {
+    method: "PUT",
+    body: payload,
+    headers: idem(),
+  });
+
+export const deleteProductSLAPolicy = (productId: string) =>
+  request<{ ok: boolean }>(`/api/v1/admin/products/${productId}/policies/sla`, {
+    method: "DELETE",
+    headers: idem(),
+  });
