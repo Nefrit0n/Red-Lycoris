@@ -792,7 +792,7 @@ func GetFindingNeighbors(ctx context.Context, db *sql.DB, currentID uuid.UUID, f
 	currentQuery := fmt.Sprintf(`
 		SELECT COALESCE(f.last_seen_at, f.created_at)
 		%s
-		WHERE %s AND f.id = $16`,
+		WHERE %s AND f.id = $17`,
 		findingBaseJoins,
 		findingFilterWhereClause,
 	)
