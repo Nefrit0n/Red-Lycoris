@@ -95,6 +95,22 @@ func CreateAuditLog(ctx context.Context, db *sql.DB, entry *models.AuditLog) err
 	if entry.UserAgent != nil {
 		userAgent = *entry.UserAgent
 	}
+	var diffJSONArg interface{}
+	if len(entry.DiffJSON) > 0 {
+		diffJSONArg = entry.DiffJSON
+	}
+	var metadataJSONArg interface{}
+	if len(entry.MetadataJSON) == 0 {
+		metadataJSONArg = []byte("{}")
+	} else {
+		metadataJSONArg = entry.MetadataJSON
+	}
+	var payloadJSONArg interface{}
+	if len(entry.Payload) == 0 {
+		payloadJSONArg = []byte("{}")
+	} else {
+		payloadJSONArg = entry.Payload
+	}
 
 	_, err := db.ExecContext(
 		ctx,
@@ -124,9 +140,9 @@ func CreateAuditLog(ctx context.Context, db *sql.DB, entry *models.AuditLog) err
 		idemKey,
 		ip,
 		userAgent,
-		entry.DiffJSON,
-		entry.MetadataJSON,
-		entry.Payload,
+		diffJSONArg,
+		metadataJSONArg,
+		payloadJSONArg,
 	)
 	return err
 }
