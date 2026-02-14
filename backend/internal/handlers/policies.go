@@ -10,6 +10,7 @@ import (
 	"time"
 
 	v1dto "red-lycoris/backend/internal/dto/v1"
+	"red-lycoris/backend/internal/events"
 	"red-lycoris/backend/internal/storage"
 
 	"github.com/go-playground/validator/v10"
@@ -19,6 +20,7 @@ import (
 
 type PoliciesHandler struct {
 	db        *sql.DB
+	publisher *events.Publisher
 	validator *validator.Validate
 }
 
@@ -55,8 +57,8 @@ type UpdateAssignmentsRequest struct {
 	Assignments []PolicyAssignmentInput `json:"assignments"`
 }
 
-func NewPoliciesHandler(db *sql.DB) *PoliciesHandler {
-	return &PoliciesHandler{db: db, validator: validator.New()}
+func NewPoliciesHandler(db *sql.DB, publisher *events.Publisher) *PoliciesHandler {
+	return &PoliciesHandler{db: db, publisher: publisher, validator: validator.New()}
 }
 
 func (h *PoliciesHandler) List(c *fiber.Ctx) error {
@@ -185,7 +187,7 @@ func (h *PoliciesHandler) Create(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to commit policy"})
 	}
 
-	policyAuditEntry(c, h.db, "policy.created", "policy", policy.ID, auditDiff{
+	policyAuditEntry(c, h.db, h.publisher, "admin.policy.created", "policy", policy.ID, auditDiff{
 		After: map[string]interface{}{
 			"policy": mapPolicyAuditPayload(policy),
 			"rule":   mapPolicyRuleAuditPayload(ruleRecord),
@@ -251,14 +253,14 @@ func (h *PoliciesHandler) Update(c *fiber.Ctx) error {
 		if strings.EqualFold(strings.TrimSpace(*req.Status), "enabled") {
 			action = "policy.enabled"
 		}
-		policyAuditEntry(c, h.db, action, "policy", updated.ID, auditDiff{
+		policyAuditEntry(c, h.db, h.publisher, action, "policy", updated.ID, auditDiff{
 			Before: mapPolicyAuditPayload(*current),
 			After:  mapPolicyAuditPayload(*updated),
 		})
 	}
 
 	if req.Name != nil || req.Description != nil {
-		policyAuditEntry(c, h.db, "policy.updated", "policy", updated.ID, auditDiff{
+		policyAuditEntry(c, h.db, h.publisher, "admin.policy.updated", "policy", updated.ID, auditDiff{
 			Before: mapPolicyAuditPayload(*current),
 			After:  mapPolicyAuditPayload(*updated),
 		})
@@ -330,7 +332,7 @@ func (h *PoliciesHandler) AddVersion(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to commit policy rule"})
 	}
 
-	policyAuditEntry(c, h.db, "policy.version_added", "policy_rule", policyID, auditDiff{
+	policyAuditEntry(c, h.db, h.publisher, "admin.policy.version_added", "policy_rule", policyID, auditDiff{
 		After: mapPolicyRuleAuditPayload(ruleRecord),
 	})
 
@@ -442,7 +444,7 @@ func (h *PoliciesHandler) UpdateAssignments(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to commit assignments"})
 	}
 
-	policyAuditEntry(c, h.db, "policy.assigned", "policy_assignment", policyID, auditDiff{
+	policyAuditEntry(c, h.db, h.publisher, "admin.policy.assigned", "policy_assignment", policyID, auditDiff{
 		Before: mapPolicyAssignmentsAuditPayload(beforeAssignments),
 		After:  mapPolicyAssignmentsAuditPayload(createdAssignments),
 	})
@@ -474,7 +476,7 @@ func (h *PoliciesHandler) Delete(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to delete policy"})
 	}
 
-	policyAuditEntry(c, h.db, "policy.deleted", "policy", policyID, auditDiff{
+	policyAuditEntry(c, h.db, h.publisher, "admin.policy.deleted", "policy", policyID, auditDiff{
 		Before: mapPolicyAuditPayload(*current),
 	})
 

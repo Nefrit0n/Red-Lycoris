@@ -101,6 +101,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		UserID:             user.ID.String(),
 		TenantID:           user.TenantID.String(),
 		Roles:              roles,
+		OrgRole:            string(resolveOrgRole(roles)),
 		MustChangePassword: needsPasswordChange,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
@@ -173,6 +174,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		UserID:             user.ID.String(),
 		TenantID:           user.TenantID.String(),
 		Roles:              roles,
+		OrgRole:            string(resolveOrgRole(roles)),
 		MustChangePassword: false,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
@@ -186,6 +188,23 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": fiber.Map{"token": tokenString}})
+}
+
+func resolveOrgRole(roles []string) models.OrgRole {
+	set := map[string]struct{}{}
+	for _, role := range roles {
+		set[role] = struct{}{}
+	}
+	if _, ok := set[string(models.OrgRoleOwner)]; ok {
+		return models.OrgRoleOwner
+	}
+	if _, ok := set[string(models.OrgRoleAdmin)]; ok {
+		return models.OrgRoleAdmin
+	}
+	if _, ok := set[string(models.OrgRoleSecurityManager)]; ok {
+		return models.OrgRoleSecurityManager
+	}
+	return models.OrgRoleViewer
 }
 
 // POST /api/v1/auth/logout

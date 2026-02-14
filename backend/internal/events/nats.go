@@ -23,6 +23,9 @@ const (
 	SbomIndexRequestedSubject = "sbom.index.requested.v1"
 
 	RiskRecomputeRequestedSubject = "finding.risk.recompute.requested.v1"
+
+	AdminStreamName = "ADMIN"
+	AdminSubject    = "admin.>"
 )
 
 type Publisher struct {
@@ -78,6 +81,16 @@ func NewPublisher(url string) (*Publisher, error) {
 	}); err != nil {
 		nc.Close()
 		return nil, fmt.Errorf("ensure stream %s failed: %w", SbomStreamName, err)
+	}
+
+	if err := ensureStream(js, &nats.StreamConfig{
+		Name:      AdminStreamName,
+		Subjects:  []string{AdminSubject},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    7 * 24 * time.Hour,
+	}); err != nil {
+		nc.Close()
+		return nil, fmt.Errorf("ensure stream %s failed: %w", AdminStreamName, err)
 	}
 
 	return &Publisher{nc: nc, js: js}, nil

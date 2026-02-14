@@ -14,17 +14,15 @@ import ImportJobsList from "./pages/ImportJobsList";
 import ImportJobDetail from "./pages/ImportJobDetail";
 import ProductsList from "./pages/ProductsList";
 import ProductDetailPage from "./pages/ProductDetail";
-import AdminOverview from "./pages/AdminOverview";
 import AnalyzeJobsPage from "./pages/AnalyzeJobsPage";
 import AnalysisJobDetail from "./pages/AnalysisJobDetail";
 
-import AdminAuditLogPage from "./pages/admin/AdminAuditLogPage";
-import AdminGroupsPage from "./pages/admin/AdminGroupsPage";
-import AdminPoliciesPage from "./pages/admin/AdminPoliciesPage";
-import AdminScannersPage from "./pages/admin/AdminScannersPage";
-import AdminSetupPage from "./pages/admin/AdminSetupPage";
-import AdminUsersPage from "./pages/admin/AdminUsersPage";
-import AdminWebhooksPage from "./pages/admin/AdminWebhooksPage";
+import OverviewPage from "./admin-v2/pages/OverviewPage";
+import UsersPage from "./admin-v2/pages/UsersPage";
+import TeamsPage from "./admin-v2/pages/TeamsPage";
+import ProjectsPage from "./admin-v2/pages/ProjectsPage";
+import PoliciesPage from "./admin-v2/pages/PoliciesPage";
+import AuditPage from "./admin-v2/pages/AuditPage";
 
 const App = () => {
   return (
@@ -53,14 +51,12 @@ const App = () => {
               <Route path="/analyze" element={<AnalyzeJobsPage />} />
               <Route path="/analyze/:id" element={<AnalysisJobDetail />} />
 
-              <Route path="/admin" element={<AdminOverview />} />
-              <Route path="/admin/users" element={<AdminUsersPage />} />
-              <Route path="/admin/groups" element={<AdminGroupsPage />} />
-              <Route path="/admin/policies" element={<AdminPoliciesPage />} />
-              <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
-              <Route path="/admin/webhooks" element={<AdminWebhooksPage />} />
-              <Route path="/admin/scanners" element={<AdminScannersPage />} />
-              <Route path="/admin/setup" element={<AdminSetupPage />} />
+              <Route path="/admin" element={<OverviewPage />} />
+              <Route path="/admin/users" element={<UsersPage />} />
+              <Route path="/admin/teams" element={<TeamsPage />} />
+              <Route path="/admin/projects" element={<ProjectsPage />} />
+              <Route path="/admin/policies" element={<PoliciesPage />} />
+              <Route path="/admin/audit" element={<AuditPage />} />
 
               {/* Редиректы */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
