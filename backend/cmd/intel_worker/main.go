@@ -6,11 +6,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"log"
 	"math/big"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"red-lycoris/backend/internal/config"
@@ -28,6 +30,10 @@ const maxInt64 = int64(^uint64(0) >> 1)
 
 func main() {
 	cfg := config.Load()
+	log.Printf("intel worker BDU provider config: enabled=%t url=%q mirror=%q", cfg.BDUEnabled, strings.TrimSpace(cfg.BDUURL), strings.TrimSpace(cfg.BDUMirrorURL))
+	if err := validateBDUConfig(cfg); err != nil {
+		log.Fatalf("configuration error: %v", err)
+	}
 
 	db, err := storage.Connect(cfg)
 	if err != nil {
@@ -83,6 +89,13 @@ func main() {
 			}
 		}
 	}
+}
+
+func validateBDUConfig(cfg config.Config) error {
+	if cfg.BDUEnabled && strings.TrimSpace(cfg.BDUURL) == "" {
+		return fmt.Errorf("BDU_ENABLED=true requires non-empty BDU_URL")
+	}
+	return nil
 }
 
 func handleIntelMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, publisher *events.Publisher, service *intel.Service, cfg config.Config) error {
