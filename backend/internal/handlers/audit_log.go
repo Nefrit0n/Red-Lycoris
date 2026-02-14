@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -44,10 +46,16 @@ func (h *AuditLogHandler) List(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid pagination"})
 	}
 
+	tenantID := tenantIDFromContext(c)
+	if tenantID == nil {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
+	}
+
 	filters := storage.AuditLogFilters{
-		Limit:  limit,
-		Offset: offset,
-		Query:  strings.TrimSpace(c.Query("q")),
+		TenantID: *tenantID,
+		Limit:    limit,
+		Offset:   offset,
+		Query:    strings.TrimSpace(c.Query("q")),
 	}
 
 	if fromRaw := strings.TrimSpace(c.Query("from")); fromRaw != "" {
@@ -71,6 +79,13 @@ func (h *AuditLogHandler) List(c *fiber.Ctx) error {
 		}
 		filters.ActorID = &parsed
 	}
+	if actorRaw := strings.TrimSpace(c.Query("actor")); actorRaw != "" && filters.ActorID == nil {
+		parsed, err := uuid.Parse(actorRaw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid actor"})
+		}
+		filters.ActorID = &parsed
+	}
 	if scopeRaw := strings.TrimSpace(c.Query("scope_id")); scopeRaw != "" {
 		parsed, err := uuid.Parse(scopeRaw)
 		if err != nil {
@@ -80,6 +95,13 @@ func (h *AuditLogHandler) List(c *fiber.Ctx) error {
 	}
 
 	filters.TargetType = strings.TrimSpace(c.Query("target_type"))
+	if targetIDRaw := strings.TrimSpace(c.Query("target")); targetIDRaw != "" {
+		parsed, err := uuid.Parse(targetIDRaw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid target"})
+		}
+		filters.TargetID = &parsed
+	}
 	filters.Action = strings.TrimSpace(c.Query("action"))
 
 	items, total, err := storage.ListAuditLogs(c.Context(), h.db, filters)
@@ -93,6 +115,64 @@ func (h *AuditLogHandler) List(c *fiber.Ctx) error {
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "data": response, "total": total})
+}
+
+func (h *AuditLogHandler) ExportJSONL(c *fiber.Ctx) error {
+	tenantID := tenantIDFromContext(c)
+	if tenantID == nil {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"success": false, "error": "missing tenant context"})
+	}
+
+	fromRaw := strings.TrimSpace(c.Query("from"))
+	toRaw := strings.TrimSpace(c.Query("to"))
+	if fromRaw == "" || toRaw == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "from and to are required"})
+	}
+	from, err := time.Parse(time.RFC3339, fromRaw)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid from timestamp"})
+	}
+	to, err := time.Parse(time.RFC3339, toRaw)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid to timestamp"})
+	}
+	if to.Before(from) {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid range"})
+	}
+	if to.Sub(from) > 31*24*time.Hour {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "max range is 31 days"})
+	}
+
+	filters := storage.AuditLogFilters{
+		TenantID:   *tenantID,
+		From:       &from,
+		To:         &to,
+		Action:     strings.TrimSpace(c.Query("action")),
+		TargetType: strings.TrimSpace(c.Query("target_type")),
+	}
+	if actorRaw := strings.TrimSpace(c.Query("actor")); actorRaw != "" {
+		parsed, err := uuid.Parse(actorRaw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid actor"})
+		}
+		filters.ActorID = &parsed
+	}
+	if targetRaw := strings.TrimSpace(c.Query("target")); targetRaw != "" {
+		parsed, err := uuid.Parse(targetRaw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid target"})
+		}
+		filters.TargetID = &parsed
+	}
+
+	filename := fmt.Sprintf("audit-export-%s.jsonl", time.Now().UTC().Format("20060102-150405"))
+	c.Set("Content-Type", "application/x-ndjson")
+	c.Set("Content-Disposition", "attachment; filename="+filename)
+
+	c.Context().SetBodyStreamWriter(func(writer *bufio.Writer) {
+		_ = storage.StreamAuditLogsJSONL(context.Background(), h.db, filters, writer)
+	})
+	return nil
 }
 
 func mapAuditLogItem(item storage.AuditLogItem) AuditLogResponse {
