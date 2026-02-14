@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 	"time"
+
+	"red-lycoris/backend/internal/config"
 )
 
 func TestParseDuration(t *testing.T) {
@@ -43,5 +45,41 @@ func TestHashIdentifierDeterministic(t *testing.T) {
 	}
 	if first == third {
 		t.Fatal("expected different hash for different input")
+	}
+}
+
+func TestValidateBDUConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     config.Config
+		wantErr bool
+	}{
+		{
+			name:    "disabled allows empty url",
+			cfg:     config.Config{BDUEnabled: false, BDUURL: ""},
+			wantErr: false,
+		},
+		{
+			name:    "enabled requires non empty url",
+			cfg:     config.Config{BDUEnabled: true, BDUURL: "   "},
+			wantErr: true,
+		},
+		{
+			name:    "enabled with url is valid",
+			cfg:     config.Config{BDUEnabled: true, BDUURL: "https://bdu.fstec.ru/vul/{cve}"},
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateBDUConfig(tc.cfg)
+			if tc.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+		})
 	}
 }
