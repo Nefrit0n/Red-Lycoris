@@ -211,13 +211,23 @@ type kevCache struct {
 }
 
 func newBDUClient(client *http.Client, enabled bool, url, mirror string, concurrency int) *bduClient {
+	url = strings.TrimSpace(url)
 	if url == "" {
 		url = defaultBDUURL
+	}
+	mirror = strings.TrimSpace(mirror)
+	disabled := !enabled || url == ""
+	if disabled {
+		reason := "disabled by BDU_ENABLED flag"
+		if enabled && url == "" {
+			reason = "BDU_ENABLED=true but BDU_URL is empty"
+		}
+		log.Printf("bdu client disabled: %s (url=%q mirror=%q)", reason, url, mirror)
 	}
 	return &bduClient{
 		url:       url,
 		mirrorURL: mirror,
-		disabled:  !enabled || url == "",
+		disabled:  disabled,
 		client:    client,
 		sem:       make(chan struct{}, concurrency),
 	}
