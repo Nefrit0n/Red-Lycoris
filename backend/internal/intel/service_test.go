@@ -250,3 +250,73 @@ func TestParseBDU_NormalizesExpectedFields(t *testing.T) {
 		t.Fatalf("expected sanitized remediation step, got: %v", steps[0])
 	}
 }
+
+func TestParseBDU_MatchesSpacedCVEInExternalIDs(t *testing.T) {
+	payload := []byte(`{
+		"items": [{
+			"id": "BDU:2025-14042",
+			"description": "entry",
+			"external_ids": {
+				"cve": ["CVE-2025 - 52565"],
+				"bdu": ["BDU:2025-14042"]
+			}
+		}]
+	}`)
+
+	normalized, refs, found := parseBDU(payload, "CVE-2025-52565")
+	if !found {
+		t.Fatal("expected BDU entry to be found for spaced CVE format")
+	}
+	if len(normalized) == 0 {
+		t.Fatal("expected normalized payload")
+	}
+	if len(refs) != 0 {
+		t.Fatalf("expected no references, got %+v", refs)
+	}
+}
+
+func TestExtractBDUVulLinks(t *testing.T) {
+	html := []byte(`
+		<html><body>
+		  <a href="/vul/2025-14042">one</a>
+		  <a href="/vul/2025-14042">dup</a>
+		  <a href="/vul/2024-1">bad</a>
+		  <a href="/other/2025-14042">bad2</a>
+		</body></html>`)
+
+	links := extractBDUVulLinks("https://bdu.fstec.ru", html)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 unique link, got %d: %+v", len(links), links)
+	}
+	if links[0] != "https://bdu.fstec.ru/vul/2025-14042" {
+		t.Fatalf("unexpected link: %s", links[0])
+	}
+}
+
+func TestParseBDUHTMLPage_FindsCVEWithSpaces(t *testing.T) {
+	html := []byte(`<html><body><div>Идентификаторы: CVE-2025 - 52565</div></body></html>`)
+
+	normalized, refs, found := parseBDUHTMLPage(html, "https://bdu.fstec.ru/vul/2025-14042", "CVE-2025-52565")
+	if !found {
+		t.Fatal("expected cve to be matched from html page")
+	}
+	if len(normalized) == 0 {
+		t.Fatal("expected normalized payload")
+	}
+	if len(refs) != 1 || refs[0].URL != "https://bdu.fstec.ru/vul/2025-14042" {
+		t.Fatalf("unexpected refs: %+v", refs)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(normalized, &doc); err != nil {
+		t.Fatalf("failed to decode payload: %v", err)
+	}
+	ids, ok := doc["external_ids"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected external_ids, got: %+v", doc["external_ids"])
+	}
+	bduValues, ok := ids["bdu"].([]any)
+	if !ok || len(bduValues) != 1 || bduValues[0] != "2025-14042" {
+		t.Fatalf("unexpected bdu ids: %+v", ids["bdu"])
+	}
+}
