@@ -224,19 +224,9 @@ export const FindingDetailContent = ({
       : null;
   const kevFlag = Boolean(intelSummary?.kev);
   const intelReferences = intelDetails?.references ?? [];
-  const intelBdu = (() => {
-    if (intelDetails?.bdu && Object.keys(intelDetails.bdu).length > 0) {
-      return intelDetails.bdu;
-    }
-    const genericSources = (intelDetails as { sources?: Record<string, unknown> } | null)?.sources;
-    const bduFromSources = genericSources && typeof genericSources === "object"
-      ? (genericSources as Record<string, unknown>).bdu
-      : null;
-    if (bduFromSources && typeof bduFromSources === "object") {
-      return bduFromSources as Record<string, unknown>;
-    }
-    return null;
-  })();
+  const intelBdu = intelDetails?.bdu && Object.keys(intelDetails.bdu).length > 0
+    ? intelDetails.bdu
+    : null;
   const metadata = semgrepEvidence?.metadata;
   const metadataRecord = isRecord(metadata) ? metadata : null;
   const cweList = uniq(toStringArray(metadataRecord?.cwe));
@@ -1310,7 +1300,7 @@ export const FindingDetailContent = ({
         </Alert>
       )}
 
-      {/* Tab: Semgrep Evidence */}
+      {/* Tab: БДУ ФСТЭК */}
       {showBduTab && bduIndex !== null && intelBdu && (
         <TabPanel value={tab} index={bduIndex}>
           <Section title="БДУ ФСТЭК" dense={compact}>

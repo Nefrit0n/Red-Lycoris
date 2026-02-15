@@ -113,6 +113,7 @@ func handleIntelMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, publishe
 	var epssTouched int
 	var kevTouched int
 	var nvdTouched int
+	var bduTouched int
 	for _, identifier := range payload.Identifiers {
 		if identifier == "" {
 			continue
@@ -165,7 +166,13 @@ func handleIntelMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, publishe
 			if record.KEVPayload != nil {
 				kevTouched++
 			}
+			if record.BDUPayload != nil {
+				bduTouched++
+			}
 		}()
+	}
+	if bduTouched > 0 {
+		log.Printf("intel job: bdu enriched %d identifier(s)", bduTouched)
 	}
 	if publisher != nil && (epssTouched > 0 || kevTouched > 0 || nvdTouched > 0) {
 		updatedAt := time.Now().UTC()
