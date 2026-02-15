@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -411,8 +412,133 @@ func (c *bduClient) fetch(ctx context.Context, identifier string) (json.RawMessa
 			return normalized, refs, true, nil
 		}
 	}
+
+	if pagePayload, refs, found, err := c.fetchFromBDUSite(ctx, identifier); err == nil && found {
+		return pagePayload, refs, true, nil
+	}
 	log.Printf("bdu fetch warning: no matching entry found for %s", identifier)
 	return nil, nil, false, nil
+}
+
+func (c *bduClient) fetchFromBDUSite(ctx context.Context, identifier string) (json.RawMessage, []storage.IntelReference, bool, error) {
+	base, ok := bduBaseURL(c.url)
+	if !ok {
+		return nil, nil, false, nil
+	}
+
+	candidateURLs := make([]string, 0, 10)
+	for _, path := range []string{"/search", "/vul/search", "/vul"} {
+		for _, key := range []string{"search", "q", "query", "text"} {
+			u := fmt.Sprintf("%s%s?%s=%s", base, path, key, url.QueryEscape(identifier))
+			candidateURLs = append(candidateURLs, u)
+		}
+	}
+
+	seen := map[string]struct{}{}
+	for _, searchURL := range candidateURLs {
+		payload, status, err := fetchURL(ctx, c.client, searchURL)
+		if err != nil || status != http.StatusOK {
+			continue
+		}
+		for _, pageURL := range extractBDUVulLinks(base, payload) {
+			if _, exists := seen[pageURL]; exists {
+				continue
+			}
+			seen[pageURL] = struct{}{}
+
+			pagePayload, pageStatus, pageErr := fetchURL(ctx, c.client, pageURL)
+			if pageErr != nil || pageStatus != http.StatusOK {
+				continue
+			}
+			if normalized, refs, found := parseBDUHTMLPage(pagePayload, pageURL, identifier); found {
+				return normalized, refs, true, nil
+			}
+		}
+	}
+
+	return nil, nil, false, nil
+}
+
+func bduBaseURL(raw string) (string, bool) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", false
+	}
+	if !strings.Contains(strings.ToLower(parsed.Host), "bdu.fstec.ru") {
+		return "", false
+	}
+	return parsed.Scheme + "://" + parsed.Host, true
+}
+
+var bduVulLinkRegex = regexp.MustCompile(`href\s*=\s*"(/vul/[0-9]{4}-[0-9]{3,})"`)
+var bduPageCVEMatcher = regexp.MustCompile(`(?i)CVE\s*[-_]\s*[0-9]{4}\s*[-_]\s*[0-9]{3,}`)
+
+func extractBDUVulLinks(base string, payload []byte) []string {
+	matches := bduVulLinkRegex.FindAllStringSubmatch(string(payload), -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	links := make([]string, 0, len(matches))
+	seen := map[string]struct{}{}
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		absolute := base + match[1]
+		if _, ok := seen[absolute]; ok {
+			continue
+		}
+		seen[absolute] = struct{}{}
+		links = append(links, absolute)
+	}
+	return links
+}
+
+func parseBDUHTMLPage(payload []byte, pageURL string, identifier string) (json.RawMessage, []storage.IntelReference, bool) {
+	html := string(payload)
+	normalizedIdentifier := normalizeIdentifier(identifier)
+
+	found := false
+	for _, match := range bduPageCVEMatcher.FindAllString(html, -1) {
+		if normalizeIdentifier(match) == normalizedIdentifier {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, nil, false
+	}
+
+	bduID := ""
+	if parts := strings.Split(pageURL, "/vul/"); len(parts) == 2 {
+		bduID = strings.Trim(parts[1], "/")
+	}
+
+	doc := map[string]any{
+		"identifier": strings.ToUpper(identifier),
+		"source":     "bdu.fstec.ru",
+		"status": map[string]any{
+			"value": "published",
+		},
+		"references": []map[string]string{{
+			"url":   pageURL,
+			"title": "BDU",
+		}},
+	}
+	if bduID != "" {
+		doc["external_ids"] = map[string][]string{
+			"cve": []string{strings.ToUpper(identifier)},
+			"bdu": []string{bduID},
+		}
+	}
+
+	normalized, err := json.Marshal(doc)
+	if err != nil {
+		return nil, nil, false
+	}
+	title := "BDU"
+	refs := []storage.IntelReference{{Title: &title, URL: pageURL}}
+	return normalized, refs, true
 }
 
 func (c *bduClient) requestURL(identifier string, queryKey string) string {
@@ -483,44 +609,62 @@ func findBDUEntry(root any, identifier string) (map[string]any, bool) {
 }
 
 func matchesBDUIdentifier(entry map[string]any, identifier string) bool {
+	normalizedIdentifier := normalizeIdentifier(identifier)
 	for _, key := range []string{"cve", "cve_id", "cveId", "cveID", "CVE", "identifier", "vulnerability_id"} {
-		if v, ok := entry[key].(string); ok && strings.EqualFold(strings.TrimSpace(v), identifier) {
+		if v, ok := entry[key].(string); ok && normalizeIdentifier(v) == normalizedIdentifier {
 			return true
 		}
 	}
 	for _, extKey := range []string{"external_ids", "identifiers"} {
 		if ext, ok := entry[extKey].(map[string]any); ok {
 			for _, item := range ext {
-				if containsIdentifier(item, identifier) {
+				if containsIdentifier(item, normalizedIdentifier) {
 					return true
 				}
 			}
 		}
 	}
 	if aliases, ok := entry["aliases"]; ok {
-		return containsIdentifier(aliases, identifier)
+		return containsIdentifier(aliases, normalizedIdentifier)
 	}
 	return false
 }
 
-func containsIdentifier(value any, identifier string) bool {
+func containsIdentifier(value any, normalizedIdentifier string) bool {
 	switch vv := value.(type) {
 	case string:
-		return strings.EqualFold(strings.TrimSpace(vv), identifier)
+		return normalizeIdentifier(vv) == normalizedIdentifier
 	case []any:
 		for _, item := range vv {
-			if containsIdentifier(item, identifier) {
+			if containsIdentifier(item, normalizedIdentifier) {
 				return true
 			}
 		}
 	case map[string]any:
 		for _, item := range vv {
-			if containsIdentifier(item, identifier) {
+			if containsIdentifier(item, normalizedIdentifier) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+var identifierSpacer = strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "")
+
+func normalizeIdentifier(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	value = identifierSpacer.Replace(value)
+	value = strings.ReplaceAll(value, "–", "-")
+	value = strings.ReplaceAll(value, "—", "-")
+	value = strings.ReplaceAll(value, "_", "-")
+	for strings.Contains(value, "--") {
+		value = strings.ReplaceAll(value, "--", "-")
+	}
+	return strings.Trim(value, "-")
 }
 
 func normalizeBDUEntry(entry map[string]any, identifier string) map[string]any {
