@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 from fastapi import FastAPI
 
-from app.tasks import parse_scan
+from app.tasks import parse_scan, sync_bdu
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("red_lycoris.api")
@@ -20,6 +20,13 @@ def health_check() -> Dict[str, str]:
 def enqueue_scan(payload: Dict[str, Any]) -> Dict[str, str]:
     task = parse_scan.delay(payload)
     logger.info("Enqueued scan task", extra={"task_id": task.id})
+    return {"task_id": task.id, "status": "queued"}
+
+
+@app.post("/api/tasks/bdu-sync")
+def enqueue_bdu_sync(payload: Dict[str, Any] | None = None) -> Dict[str, str]:
+    task = sync_bdu.delay(payload)
+    logger.info("Enqueued BDU sync task", extra={"task_id": task.id})
     return {"task_id": task.id, "status": "queued"}
 
 

@@ -3,6 +3,7 @@ package intel
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ type Service struct {
 	kev             *kevClient
 	bdu             *bduClient
 	bduEnabled      bool
+	db              *sql.DB
 	refreshInterval time.Duration
 }
 
@@ -44,6 +46,7 @@ type Config struct {
 	BDUMirrorURL        string
 	BDUTimeout          time.Duration
 	BDUTLSSkipVerify    bool
+	DB                  *sql.DB
 	RefreshInterval     time.Duration
 	ProviderConcurrency int
 }
@@ -80,6 +83,7 @@ func NewService(cfg Config) *Service {
 		kev:             newKEVClient(client, cfg.KEVURL, cfg.KEVMirrorURL, concurrency),
 		bdu:             newBDUClient(bduHTTPClient, cfg.BDUEnabled, cfg.BDUURL, cfg.BDUMirrorURL, concurrency),
 		bduEnabled:      cfg.BDUEnabled,
+		db:              cfg.DB,
 		refreshInterval: cfg.RefreshInterval,
 	}
 }
@@ -110,15 +114,10 @@ func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIn
 
 	// CWE identifiers: only BDU FSTEC can be queried (NVD/EPSS/KEV require CVE).
 	if IsCWE(identifier) {
-		if s.bdu != nil {
-			bduPayload, bduRefs, bduFound, err := s.bdu.fetchByCWE(ctx, identifier)
-			if err != nil {
-				return record, false, err
-			}
-			if bduFound {
-				record.BDUPayload = bduPayload
-				record.References = dedupeReferences(bduRefs)
-			}
+		bduPayload, bduRefs := s.enrichBDULocal(ctx, identifier)
+		if bduPayload != nil {
+			record.BDUPayload = bduPayload
+			record.References = dedupeReferences(bduRefs)
 		}
 		return record, false, nil
 	}
@@ -165,14 +164,19 @@ func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIn
 		references = append(references, kevRefs...)
 	}
 
-	if s.bdu != nil {
-		bduPayload, bduRefs, bduFound, err := s.bdu.fetch(ctx, identifier)
-		if err != nil {
-			return record, false, err
+	// BDU: prefer local database, fall back to web scraping.
+	bduPayload, bduRefs := s.enrichBDULocal(ctx, identifier)
+	if bduPayload != nil {
+		record.BDUPayload = bduPayload
+		references = append(references, bduRefs...)
+	} else if s.bdu != nil {
+		remoteBDU, remoteBDURefs, remoteFound, bduErr := s.bdu.fetch(ctx, identifier)
+		if bduErr != nil {
+			log.Printf("bdu remote fetch error for %s: %v", identifier, bduErr)
 		}
-		if bduFound {
-			record.BDUPayload = bduPayload
-			references = append(references, bduRefs...)
+		if remoteFound {
+			record.BDUPayload = remoteBDU
+			references = append(references, remoteBDURefs...)
 		}
 	}
 
@@ -183,6 +187,46 @@ func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIn
 	record.EPSSPercentile = epssPercentile
 	record.KEV = kev
 	return record, false, nil
+}
+
+// enrichBDULocal queries the local bdu_vulnerabilities table for the identifier.
+func (s *Service) enrichBDULocal(ctx context.Context, identifier string) (json.RawMessage, []storage.IntelReference) {
+	if s.db == nil || !s.bduEnabled {
+		return nil, nil
+	}
+
+	vulns, err := storage.GetBDUByIdentifiers(ctx, s.db, []string{identifier})
+	if err != nil {
+		log.Printf("bdu local lookup error for %s: %v", identifier, err)
+		return nil, nil
+	}
+	if len(vulns) == 0 {
+		return nil, nil
+	}
+
+	log.Printf("bdu local: found %d records for %s", len(vulns), identifier)
+
+	if len(vulns) == 1 {
+		payload, err := json.Marshal(vulns[0])
+		if err != nil {
+			return nil, nil
+		}
+		title := "BDU"
+		refs := []storage.IntelReference{{Title: &title, URL: "https://bdu.fstec.ru/vul/" + strings.TrimPrefix(vulns[0].BDUID, "BDU:")}}
+		return payload, refs
+	}
+
+	// Multiple results (common for CWE).
+	payload, err := json.Marshal(vulns)
+	if err != nil {
+		return nil, nil
+	}
+	var refs []storage.IntelReference
+	title := "BDU"
+	for _, v := range vulns {
+		refs = append(refs, storage.IntelReference{Title: &title, URL: "https://bdu.fstec.ru/vul/" + strings.TrimPrefix(v.BDUID, "BDU:")})
+	}
+	return payload, refs
 }
 
 func dedupeReferences(refs []storage.IntelReference) []storage.IntelReference {
