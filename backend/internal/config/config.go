@@ -55,6 +55,7 @@ type Config struct {
 	BDUMirrorURL             string
 	BDUTimeout               string
 	BDUTLSSkipVerify         bool
+	BDUXLSXPath              string
 	IntelRefreshInterval     string
 	IntelWorkerConcurrency   int
 	IntelRetryBase           string
@@ -111,6 +112,7 @@ func Load() Config {
 		BDUMirrorURL:             getEnv("BDU_MIRROR_URL", ""),
 		BDUTimeout:               getEnv("BDU_TIMEOUT", "20s"),
 		BDUTLSSkipVerify:         getEnvAsBool("BDU_TLS_SKIP_VERIFY", true),
+		BDUXLSXPath:              getEnv("BDU_XLSX_PATH", "/app/assets/bdu/vullist.xlsx"),
 		IntelRefreshInterval:     getEnv("INTEL_REFRESH_INTERVAL", "24h"),
 		IntelWorkerConcurrency:   getEnvAsInt("INTEL_WORKER_CONCURRENCY", 4),
 		IntelRetryBase:           getEnv("INTEL_RETRY_BASE", "30m"),

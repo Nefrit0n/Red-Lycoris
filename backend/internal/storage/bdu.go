@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -40,6 +42,11 @@ type BDUVulnerability struct {
 	VulnState          string `json:"vuln_state"`
 	CWEDescription     string `json:"cwe_description"`
 	CWEID              string `json:"cwe_id"`
+}
+
+type BDUIdentifierMapping struct {
+	Identifier string
+	BDUID      string
 }
 
 // BDUSyncStatus represents the singleton sync status row.
@@ -138,4 +145,106 @@ func UpdateBDUSyncInterval(ctx context.Context, db *sql.DB, hours int) error {
 		hours,
 	)
 	return err
+}
+
+func MarkBDUSyncStarted(ctx context.Context, db *sql.DB) error {
+	_, err := db.ExecContext(ctx,
+		"UPDATE bdu_sync_status SET is_syncing = TRUE, last_error = NULL, updated_at = NOW() WHERE id = 1",
+	)
+	return err
+}
+
+func MarkBDUSyncFailed(ctx context.Context, db *sql.DB, errText string) error {
+	errText = strings.TrimSpace(errText)
+	if errText == "" {
+		errText = "unknown bdu sync error"
+	}
+	_, err := db.ExecContext(ctx,
+		"UPDATE bdu_sync_status SET is_syncing = FALSE, last_error = $1, updated_at = NOW() WHERE id = 1",
+		errText,
+	)
+	return err
+}
+
+func ReplaceBDUDataset(ctx context.Context, db *sql.DB, vulns []BDUVulnerability, mappings []BDUIdentifierMapping, syncedAt time.Time) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM bdu_identifier_map"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM bdu_vulnerabilities"); err != nil {
+		return err
+	}
+
+	vulnStmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO bdu_vulnerabilities (
+			bdu_id, name, description, vendor, software_name, software_version,
+			software_type, os_hardware, vuln_class, detection_date,
+			cvss_v2, cvss_v3, cvss_v4, severity, remediation, status,
+			exploit_exists, fix_info, source_urls, other_ids, other_info,
+			incident_info, exploitation_method, fix_method, published_date,
+			updated_date, consequences, vuln_state, cwe_description, cwe_id, synced_at
+		) VALUES (
+			$1,$2,$3,$4,$5,$6,
+			$7,$8,$9,$10,
+			$11,$12,$13,$14,$15,$16,
+			$17,$18,$19,$20,$21,
+			$22,$23,$24,$25,
+			$26,$27,$28,$29,$30,$31
+		)`)
+	if err != nil {
+		return err
+	}
+	defer vulnStmt.Close()
+
+	for _, v := range vulns {
+		if strings.TrimSpace(v.BDUID) == "" {
+			continue
+		}
+		if _, err := vulnStmt.ExecContext(ctx,
+			v.BDUID, v.Name, v.Description, v.Vendor, v.SoftwareName, v.SoftwareVersion,
+			v.SoftwareType, v.OSHardware, v.VulnClass, v.DetectionDate,
+			v.CVSSV2, v.CVSSV3, v.CVSSV4, v.Severity, v.Remediation, v.Status,
+			v.ExploitExists, v.FixInfo, v.SourceURLs, v.OtherIDs, v.OtherInfo,
+			v.IncidentInfo, v.ExploitationMethod, v.FixMethod, v.PublishedDate,
+			v.UpdatedDate, v.Consequences, v.VulnState, v.CWEDescription, v.CWEID, syncedAt,
+		); err != nil {
+			return fmt.Errorf("insert bdu vulnerability %s: %w", v.BDUID, err)
+		}
+	}
+
+	mapStmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO bdu_identifier_map (identifier, bdu_id)
+		VALUES ($1, $2)
+		ON CONFLICT (identifier, bdu_id) DO NOTHING`)
+	if err != nil {
+		return err
+	}
+	defer mapStmt.Close()
+
+	for _, m := range mappings {
+		if strings.TrimSpace(m.Identifier) == "" || strings.TrimSpace(m.BDUID) == "" {
+			continue
+		}
+		if _, err := mapStmt.ExecContext(ctx, m.Identifier, m.BDUID); err != nil {
+			return fmt.Errorf("insert bdu identifier mapping %s->%s: %w", m.Identifier, m.BDUID, err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE bdu_sync_status
+		SET is_syncing = FALSE,
+			last_error = NULL,
+			last_synced_at = $1,
+			record_count = $2,
+			updated_at = NOW()
+		WHERE id = 1`, syncedAt, len(vulns)); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
