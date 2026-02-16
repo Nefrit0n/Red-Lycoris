@@ -320,3 +320,165 @@ func TestParseBDUHTMLPage_FindsCVEWithSpaces(t *testing.T) {
 		t.Fatalf("unexpected bdu ids: %+v", ids["bdu"])
 	}
 }
+
+func TestExtractCWENumber(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"CWE-1333", "1333"},
+		{"cwe-79", "79"},
+		{"CWE-89", "89"},
+		{"CWE-", ""},
+		{"CVE-2024-0001", ""},
+		{"", ""},
+		{"CWE-0", "0"},
+	}
+	for _, tc := range tests {
+		got := extractCWENumber(tc.input)
+		if got != tc.want {
+			t.Errorf("extractCWENumber(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestParseBDUHTMLPageGeneric(t *testing.T) {
+	html := []byte(`<html><body>
+		<h1>BDU:2023-04393</h1>
+		<div class="vulner_desc">Test CWE vulnerability description</div>
+		<div>Идентификаторы: CVE-2023-12345</div>
+	</body></html>`)
+
+	normalized, refs := parseBDUHTMLPageGeneric(html, "https://bdu.fstec.ru/vul/2023-04393")
+	if normalized == nil {
+		t.Fatal("expected normalized payload for generic parse")
+	}
+	if len(refs) != 1 || refs[0].URL != "https://bdu.fstec.ru/vul/2023-04393" {
+		t.Fatalf("unexpected refs: %+v", refs)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(normalized, &doc); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if doc["identifier"] != "BDU:2023-04393" {
+		t.Fatalf("unexpected identifier: %v", doc["identifier"])
+	}
+	ids, ok := doc["external_ids"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected external_ids map, got: %+v", doc["external_ids"])
+	}
+	bduIDs, ok := ids["bdu"].([]any)
+	if !ok || len(bduIDs) != 1 || bduIDs[0] != "2023-04393" {
+		t.Fatalf("unexpected bdu ids: %+v", ids["bdu"])
+	}
+	cveIDs, ok := ids["cve"].([]any)
+	if !ok || len(cveIDs) != 1 || cveIDs[0] != "CVE-2023-12345" {
+		t.Fatalf("unexpected cve ids: %+v", ids["cve"])
+	}
+}
+
+func TestParseBDUHTMLPageGeneric_NoBduID(t *testing.T) {
+	html := []byte(`<html><body>page</body></html>`)
+	normalized, _ := parseBDUHTMLPageGeneric(html, "https://bdu.fstec.ru/other/page")
+	if normalized != nil {
+		t.Fatal("expected nil for non-vul URL")
+	}
+}
+
+func TestEnrichCWE_BDUSearch(t *testing.T) {
+	mux := http.NewServeMux()
+
+	// BDU search page returns links to vulnerability pages.
+	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		if !strings.Contains(q, "CWE") || !strings.Contains(q, "1333") {
+			http.Error(w, "unexpected query", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`<html><body>
+			<a href="/vul/2023-04393">BDU:2023-04393</a>
+			<a href="/vul/2026-01715">BDU:2026-01715</a>
+		</body></html>`))
+	})
+
+	// Individual vulnerability pages.
+	mux.HandleFunc("/vul/2023-04393", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body>
+			<div class="vulner_desc">ReDoS vulnerability from CWE-1333</div>
+			<div>CVE-2023-12345</div>
+		</body></html>`))
+	})
+	mux.HandleFunc("/vul/2026-01715", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body>
+			<div class="vulner_desc">Another CWE-1333 related vuln</div>
+		</body></html>`))
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := server.Client()
+	service := &Service{
+		nvd:  &nvdClient{baseURL: server.URL + "/nvd", client: client, sem: make(chan struct{}, 1)},
+		epss: &epssClient{baseURL: server.URL + "/epss", disabled: true, client: client, sem: make(chan struct{}, 1)},
+		kev:  &kevClient{url: server.URL + "/kev", client: client, sem: make(chan struct{}, 1)},
+		bdu: &bduClient{
+			url:    server.URL + "/bdu?cve={cve}",
+			client: client,
+			sem:    make(chan struct{}, 1),
+		},
+	}
+
+	record, skipped, err := service.Enrich(context.Background(), "CWE-1333")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if skipped {
+		t.Fatal("expected CWE enrich not to be skipped")
+	}
+	if len(record.BDUPayload) == 0 {
+		t.Fatal("expected BDU payload for CWE search")
+	}
+
+	// BDU payload should be a JSON array.
+	var entries []json.RawMessage
+	if err := json.Unmarshal(record.BDUPayload, &entries); err != nil {
+		t.Fatalf("expected array BDU payload, got: %s", string(record.BDUPayload))
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 BDU entries, got %d", len(entries))
+	}
+
+	// NVD/EPSS/KEV should be empty for CWE.
+	if record.NVDPayload != nil {
+		t.Fatal("expected nil NVD for CWE")
+	}
+	if record.EPSSPayload != nil {
+		t.Fatal("expected nil EPSS for CWE")
+	}
+	if record.KEVPayload != nil {
+		t.Fatal("expected nil KEV for CWE")
+	}
+
+	// References should include BDU links.
+	if len(record.References) < 2 {
+		t.Fatalf("expected at least 2 references, got %d", len(record.References))
+	}
+}
+
+func TestEnrichCWE_SkippedWhenBDUDisabled(t *testing.T) {
+	service := &Service{
+		bdu: &bduClient{disabled: true},
+	}
+	record, skipped, err := service.Enrich(context.Background(), "CWE-1333")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if skipped {
+		t.Fatal("expected CWE not to be marked as skipped")
+	}
+	if record.BDUPayload != nil {
+		t.Fatal("expected nil BDU payload when disabled")
+	}
+}
