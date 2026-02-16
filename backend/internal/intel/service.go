@@ -95,6 +95,22 @@ func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIn
 		Identifier:    identifier,
 		SourceVersion: "v1",
 	}
+
+	// CWE identifiers: only BDU FSTEC can be queried (NVD/EPSS/KEV require CVE).
+	if IsCWE(identifier) {
+		if s.bdu != nil {
+			bduPayload, bduRefs, bduFound, err := s.bdu.fetchByCWE(ctx, identifier)
+			if err != nil {
+				return record, false, err
+			}
+			if bduFound {
+				record.BDUPayload = bduPayload
+				record.References = dedupeReferences(bduRefs)
+			}
+		}
+		return record, false, nil
+	}
+
 	if !IsCVE(identifier) {
 		return record, true, nil
 	}
@@ -437,7 +453,17 @@ func (c *bduClient) fetchFromBDUSite(ctx context.Context, identifier string) (js
 		return nil, nil, false, nil
 	}
 
-	candidateURLs := make([]string, 0, 10)
+	candidateURLs := make([]string, 0, 16)
+
+	// BDU FSTEC search uses AND-style queries: (CVE AND 2025 AND 31133).
+	// Add these high-priority candidates first.
+	if bduQuery := buildBDUSearchQuery(identifier); bduQuery != "" {
+		candidateURLs = append(candidateURLs,
+			fmt.Sprintf("%s/search?q=%s", base, url.QueryEscape(bduQuery)),
+		)
+	}
+
+	// Also try the raw identifier as a search term.
 	for _, path := range []string{"/search", "/vul/search", "/vul"} {
 		for _, key := range []string{"search", "q", "query", "text"} {
 			u := fmt.Sprintf("%s%s?%s=%s", base, path, key, url.QueryEscape(identifier))
@@ -470,6 +496,155 @@ func (c *bduClient) fetchFromBDUSite(ctx context.Context, identifier string) (js
 	return nil, nil, false, nil
 }
 
+// fetchByCWE searches BDU FSTEC by CWE identifier (e.g. CWE-1333).
+// It constructs a search query like https://bdu.fstec.ru/search?q=(CWE+AND+1333)
+// and collects matching BDU vulnerability entries.
+// The result is stored as a JSON array of normalized entries.
+func (c *bduClient) fetchByCWE(ctx context.Context, cweIdentifier string) (json.RawMessage, []storage.IntelReference, bool, error) {
+	if c == nil || c.disabled {
+		return nil, nil, false, nil
+	}
+	c.sem <- struct{}{}
+	defer func() { <-c.sem }()
+
+	cweNumber := extractCWENumber(cweIdentifier)
+	if cweNumber == "" {
+		return nil, nil, false, nil
+	}
+
+	base, ok := bduBaseURL(c.url)
+	if !ok {
+		return nil, nil, false, nil
+	}
+
+	// BDU search format: https://bdu.fstec.ru/search?q=(CWE AND 1333)
+	searchQuery := fmt.Sprintf("(CWE AND %s)", cweNumber)
+	searchURL := fmt.Sprintf("%s/search?q=%s", base, url.QueryEscape(searchQuery))
+
+	payload, status, err := fetchURL(ctx, c.client, searchURL)
+	if err != nil || status != http.StatusOK {
+		log.Printf("bdu cwe search failed for %s: err=%v status=%d", cweIdentifier, err, status)
+		return nil, nil, false, nil
+	}
+
+	links := extractBDUVulLinks(base, payload)
+	if len(links) == 0 {
+		log.Printf("bdu cwe search: no vul links found for %s", cweIdentifier)
+		return nil, nil, false, nil
+	}
+
+	// Limit to first N results to avoid excessive requests.
+	const maxCWELinks = 5
+	if len(links) > maxCWELinks {
+		links = links[:maxCWELinks]
+	}
+
+	var allEntries []json.RawMessage
+	var allRefs []storage.IntelReference
+
+	for _, pageURL := range links {
+		pagePayload, pageStatus, pageErr := fetchURL(ctx, c.client, pageURL)
+		if pageErr != nil || pageStatus != http.StatusOK {
+			continue
+		}
+
+		normalized, refs := parseBDUHTMLPageGeneric(pagePayload, pageURL)
+		if normalized != nil {
+			allEntries = append(allEntries, normalized)
+			allRefs = append(allRefs, refs...)
+		}
+	}
+
+	if len(allEntries) == 0 {
+		log.Printf("bdu cwe search: no parseable entries for %s", cweIdentifier)
+		return nil, nil, false, nil
+	}
+
+	// Store as JSON array so GetIntelDetail can expand individual entries.
+	b, err := json.Marshal(allEntries)
+	if err != nil {
+		return nil, nil, false, nil
+	}
+
+	log.Printf("bdu cwe search: found %d entries for %s", len(allEntries), cweIdentifier)
+	return b, allRefs, true, nil
+}
+
+var cweNumberRegex = regexp.MustCompile(`(?i)^CWE-(\d+)$`)
+
+func extractCWENumber(identifier string) string {
+	m := cweNumberRegex.FindStringSubmatch(strings.TrimSpace(identifier))
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
+}
+
+// parseBDUHTMLPageGeneric extracts BDU entry data from a vulnerability page
+// without requiring a specific CVE match. Used for CWE-based search where
+// the page was already found via BDU search, so relevance is established.
+func parseBDUHTMLPageGeneric(payload []byte, pageURL string) (json.RawMessage, []storage.IntelReference) {
+	bduID := ""
+	if parts := strings.Split(pageURL, "/vul/"); len(parts) == 2 {
+		bduID = strings.Trim(parts[1], "/")
+	}
+	if bduID == "" {
+		return nil, nil
+	}
+
+	html := string(payload)
+
+	// Extract CVE identifiers from page (if any).
+	cveList := uniqueStrings(bduPageCVEMatcher.FindAllString(html, -1))
+	for i := range cveList {
+		cveList[i] = normalizeIdentifier(cveList[i])
+	}
+
+	// Build external_ids.
+	extIDs := map[string][]string{
+		"bdu": {bduID},
+	}
+	if len(cveList) > 0 {
+		extIDs["cve"] = cveList
+	}
+
+	doc := map[string]any{
+		"identifier": "BDU:" + bduID,
+		"source":     "bdu.fstec.ru",
+		"status": map[string]any{
+			"value": "published",
+		},
+		"external_ids": extIDs,
+		"references": []map[string]string{{
+			"url":   pageURL,
+			"title": "BDU",
+		}},
+	}
+
+	// Try to extract description from HTML.
+	if desc := extractBDUDescription(html); desc != "" {
+		doc["description"] = desc
+	}
+
+	normalized, err := json.Marshal(doc)
+	if err != nil {
+		return nil, nil
+	}
+	title := "BDU"
+	refs := []storage.IntelReference{{Title: &title, URL: pageURL}}
+	return normalized, refs
+}
+
+var bduDescriptionRegex = regexp.MustCompile(`(?is)<div[^>]*class="[^"]*vulner_desc[^"]*"[^>]*>(.*?)</div>`)
+
+func extractBDUDescription(html string) string {
+	match := bduDescriptionRegex.FindStringSubmatch(html)
+	if len(match) < 2 {
+		return ""
+	}
+	return sanitizePlainText(match[1])
+}
+
 func bduBaseURL(raw string) (string, bool) {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
@@ -479,6 +654,18 @@ func bduBaseURL(raw string) (string, bool) {
 		return "", false
 	}
 	return parsed.Scheme + "://" + parsed.Host, true
+}
+
+// buildBDUSearchQuery converts an identifier into BDU's AND-style search
+// format. CVE-2025-31133 → "(CVE AND 2025 AND 31133)".
+func buildBDUSearchQuery(identifier string) string {
+	parts := strings.FieldsFunc(strings.ToUpper(strings.TrimSpace(identifier)), func(r rune) bool {
+		return r == '-' || r == '_'
+	})
+	if len(parts) < 2 {
+		return ""
+	}
+	return "(" + strings.Join(parts, " AND ") + ")"
 }
 
 var bduVulLinkRegex = regexp.MustCompile(`href\s*=\s*"(/vul/[0-9]{4}-[0-9]{3,})"`)
