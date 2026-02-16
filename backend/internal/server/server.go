@@ -236,6 +236,10 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	admin.Delete("/products/:productId/users/:userId/role", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsWrite), teamsProjectsHandler.DeleteProductUserRole)
 	admin.Get("/products/:productId/effective-access/:userId", middleware.RequirePermission(authzEvaluator, authz.PermAdminProjectsRead), teamsProjectsHandler.GetEffectiveAccess)
 
+	bduHandler := handlers.NewAdminBDUHandler(db)
+	admin.Get("/bdu/sync-status", bduHandler.GetSyncStatus)
+	admin.Put("/bdu/sync-interval", bduHandler.UpdateSyncInterval)
+
 	policyResultsHandler := handlers.NewPolicyResultsHandler(db)
 	secured.Get("/policy-results", policyResultsHandler.List)
 	secured.Get("/policy-results/:id", policyResultsHandler.Get)
