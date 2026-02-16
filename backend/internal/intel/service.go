@@ -2,6 +2,7 @@ package intel
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,6 +43,7 @@ type Config struct {
 	BDUURL              string
 	BDUMirrorURL        string
 	BDUTimeout          time.Duration
+	BDUTLSSkipVerify    bool
 	RefreshInterval     time.Duration
 	ProviderConcurrency int
 }
@@ -52,7 +54,11 @@ func NewService(cfg Config) *Service {
 	if bduTimeout <= 0 {
 		bduTimeout = 20 * time.Second
 	}
-	bduHTTPClient := &http.Client{Timeout: bduTimeout}
+	bduTransport := http.DefaultTransport.(*http.Transport).Clone()
+	if cfg.BDUTLSSkipVerify {
+		bduTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 — BDU FSTEC uses a Russian CA not in default trust stores
+	}
+	bduHTTPClient := &http.Client{Timeout: bduTimeout, Transport: bduTransport}
 	concurrency := cfg.ProviderConcurrency
 	if concurrency <= 0 {
 		concurrency = 4
