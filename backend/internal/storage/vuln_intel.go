@@ -73,6 +73,7 @@ type VulnIntelStatus struct {
 	LastRefreshedAt sql.NullTime
 	NextRetryAt     sql.NullTime
 	FailCount       int
+	HasBDUPayload   bool
 }
 
 // --- helpers
@@ -406,11 +407,11 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 
 func GetVulnIntelStatus(ctx context.Context, db *sql.DB, identifier string) (*VulnIntelStatus, error) {
 	query := `
-		SELECT last_refreshed_at, next_retry_at, fail_count
+		SELECT last_refreshed_at, next_retry_at, fail_count, (bdu_payload IS NOT NULL) AS has_bdu
 		FROM vuln_intel
 		WHERE identifier = $1`
 	var status VulnIntelStatus
-	err := db.QueryRowContext(ctx, query, identifier).Scan(&status.LastRefreshedAt, &status.NextRetryAt, &status.FailCount)
+	err := db.QueryRowContext(ctx, query, identifier).Scan(&status.LastRefreshedAt, &status.NextRetryAt, &status.FailCount, &status.HasBDUPayload)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
