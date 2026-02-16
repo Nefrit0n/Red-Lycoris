@@ -360,6 +360,10 @@ func (c *kevClient) load(ctx context.Context) (map[string]json.RawMessage, error
 }
 
 func fetchWithFallback(ctx context.Context, client *http.Client, url, mirror string) ([]byte, error) {
+	return fetchWithFallbackCtx(ctx, client, url, mirror, "kev")
+}
+
+func fetchWithFallbackCtx(ctx context.Context, client *http.Client, url, mirror, source string) ([]byte, error) {
 	payload, status, err := fetchURL(ctx, client, url)
 	if err == nil && status == http.StatusOK {
 		return payload, nil
@@ -368,15 +372,15 @@ func fetchWithFallback(ctx context.Context, client *http.Client, url, mirror str
 		if err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("kev error: %s", http.StatusText(status))
+		return nil, fmt.Errorf("%s error: %s", source, http.StatusText(status))
 	}
-	log.Printf("kev primary url failed: %v (status %d), trying mirror", err, status)
+	log.Printf("%s primary url failed: %v (status %d), trying mirror", source, err, status)
 	payload, status, err = fetchURL(ctx, client, mirror)
 	if err != nil {
 		return nil, err
 	}
 	if status != http.StatusOK {
-		return nil, fmt.Errorf("kev mirror error: %s", http.StatusText(status))
+		return nil, fmt.Errorf("%s mirror error: %s", source, http.StatusText(status))
 	}
 	return payload, nil
 }
@@ -402,8 +406,15 @@ func (c *bduClient) fetch(ctx context.Context, identifier string) (json.RawMessa
 	c.sem <- struct{}{}
 	defer func() { <-c.sem }()
 
+	seen := map[string]struct{}{}
 	for _, queryKey := range []string{"cve", "cveId", "identifier"} {
-		payload, err := fetchWithFallback(ctx, c.client, c.requestURL(identifier, queryKey), c.requestMirrorURL(identifier, queryKey))
+		primary := c.requestURL(identifier, queryKey)
+		if _, ok := seen[primary]; ok {
+			continue
+		}
+		seen[primary] = struct{}{}
+		mirror := c.requestMirrorURL(identifier, queryKey)
+		payload, err := fetchWithFallbackCtx(ctx, c.client, primary, mirror, "bdu")
 		if err != nil {
 			continue
 		}
