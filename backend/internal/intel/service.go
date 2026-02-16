@@ -29,6 +29,7 @@ type Service struct {
 	epss            *epssClient
 	kev             *kevClient
 	bdu             *bduClient
+	bduEnabled      bool
 	refreshInterval time.Duration
 }
 
@@ -72,6 +73,7 @@ func NewService(cfg Config) *Service {
 		},
 		kev:             newKEVClient(client, cfg.KEVURL, cfg.KEVMirrorURL, concurrency),
 		bdu:             newBDUClient(bduHTTPClient, cfg.BDUEnabled, cfg.BDUURL, cfg.BDUMirrorURL, concurrency),
+		bduEnabled:      cfg.BDUEnabled,
 		refreshInterval: cfg.RefreshInterval,
 	}
 }
@@ -82,6 +84,10 @@ func (s *Service) ShouldRefresh(status *storage.VulnIntelStatus, now time.Time) 
 	}
 	if status.NextRetryAt.Valid && now.Before(status.NextRetryAt.Time) {
 		return false
+	}
+	// Force re-enrichment when BDU is enabled but the record has no BDU data yet.
+	if s.bduEnabled && !status.HasBDUPayload {
+		return true
 	}
 	if status.LastRefreshedAt.Valid && s.refreshInterval > 0 {
 		next := status.LastRefreshedAt.Time.Add(s.refreshInterval)
@@ -422,6 +428,8 @@ func (c *bduClient) fetch(ctx context.Context, identifier string) (json.RawMessa
 	c.sem <- struct{}{}
 	defer func() { <-c.sem }()
 
+	log.Printf("bdu fetch: starting enrichment for %s", identifier)
+
 	seen := map[string]struct{}{}
 	for _, queryKey := range []string{"cve", "cveId", "identifier"} {
 		primary := c.requestURL(identifier, queryKey)
@@ -436,11 +444,14 @@ func (c *bduClient) fetch(ctx context.Context, identifier string) (json.RawMessa
 		}
 		normalized, refs, found := parseBDU(payload, identifier)
 		if found {
+			log.Printf("bdu fetch: found entry for %s via JSON API", identifier)
 			return normalized, refs, true, nil
 		}
 	}
 
+	log.Printf("bdu fetch: JSON API returned no match for %s, trying HTML search", identifier)
 	if pagePayload, refs, found, err := c.fetchFromBDUSite(ctx, identifier); err == nil && found {
+		log.Printf("bdu fetch: found entry for %s via HTML search", identifier)
 		return pagePayload, refs, true, nil
 	}
 	log.Printf("bdu fetch warning: no matching entry found for %s", identifier)
@@ -450,6 +461,7 @@ func (c *bduClient) fetch(ctx context.Context, identifier string) (json.RawMessa
 func (c *bduClient) fetchFromBDUSite(ctx context.Context, identifier string) (json.RawMessage, []storage.IntelReference, bool, error) {
 	base, ok := bduBaseURL(c.url)
 	if !ok {
+		log.Printf("bdu search: cannot extract base URL from %q", c.url)
 		return nil, nil, false, nil
 	}
 
@@ -480,9 +492,14 @@ func (c *bduClient) fetchFromBDUSite(ctx context.Context, identifier string) (js
 	for _, searchURL := range candidateURLs {
 		payload, status, err := fetchURL(ctx, c.client, searchURL)
 		if err != nil || status != http.StatusOK {
+			log.Printf("bdu search: %s returned status=%d err=%v", searchURL, status, err)
 			continue
 		}
-		for _, pageURL := range extractBDUVulLinks(base, payload) {
+		vulLinks := extractBDUVulLinks(base, payload)
+		if len(vulLinks) > 0 {
+			log.Printf("bdu search: %s found %d vul links", searchURL, len(vulLinks))
+		}
+		for _, pageURL := range vulLinks {
 			if _, exists := seen[pageURL]; exists {
 				continue
 			}
@@ -490,9 +507,11 @@ func (c *bduClient) fetchFromBDUSite(ctx context.Context, identifier string) (js
 
 			pagePayload, pageStatus, pageErr := fetchURL(ctx, c.client, pageURL)
 			if pageErr != nil || pageStatus != http.StatusOK {
+				log.Printf("bdu search: page %s returned status=%d err=%v", pageURL, pageStatus, pageErr)
 				continue
 			}
 			if normalized, refs, found := parseBDUHTMLPage(pagePayload, pageURL, identifier); found {
+				log.Printf("bdu search: matched %s on page %s", identifier, pageURL)
 				return normalized, refs, true, nil
 			}
 		}
