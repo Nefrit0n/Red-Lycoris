@@ -12,7 +12,8 @@ CMD ["go", "run", "./cmd/server"]
 
 FROM base AS build
 COPY . .
-RUN go build -ldflags="-s -w" -trimpath -o /app/server ./cmd/server && \
+RUN mkdir -p /app/assets/bdu && wget -O /app/assets/bdu/vullist.xlsx https://bdu.fstec.ru/files/documents/vullist.xlsx && \
+    go build -ldflags="-s -w" -trimpath -o /app/server ./cmd/server && \
     go build -ldflags="-s -w" -trimpath -o /app/analysis_worker ./cmd/analysis_worker && \
     go build -ldflags="-s -w" -trimpath -o /app/intel_worker ./cmd/intel_worker && \
     go build -ldflags="-s -w" -trimpath -o /app/sbom_worker ./cmd/sbom_worker
@@ -29,6 +30,7 @@ RUN addgroup -g 1001 -S appgroup && \
 
 COPY --from=build /app/server /app/server
 COPY --from=build /app/migrations /app/migrations
+COPY --from=build /app/assets /app/assets
 
 # Set ownership
 RUN chown -R appuser:appgroup /app
@@ -74,6 +76,7 @@ RUN apk add --no-cache ca-certificates wget && \
     adduser -u 1001 -S appuser -G appgroup
 
 COPY --from=build /app/intel_worker /app/intel_worker
+COPY --from=build /app/assets /app/assets
 RUN chown -R appuser:appgroup /app
 
 USER appuser
