@@ -12,7 +12,9 @@ CMD ["go", "run", "./cmd/server"]
 
 FROM base AS build
 COPY . .
-RUN mkdir -p /app/assets/bdu && wget -O /app/assets/bdu/vullist.xlsx https://bdu.fstec.ru/files/documents/vullist.xlsx && \
+RUN mkdir -p /app/assets/bdu && \
+    (wget -O /app/assets/bdu/vullist.xlsx https://bdu.fstec.ru/files/documents/vullist.xlsx || \
+     wget --no-check-certificate -O /app/assets/bdu/vullist.xlsx https://bdu.fstec.ru/files/documents/vullist.xlsx) && \
     go build -ldflags="-s -w" -trimpath -o /app/server ./cmd/server && \
     go build -ldflags="-s -w" -trimpath -o /app/analysis_worker ./cmd/analysis_worker && \
     go build -ldflags="-s -w" -trimpath -o /app/intel_worker ./cmd/intel_worker && \
