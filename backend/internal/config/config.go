@@ -54,6 +54,7 @@ type Config struct {
 	BDUURL                   string
 	BDUMirrorURL             string
 	BDUTimeout               string
+	BDUTLSSkipVerify         bool
 	IntelRefreshInterval     string
 	IntelWorkerConcurrency   int
 	IntelRetryBase           string
@@ -109,6 +110,7 @@ func Load() Config {
 		BDUURL:                   getEnv("BDU_URL", ""),
 		BDUMirrorURL:             getEnv("BDU_MIRROR_URL", ""),
 		BDUTimeout:               getEnv("BDU_TIMEOUT", "20s"),
+		BDUTLSSkipVerify:         getEnvAsBool("BDU_TLS_SKIP_VERIFY", true),
 		IntelRefreshInterval:     getEnv("INTEL_REFRESH_INTERVAL", "24h"),
 		IntelWorkerConcurrency:   getEnvAsInt("INTEL_WORKER_CONCURRENCY", 4),
 		IntelRetryBase:           getEnv("INTEL_RETRY_BASE", "30m"),
