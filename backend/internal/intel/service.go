@@ -164,20 +164,11 @@ func (s *Service) Enrich(ctx context.Context, identifier string) (storage.VulnIn
 		references = append(references, kevRefs...)
 	}
 
-	// BDU: prefer local database, fall back to web scraping.
+	// BDU: use only local database populated from vullist.xlsx.
 	bduPayload, bduRefs := s.enrichBDULocal(ctx, identifier)
 	if bduPayload != nil {
 		record.BDUPayload = bduPayload
 		references = append(references, bduRefs...)
-	} else if s.bdu != nil {
-		remoteBDU, remoteBDURefs, remoteFound, bduErr := s.bdu.fetch(ctx, identifier)
-		if bduErr != nil {
-			log.Printf("bdu remote fetch error for %s: %v", identifier, bduErr)
-		}
-		if remoteFound {
-			record.BDUPayload = remoteBDU
-			references = append(references, remoteBDURefs...)
-		}
 	}
 
 	record.References = dedupeReferences(references)
