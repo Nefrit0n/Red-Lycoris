@@ -3,52 +3,73 @@ import { describe, expect, it } from "vitest";
 import BduPanel from "./BduPanel";
 
 describe("BduPanel", () => {
-  it("renders empty fields fallback", () => {
-    const { container } = render(<BduPanel bdu={{ "CVE-1": {} }} />);
-    expect(screen.getByText("CVE-1")).toBeInTheDocument();
-    expect(container.textContent).toContain("Описание уязвимости");
+  it("renders empty data fallback", () => {
+    const { container } = render(<BduPanel bdu={{}} />);
+    expect(screen.getByText("Данные БДУ ФСТЭК отсутствуют")).toBeInTheDocument();
     expect(container).toMatchSnapshot();
   });
 
-  it("renders long remediation list and pre-line content", () => {
+  it("renders local DB format entry with key fields", () => {
     const { container } = render(
       <BduPanel
         bdu={{
-          "CVE-2": {
-            description: "line1\nline2\nline3",
-            remediation_steps: ["step one", "step two", "step three", "step four"],
-            external_ids: { cve: ["CVE-2"], "fg-ir": ["FG-IR-2"] },
+          "BDU:2022-01428": {
+            bdu_id: "BDU:2022-01428",
+            name: "Уязвимость пакета chromium",
+            description: "Описание уязвимости...",
+            vendor: "Сообщество свободного ПО",
+            software_name: "Debian GNU/Linux",
+            software_version: "10",
+            software_type: "Операционная система",
+            os_hardware: "",
+            vuln_class: "Уязвимость кода",
+            detection_date: "09.02.2022",
+            cvss_v2: "AV:N/AC:L/Au:N/C:C/I:C/A:C",
+            cvss_v3: "AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H",
+            cvss_v4: "",
+            severity: "Критический уровень опасности",
+            remediation: "Обновить пакет",
+            status: "Подтверждена производителем",
+            exploit_exists: "Существует",
+            fix_info: "Уязвимость устранена",
+            source_urls: "https://security-tracker.debian.org",
+            other_ids: "CVE-2022-0975",
+            other_info: "",
+            incident_info: "Да",
+            exploitation_method: "Манипулирование данными",
+            fix_method: "Обновление ПО",
+            published_date: "23.03.2022",
+            updated_date: "13.09.2024",
+            consequences: "",
+            vuln_state: "Опубликована",
+            cwe_description: "Использование после освобождения",
+            cwe_id: "CWE-416",
           },
         }}
       />
     );
-    expect(screen.getByText(/line1/)).toBeInTheDocument();
-    expect(screen.getByText(/1\. step one/)).toBeInTheDocument();
+
+    expect(screen.getByText("BDU:2022-01428")).toBeInTheDocument();
+    expect(screen.getByText("Уязвимость пакета chromium")).toBeInTheDocument();
+    expect(screen.getByText("Критический уровень опасности")).toBeInTheDocument();
+    expect(screen.getByText("Существует")).toBeInTheDocument();
     expect(container).toMatchSnapshot();
   });
 
-  it("renders multiple CVSS versions and software rows", () => {
-    const { container } = render(
+  it("renders legacy web-scraping format as fallback", () => {
+    render(
       <BduPanel
         bdu={{
-          "CVE-3": {
-            affected_software: [
-              { vendor: "Acme", product: "GW", version: "1.2", type: "library", platform: "linux" },
-            ],
-            cvss: {
-              v2: { score: 5.0, vector: "AV:N" },
-              v3: { score: 8.8, vector: "CVSS:3.1/AV:N" },
-              v4: { score: 9.1, vector: "CVSS:4.0/AV:N" },
-            },
-            references: [{ title: "BDU", url: "https://bdu.example/item/3" }],
+          "CVE-1": {
+            identifier: "BDU:2021-00001",
+            description: "Legacy description text",
+            severity: "Высокий",
           },
         }}
       />
     );
 
-    expect(screen.getByText("Acme")).toBeInTheDocument();
-    expect(screen.getByText(/v2: score: 5/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "BDU" })).toHaveAttribute("target", "_blank");
-    expect(container).toMatchSnapshot();
+    expect(screen.getByText("BDU:2021-00001")).toBeInTheDocument();
+    expect(screen.getByText("Legacy description text")).toBeInTheDocument();
   });
 });
