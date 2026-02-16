@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -351,7 +352,15 @@ func GetIntelDetail(ctx context.Context, db *sql.DB, findingID uuid.UUID) (*Inte
 			detail.KEV[identifier] = json.RawMessage(kevPayload)
 		}
 		if len(bduPayload) > 0 {
-			detail.BDU[identifier] = json.RawMessage(bduPayload)
+			// CWE search stores an array of BDU entries; expand each into
+			// its own map key so the frontend renders them individually.
+			if expanded := expandBDUArrayPayload(bduPayload); len(expanded) > 0 {
+				for k, v := range expanded {
+					detail.BDU[k] = v
+				}
+			} else {
+				detail.BDU[identifier] = json.RawMessage(bduPayload)
+			}
 		}
 
 		// safety: не парсим гигантский мусор
@@ -504,6 +513,36 @@ func UpdateVulnIntelError(ctx context.Context, db *sql.DB, identifier string, so
 			updated_at = NOW()`
 	_, err := db.ExecContext(ctx, query, identifier, sourceVersion, lastError, nextRetryAt, failCount)
 	return err
+}
+
+// expandBDUArrayPayload checks whether the BDU payload is a JSON array
+// (produced by CWE-based BDU search). If so, it returns individual entries
+// keyed by their "identifier" field (e.g. "BDU:2023-04393"). For single-
+// object payloads (CVE-based search) it returns nil so the caller uses
+// the original payload as-is.
+func expandBDUArrayPayload(payload []byte) map[string]json.RawMessage {
+	if len(payload) == 0 || payload[0] != '[' {
+		return nil
+	}
+	var entries []json.RawMessage
+	if err := json.Unmarshal(payload, &entries); err != nil || len(entries) == 0 {
+		return nil
+	}
+	result := make(map[string]json.RawMessage, len(entries))
+	for i, entry := range entries {
+		var doc struct {
+			Identifier string `json:"identifier"`
+		}
+		key := ""
+		if json.Unmarshal(entry, &doc) == nil && doc.Identifier != "" {
+			key = doc.Identifier
+		}
+		if key == "" {
+			key = fmt.Sprintf("BDU#%03d", i)
+		}
+		result[key] = entry
+	}
+	return result
 }
 
 func nullRawMessage(payload []byte) any {
