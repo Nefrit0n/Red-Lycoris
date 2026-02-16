@@ -3,7 +3,6 @@ package main
 import (
 	"testing"
 	"time"
-
 )
 
 func TestParseDuration(t *testing.T) {
@@ -46,4 +45,3 @@ func TestHashIdentifierDeterministic(t *testing.T) {
 		t.Fatal("expected different hash for different input")
 	}
 }
-
