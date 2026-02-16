@@ -23,6 +23,7 @@ func TestShouldRefresh(t *testing.T) {
 
 	status := &storage.VulnIntelStatus{
 		LastRefreshedAt: sql.NullTime{Time: now.Add(-2 * time.Hour), Valid: true},
+		HasBDUPayload:   true,
 	}
 	if service.ShouldRefresh(status, now) {
 		t.Fatal("expected no refresh when interval not elapsed")
@@ -30,6 +31,7 @@ func TestShouldRefresh(t *testing.T) {
 
 	status = &storage.VulnIntelStatus{
 		LastRefreshedAt: sql.NullTime{Time: now.Add(-48 * time.Hour), Valid: true},
+		HasBDUPayload:   true,
 	}
 	if !service.ShouldRefresh(status, now) {
 		t.Fatal("expected refresh when interval elapsed")
@@ -41,6 +43,29 @@ func TestShouldRefresh(t *testing.T) {
 	}
 	if service.ShouldRefresh(status, now) {
 		t.Fatal("expected no refresh when next retry is in the future")
+	}
+}
+
+func TestShouldRefresh_MissingBDU(t *testing.T) {
+	service := &Service{refreshInterval: 24 * time.Hour, bduEnabled: true}
+	now := time.Now().UTC()
+
+	// BDU enabled but payload missing — should force refresh even if interval not elapsed.
+	status := &storage.VulnIntelStatus{
+		LastRefreshedAt: sql.NullTime{Time: now.Add(-2 * time.Hour), Valid: true},
+		HasBDUPayload:   false,
+	}
+	if !service.ShouldRefresh(status, now) {
+		t.Fatal("expected refresh when BDU enabled but payload missing")
+	}
+
+	// BDU enabled and payload present — normal interval logic applies.
+	status = &storage.VulnIntelStatus{
+		LastRefreshedAt: sql.NullTime{Time: now.Add(-2 * time.Hour), Valid: true},
+		HasBDUPayload:   true,
+	}
+	if service.ShouldRefresh(status, now) {
+		t.Fatal("expected no refresh when BDU payload already present")
 	}
 }
 
