@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"hash/fnv"
 	"log"
 	"math/big"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"red-lycoris/backend/internal/bdu"
 	"red-lycoris/backend/internal/config"
 	"red-lycoris/backend/internal/events"
 	"red-lycoris/backend/internal/intel"
@@ -30,10 +30,7 @@ const maxInt64 = int64(^uint64(0) >> 1)
 
 func main() {
 	cfg := config.Load()
-	log.Printf("intel worker BDU provider config: enabled=%t url=%q mirror=%q", cfg.BDUEnabled, strings.TrimSpace(cfg.BDUURL), strings.TrimSpace(cfg.BDUMirrorURL))
-	if err := validateBDUConfig(cfg); err != nil {
-		log.Fatalf("configuration error: %v", err)
-	}
+	log.Printf("intel worker BDU provider config: enabled=%t xlsx_path=%q", cfg.BDUEnabled, strings.TrimSpace(cfg.BDUXLSXPath))
 
 	db, err := storage.Connect(cfg)
 	if err != nil {
@@ -76,10 +73,23 @@ func main() {
 		ProviderConcurrency: cfg.IntelWorkerConcurrency,
 	})
 
+	if cfg.BDUEnabled {
+		if err := bdu.SyncIfDue(context.Background(), db, cfg.BDUXLSXPath, time.Now().UTC()); err != nil {
+			log.Printf("bdu sync warning: %v", err)
+		} else {
+			log.Printf("bdu sync: local xlsx imported")
+		}
+	}
+
 	for {
 		msgs, err := sub.Fetch(1, nats.MaxWait(5*time.Second))
 		if err != nil {
 			if errors.Is(err, nats.ErrTimeout) {
+				if cfg.BDUEnabled {
+					if syncErr := bdu.SyncIfDue(context.Background(), db, cfg.BDUXLSXPath, time.Now().UTC()); syncErr != nil {
+						log.Printf("bdu periodic sync warning: %v", syncErr)
+					}
+				}
 				continue
 			}
 			log.Printf("fetch error: %v", err)
@@ -91,13 +101,6 @@ func main() {
 			}
 		}
 	}
-}
-
-func validateBDUConfig(cfg config.Config) error {
-	if cfg.BDUEnabled && strings.TrimSpace(cfg.BDUURL) == "" {
-		return fmt.Errorf("BDU_ENABLED=true requires non-empty BDU_URL")
-	}
-	return nil
 }
 
 func handleIntelMessage(ctx context.Context, msg *nats.Msg, db *sql.DB, publisher *events.Publisher, service *intel.Service, cfg config.Config) error {
