@@ -453,17 +453,22 @@ func (c *bduClient) fetchFromBDUSite(ctx context.Context, identifier string) (js
 		return nil, nil, false, nil
 	}
 
-	candidateURLs := make([]string, 0, 16)
+	candidateURLs := make([]string, 0, 20)
 
-	// BDU FSTEC search uses AND-style queries: (CVE AND 2025 AND 31133).
-	// Add these high-priority candidates first.
+	// 1. Quoted exact match — most reliable: q="CVE-2025-31133"
+	quoted := fmt.Sprintf("%q", identifier)
+	candidateURLs = append(candidateURLs,
+		fmt.Sprintf("%s/search?q=%s", base, url.QueryEscape(quoted)),
+	)
+
+	// 2. AND-style query: q=(CVE AND 2025 AND 31133)
 	if bduQuery := buildBDUSearchQuery(identifier); bduQuery != "" {
 		candidateURLs = append(candidateURLs,
 			fmt.Sprintf("%s/search?q=%s", base, url.QueryEscape(bduQuery)),
 		)
 	}
 
-	// Also try the raw identifier as a search term.
+	// 3. Fallback: raw identifier as a search term.
 	for _, path := range []string{"/search", "/vul/search", "/vul"} {
 		for _, key := range []string{"search", "q", "query", "text"} {
 			u := fmt.Sprintf("%s%s?%s=%s", base, path, key, url.QueryEscape(identifier))
@@ -517,17 +522,25 @@ func (c *bduClient) fetchByCWE(ctx context.Context, cweIdentifier string) (json.
 		return nil, nil, false, nil
 	}
 
-	// BDU search format: https://bdu.fstec.ru/search?q=(CWE AND 1333)
-	searchQuery := fmt.Sprintf("(CWE AND %s)", cweNumber)
-	searchURL := fmt.Sprintf("%s/search?q=%s", base, url.QueryEscape(searchQuery))
-
-	payload, status, err := fetchURL(ctx, c.client, searchURL)
-	if err != nil || status != http.StatusOK {
-		log.Printf("bdu cwe search failed for %s: err=%v status=%d", cweIdentifier, err, status)
-		return nil, nil, false, nil
+	// Try multiple search formats; BDU supports quoted exact match and AND-style.
+	searchQueries := []string{
+		fmt.Sprintf("%q", cweIdentifier),       // "CWE-1333" — exact match
+		fmt.Sprintf("(CWE AND %s)", cweNumber), // (CWE AND 1333)
+		cweIdentifier,                          // CWE-1333 as-is
 	}
 
-	links := extractBDUVulLinks(base, payload)
+	var links []string
+	for _, sq := range searchQueries {
+		searchURL := fmt.Sprintf("%s/search?q=%s", base, url.QueryEscape(sq))
+		payload, status, err := fetchURL(ctx, c.client, searchURL)
+		if err != nil || status != http.StatusOK {
+			continue
+		}
+		links = extractBDUVulLinks(base, payload)
+		if len(links) > 0 {
+			break
+		}
+	}
 	if len(links) == 0 {
 		log.Printf("bdu cwe search: no vul links found for %s", cweIdentifier)
 		return nil, nil, false, nil
