@@ -4,4 +4,4 @@ gunicorn==24.1.1
 httpx==0.28.1
 uvicorn==0.40.0
 openpyxl==3.1.5
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.11
