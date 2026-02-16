@@ -487,14 +487,15 @@ func TestBuildBDUSearchQuery(t *testing.T) {
 	}
 }
 
-func TestFetchFromBDUSite_ANDQuery(t *testing.T) {
+func TestFetchFromBDUSite_QuotedAndANDQuery(t *testing.T) {
 	mux := http.NewServeMux()
 
-	// BDU search with AND format should work.
+	// BDU search — accept quoted exact match or AND format.
 	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
-		if strings.Contains(q, "AND") && strings.Contains(q, "2025") && strings.Contains(q, "31133") {
-			// Return page with vulnerability link.
+		isQuoted := strings.Contains(q, "CVE-2025-31133")
+		isAND := strings.Contains(q, "AND") && strings.Contains(q, "2025") && strings.Contains(q, "31133")
+		if isQuoted || isAND {
 			_, _ = w.Write([]byte(`<html><body>
 				<a href="/vul/2025-14041">BDU:2025-14041</a>
 			</body></html>`))
