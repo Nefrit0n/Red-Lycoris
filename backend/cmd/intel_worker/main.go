@@ -71,6 +71,7 @@ func main() {
 		BDUMirrorURL:        cfg.BDUMirrorURL,
 		BDUTimeout:          parseDuration(cfg.BDUTimeout, 20*time.Second),
 		BDUTLSSkipVerify:    cfg.BDUTLSSkipVerify,
+		DB:                  db,
 		RefreshInterval:     parseDuration(cfg.IntelRefreshInterval, 24*time.Hour),
 		ProviderConcurrency: cfg.IntelWorkerConcurrency,
 	})

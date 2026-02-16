@@ -264,10 +264,15 @@ services:
     command: >
       celery -A app.celery_app:celery_app worker --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
     environment:
-      <<: *celery-env
+      <<: [ *celery-env, *db-env ]
       APP_ENV: production
+      BDU_XLSX_URL: ${BDU_XLSX_URL:-https://bdu.fstec.ru/files/documents/vullist.xlsx}
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: unless-stopped
     networks:
