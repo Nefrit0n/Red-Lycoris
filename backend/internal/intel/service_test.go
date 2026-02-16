@@ -467,6 +467,87 @@ func TestEnrichCWE_BDUSearch(t *testing.T) {
 	}
 }
 
+func TestBuildBDUSearchQuery(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"CVE-2025-31133", "(CVE AND 2025 AND 31133)"},
+		{"CVE-2024-0001", "(CVE AND 2024 AND 0001)"},
+		{"CWE-1333", "(CWE AND 1333)"},
+		{"GHSA-fh74-hm69-rqjw", "(GHSA AND FH74 AND HM69 AND RQJW)"},
+		{"single", ""},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		got := buildBDUSearchQuery(tc.input)
+		if got != tc.want {
+			t.Errorf("buildBDUSearchQuery(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestFetchFromBDUSite_ANDQuery(t *testing.T) {
+	mux := http.NewServeMux()
+
+	// BDU search with AND format should work.
+	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		if strings.Contains(q, "AND") && strings.Contains(q, "2025") && strings.Contains(q, "31133") {
+			// Return page with vulnerability link.
+			_, _ = w.Write([]byte(`<html><body>
+				<a href="/vul/2025-14041">BDU:2025-14041</a>
+			</body></html>`))
+			return
+		}
+		// Raw CVE format — return empty page (simulates BDU not finding it).
+		_, _ = w.Write([]byte(`<html><body>No results</body></html>`))
+	})
+
+	// Vulnerability page with CVE identifier (BDU format with spaces).
+	mux.HandleFunc("/vul/2025-14041", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body>
+			<div>Идентификаторы: CVE - 2025 - 31133</div>
+		</body></html>`))
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &bduClient{
+		url:    server.URL + "/vul/{cve}",
+		client: server.Client(),
+		sem:    make(chan struct{}, 1),
+	}
+
+	payload, refs, found, err := client.fetchFromBDUSite(context.Background(), "CVE-2025-31133")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected BDU entry to be found via AND search query")
+	}
+	if payload == nil {
+		t.Fatal("expected non-nil payload")
+	}
+	if len(refs) == 0 {
+		t.Fatal("expected at least one reference")
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		t.Fatalf("failed to unmarshal payload: %v", err)
+	}
+	ids, ok := doc["external_ids"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected external_ids, got: %+v", doc)
+	}
+	bduIDs, ok := ids["bdu"].([]any)
+	if !ok || len(bduIDs) != 1 || bduIDs[0] != "2025-14041" {
+		t.Fatalf("unexpected bdu ids: %+v", ids["bdu"])
+	}
+}
+
 func TestEnrichCWE_SkippedWhenBDUDisabled(t *testing.T) {
 	service := &Service{
 		bdu: &bduClient{disabled: true},

@@ -453,7 +453,17 @@ func (c *bduClient) fetchFromBDUSite(ctx context.Context, identifier string) (js
 		return nil, nil, false, nil
 	}
 
-	candidateURLs := make([]string, 0, 10)
+	candidateURLs := make([]string, 0, 16)
+
+	// BDU FSTEC search uses AND-style queries: (CVE AND 2025 AND 31133).
+	// Add these high-priority candidates first.
+	if bduQuery := buildBDUSearchQuery(identifier); bduQuery != "" {
+		candidateURLs = append(candidateURLs,
+			fmt.Sprintf("%s/search?q=%s", base, url.QueryEscape(bduQuery)),
+		)
+	}
+
+	// Also try the raw identifier as a search term.
 	for _, path := range []string{"/search", "/vul/search", "/vul"} {
 		for _, key := range []string{"search", "q", "query", "text"} {
 			u := fmt.Sprintf("%s%s?%s=%s", base, path, key, url.QueryEscape(identifier))
@@ -644,6 +654,18 @@ func bduBaseURL(raw string) (string, bool) {
 		return "", false
 	}
 	return parsed.Scheme + "://" + parsed.Host, true
+}
+
+// buildBDUSearchQuery converts an identifier into BDU's AND-style search
+// format. CVE-2025-31133 → "(CVE AND 2025 AND 31133)".
+func buildBDUSearchQuery(identifier string) string {
+	parts := strings.FieldsFunc(strings.ToUpper(strings.TrimSpace(identifier)), func(r rune) bool {
+		return r == '-' || r == '_'
+	})
+	if len(parts) < 2 {
+		return ""
+	}
+	return "(" + strings.Join(parts, " AND ") + ")"
 }
 
 var bduVulLinkRegex = regexp.MustCompile(`href\s*=\s*"(/vul/[0-9]{4}-[0-9]{3,})"`)
