@@ -3,10 +3,13 @@ package server
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"red-lycoris/backend/internal/authz"
 	"red-lycoris/backend/internal/config"
@@ -21,7 +24,7 @@ import (
 	"red-lycoris/backend/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/google/uuid"
 )
@@ -42,9 +45,7 @@ func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store ob
 		BodyLimit: int(maxArchiveBytes),
 	})
 	app.Use(requestid.New())
-	app.Use(logger.New(logger.Config{
-		Format: "${time} ${status} ${latency} ${method} ${path} request_id=${locals:requestid}\n",
-	}))
+	app.Use(middleware.RequestLogger(slog.New(slog.NewJSONHandler(os.Stdout, nil))))
 	setupRoutes(app, cfg, db, publisher, store)
 	return app
 }
@@ -64,6 +65,17 @@ func parseInt64WithDefault(raw string, fallback int64) int64 {
 func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *events.Publisher, store objectstore.Store) {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
+	})
+
+	app.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
+	})
+
+	app.Get("/readyz", func(c *fiber.Ctx) error {
+		if err := db.PingContext(context.Background()); err != nil {
+			return c.Status(http.StatusServiceUnavailable).JSON(fiber.Map{"status": "not_ready"})
+		}
+		return c.JSON(fiber.Map{"status": "ready"})
 	})
 
 	app.Get("/api/ping", func(c *fiber.Ctx) error {
@@ -187,6 +199,24 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 
 	intelHandler := handlers.NewIntelHandler(db, publisher)
 	secured.Post("/intel/refresh", middleware.AuthorizeRole("admin"), intelHandler.Refresh)
+
+	ingestAuth := middleware.NewIntegrationBearerAuth(db)
+	apiRate := limiter.New(limiter.Config{Max: 60, Expiration: time.Minute})
+	adminRate := limiter.New(limiter.Config{Max: 30, Expiration: time.Minute})
+	ingest := api.Group("/ingest", ingestAuth.Require())
+	ingestRuns := handlers.NewIngestRunsHandler(db, publisher, store)
+	ingest.Post("/runs:init", apiRate, ingestAuth.Require("ingest:run:init", "ingest:artifact:write"), ingestRuns.Init)
+	ingest.Post("/runs/:run_id:commit", apiRate, ingestAuth.Require("ingest:run:commit"), ingestRuns.Commit)
+	ingest.Get("/runs/:run_id", ingestAuth.Require("ingest:run:init"), ingestRuns.Get)
+
+	adminTokensHandler := handlers.NewAdminIntegrationTokensHandler(db)
+	adminInt := api.Group("/admin/integration-tokens", adminRate, ingestAuth.Require())
+	adminInt.Get("/", ingestAuth.Require("admin:tokens:read"), adminTokensHandler.List)
+	adminInt.Post("/", ingestAuth.Require("admin:tokens:write"), adminTokensHandler.Create)
+	adminInt.Patch("/:id", ingestAuth.Require("admin:tokens:write"), adminTokensHandler.Patch)
+	adminInt.Post("/:id/revoke", ingestAuth.Require("admin:tokens:write"), adminTokensHandler.Revoke)
+	adminInt.Post("/:id/rotate", ingestAuth.Require("admin:tokens:write"), adminTokensHandler.Rotate)
+	adminInt.Get("/:id/audit", ingestAuth.Require("admin:tokens:read"), adminTokensHandler.Audit)
 
 	admin := secured.Group("/admin", middleware.RequireIdempotency(db))
 	auditLogHandler := handlers.NewAuditLogHandler(db)
