@@ -51,25 +51,27 @@ describe("BduPanel", () => {
 
     expect(screen.getByText("BDU:2022-01428")).toBeInTheDocument();
     expect(screen.getByText("Уязвимость пакета chromium")).toBeInTheDocument();
-    expect(screen.getByText("Критический уровень опасности")).toBeInTheDocument();
+    // Severity badge uses shortened label from severityToken()
+    expect(screen.getByText("Критический")).toBeInTheDocument();
     expect(screen.getByText("Существует")).toBeInTheDocument();
+    // Key info grid
+    expect(screen.getByText("Уязвимость кода")).toBeInTheDocument();
     expect(container).toMatchSnapshot();
   });
 
-  it("renders legacy web-scraping format as fallback", () => {
+  it("ignores unrecognized payload format gracefully", () => {
     render(
       <BduPanel
         bdu={{
           "CVE-1": {
             identifier: "BDU:2021-00001",
             description: "Legacy description text",
-            severity: "Высокий",
           },
         }}
       />
     );
 
-    expect(screen.getByText("BDU:2021-00001")).toBeInTheDocument();
-    expect(screen.getByText("Legacy description text")).toBeInTheDocument();
+    // Without bdu_id field, the entry is filtered out — shows empty state.
+    expect(screen.getByText("Данные БДУ ФСТЭК отсутствуют")).toBeInTheDocument();
   });
 });
