@@ -27,6 +27,8 @@ type RunnerConfig struct {
 
 var dockerRefPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.:/@-]*$`)
 
+const dockerTransientRetryAttempts = 3
+
 // RunOpenGrep runs OpenGrep (Semgrep-compatible fork) in a Docker container.
 // Output format is identical to Semgrep JSON, so the same parser can be used.
 func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
@@ -53,9 +55,7 @@ func RunOpenGrep(ctx context.Context, cfg RunnerConfig, workspace string, output
 	if err != nil {
 		return "", err
 	}
-	// #nosec G204 -- arguments are validated in dockerRunArgs.
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := runDockerCommand(ctx, args)
 	if err != nil {
 		return string(output), fmt.Errorf("opengrep failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
@@ -109,9 +109,7 @@ func RunTrivy(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	if err != nil {
 		return "", err
 	}
-	// #nosec G204 -- arguments are validated in dockerRunArgs.
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := runDockerCommand(ctx, args)
 	if err != nil {
 		return string(output), fmt.Errorf("trivy failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
@@ -135,9 +133,7 @@ func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputP
 	if err != nil {
 		return "", err
 	}
-	// #nosec G204 -- arguments are validated in dockerRunArgs.
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := runDockerCommand(ctx, args)
 	if err != nil {
 		return string(output), fmt.Errorf("checkov failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
@@ -173,9 +169,7 @@ func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath
 	if err != nil {
 		return "", err
 	}
-	// #nosec G204 -- arguments are validated in dockerRunArgs.
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := runDockerCommand(ctx, args)
 	if err != nil {
 		// KICS exits non-zero when findings are present — only fail on actual errors
 		if !strings.Contains(string(output), "Files scanned") {
@@ -208,9 +202,7 @@ func RunGitleaks(ctx context.Context, cfg RunnerConfig, workspace string, output
 	if err != nil {
 		return "", err
 	}
-	// #nosec G204 -- arguments are validated in dockerRunArgs.
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := runDockerCommand(ctx, args)
 	if err != nil {
 		return string(output), fmt.Errorf("gitleaks failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
@@ -233,9 +225,7 @@ func RunGrype(ctx context.Context, cfg RunnerConfig, workspace string, outputPat
 	if err != nil {
 		return "", err
 	}
-	// #nosec G204 -- arguments are validated in dockerRunArgs.
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := runDockerCommand(ctx, args)
 	if err != nil {
 		return string(output), fmt.Errorf("grype failed: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
@@ -288,4 +278,66 @@ func dockerRunArgs(cfg RunnerConfig, workspace string, outputPath string, image 
 	)
 	args = append(args, extraArgs...)
 	return args, nil
+}
+
+func runDockerCommand(ctx context.Context, args []string) ([]byte, error) {
+	var lastOutput []byte
+	var lastErr error
+
+	for attempt := 1; attempt <= dockerTransientRetryAttempts; attempt++ {
+		if ctx.Err() != nil {
+			if lastErr != nil {
+				return lastOutput, lastErr
+			}
+			return nil, ctx.Err()
+		}
+
+		// #nosec G204 -- arguments are validated in dockerRunArgs.
+		cmd := exec.CommandContext(ctx, "docker", args...)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			return output, nil
+		}
+
+		lastOutput = output
+		lastErr = err
+		if !isTransientDockerPullError(string(output)) || attempt == dockerTransientRetryAttempts {
+			return output, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return output, err
+		case <-time.After(time.Duration(attempt) * time.Second):
+		}
+	}
+
+	return lastOutput, lastErr
+}
+
+func isTransientDockerPullError(output string) bool {
+	if output == "" {
+		return false
+	}
+	lower := strings.ToLower(output)
+
+	if !strings.Contains(lower, "docker.io") && !strings.Contains(lower, "registry-") {
+		return false
+	}
+
+	transientMarkers := []string{
+		"eof",
+		"tls handshake timeout",
+		"i/o timeout",
+		"connection reset by peer",
+		"temporary failure in name resolution",
+	}
+
+	for _, marker := range transientMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+
+	return false
 }
