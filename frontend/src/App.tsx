@@ -23,6 +23,7 @@ import TeamsPage from "./admin-v2/pages/TeamsPage";
 import ProjectsPage from "./admin-v2/pages/ProjectsPage";
 import PoliciesPage from "./admin-v2/pages/PoliciesPage";
 import AuditPage from "./admin-v2/pages/AuditPage";
+import IntegrationTokensPage from "./admin-v2/pages/IntegrationTokensPage";
 
 const App = () => {
   return (
@@ -56,6 +57,8 @@ const App = () => {
               <Route path="/admin/teams" element={<TeamsPage />} />
               <Route path="/admin/projects" element={<ProjectsPage />} />
               <Route path="/admin/policies" element={<PoliciesPage />} />
+              <Route path="/admin/integrations/tokens" element={<IntegrationTokensPage />} />
+              <Route path="/admin/integrations/tokens/:id" element={<IntegrationTokensPage />} />
               <Route path="/admin/audit" element={<AuditPage />} />
 
               {/* Редиректы */}
