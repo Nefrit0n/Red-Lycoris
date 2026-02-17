@@ -5,6 +5,7 @@ import {
   Home,
   People,
   ReceiptLong,
+  VpnKey,
 } from "@mui/icons-material";
 
 export interface AdminV2RouteConfig {
@@ -38,6 +39,12 @@ export const adminV2Routes: AdminV2RouteConfig[] = [
     path: "/admin/projects",
     icon: AccountTree,
     title: "Проекты",
+  },
+  {
+    label: "Integration Tokens",
+    path: "/admin/integrations/tokens",
+    icon: VpnKey,
+    title: "Integration Tokens",
   },
   {
     label: "Политики",
