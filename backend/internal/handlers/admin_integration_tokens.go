@@ -18,12 +18,29 @@ func NewAdminIntegrationTokensHandler(db *sql.DB) *AdminIntegrationTokensHandler
 	return &AdminIntegrationTokensHandler{db: db}
 }
 
-func (h *AdminIntegrationTokensHandler) List(c *fiber.Ctx) error {
-	orgID := c.Locals("integration_org_id").(uuid.UUID)
-	var pid *uuid.UUID
-	if p, ok := c.Locals("integration_project_id").(uuid.UUID); ok {
-		pid = &p
+func tenantIDFromLocals(c *fiber.Ctx) (uuid.UUID, bool) {
+	tenantID, ok := c.Locals("tenant_id").(uuid.UUID)
+	if !ok || tenantID == uuid.Nil {
+		return uuid.Nil, false
 	}
+	return tenantID, true
+}
+
+func (h *AdminIntegrationTokensHandler) List(c *fiber.Ctx) error {
+	orgID, ok := tenantIDFromLocals(c)
+	if !ok {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
+	}
+
+	var pid *uuid.UUID
+	if raw := c.Query("project_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid project_id"})
+		}
+		pid = &parsed
+	}
+
 	items, err := storage.ListIntegrationTokens(c.Context(), h.db, orgID, pid)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "list failed"})
@@ -32,10 +49,17 @@ func (h *AdminIntegrationTokensHandler) List(c *fiber.Ctx) error {
 }
 
 func (h *AdminIntegrationTokensHandler) Create(c *fiber.Ctx) error {
+	orgID, ok := tenantIDFromLocals(c)
+	if !ok {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
+	}
+
 	var req struct {
-		Name      string     `json:"name"`
-		OrgID     uuid.UUID  `json:"org_id"`
-		ProjectID *uuid.UUID `json:"project_id"`
+		Name   string `json:"name"`
+		Tenant struct {
+			OrgID     uuid.UUID  `json:"org_id"`
+			ProjectID *uuid.UUID `json:"project_id"`
+		} `json:"tenant"`
 		ExpiresAt *time.Time `json:"expires_at"`
 		Scopes    []string   `json:"scopes"`
 	}
@@ -45,7 +69,11 @@ func (h *AdminIntegrationTokensHandler) Create(c *fiber.Ctx) error {
 	if err := security.ValidateScopeList(req.Scopes); err != nil {
 		return c.Status(http.StatusUnprocessableEntity).JSON(fiber.Map{"error": err.Error()})
 	}
-	policy, err := storage.GetOrgSecurityPolicy(c.Context(), h.db, req.OrgID)
+	if req.Tenant.OrgID != uuid.Nil && req.Tenant.OrgID != orgID {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "tenant mismatch"})
+	}
+
+	policy, err := storage.GetOrgSecurityPolicy(c.Context(), h.db, orgID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "policy lookup failed"})
 	}
@@ -65,9 +93,9 @@ func (h *AdminIntegrationTokensHandler) Create(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "token hash failed"})
 	}
-	row := storage.IntegrationToken{ID: uuid.New(), OrgID: req.OrgID, Name: req.Name, TokenHash: hash, Scopes: req.Scopes, CreatedAt: now, ExpiresAt: expiresAt}
-	if req.ProjectID != nil {
-		row.ProjectID = sql.NullString{String: req.ProjectID.String(), Valid: true}
+	row := storage.IntegrationToken{ID: uuid.New(), OrgID: orgID, Name: req.Name, TokenHash: hash, Scopes: req.Scopes, CreatedAt: now, ExpiresAt: expiresAt}
+	if req.Tenant.ProjectID != nil {
+		row.ProjectID = sql.NullString{String: req.Tenant.ProjectID.String(), Valid: true}
 	}
 	if err := storage.CreateIntegrationToken(c.Context(), h.db, row); err != nil {
 		return c.Status(http.StatusConflict).JSON(fiber.Map{"error": err.Error()})
@@ -77,6 +105,11 @@ func (h *AdminIntegrationTokensHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *AdminIntegrationTokensHandler) Patch(c *fiber.Ctx) error {
+	orgID, ok := tenantIDFromLocals(c)
+	if !ok {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
@@ -92,6 +125,9 @@ func (h *AdminIntegrationTokensHandler) Patch(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "update failed"})
 	}
 	tok, _ := storage.GetIntegrationTokenByID(c.Context(), h.db, id)
+	if tok != nil && tok.OrgID != orgID {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "not found"})
+	}
 	if tok != nil {
 		_ = storage.InsertIntegrationTokenEvent(c.Context(), h.db, tok.OrgID, tok.ID, "name_changed", "user", nil, c.IP(), string(c.Request().Header.UserAgent()), storage.EncodeJSON(req))
 	}
@@ -99,12 +135,17 @@ func (h *AdminIntegrationTokensHandler) Patch(c *fiber.Ctx) error {
 }
 
 func (h *AdminIntegrationTokensHandler) Revoke(c *fiber.Ctx) error {
+	orgID, ok := tenantIDFromLocals(c)
+	if !ok {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
 	}
 	tok, _ := storage.GetIntegrationTokenByID(c.Context(), h.db, id)
-	if tok == nil {
+	if tok == nil || tok.OrgID != orgID {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "not found"})
 	}
 	if err := storage.RevokeIntegrationToken(c.Context(), h.db, id, time.Now().UTC()); err != nil {
@@ -116,12 +157,17 @@ func (h *AdminIntegrationTokensHandler) Revoke(c *fiber.Ctx) error {
 }
 
 func (h *AdminIntegrationTokensHandler) Rotate(c *fiber.Ctx) error {
+	orgID, ok := tenantIDFromLocals(c)
+	if !ok {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
 	}
 	tok, _ := storage.GetIntegrationTokenByID(c.Context(), h.db, id)
-	if tok == nil {
+	if tok == nil || tok.OrgID != orgID {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "not found"})
 	}
 	plain, _ := security.GenerateIntegrationToken()
@@ -135,12 +181,17 @@ func (h *AdminIntegrationTokensHandler) Rotate(c *fiber.Ctx) error {
 }
 
 func (h *AdminIntegrationTokensHandler) Audit(c *fiber.Ctx) error {
+	orgID, ok := tenantIDFromLocals(c)
+	if !ok {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "missing tenant context"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
 	}
 	tok, _ := storage.GetIntegrationTokenByID(c.Context(), h.db, id)
-	if tok == nil {
+	if tok == nil || tok.OrgID != orgID {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "not found"})
 	}
 	items, err := storage.ListIntegrationTokenEvents(c.Context(), h.db, tok.OrgID, tok.ID, 100)
