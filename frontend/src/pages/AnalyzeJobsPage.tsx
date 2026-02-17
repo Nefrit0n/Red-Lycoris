@@ -294,6 +294,15 @@ const AnalyzeJobsPage = () => {
     submitting,
   ]);
 
+  const canSubmit = useMemo(() => {
+    if (!selectedProductId) return false;
+    if (sourceMode === "latest" && !latestSnapshot) return false;
+    if (sourceMode === "select" && !selectedSnapshotId) return false;
+    if ((sourceMode === "upload" || sourceMode === "ephemeral") && !archive) return false;
+    if (selectedScanners.length === 0) return false;
+    return true;
+  }, [selectedProductId, sourceMode, latestSnapshot, selectedSnapshotId, archive, selectedScanners]);
+
   const scannerWarnings = useMemo(() => {
     if (selectedScanners.length === 0) {
       return ["Нужно выбрать хотя бы один сканер."];
@@ -380,22 +389,28 @@ const AnalyzeJobsPage = () => {
         <AnalyzeHeader onHistoryClick={handleHistoryClick} />
 
         <Stack direction={{ xs: "column", lg: "row" }} spacing={3} alignItems="flex-start">
-          <Card variant="outlined" sx={{ flex: 1 }}>
+          <Card variant="outlined" sx={{ flex: 1, minWidth: 0 }}>
             <CardContent>
               <Stack spacing={3}>
                 <Stepper activeStep={activeStep} alternativeLabel>
-                  {STEPS.map((label) => (
-                    <Step key={label}>
+                  {STEPS.map((label, index) => (
+                    <Step
+                      key={label}
+                      sx={{ cursor: index < activeStep ? "pointer" : "default" }}
+                      onClick={() => {
+                        if (index < activeStep) setActiveStep(index);
+                      }}
+                    >
                       <StepLabel>{label}</StepLabel>
                     </Step>
                   ))}
                 </Stepper>
 
-                <Box sx={{ minHeight: 200 }}>
+                <Box sx={{ minHeight: { xs: 320, sm: 380 }, overflowY: "auto" }}>
                   {stepContent}
                 </Box>
 
-                <Stack direction="row" justifyContent="space-between">
+                <Stack direction="row" justifyContent="space-between" sx={{ pt: 1, borderTop: "1px solid", borderColor: "divider" }}>
                   <Button
                     disabled={activeStep === 0}
                     onClick={() => setActiveStep((prev) => prev - 1)}
@@ -411,7 +426,7 @@ const AnalyzeJobsPage = () => {
                       Далее
                     </Button>
                   ) : (
-                    <Box />
+                    <Box sx={{ width: 88 }} />
                   )}
                 </Stack>
               </Stack>
@@ -428,6 +443,7 @@ const AnalyzeJobsPage = () => {
             onSubmit={handleSubmit}
             submitError={submitError}
             onRetry={submitError ? handleSubmit : undefined}
+            canSubmit={canSubmit}
           />
         </Stack>
 

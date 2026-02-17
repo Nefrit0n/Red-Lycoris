@@ -7,11 +7,12 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  LinearProgress,
   Stack,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AnalysisJob,
@@ -49,7 +50,15 @@ const formatLogTime = (value?: string) => {
   return date.toLocaleString("ru-RU");
 };
 
+const formatElapsed = (ms: number) => {
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+};
+
 const AUTO_REFRESH_INTERVAL = 5_000;
+const ERROR_TRUNCATE_LENGTH = 200;
 
 const AnalysisJobDetail = () => {
   const { id } = useParams();
@@ -58,6 +67,9 @@ const AnalysisJobDetail = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
+  const [elapsed, setElapsed] = useState<number>(0);
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadJob = useCallback(async () => {
     if (!id) return;
@@ -84,6 +96,22 @@ const AnalysisJobDetail = () => {
     return () => clearInterval(interval);
   }, [job, loadJob]);
 
+  // Elapsed timer for active jobs
+  useEffect(() => {
+    if (elapsedRef.current) clearInterval(elapsedRef.current);
+    if (!job || (job.status !== "processing" && job.status !== "queued")) {
+      setElapsed(0);
+      return;
+    }
+    const startTime = job.startedAt ? new Date(job.startedAt).getTime() : Date.now();
+    const tick = () => setElapsed(Date.now() - startTime);
+    tick();
+    elapsedRef.current = setInterval(tick, 1000);
+    return () => {
+      if (elapsedRef.current) clearInterval(elapsedRef.current);
+    };
+  }, [job]);
+
   const handleDownload = async (artifact: string) => {
     if (!id) return;
     setDownloadError(null);
@@ -102,6 +130,26 @@ const AnalysisJobDetail = () => {
     }
   };
 
+  const handleCopyError = async (message: string) => {
+    try {
+      await navigator.clipboard.writeText(message);
+    } catch {
+      // fallback: ignore silently
+    }
+  };
+
+  const toggleErrorExpand = (scanner: string) => {
+    setExpandedErrors((prev) => {
+      const next = new Set(prev);
+      if (next.has(scanner)) {
+        next.delete(scanner);
+      } else {
+        next.add(scanner);
+      }
+      return next;
+    });
+  };
+
   if (!id) {
     return (
       <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }}>
@@ -111,6 +159,17 @@ const AnalysisJobDetail = () => {
   }
 
   const jobStatus = job ? STATUS_CONFIG[job.status] || { label: job.status, color: "default" as const } : null;
+
+  // Scanner progress metrics
+  const scannerDetails = job?.scannerDetails ?? [];
+  const completedScanners = scannerDetails.filter(
+    (s) => s.status === "succeeded" || s.status === "failed"
+  ).length;
+  const totalScanners = scannerDetails.length;
+  const activeScannerName = scannerDetails.find(
+    (s) => s.status === "running" || s.status === "processing"
+  );
+  const isLive = job?.status === "processing" || job?.status === "queued";
 
   return (
     <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }} sx={{ maxWidth: 1000, mx: "auto" }}>
@@ -145,28 +204,28 @@ const AnalysisJobDetail = () => {
               <CardContent>
                 <Box
                   display="grid"
-                  gridTemplateColumns={{ xs: "1fr", sm: "1fr 1fr", md: "1fr 1fr 1fr 1fr" }}
+                  gridTemplateColumns={{ xs: "1fr 1fr", md: "1fr 1fr 1fr 1fr" }}
                   gap={2}
                 >
-                  <Box>
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="caption" color="text.secondary">Продукт</Typography>
-                    <Typography variant="body2" fontWeight={600}>
+                    <Typography variant="body2" fontWeight={600} noWrap>
                       {job.productName || job.productId || "—"}
                     </Typography>
                   </Box>
-                  <Box>
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="caption" color="text.secondary">Создан</Typography>
                     <Typography variant="body2">
                       {new Date(job.createdAt).toLocaleString("ru-RU")}
                     </Typography>
                   </Box>
-                  <Box>
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="caption" color="text.secondary">Длительность</Typography>
                     <Typography variant="body2">
                       {job.durationSeconds ? `${Math.round(job.durationSeconds)} сек` : "—"}
                     </Typography>
                   </Box>
-                  <Box>
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="caption" color="text.secondary">Источник</Typography>
                     <Typography variant="body2">
                       {job.sourceKind === "snapshot" ? "Снапшот" : "Архив (ephemeral)"}
@@ -180,7 +239,39 @@ const AnalysisJobDetail = () => {
             <Card variant="outlined">
               <CardContent>
                 <Stack spacing={2}>
-                  <Typography variant="subtitle1">Сканеры</Typography>
+                  <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+                    <Typography variant="subtitle1">Сканеры</Typography>
+                    {totalScanners > 0 && (
+                      <Typography variant="caption" color="text.secondary">
+                        {completedScanners} / {totalScanners} завершено
+                      </Typography>
+                    )}
+                  </Stack>
+
+                  {/* Live progress block */}
+                  {isLive && totalScanners > 0 && (
+                    <Box>
+                      <LinearProgress
+                        variant="determinate"
+                        value={(completedScanners / totalScanners) * 100}
+                        sx={{ mb: 0.75, borderRadius: 1 }}
+                      />
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography variant="caption" color="text.secondary">
+                          {formatElapsed(elapsed)} прошло
+                        </Typography>
+                        {activeScannerName && (
+                          <>
+                            <Typography variant="caption" color="text.disabled">·</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Сейчас: {scannerDisplayName(activeScannerName.scanner)}
+                            </Typography>
+                          </>
+                        )}
+                      </Stack>
+                    </Box>
+                  )}
+
                   <Divider />
                   {job.scannerDetails && job.scannerDetails.length > 0 ? (
                     job.scannerDetails.map((s) => {
@@ -190,9 +281,16 @@ const AnalysisJobDetail = () => {
                         s.startedAt && !s.finishedAt && { label: `Выполняется: ${sCfg.label}` },
                         s.finishedAt && { label: `Завершение: ${sCfg.label}`, time: formatLogTime(s.finishedAt) },
                         s.hasArtifact && { label: "Артефакт результата готов" },
-                        s.errorMessage && { label: `Ошибка: ${s.errorMessage}` },
                         !s.startedAt && { label: sCfg.label === "В очереди" || sCfg.label === "Ожидание" ? "Ожидает запуска" : `Статус: ${sCfg.label}` },
                       ].filter(Boolean) as { label: string; time?: string }[];
+
+                      const errorMsg = s.errorMessage ?? null;
+                      const isErrorExpanded = expandedErrors.has(s.scanner);
+                      const errorTruncated =
+                        errorMsg && errorMsg.length > ERROR_TRUNCATE_LENGTH && !isErrorExpanded
+                          ? errorMsg.slice(0, ERROR_TRUNCATE_LENGTH) + "…"
+                          : errorMsg;
+
                       return (
                         <Stack
                           key={s.scanner}
@@ -222,11 +320,6 @@ const AnalysisJobDetail = () => {
                               )}
                             </Stack>
                             <Stack direction="row" spacing={1} alignItems="center">
-                              {s.errorMessage && (
-                                <Tooltip title={s.errorMessage} arrow>
-                                  <Chip label="Ошибка" size="small" color="error" variant="outlined" />
-                                </Tooltip>
-                              )}
                               {s.hasArtifact && (
                                 <Button
                                   size="small"
@@ -238,6 +331,42 @@ const AnalysisJobDetail = () => {
                               )}
                             </Stack>
                           </Stack>
+
+                          {/* Inline error display */}
+                          {errorMsg && (
+                            <Alert
+                              severity="error"
+                              variant="outlined"
+                              sx={{ py: 0.5 }}
+                              action={
+                                <Tooltip title="Скопировать">
+                                  <Button
+                                    size="small"
+                                    color="inherit"
+                                    sx={{ minWidth: 0, px: 1 }}
+                                    onClick={() => handleCopyError(errorMsg)}
+                                  >
+                                    Копировать
+                                  </Button>
+                                </Tooltip>
+                              }
+                            >
+                              <Typography variant="caption" sx={{ wordBreak: "break-word" }}>
+                                {errorTruncated}
+                              </Typography>
+                              {errorMsg.length > ERROR_TRUNCATE_LENGTH && (
+                                <Typography
+                                  variant="caption"
+                                  color="primary.main"
+                                  sx={{ cursor: "pointer", display: "block", mt: 0.5 }}
+                                  onClick={() => toggleErrorExpand(s.scanner)}
+                                >
+                                  {isErrorExpanded ? "Свернуть" : "Показать полностью"}
+                                </Typography>
+                              )}
+                            </Alert>
+                          )}
+
                           <Box sx={{ pl: { sm: 7 } }}>
                             <Typography variant="caption" color="text.secondary">
                               Лог выполнения
@@ -320,21 +449,24 @@ const AnalysisJobDetail = () => {
                       <Typography variant="caption" color="text.secondary">Дубликатов</Typography>
                     </Box>
                   </Stack>
-                  {job.findingsTotal > 0 && (
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => navigate("/findings")}
-                      sx={{ alignSelf: "flex-start" }}
-                    >
-                      Перейти к находкам
-                    </Button>
-                  )}
+                  {/* Always rendered to prevent CLS — disabled when no findings */}
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={job.findingsTotal === 0}
+                    onClick={() => navigate("/findings")}
+                    sx={{
+                      alignSelf: "flex-start",
+                      opacity: job.findingsTotal === 0 ? 0.4 : 1,
+                    }}
+                  >
+                    {job.findingsTotal > 0 ? "Перейти к находкам" : "Находок нет"}
+                  </Button>
                 </Stack>
               </CardContent>
             </Card>
 
-            {/* Error message */}
+            {/* Job-level error message */}
             {job.errorMessage && (
               <Alert severity="error" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                 {job.errorMessage}
