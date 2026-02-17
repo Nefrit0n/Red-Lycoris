@@ -15,24 +15,26 @@ Red-Lycoris/
 │   │   ├── server/           # Main API server (port 8080)
 │   │   ├── migrate/          # Database migration runner
 │   │   ├── analysis_worker/  # Processes scan reports, runs scanners via Docker
-│   │   ├── intel_worker/     # Enriches findings with NVD/EPSS/KEV data
+│   │   ├── intel_worker/     # Enriches findings with NVD/EPSS/KEV/BDU data
 │   │   ├── sbom_worker/      # SBOM indexing
 │   │   └── scancli/          # CLI tool for scanning
 │   ├── internal/
-│   │   ├── handlers/         # HTTP route handlers (~35 files)
-│   │   ├── models/           # Domain models and database types (~15 files)
-│   │   ├── storage/          # PostgreSQL data access layer (~50 files)
-│   │   ├── dto/v1/           # Data transfer objects (versioned, API shapes)
-│   │   ├── parser/           # Scanner report parsers (20 formats, see above)
+│   │   ├── handlers/         # HTTP route handlers (~41 files)
+│   │   ├── models/           # Domain models and database types (~17 files)
+│   │   ├── storage/          # PostgreSQL data access layer (~58 files)
+│   │   ├── dto/v1/           # Data transfer objects (versioned, API shapes, ~10 files)
+│   │   ├── parser/           # Scanner report parsers (20 formats, 24 files)
 │   │   ├── importing/        # Report import orchestration + plugin registry
 │   │   ├── dedup/            # Finding deduplication via fingerprinting
 │   │   ├── policies/         # OPA/Rego policy evaluation engine
-│   │   ├── intel/            # Vulnerability intelligence (NVD, EPSS, KEV)
+│   │   ├── intel/            # Vulnerability intelligence (NVD, EPSS, KEV, BDU)
 │   │   ├── risk/             # Risk scoring calculations
 │   │   ├── scanners/         # Docker-based scanner execution
 │   │   ├── events/           # NATS JetStream event publishing/subscribing
 │   │   ├── middleware/       # Auth, RBAC, tenant isolation middleware
-│   │   ├── mapper/v1/        # DTO <-> model mapping (versioned)
+│   │   ├── authz/            # Authorization logic
+│   │   ├── bdu/              # BDU FSTEC vulnerability intelligence integration
+│   │   ├── mapper/v1/        # DTO <-> model mapping (versioned, ~5 files)
 │   │   ├── config/           # Environment-based configuration
 │   │   ├── objectstore/      # MinIO/S3 client wrapper
 │   │   ├── archive/          # Archive extraction utilities
@@ -40,33 +42,42 @@ Red-Lycoris/
 │   │   ├── sla/              # SLA tracking
 │   │   ├── sbomindex/        # SBOM component indexing
 │   │   └── server/           # Fiber app setup and routing
-│   └── migrations/           # SQL migration files (41 migrations, sequential numbering)
+│   └── migrations/           # SQL migration files (47 migrations, sequential numbering)
 ├── frontend/                 # React 19 + TypeScript + MUI 7
 │   └── src/
-│       ├── api/              # API client functions (12 modules)
-│       ├── components/       # Reusable UI components (37+ files, filters/ subdir)
-│       ├── pages/            # Route-level page components (22 pages)
+│       ├── api/              # API client functions (16 modules)
+│       ├── components/       # Reusable UI components (~39 files, filters/ subdir)
+│       ├── pages/            # Route-level page components (~17 pages)
 │       ├── features/         # Feature-specific modules (analyze/, findings/, filters/)
 │       ├── contexts/         # React context providers (Notification, Theme)
-│       ├── hooks/            # Custom React hooks (17 hooks)
-│       ├── types/            # TypeScript type definitions (8 modules)
-│       ├── utils/            # Utility functions (12 files)
+│       ├── hooks/            # Custom React hooks (~18 hooks)
+│       ├── types/            # TypeScript type definitions (~9 modules)
+│       ├── utils/            # Utility functions (~12 files)
 │       ├── design-system/    # Design system: tokens, theme, components, docs
 │       ├── dashboard-v2/     # Dashboard v2: widgets, templates, layouts
 │       └── test/             # Test setup (setup.ts)
 ├── python_api/               # FastAPI + Celery worker (Python 3.12+)
-│   ├── app/                  # Application code (main, celery_app, tasks)
+│   ├── app/                  # Application code (main, celery_app, tasks, bdu_sync)
 │   └── tests/                # pytest test suite
 ├── policies/rego/            # OPA Rego policy files
 │   ├── auto_assign.rego      # Auto-assignment rules
+│   ├── auto_assign_test.rego
 │   ├── gate_fail.rego        # SDLC gate failure conditions
-│   └── sla_breach.rego       # SLA breach detection
+│   ├── gate_fail_test.rego
+│   ├── sla_breach.rego       # SLA breach detection
+│   └── sla_breach_test.rego
 ├── nginx/                    # NGINX reverse proxy with self-signed TLS
 ├── contracts/                # OpenAPI contract tests (Schemathesis + fixtures)
-├── docs/                     # Architecture docs, guides, UX specs, scanner templates
+│   └── fixtures/v1/          # Contract test fixture files (6 JSON fixtures)
+├── docs/                     # Architecture docs and scanner templates
+│   ├── CODE_ANALYSIS_AND_GOST_COMPLIANCE.md
+│   ├── policies/examples/    # Example Rego policy files
+│   ├── template/             # 36 scanner report fixtures for all supported formats
+│   └── ux/logo/              # SVG logo assets
 ├── scripts/                  # CI/CD and utility scripts
-├── config/                   # Configuration files
-├── shared/                   # Shared resources
+├── config/                   # Configuration files (.env)
+├── shared/                   # Shared resources (placeholder)
+├── stress_seed_findings.py   # Stress test utility for seeding findings data
 ├── Makefile                  # Docker orchestration targets
 ├── docker-compose.yml        # 12 services (app + infra)
 └── .env.example              # Environment variable template
@@ -97,6 +108,7 @@ docker compose up --build
 | `make prune` | Remove dangling images and build cache |
 | `make prune-all` | Remove ALL unused images (caution!) |
 | `make disk` | Show Docker disk usage |
+| `make help` | Show all available make targets |
 
 ### Backend (Go)
 
@@ -176,13 +188,13 @@ cd python_api && ruff check . && ruff format --check . && pytest --cov=app
 | nats-init | natsio/nats-box (one-shot) | Creates ANALYSIS, INTEL, SBOM JetStream streams |
 | backend | backend/Dockerfile:runtime | Main REST API server (port 8080) |
 | analysis-worker | backend/Dockerfile:analysis-worker | Scanner execution via Docker-out-of-Docker |
-| intel-worker | backend/Dockerfile:intel-worker | NVD/EPSS/KEV enrichment |
+| intel-worker | backend/Dockerfile:intel-worker | NVD/EPSS/KEV/BDU enrichment |
 | python-api | python_api/ | FastAPI async service (port 8000) |
 | celery-worker | python_api/ | Celery async task worker |
 | postgres | postgres:16-alpine | Primary database |
 | redis | redis:7-alpine | Celery broker / result backend |
 | nats | nats:2.10-alpine | JetStream event streaming |
-| minio | minio/minio:RELEASE.2025-09-07 | S3-compatible object storage |
+| minio | minio/minio (RELEASE.2025-09-07) | S3-compatible object storage |
 
 ### Service Communication
 - **HTTP REST** — Fiber-based API for client-facing operations
@@ -210,13 +222,13 @@ cd python_api && ruff check . && ruff format --check . && pytest --cov=app
 ### Policy Engine
 - OPA/Rego policies in `policies/rego/`
 - Policy types: auto-assign, gate-fail, SLA breach
-- Policies have Rego test files (`*_test.rego`) — run with `opa test`
+- Each policy has a paired `*_test.rego` file — run with `opa test policies/rego/`
 - Example policies in `docs/policies/examples/`
 
 ## Code Conventions
 
 ### Go (backend)
-- **Go version**: 1.24.6 (toolchain 1.24.12)
+- **Go version**: 1.24.6 (toolchain go1.24.12)
 - **Module**: `red-lycoris/backend`
 - **Formatting**: `gofmt` enforced — no exceptions
 - **Error handling**: Explicit `if err != nil` returns; no panics in library code
@@ -228,7 +240,7 @@ cd python_api && ruff check . && ruff format --check . && pytest --cov=app
 
 ### TypeScript/React (frontend)
 - **Node version**: 20
-- **Key deps**: React 19, MUI 7, Vite 6, TypeScript 5.5, Vitest 4, Storybook 8
+- **Key deps**: React 19.2.4, MUI 7.3.7, Vite 6.4.1, TypeScript 5.5.4, Vitest 4.0.18, Storybook 8.6.14
 - **Strict mode**: `tsconfig.json` has `strict: true`
 - **Components**: Functional components with hooks only
 - **Styling**: MUI `sx` prop and Emotion — no CSS files
@@ -239,7 +251,7 @@ cd python_api && ruff check . && ruff format --check . && pytest --cov=app
 
 ### Python (python_api)
 - **Python version**: 3.12+ (Dockerfile uses 3.14-slim)
-- **Key deps**: FastAPI 0.128, Celery 5.6, Gunicorn 24, httpx 0.28
+- **Key deps**: FastAPI 0.128.0, Celery 5.6.2, Gunicorn 24.1.1, httpx 0.28.1, uvicorn 0.40.0, openpyxl 3.1.5, psycopg2-binary 2.9.11
 - **Formatting/Linting**: Ruff for both (enforced in CI)
 - **Type hints**: Required in function signatures
 - **Naming**: snake_case everywhere
@@ -265,43 +277,35 @@ Defined in `.env.example` (ports, DB, Redis, Gunicorn) and `docker-compose.yml` 
 - `JWT_SECRET` — **Required** for authentication (no default)
 - `ROOT_EMAIL`, `ROOT_PASSWORD` — Bootstrap admin credentials (defaults: root@localhost / root)
 - `NATS_URL` — NATS server (default: nats://nats:4222)
-- `OBJECT_STORE_ENDPOINT`, `OBJECT_STORE_ACCESS_KEY`, `OBJECT_STORE_SECRET_KEY`, `OBJECT_STORE_BUCKET` — MinIO config
+- `OBJECT_STORE_ENDPOINT`, `OBJECT_STORE_ACCESS_KEY`, `OBJECT_STORE_SECRET_KEY`, `OBJECT_STORE_BUCKET`, `OBJECT_STORE_USE_SSL` — MinIO config
 - `NVD_API_KEY` — Optional, for NVD vulnerability enrichment
-- `EPSS_ENABLED`, `KEV_URL` — Intelligence enrichment toggles
-- `ANALYSIS_SEMGREP_IMAGE`, `ANALYSIS_TRIVY_IMAGE`, etc. — Scanner Docker image overrides
+- `EPSS_ENABLED`, `KEV_URL`, `KEV_MIRROR_URL` — Intelligence enrichment toggles
+- `BDU_ENABLED`, `BDU_XLSX_PATH` — BDU FSTEC enrichment config (Excel file path)
+- `INTEL_REFRESH_INTERVAL`, `INTEL_WORKER_CONCURRENCY`, `INTEL_RETRY_BASE` — Intel worker tuning
+- `ANALYSIS_SEMGREP_IMAGE`, `ANALYSIS_TRIVY_IMAGE`, `ANALYSIS_CHECKOV_IMAGE`, etc. — Scanner Docker image overrides
+- `ANALYSIS_OPENGREP_BINARY` — Path to opengrep binary inside analysis-worker container
+- `ANALYSIS_MAX_ARCHIVE_BYTES`, `ANALYSIS_MAX_EXTRACT_BYTES` — Archive size limits
+- `ANALYSIS_SCANNER_TIMEOUT`, `ANALYSIS_CLEANUP_INTERVAL`, `ANALYSIS_CLEANUP_TTL` — Analysis worker config
 
 ## Documentation
 
-### Architecture & API
-- `docs/ARCHITECTURE.md` — Domain boundaries and core design principles
-- `docs/api_contracts_v1.md` — REST API contract specifications
-- `docs/domain_entities.md` — Domain model documentation
-- `docs/dev-rate-limit.md` — Rate limiting configuration
-- `docs/index.md` — Documentation index
-
-### Guides (`docs/guides/`)
-- `adding-scanner.md` — How to add a new scanner integration
-- `evolving-dto-v1.md` — DTO versioning and evolution patterns
-- `intel.md` — Vulnerability intelligence enrichment
-- `policies.md` — Policy system guide
-- `policy-lifecycle.md` — Policy lifecycle management
-- `report-versions.md` — Report version handling
-- `risk-scoring.md` — Risk scoring methodology
-- `sdlc-gates.md` — SDLC security gate configuration
-
-### UX & Design (`docs/ux/`)
-- `BRAND_TOKENS.md` — Brand identity tokens
-- `COMPONENT_SPECIFICATIONS.md` — Component design specs
-- `SMART_VIEWS_SPECIFICATION.md` — Smart views feature spec
-- `TRIAGE_DASHBOARD_UX.md` — Triage dashboard UX design
-- `logo/` — SVG logo assets
+### Architecture & Compliance
+- `docs/CODE_ANALYSIS_AND_GOST_COMPLIANCE.md` — Code analysis and GOST compliance documentation
 
 ### Scanner Templates (`docs/template/`)
-- 30+ example scanner report fixtures (JSON + SARIF) for all supported scanners
+- 36 example scanner report fixtures (JSON + SARIF) for all supported scanners
 - Used for parser development and contract testing
+- Covers: bandit, checkov, codeql, detect-secrets, gitleaks, gosec, grype, kics, npm-audit, nuclei, pip-audit, sarif-generic, semgrep, snyk, terrascan, tfsec, trivy, trufflehog, zap, and more
 
 ### Policy Examples (`docs/policies/examples/`)
 - `auto_triage_recommend.rego`, `break_build_critical_fix.rego`, `sla_critical_age.rego`
+
+### Logo Assets (`docs/ux/logo/`)
+- `logo.svg`, `logo_full.svg`
+
+### Contract Fixtures (`contracts/fixtures/v1/`)
+- `finding_detail_sast.json`, `finding_detail_sca.json`, `import_job.json`
+- `findings_list.json`, `metrics_breakdown.json`, `metrics_timeseries.json`
 
 ## Scripts
 
@@ -315,6 +319,7 @@ Defined in `.env.example` (ports, DB, Redis, Gunicorn) and `docker-compose.yml` 
 | `scripts/contracts/validate_fixtures.py` | Contract fixture validation |
 | `scripts/contracts/run_schemathesis.sh` | Schemathesis API testing |
 | `scripts/contracts/check_openapi_compat.sh` | OpenAPI backward compatibility check |
+| `stress_seed_findings.py` | Root-level stress test utility for seeding findings |
 
 ## Common Tasks for AI Assistants
 
@@ -327,14 +332,13 @@ Defined in `.env.example` (ports, DB, Redis, Gunicorn) and `docker-compose.yml` 
 6. Write tests in the handler file (`*_test.go`)
 
 ### Adding a new scanner parser
-Follow `docs/guides/adding-scanner.md`:
-1. Add parser in `backend/internal/parser/` (implement the parser interface)
+1. Add parser in `backend/internal/parser/` (implement the parser interface; see existing parsers like `bandit.go` for reference)
 2. Register in `backend/internal/parser/registry.go`
 3. Add scanner Docker image env var in `docker-compose.yml` analysis env anchor
 4. Add example report fixture in `docs/template/`
 
 ### Modifying the database schema
-1. Create a new SQL file in `backend/migrations/` with the next sequential number (currently at 041)
+1. Create a new SQL file in `backend/migrations/` with the next sequential number (currently at 047)
 2. Create both `NNN_description.up.sql` and `NNN_description.down.sql`
 3. Migrations run automatically on startup via the `db-migrate` one-shot service
 
