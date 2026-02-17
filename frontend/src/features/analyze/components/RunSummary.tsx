@@ -21,6 +21,7 @@ type RunSummaryProps = {
   onSubmit: () => void;
   submitError?: string | null;
   onRetry?: () => void;
+  canSubmit?: boolean;
 };
 
 const RunSummary = ({
@@ -33,9 +34,18 @@ const RunSummary = ({
   onSubmit,
   submitError,
   onRetry,
+  canSubmit = true,
 }: RunSummaryProps) => {
   return (
-    <Card variant="outlined" sx={{ width: { xs: "100%", lg: 320 } }}>
+    <Card
+      variant="outlined"
+      sx={{
+        width: { xs: "100%", lg: 320 },
+        position: { lg: "sticky" },
+        top: { lg: 24 },
+        alignSelf: { lg: "flex-start" },
+      }}
+    >
       <CardContent>
         <Stack spacing={2}>
           <Typography variant="subtitle1">Сводка запуска</Typography>
@@ -52,7 +62,12 @@ const RunSummary = ({
           </Stack>
 
           <Stack direction="row" spacing={1} alignItems="center">
-            <Button fullWidth variant="contained" onClick={onSubmit} disabled={submitting}>
+            <Button
+              fullWidth
+              variant="contained"
+              onClick={onSubmit}
+              disabled={!canSubmit || submitting}
+            >
               Запустить анализ
             </Button>
             <Box sx={{ width: 20, display: "flex", justifyContent: "center" }}>
@@ -60,27 +75,30 @@ const RunSummary = ({
             </Box>
           </Stack>
 
-          {uploadProgress !== null && (
-            <Stack spacing={1}>
-              <Typography variant="caption" color="text.secondary">
-                Загрузка архива: {uploadProgress}%
-              </Typography>
-              <LinearProgress variant="determinate" value={uploadProgress} />
-            </Stack>
-          )}
+          {/* Reserve fixed height for progress/error area to prevent CLS */}
+          <Box sx={{ minHeight: 40 }}>
+            {uploadProgress !== null && (
+              <Stack spacing={1}>
+                <Typography variant="caption" color="text.secondary">
+                  Загрузка архива: {uploadProgress}%
+                </Typography>
+                <LinearProgress variant="determinate" value={uploadProgress} />
+              </Stack>
+            )}
 
-          {submitError && (
-            <Box>
-              <Typography variant="body2" color="error">
-                {submitError}
-              </Typography>
-              {onRetry && (
-                <Button size="small" variant="outlined" sx={{ mt: 1 }} onClick={onRetry}>
-                  Повторить
-                </Button>
-              )}
-            </Box>
-          )}
+            {submitError && (
+              <Box>
+                <Typography variant="body2" color="error">
+                  {submitError}
+                </Typography>
+                {onRetry && (
+                  <Button size="small" variant="outlined" sx={{ mt: 1 }} onClick={onRetry}>
+                    Повторить
+                  </Button>
+                )}
+              </Box>
+            )}
+          </Box>
 
           {lastJobId && (
             <>
@@ -89,8 +107,13 @@ const RunSummary = ({
                 <Typography variant="caption" color="text.secondary">
                   Последний запуск
                 </Typography>
-                <Button component={Link} to={`/analyze/${lastJobId}`} size="small">
-                  Открыть анализ {lastJobId}
+                <Button
+                  component={Link}
+                  to={`/analyze/${lastJobId}`}
+                  size="small"
+                  sx={{ justifyContent: "flex-start", textTransform: "none" }}
+                >
+                  → Анализ #{lastJobId.slice(0, 8)}
                 </Button>
               </Stack>
             </>
