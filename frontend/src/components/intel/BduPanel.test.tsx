@@ -51,8 +51,11 @@ describe("BduPanel", () => {
 
     expect(screen.getByText("BDU:2022-01428")).toBeInTheDocument();
     expect(screen.getByText("Уязвимость пакета chromium")).toBeInTheDocument();
-    expect(screen.getByText("Критический уровень опасности")).toBeInTheDocument();
+    // Severity badge uses shortened label from severityToken()
+    expect(screen.getByText("Критический")).toBeInTheDocument();
     expect(screen.getByText("Существует")).toBeInTheDocument();
+    // Key info grid
+    expect(screen.getByText("Уязвимость кода")).toBeInTheDocument();
     expect(container).toMatchSnapshot();
   });
 
