@@ -56,6 +56,7 @@ const IntegrationTokensPage = () => {
   const [selected, setSelected] = useState<string[]>([]);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [createdToken, setCreatedToken] = useState<{ secret: string; name: string } | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditTokenId, setAuditTokenId] = useState<string>("");
@@ -148,15 +149,42 @@ const IntegrationTokensPage = () => {
   ];
 
   const handleCreate = async () => {
-    const response = await createIntegrationToken({
-      name: form.name,
-      tenant: { org_id: form.org_id, project_id: form.project_id || undefined },
-      scopes: form.scopes,
-      expires_at: form.expires_at || undefined,
-    });
-    setCreateOpen(false);
-    setCreatedToken({ secret: response.token_secret, name: response.token.name });
-    await load();
+    setCreateError("");
+
+    if (!form.name.trim()) {
+      setCreateError("Укажите имя токена.");
+      return;
+    }
+    if (!form.scopes.length) {
+      setCreateError("Выберите минимум один scope.");
+      return;
+    }
+
+    try {
+      const expiresAt = form.expires_at ? new Date(form.expires_at).toISOString() : undefined;
+      const response = await createIntegrationToken({
+        name: form.name.trim(),
+        tenant: { org_id: form.org_id || "00000000-0000-0000-0000-000000000000", project_id: form.project_id || undefined },
+        scopes: form.scopes,
+        expires_at: expiresAt,
+      });
+      setCreateOpen(false);
+      setCreatedToken({ secret: response.token_secret, name: response.token.name });
+      await load();
+    } catch (e: any) {
+      const status = e?.status;
+      if (status === 400) {
+        setCreateError("Некорректные поля формы. Проверьте дату/ID и попробуйте снова.");
+      } else if (status === 409) {
+        setCreateError("Токен с таким именем уже существует в выбранном контуре.");
+      } else if (status === 422) {
+        setCreateError("Запрос отклонён политикой токенов (scope/TTL).");
+      } else if ([401, 403].includes(status)) {
+        setCreateError("Недостаточно прав для создания токена.");
+      } else {
+        setCreateError("Не удалось создать токен. Попробуйте ещё раз.");
+      }
+    }
   };
 
   const handleRevoke = async (id: string) => {
@@ -267,6 +295,7 @@ const IntegrationTokensPage = () => {
         <Box sx={{ width: 420, p: 2 }}>
           <Typography variant="h6">Create Token</Typography>
           <Typography variant="body2" color="text.secondary">Policy: default ttl 90 days / max ttl 365 days</Typography>
+          {createError && <Alert severity="error" sx={{ mt: 2 }}>{createError}</Alert>}
           <Stack spacing={2} sx={{ mt: 2 }}>
             <TextField label="Name" value={form.name} onChange={(e) => setForm((v) => ({ ...v, name: e.target.value }))} />
             <TextField label="Org ID" value={form.org_id} onChange={(e) => setForm((v) => ({ ...v, org_id: e.target.value }))} />
