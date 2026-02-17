@@ -51,10 +51,6 @@ type Config struct {
 	KEVURL                   string
 	KEVMirrorURL             string
 	BDUEnabled               bool
-	BDUURL                   string
-	BDUMirrorURL             string
-	BDUTimeout               string
-	BDUTLSSkipVerify         bool
 	BDUXLSXPath              string
 	IntelRefreshInterval     string
 	IntelWorkerConcurrency   int
@@ -108,10 +104,6 @@ func Load() Config {
 		KEVURL:                   getEnv("KEV_URL", ""),
 		KEVMirrorURL:             getEnv("KEV_MIRROR_URL", ""),
 		BDUEnabled:               getEnvAsBool("BDU_ENABLED", false),
-		BDUURL:                   getEnv("BDU_URL", ""),
-		BDUMirrorURL:             getEnv("BDU_MIRROR_URL", ""),
-		BDUTimeout:               getEnv("BDU_TIMEOUT", "20s"),
-		BDUTLSSkipVerify:         getEnvAsBool("BDU_TLS_SKIP_VERIFY", true),
 		BDUXLSXPath:              getEnv("BDU_XLSX_PATH", "/app/assets/bdu/vullist.xlsx"),
 		IntelRefreshInterval:     getEnv("INTEL_REFRESH_INTERVAL", "24h"),
 		IntelWorkerConcurrency:   getEnvAsInt("INTEL_WORKER_CONCURRENCY", 4),

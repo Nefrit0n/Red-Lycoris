@@ -50,55 +50,12 @@ type BduLocal = {
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-const str = (v: unknown): string => {
-  if (typeof v === "string") return v.trim();
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  return "";
-};
-
-/** Detect if payload is in the new local-DB flat format. */
-const isLocalFormat = (v: unknown): v is BduLocal =>
-  isRecord(v) && typeof (v as Record<string, unknown>).bdu_id === "string";
-
-/** Normalize any payload shape into BduLocal. */
-function toLocal(key: string, raw: unknown): BduLocal {
-  if (isLocalFormat(raw)) return raw;
-  // Legacy format from web scraping — map as best we can.
-  const src = isRecord(raw) ? raw : {};
-  return {
-    bdu_id: str(src.identifier) || key,
-    name: "",
-    description: str(src.description),
-    vendor: "",
-    software_name: "",
-    software_version: "",
-    software_type: "",
-    os_hardware: "",
-    vuln_class: "",
-    detection_date: "",
-    cvss_v2: str(isRecord(src.cvss) ? (src.cvss as Record<string, unknown>).v2 : ""),
-    cvss_v3: str(isRecord(src.cvss) ? (src.cvss as Record<string, unknown>).v3 : ""),
-    cvss_v4: str(isRecord(src.cvss) ? (src.cvss as Record<string, unknown>).v4 : ""),
-    severity: str(src.severity),
-    remediation: Array.isArray(src.remediation_steps)
-      ? (src.remediation_steps as unknown[]).map(str).join("\n")
-      : "",
-    status: str(isRecord(src.status) ? (src.status as Record<string, unknown>).value : ""),
-    exploit_exists: "",
-    fix_info: "",
-    source_urls: "",
-    other_ids: "",
-    other_info: "",
-    incident_info: "",
-    exploitation_method: "",
-    fix_method: "",
-    published_date: str(isRecord(src.status) ? (src.status as Record<string, unknown>).published_at : ""),
-    updated_date: str(isRecord(src.status) ? (src.status as Record<string, unknown>).updated_at : ""),
-    consequences: "",
-    vuln_state: "",
-    cwe_description: "",
-    cwe_id: "",
-  };
+/** Cast payload to BduLocal. Data always comes from the local bdu_vulnerabilities table. */
+function toLocal(_key: string, raw: unknown): BduLocal | null {
+  if (isRecord(raw) && typeof (raw as Record<string, unknown>).bdu_id === "string") {
+    return raw as BduLocal;
+  }
+  return null;
 }
 
 function severityColor(severity: string): "error" | "warning" | "info" | "success" | "default" {
@@ -282,7 +239,9 @@ function BduEntry({ entry }: { entry: BduLocal }) {
 }
 
 export default function BduPanel({ bdu }: BduPanelProps) {
-  const entries = Object.entries(bdu).map(([key, payload]) => toLocal(key, payload));
+  const entries = Object.entries(bdu)
+    .map(([key, payload]) => toLocal(key, payload))
+    .filter((entry): entry is BduLocal => entry !== null);
 
   if (entries.length === 0) {
     return <Typography variant="body2" color="text.secondary">Данные БДУ ФСТЭК отсутствуют</Typography>;
