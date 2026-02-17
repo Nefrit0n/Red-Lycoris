@@ -14,6 +14,7 @@ import (
 
 	"red-lycoris/backend/internal/config"
 	"red-lycoris/backend/internal/middleware"
+	"red-lycoris/backend/internal/objectstore"
 	"red-lycoris/backend/internal/server"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -38,6 +39,18 @@ func (m *mockObjectStore) GetObject(_ context.Context, _ string) (io.ReadCloser,
 func (m *mockObjectStore) DeleteObject(_ context.Context, key string) error {
 	m.deleteCalls = append(m.deleteCalls, key)
 	return nil
+}
+
+func (m *mockObjectStore) PresignPut(_ context.Context, _ string, _ time.Duration) (string, error) {
+	return "http://example.local/upload", nil
+}
+
+func (m *mockObjectStore) CreateMultipartPlan(_ context.Context, _ string, _ int, _ time.Duration) (string, string, string, []objectstore.PresignedMultipartPart, error) {
+	return "upload-id", "http://example.local/complete", "http://example.local/abort", []objectstore.PresignedMultipartPart{{PartNumber: 1, URL: "http://example.local/part1"}}, nil
+}
+
+func (m *mockObjectStore) StatObject(_ context.Context, _ string) (int64, string, error) {
+	return 1, "etag", nil
 }
 
 type snapshotResponse struct {
