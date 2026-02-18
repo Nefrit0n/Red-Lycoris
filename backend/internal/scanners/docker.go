@@ -5,6 +5,7 @@ package scanners
 import (
 	"context"
 	"fmt"
+	"log"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -154,30 +155,55 @@ func RunCheckov(ctx context.Context, cfg RunnerConfig, workspace string, outputP
 }
 
 // RunKICS runs KICS IaC scanner in a Docker container.
+//
+// The command uses --ignore-on-exit results so KICS returns exit code 0
+// even when findings are present. Real engine errors (docker pull failure,
+// invalid arguments, timeout) still produce non-zero exit codes.
+//
+// Output is JSON format at a predictable path (/out/result.json).
 func RunKICS(ctx context.Context, cfg RunnerConfig, workspace string, outputPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
+
+	start := time.Now()
 
 	args, err := dockerRunArgs(cfg, workspace, outputPath, cfg.KICSImage,
 		"scan",
 		"--path", "/src",
 		"--output-path", "/out",
 		"--output-name", "result",
-		"--report-formats", "sarif",
+		"--report-formats", "json",
+		"--ignore-on-exit", "results",
 		"--no-progress",
 	)
 	if err != nil {
 		return "", err
 	}
+
+	log.Printf("[kics] starting scan image=%s workspace=%s output_dir=%s",
+		cfg.KICSImage, workspace, filepath.Dir(outputPath))
+
 	output, err := runDockerCommand(ctx, args)
+	duration := time.Since(start)
+	exitCode := exitCodeFromError(err)
+
+	log.Printf("[kics] finished duration=%s exit_code=%d output_bytes=%d",
+		duration.Round(time.Millisecond), exitCode, len(output))
+
 	if err != nil {
-		// KICS exits non-zero when findings are present — only fail on actual errors
-		if !strings.Contains(string(output), "Files scanned") {
-			return string(output), fmt.Errorf("kics failed: %v (%s)", err, strings.TrimSpace(string(output)))
+		// With --ignore-on-exit results, non-zero means a real engine error.
+		// Safety net: also accept findings-related exit codes (20-60) from
+		// older KICS versions that may not support --ignore-on-exit.
+		if result := ClassifyKICSExitCode(exitCode); !result.Success {
+			return string(output), fmt.Errorf("kics engine error (exit %d): %s",
+				exitCode, strings.TrimSpace(string(output)))
 		}
+		log.Printf("[kics] non-zero exit %d classified as findings (not engine error)", exitCode)
 	}
-	sarifPath := filepath.Join(filepath.Dir(outputPath), "result.sarif")
-	if err := renameIfExists(sarifPath, outputPath); err != nil {
+
+	// KICS writes result.json to /out/ which maps to outputDir
+	jsonPath := filepath.Join(filepath.Dir(outputPath), "result.json")
+	if err := renameIfExists(jsonPath, outputPath); err != nil {
 		return string(output), fmt.Errorf("kics output rename: %v", err)
 	}
 	if err := ensureOutputFile(outputPath, "kics", string(output)); err != nil {
