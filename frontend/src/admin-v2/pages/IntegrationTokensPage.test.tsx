@@ -11,10 +11,12 @@ vi.mock("../../api/integrationTokens", () => ({
         name: "gitlab-ci",
         revision: 1,
         tenant: { org_id: "org1", project_id: "prj1" },
-        scopes: ["ingest:run:init"],
+        scopes: ["ingest:run:init", "ingest:artifact:write"],
         state: "ACTIVE",
         created_at: new Date().toISOString(),
+        last_used_at: null,
         expires_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+        created_by: { name: "Alex Admin" },
       },
     ],
     total: 1,
@@ -27,16 +29,18 @@ vi.mock("../../api/integrationTokens", () => ({
 }));
 
 describe("IntegrationTokensPage", () => {
-  it("renders page and warning banner", async () => {
+  it("renders page and secure subtitle", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/integrations/tokens"]}>
         <IntegrationTokensPage />
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("heading", { name: "Integration Tokens" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Токены интеграции" })).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText(/expire in 7 days/i)).toBeInTheDocument();
+      expect(screen.getByText(/Токен показывается полностью только при создании/i)).toBeInTheDocument();
+      expect(screen.getByText("Alex Admin")).toBeInTheDocument();
+      expect(screen.getByText("Никогда")).toBeInTheDocument();
     });
   });
 });
