@@ -45,7 +45,7 @@ const normalizeToken = (raw: any): IntegrationToken => {
     expires_at: expiresAt,
     last_used_at: raw?.last_used_at ?? raw?.LastUsedAt,
     created_at: raw?.created_at ?? raw?.CreatedAt,
-    created_by: raw?.created_by ?? raw?.CreatedByUserID,
+    created_by: raw?.created_by ?? raw?.createdBy ?? raw?.CreatedBy ?? raw?.CreatedByUser ?? raw?.CreatedByUserID,
     updated_at: raw?.updated_at ?? raw?.UpdatedAt,
     revoked_at: revokedAt,
   };
