@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -399,6 +400,11 @@ func (h *AnalysisJobsHandler) DownloadArtifact(c *fiber.Ctx) error {
 		return c.Status(http.StatusConflict).JSON(fiber.Map{"error": "artifact not ready"})
 	}
 
+	size, _, err := h.store.StatObject(c.Context(), *key)
+	if err != nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "artifact not found"})
+	}
+
 	reader, err := h.store.GetObject(c.Context(), *key)
 	if err != nil {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "artifact not found"})
@@ -407,7 +413,10 @@ func (h *AnalysisJobsHandler) DownloadArtifact(c *fiber.Ctx) error {
 
 	c.Set("Content-Type", "application/json")
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	return c.SendStream(reader, -1)
+	if size > math.MaxInt {
+		return c.SendStream(reader, -1)
+	}
+	return c.SendStream(reader, int(size))
 }
 
 func mapAnalysisJobListItem(item storage.AnalysisJobListItem) AnalysisJobResponse {
