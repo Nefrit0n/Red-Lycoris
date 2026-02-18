@@ -63,6 +63,22 @@ const formatElapsed = (ms: number) => {
   return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
+const SEVERITY_COLOR: Record<string, "error" | "warning" | "info" | "default"> = {
+  critical: "error",
+  high: "error",
+  medium: "warning",
+  low: "info",
+  info: "default",
+};
+
+const SEVERITY_LABEL: Record<string, string> = {
+  critical: "CRITICAL",
+  high: "HIGH",
+  medium: "MEDIUM",
+  low: "LOW",
+  info: "INFO",
+};
+
 const AUTO_REFRESH_INTERVAL = 5_000;
 const ERROR_TRUNCATE_LENGTH = 200;
 
@@ -350,11 +366,24 @@ const AnalysisJobDetail = () => {
                             alignItems={{ sm: "center" }}
                             justifyContent="space-between"
                           >
-                            <Stack direction="row" spacing={1.5} alignItems="center" flex={1}>
+                            <Stack direction="row" spacing={1.5} alignItems="center" flex={1} flexWrap="wrap">
                               <Typography variant="body2" fontWeight={600} sx={{ minWidth: 100 }}>
                                 {scannerDisplayName(s.scanner)}
                               </Typography>
                               <Chip label={sCfg.label} color={sCfg.color} size="small" variant="filled" />
+                              {s.status === "succeeded" && s.maxSeverity && (
+                                <Chip
+                                  label={SEVERITY_LABEL[s.maxSeverity] || s.maxSeverity.toUpperCase()}
+                                  color={SEVERITY_COLOR[s.maxSeverity] || "default"}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              )}
+                              {s.status === "succeeded" && s.resultCount != null && s.resultCount > 0 && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {s.resultCount} {s.resultCount === 1 ? "находка" : "находок"}
+                                </Typography>
+                              )}
                               {s.durationMs != null && (
                                 <Typography variant="caption" color="text.secondary">
                                   {formatDuration(s.durationMs)}

@@ -95,7 +95,7 @@ func Load() Config {
 		AnalysisOpenGrepImage:    getEnv("ANALYSIS_OPENGREP_IMAGE", ""),
 		AnalysisTrivyImage:       getEnv("ANALYSIS_TRIVY_IMAGE", "aquasec/trivy:latest"),
 		AnalysisCheckovImage:     getEnv("ANALYSIS_CHECKOV_IMAGE", "bridgecrew/checkov:latest"),
-		AnalysisKICSImage:        getEnv("ANALYSIS_KICS_IMAGE", "checkmarx/kics:latest"),
+		AnalysisKICSImage:        getEnv("ANALYSIS_KICS_IMAGE", "checkmarx/kics:v2.1.0"),
 		AnalysisGitleaksImage:    getEnv("ANALYSIS_GITLEAKS_IMAGE", "zricethezav/gitleaks:latest"),
 		AnalysisGrypeImage:       getEnv("ANALYSIS_GRYPE_IMAGE", "anchore/grype:latest"),
 		AnalysisContainerNetwork: getEnv("ANALYSIS_CONTAINER_NETWORK", "bridge"),
