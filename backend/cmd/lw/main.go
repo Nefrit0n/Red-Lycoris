@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
@@ -13,6 +15,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"mime"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -58,6 +61,10 @@ type uploadArgs struct {
 	IdempotencyKey string
 	StateFile      string
 	MaxConcurrency int
+	MaxRetries     int
+	Timeout        time.Duration
+	Insecure       bool
+	CAFile         string
 	LogFormat      string
 }
 
@@ -75,6 +82,10 @@ func runUpload(args []string) error {
 	fs.StringVar(&cfg.IdempotencyKey, "idempotency-key", "", "optional")
 	fs.StringVar(&cfg.StateFile, "state-file", ".lw-upload-state.json", "resume state file")
 	fs.IntVar(&cfg.MaxConcurrency, "max-concurrency", 4, "upload concurrency")
+	fs.IntVar(&cfg.MaxRetries, "max-retries", 6, "request retries")
+	fs.DurationVar(&cfg.Timeout, "timeout", 60*time.Second, "http timeout")
+	fs.BoolVar(&cfg.Insecure, "insecure", false, "disable TLS certificate verification (dev only)")
+	fs.StringVar(&cfg.CAFile, "ca-file", "", "path to PEM CA bundle")
 	fs.StringVar(&cfg.LogFormat, "log", "text", "json|text")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -95,13 +106,16 @@ func runUpload(args []string) error {
 		}
 	}
 
-	ciProvider := "gitlab"
+	ciProvider := "local"
 	if cfg.CI == "auto" {
-		if !isGitLabCIEnv(os.Environ()) {
-			return errors.New("gitlab CI context not detected (ci=auto)")
+		if isGitLabCIEnv(os.Environ()) {
+			ciProvider = "gitlab"
 		}
 	}
 	if cfg.CI == "gitlab" {
+		if err := requireGitLabCIEnv(os.Environ()); err != nil {
+			return err
+		}
 		ciProvider = "gitlab"
 	}
 
@@ -111,20 +125,28 @@ func runUpload(args []string) error {
 	}
 
 	state := loadState(cfg.StateFile)
-	client := &http.Client{Timeout: 60 * time.Second}
-	initResp, err := doInit(client, cfg, meta, parsedArtifacts)
+	client, err := buildHTTPClient(cfg)
+	if err != nil {
+		return err
+	}
+	initResp, err := doInit(client, cfg, ciProvider, meta, parsedArtifacts)
 	if err != nil {
 		return err
 	}
 	state.RunID = initResp.RunID
 	state.Endpoint = cfg.Endpoint
 	state.Project = cfg.Project
+	for _, item := range initResp.UploadPlan {
+		if item.ObjectKey != "" {
+			state.ObjectKeys[item.ArtifactPath] = item.ObjectKey
+		}
+	}
 	saveState(cfg.StateFile, state)
 
 	if err := uploadAll(client, log, cfg, parsedArtifacts, initResp, state); err != nil {
 		return err
 	}
-	if err := doCommit(client, cfg, parsedArtifacts, initResp.RunID); err != nil {
+	if err := doCommit(client, cfg, parsedArtifacts, initResp.RunID, state.ObjectKeys); err != nil {
 		return err
 	}
 	log.Info("upload completed", "run_id", initResp.RunID)
@@ -221,13 +243,33 @@ func inferFormatHint(path string) string {
 }
 
 var gitLabAllowlist = []string{
-	"CI_PIPELINE_ID", "CI_PIPELINE_IID", "CI_PIPELINE_URL", "CI_JOB_ID", "CI_JOB_URL", "CI_JOB_NAME", "CI_JOB_STAGE",
-	"CI_PROJECT_ID", "CI_PROJECT_PATH", "CI_PROJECT_URL", "CI_COMMIT_SHA", "CI_COMMIT_REF_NAME", "CI_COMMIT_TAG", "CI_COMMIT_BRANCH",
+	"CI", "GITLAB_CI", "CI_PIPELINE_ID", "CI_PIPELINE_IID", "CI_PIPELINE_URL", "CI_PIPELINE_SOURCE", "CI_JOB_ID", "CI_JOB_URL",
+	"CI_JOB_NAME", "CI_JOB_STAGE", "CI_JOB_STARTED_AT", "CI_PROJECT_ID", "CI_PROJECT_PATH", "CI_PROJECT_URL", "CI_COMMIT_SHA",
+	"CI_COMMIT_REF_NAME", "CI_COMMIT_TAG", "CI_COMMIT_BRANCH", "CI_COMMIT_TIMESTAMP", "CI_SERVER_URL", "CI_API_V4_URL",
+	"CI_MERGE_REQUEST_IID", "CI_RUNNER_ID", "CI_RUNNER_TAGS",
 }
 
 func isGitLabCIEnv(env []string) bool {
 	m := toEnvMap(env)
+	if !isTrueCIFlag(m["CI"]) || !isTrueCIFlag(m["GITLAB_CI"]) {
+		return false
+	}
 	return m["CI_PIPELINE_ID"] != "" && m["CI_JOB_ID"] != ""
+}
+
+func requireGitLabCIEnv(env []string) error {
+	m := toEnvMap(env)
+	if !isTrueCIFlag(m["CI"]) || !isTrueCIFlag(m["GITLAB_CI"]) {
+		return errors.New("ci=gitlab requires CI=true and GITLAB_CI=true")
+	}
+	if m["CI_JOB_ID"] == "" || m["CI_PIPELINE_ID"] == "" {
+		return errors.New("ci=gitlab requires CI_JOB_ID and CI_PIPELINE_ID")
+	}
+	return nil
+}
+
+func isTrueCIFlag(v string) bool {
+	return strings.EqualFold(strings.TrimSpace(v), "true") || strings.TrimSpace(v) == "1"
 }
 
 func collectAllowlistGitLabEnv(env []string) map[string]string {
@@ -271,13 +313,12 @@ func buildMetadata(cfg uploadArgs, provider string) map[string]any {
 			"stage":       envmap["CI_JOB_STAGE"],
 		},
 	}
-	if strings.Contains(cfg.Enrich, "env") {
+	if provider == "gitlab" && strings.Contains(cfg.Enrich, "env") {
 		meta["gitlab_context"] = collectAllowlistGitLabEnv(os.Environ())
 	}
 	if !strings.Contains(cfg.Enrich, "git") {
 		delete(meta, "git")
 	}
-	_ = provider
 	return meta
 }
 
@@ -307,6 +348,8 @@ type initRequest struct {
 type uploadPlanPart struct {
 	PartNumber int    `json:"part_number"`
 	URL        string `json:"url"`
+	Offset     int64  `json:"offset"`
+	Size       int64  `json:"size"`
 }
 
 type uploadPlanItem struct {
@@ -315,10 +358,11 @@ type uploadPlanItem struct {
 	UploadMode   string `json:"upload_mode"`
 	PutURL       string `json:"put_url"`
 	Multipart    struct {
-		UploadID    string           `json:"upload_id"`
-		CompleteURL string           `json:"complete_url"`
-		AbortURL    string           `json:"abort_url"`
-		Parts       []uploadPlanPart `json:"parts"`
+		UploadID      string           `json:"upload_id"`
+		CompleteURL   string           `json:"complete_url"`
+		AbortURL      string           `json:"abort_url"`
+		PartSizeBytes int64            `json:"part_size_bytes"`
+		Parts         []uploadPlanPart `json:"parts"`
 	} `json:"multipart"`
 }
 
@@ -328,18 +372,18 @@ type initResponse struct {
 	UploadPlan []uploadPlanItem `json:"upload_plan"`
 }
 
-func doInit(client *http.Client, cfg uploadArgs, metadata map[string]any, artifacts []artifactSpec) (*initResponse, error) {
-	payload, _ := json.Marshal(initRequest{Provider: "gitlab", Metadata: metadata, Artifacts: artifacts})
+func doInit(client *http.Client, cfg uploadArgs, provider string, metadata map[string]any, artifacts []artifactSpec) (*initResponse, error) {
+	payload, _ := json.Marshal(initRequest{Provider: provider, Metadata: metadata, Artifacts: artifacts})
 	url := strings.TrimRight(cfg.Endpoint, "/") + "/api/v1/ingest/runs:init"
 	var out initResponse
-	err := doJSONWithRetry(client, http.MethodPost, url, cfg.Token, cfg.IdempotencyKey, payload, &out)
+	err := doJSONWithRetry(client, cfg.MaxRetries, http.MethodPost, url, cfg.Token, cfg.IdempotencyKey, payload, &out)
 	if err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-func doCommit(client *http.Client, cfg uploadArgs, artifacts []artifactSpec, runID string) error {
+func doCommit(client *http.Client, cfg uploadArgs, artifacts []artifactSpec, runID string, objectKeys map[string]string) error {
 	type commitArtifact struct {
 		Path      string `json:"path"`
 		SHA256    string `json:"sha256"`
@@ -348,15 +392,15 @@ func doCommit(client *http.Client, cfg uploadArgs, artifacts []artifactSpec, run
 	}
 	items := make([]commitArtifact, 0, len(artifacts))
 	for _, a := range artifacts {
-		items = append(items, commitArtifact{Path: a.Path, SHA256: a.SHA256, SizeBytes: a.SizeBytes, ObjectKey: ""})
+		items = append(items, commitArtifact{Path: a.Path, SHA256: a.SHA256, SizeBytes: a.SizeBytes, ObjectKey: objectKeys[a.Path]})
 	}
 	body, _ := json.Marshal(map[string]any{"artifacts": items})
 	url := strings.TrimRight(cfg.Endpoint, "/") + "/api/v1/ingest/runs/" + runID + ":commit"
-	return doJSONWithRetry(client, http.MethodPost, url, cfg.Token, "", body, nil)
+	return doJSONWithRetry(client, cfg.MaxRetries, http.MethodPost, url, cfg.Token, "", body, nil)
 }
 
-func doJSONWithRetry(client *http.Client, method, url, token, idem string, body []byte, out any) error {
-	return withRetry(func() (bool, error) {
+func doJSONWithRetry(client *http.Client, maxRetries int, method, url, token, idem string, body []byte, out any) error {
+	return withRetry(maxRetries, func() (bool, error) {
 		req, _ := http.NewRequest(method, url, bytes.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
@@ -365,7 +409,7 @@ func doJSONWithRetry(client *http.Client, method, url, token, idem string, body 
 		}
 		resp, err := client.Do(req)
 		if err != nil {
-			return true, err
+			return isRetryableNetErr(err), err
 		}
 		defer resp.Body.Close()
 		b, _ := io.ReadAll(resp.Body)
@@ -405,14 +449,18 @@ func retryAfterErr(h, msg string) error {
 	return r
 }
 
-func withRetry(fn func() (retry bool, err error)) error {
+func withRetry(maxRetries int, fn func() (retry bool, err error)) error {
+	if maxRetries < 1 {
+		maxRetries = 1
+	}
 	base := 500 * time.Millisecond
-	for i := 0; i < 6; i++ {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < maxRetries; i++ {
 		retry, err := fn()
 		if err == nil {
 			return nil
 		}
-		if !retry || i == 5 {
+		if !retry || i == maxRetries-1 {
 			return err
 		}
 		wait := base * time.Duration(1<<i)
@@ -420,22 +468,33 @@ func withRetry(fn func() (retry bool, err error)) error {
 		if errors.As(err, &r) && r.wait > 0 {
 			wait = r.wait
 		}
-		jitter := time.Duration(rand.Int63n(int64(wait / 4)))
+		jitter := time.Duration(rng.Int63n(int64(wait/4) + 1))
 		time.Sleep(wait + jitter)
 	}
 	return nil
 }
 
+func isRetryableNetErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if ne, ok := err.(net.Error); ok && (ne.Timeout() || ne.Temporary()) {
+		return true
+	}
+	return true
+}
+
 type uploadState struct {
-	RunID     string            `json:"run_id"`
-	Endpoint  string            `json:"endpoint"`
-	Project   string            `json:"project"`
-	Uploaded  map[string]string `json:"uploaded"`
-	UpdatedAt time.Time         `json:"updated_at"`
+	RunID      string            `json:"run_id"`
+	Endpoint   string            `json:"endpoint"`
+	Project    string            `json:"project"`
+	Uploaded   map[string]string `json:"uploaded"`
+	ObjectKeys map[string]string `json:"object_keys"`
+	UpdatedAt  time.Time         `json:"updated_at"`
 }
 
 func loadState(path string) uploadState {
-	st := uploadState{Uploaded: map[string]string{}}
+	st := uploadState{Uploaded: map[string]string{}, ObjectKeys: map[string]string{}}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return st
@@ -443,6 +502,9 @@ func loadState(path string) uploadState {
 	_ = json.Unmarshal(b, &st)
 	if st.Uploaded == nil {
 		st.Uploaded = map[string]string{}
+	}
+	if st.ObjectKeys == nil {
+		st.ObjectKeys = map[string]string{}
 	}
 	return st
 }
@@ -467,7 +529,11 @@ func uploadAll(client *http.Client, log *slog.Logger, cfg uploadArgs, artifacts 
 		if !ok {
 			return fmt.Errorf("missing upload plan for %s", a.Path)
 		}
-		if _, done := st.Uploaded[plan.ObjectKey]; done {
+		uploadStateKey := plan.ObjectKey
+		if uploadStateKey == "" {
+			uploadStateKey = a.Path
+		}
+		if _, done := st.Uploaded[uploadStateKey]; done {
 			continue
 		}
 		a := a
@@ -487,7 +553,11 @@ func uploadAll(client *http.Client, log *slog.Logger, cfg uploadArgs, artifacts 
 				return
 			}
 			mu.Lock()
-			st.Uploaded[pitem.ObjectKey] = etag
+			stateKey := pitem.ObjectKey
+			if stateKey == "" {
+				stateKey = a.Path
+			}
+			st.Uploaded[stateKey] = etag
 			saveState(cfg.StateFile, st)
 			mu.Unlock()
 			log.Info("uploaded artifact", "path", a.Path)
@@ -517,23 +587,31 @@ func uploadOne(client *http.Client, a artifactSpec, plan uploadPlanItem) (string
 		return resp.Header.Get("ETag"), nil
 	}
 	parts := make([]completePart, 0, len(plan.Multipart.Parts))
+	offsets, err := computeMultipartRanges(a.SizeBytes, plan)
+	if err != nil {
+		return "", err
+	}
 	for _, p := range plan.Multipart.Parts {
-		chunk, err := io.ReadAll(io.LimitReader(f, 16*1024*1024))
-		if err != nil {
-			return "", err
+		r, ok := offsets[p.PartNumber]
+		if !ok {
+			return "", fmt.Errorf("missing range for part %d", p.PartNumber)
 		}
-		req, _ := http.NewRequest(http.MethodPut, p.URL, bytes.NewReader(chunk))
+		chunk := io.NewSectionReader(f, r.Offset, r.Size)
+		req, _ := http.NewRequest(http.MethodPut, p.URL, chunk)
 		resp, err := client.Do(req)
 		if err != nil {
+			abortMultipart(client, plan)
 			return "", err
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			resp.Body.Close()
+			abortMultipart(client, plan)
 			return "", fmt.Errorf("multipart part upload failed: %d", resp.StatusCode)
 		}
 		parts = append(parts, completePart{PartNumber: p.PartNumber, ETag: strings.Trim(resp.Header.Get("ETag"), "\"")})
 		resp.Body.Close()
 	}
+	sort.Slice(parts, func(i, j int) bool { return parts[i].PartNumber < parts[j].PartNumber })
 	xmlBody, _ := xml.Marshal(completeMultipartUpload{Parts: parts})
 	req, _ := http.NewRequest(http.MethodPost, plan.Multipart.CompleteURL, bytes.NewReader(xmlBody))
 	req.Header.Set("Content-Type", "application/xml")
@@ -543,9 +621,88 @@ func uploadOne(client *http.Client, a artifactSpec, plan uploadPlanItem) (string
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		abortMultipart(client, plan)
 		return "", fmt.Errorf("multipart complete failed")
 	}
 	return resp.Header.Get("ETag"), nil
+}
+
+type multipartRange struct {
+	Offset int64
+	Size   int64
+}
+
+func computeMultipartRanges(fileSize int64, plan uploadPlanItem) (map[int]multipartRange, error) {
+	out := make(map[int]multipartRange, len(plan.Multipart.Parts))
+	hasExplicit := true
+	for _, p := range plan.Multipart.Parts {
+		if p.Offset < 0 || p.Size <= 0 {
+			hasExplicit = false
+			break
+		}
+	}
+	if hasExplicit {
+		for _, p := range plan.Multipart.Parts {
+			out[p.PartNumber] = multipartRange{Offset: p.Offset, Size: p.Size}
+		}
+		return out, nil
+	}
+	partSize := plan.Multipart.PartSizeBytes
+	if partSize <= 0 {
+		if len(plan.Multipart.Parts) == 0 {
+			return nil, errors.New("multipart plan has no parts")
+		}
+		partSize = (fileSize + int64(len(plan.Multipart.Parts)) - 1) / int64(len(plan.Multipart.Parts))
+	}
+	for i, p := range plan.Multipart.Parts {
+		offset := int64(i) * partSize
+		size := partSize
+		remaining := fileSize - offset
+		if remaining <= 0 {
+			size = 0
+		} else if remaining < size {
+			size = remaining
+		}
+		out[p.PartNumber] = multipartRange{Offset: offset, Size: size}
+	}
+	return out, nil
+}
+
+func abortMultipart(client *http.Client, plan uploadPlanItem) {
+	if strings.TrimSpace(plan.Multipart.AbortURL) == "" {
+		return
+	}
+	req, _ := http.NewRequest(http.MethodPost, plan.Multipart.AbortURL, nil)
+	resp, err := client.Do(req)
+	if err == nil && resp != nil {
+		resp.Body.Close()
+	}
+}
+
+func buildHTTPClient(cfg uploadArgs) (*http.Client, error) {
+	tlsConfig := &tls.Config{}
+	if cfg.Insecure {
+		tlsConfig.InsecureSkipVerify = true
+	}
+	if cfg.CAFile != "" {
+		pem, err := os.ReadFile(filepath.Clean(cfg.CAFile))
+		if err != nil {
+			return nil, fmt.Errorf("read ca-file: %w", err)
+		}
+		pool, err := x509.SystemCertPool()
+		if err != nil || pool == nil {
+			pool = x509.NewCertPool()
+		}
+		if ok := pool.AppendCertsFromPEM(pem); !ok {
+			return nil, errors.New("ca-file does not contain valid PEM certificates")
+		}
+		tlsConfig.RootCAs = pool
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if cfg.Insecure || cfg.CAFile != "" {
+		transport.TLSClientConfig = tlsConfig
+	}
+	return &http.Client{Timeout: cfg.Timeout, Transport: transport}, nil
 }
 
 type completeMultipartUpload struct {
