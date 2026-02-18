@@ -640,6 +640,15 @@ func runScanner(ctx context.Context, db *sql.DB, store objectstore.Store, publis
 	if artifactUploaded && scanErr == nil {
 		// #nosec G304 -- resultPath is validated to stay within jobDir.
 		if bytes, err := os.ReadFile(resultPath); err == nil {
+			// Extract scanner-specific summary (currently KICS only).
+			if scanner == "kics" {
+				if summary, extractErr := scanners.ExtractKICSSummary(bytes); extractErr == nil && summary != nil {
+					countsJSON, _ := json.Marshal(summary.SeverityCounts)
+					countsStr := string(countsJSON)
+					_ = storage.UpdateAnalysisJobScannerSummary(ctx, db, job.ID, scanner, &summary.ResultCount, &summary.MaxSeverity, &countsStr)
+				}
+			}
+
 			importResult, importErr = importing.ImportFindings(ctx, db, importing.ImportParams{
 				Scanner:      importScanner,
 				Report:       bytes,

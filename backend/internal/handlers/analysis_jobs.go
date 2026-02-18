@@ -32,14 +32,17 @@ type AnalysisJobsHandler struct {
 }
 
 type AnalysisJobScannerResponse struct {
-	Scanner      string  `json:"scanner"`
-	Status       string  `json:"status"`
-	HasArtifact  bool    `json:"hasArtifact"`
-	ImportJobID  *string `json:"importJobId,omitempty"`
-	ErrorMessage *string `json:"errorMessage,omitempty"`
-	DurationMs   *int    `json:"durationMs,omitempty"`
-	StartedAt    *string `json:"startedAt,omitempty"`
-	FinishedAt   *string `json:"finishedAt,omitempty"`
+	Scanner        string  `json:"scanner"`
+	Status         string  `json:"status"`
+	HasArtifact    bool    `json:"hasArtifact"`
+	ImportJobID    *string `json:"importJobId,omitempty"`
+	ErrorMessage   *string `json:"errorMessage,omitempty"`
+	DurationMs     *int    `json:"durationMs,omitempty"`
+	StartedAt      *string `json:"startedAt,omitempty"`
+	FinishedAt     *string `json:"finishedAt,omitempty"`
+	ResultCount    *int    `json:"resultCount,omitempty"`
+	MaxSeverity    *string `json:"maxSeverity,omitempty"`
+	SeverityCounts *string `json:"severityCounts,omitempty"`
 }
 
 type AnalysisJobResponse struct {
@@ -313,10 +316,13 @@ func (h *AnalysisJobsHandler) Get(c *fiber.Ctx) error {
 		details := make([]AnalysisJobScannerResponse, 0, len(scannerRows))
 		for _, s := range scannerRows {
 			d := AnalysisJobScannerResponse{
-				Scanner:     s.Scanner,
-				Status:      s.Status,
-				HasArtifact: s.ArtifactKey != nil && *s.ArtifactKey != "",
-				DurationMs:  s.DurationMs,
+				Scanner:        s.Scanner,
+				Status:         s.Status,
+				HasArtifact:    s.ArtifactKey != nil && *s.ArtifactKey != "",
+				DurationMs:     s.DurationMs,
+				ResultCount:    s.ResultCount,
+				MaxSeverity:    s.MaxSeverity,
+				SeverityCounts: s.SeverityCounts,
 			}
 			if s.StartedAt != nil {
 				v := s.StartedAt.Format(time.RFC3339)

@@ -65,10 +65,29 @@ func UpdateAnalysisJobScannerStatus(ctx context.Context, db *sql.DB, jobID uuid.
 	return err
 }
 
+// UpdateAnalysisJobScannerSummary updates a scanner row with scan result summary.
+func UpdateAnalysisJobScannerSummary(ctx context.Context, db *sql.DB, jobID uuid.UUID, scanner string, resultCount *int, maxSeverity *string, severityCountsJSON *string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE analysis_job_scanners
+		 SET result_count    = COALESCE($1, result_count),
+		     max_severity    = COALESCE($2, max_severity),
+		     severity_counts = COALESCE($3::jsonb, severity_counts)
+		 WHERE job_id = $4 AND scanner = $5`,
+		resultCount,
+		anyStringPtr(maxSeverity),
+		anyStringPtr(severityCountsJSON),
+		jobID,
+		scanner,
+	)
+	return err
+}
+
 // ListAnalysisJobScanners returns all scanner rows for a given job.
 func ListAnalysisJobScanners(ctx context.Context, db *sql.DB, jobID uuid.UUID) ([]models.AnalysisJobScanner, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, job_id, scanner, status, artifact_key, import_job_id, error_message, started_at, finished_at, duration_ms
+		`SELECT id, job_id, scanner, status, artifact_key, import_job_id, error_message,
+		        started_at, finished_at, duration_ms,
+		        result_count, max_severity, severity_counts::text
 		 FROM analysis_job_scanners
 		 WHERE job_id = $1
 		 ORDER BY scanner`,
@@ -86,6 +105,7 @@ func ListAnalysisJobScanners(ctx context.Context, db *sql.DB, jobID uuid.UUID) (
 			&s.ID, &s.JobID, &s.Scanner, &s.Status,
 			&s.ArtifactKey, &s.ImportJobID, &s.ErrorMessage,
 			&s.StartedAt, &s.FinishedAt, &s.DurationMs,
+			&s.ResultCount, &s.MaxSeverity, &s.SeverityCounts,
 		); err != nil {
 			return nil, err
 		}
