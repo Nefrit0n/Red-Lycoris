@@ -33,14 +33,17 @@ func IsScannerSupported(name string) bool {
 
 // AnalysisJobScanner tracks one scanner's execution within an analysis job.
 type AnalysisJobScanner struct {
-	ID           uuid.UUID  `db:"id"`
-	JobID        uuid.UUID  `db:"job_id"`
-	Scanner      string     `db:"scanner"`
-	Status       string     `db:"status"`
-	ArtifactKey  *string    `db:"artifact_key"`
-	ImportJobID  *uuid.UUID `db:"import_job_id"`
-	ErrorMessage *string    `db:"error_message"`
-	StartedAt    *time.Time `db:"started_at"`
-	FinishedAt   *time.Time `db:"finished_at"`
-	DurationMs   *int       `db:"duration_ms"`
+	ID             uuid.UUID  `db:"id"`
+	JobID          uuid.UUID  `db:"job_id"`
+	Scanner        string     `db:"scanner"`
+	Status         string     `db:"status"`
+	ArtifactKey    *string    `db:"artifact_key"`
+	ImportJobID    *uuid.UUID `db:"import_job_id"`
+	ErrorMessage   *string    `db:"error_message"`
+	StartedAt      *time.Time `db:"started_at"`
+	FinishedAt     *time.Time `db:"finished_at"`
+	DurationMs     *int       `db:"duration_ms"`
+	ResultCount    *int       `db:"result_count"`
+	MaxSeverity    *string    `db:"max_severity"`
+	SeverityCounts *string    `db:"severity_counts"` // JSON string, e.g. {"HIGH":3,"MEDIUM":5}
 }

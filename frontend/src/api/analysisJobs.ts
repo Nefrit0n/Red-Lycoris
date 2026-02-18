@@ -10,6 +10,9 @@ export interface AnalysisJobScannerDetail {
   durationMs?: number;
   startedAt?: string;
   finishedAt?: string;
+  resultCount?: number;
+  maxSeverity?: string;
+  severityCounts?: string;
 }
 
 export interface AnalysisJob {
