@@ -5,16 +5,16 @@ set -eu
 LW_SH="${LW_SH:-./lw.sh}"
 
 # === filled test defaults (override by exporting env vars before running) ===
-ENDPOINT="${ENDPOINT:-https://localhost}"   # поменяй на свой API
+ENDPOINT="${ENDPOINT:-https://localhost:443}"   # поменяй на свой API
 PROJECT="${PROJECT:-demo-project}"               # project id/slug как у тебя в платформе
-TOKEN="${TOKEN:-rlx_test_REPLACE_ME}"            # ВАЖНО: замени на реальный токен
+TOKEN="${TOKEN:-rlx_XA60coxj3-p09X2GE3Y0Mt0Ft3R25BW8bTVbHWUBAEo}"            # ВАЖНО: замени на реальный токен
 
 # lw.sh release channel (if you use bootstrap downloads)
-LW_BASE_URL="${LW_BASE_URL:-http://localhost:8000/releases/lw}"
+LW_BASE_URL="${LW_BASE_URL:-http://localhost:443/releases/lw}"
 LW_VERSION="${LW_VERSION:-0.1.0}"
 
 # scanning results file
-RESULT_FILE="${RESULT_FILE:-result_trivy.json}"
+RESULT_FILE="${RESULT_FILE:-trivy_result.json}"
 
 # optional tuning
 STATE_FILE="${STATE_FILE:-.lw-upload-state.json}"
