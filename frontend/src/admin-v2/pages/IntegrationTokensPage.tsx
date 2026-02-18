@@ -66,35 +66,35 @@ const formatRelative = (value?: string | null, fallback = "—"): string => {
   const diffMs = Date.now() - dt.getTime();
   const absMs = Math.abs(diffMs);
   const minutes = Math.floor(absMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ${diffMs >= 0 ? "ago" : "from now"}`;
+  if (minutes < 1) return "только что";
+  if (minutes < 60) return `${minutes} мин ${diffMs >= 0 ? "назад" : "спустя"}`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${diffMs >= 0 ? "ago" : "from now"}`;
+  if (hours < 24) return `${hours} ч ${diffMs >= 0 ? "назад" : "спустя"}`;
   const days = Math.floor(hours / 24);
-  return `${days}d ${diffMs >= 0 ? "ago" : "from now"}`;
+  return `${days} д ${diffMs >= 0 ? "назад" : "спустя"}`;
 };
 
 const formatCreatedBy = (createdBy: IntegrationToken["created_by"]): string => {
-  if (!createdBy) return "System";
-  if (typeof createdBy === "string") return createdBy || "System";
+  if (!createdBy) return "Система";
+  if (typeof createdBy === "string") return createdBy || "Система";
   if (typeof createdBy === "object") {
     const actor = createdBy as { name?: string; email?: string; id?: string };
-    return actor.name || actor.email || actor.id || "System";
+    return actor.name || actor.email || actor.id || "Система";
   }
-  return "System";
+  return "Система";
 };
 
-const tokenStatus = (row: IntegrationToken): "Active" | "Revoked" | "Expired" => {
-  if (row.state === "REVOKED") return "Revoked";
-  if (row.state === "EXPIRED") return "Expired";
+const tokenStatus = (row: IntegrationToken): "Активен" | "Отозван" | "Истёк" => {
+  if (row.state === "REVOKED") return "Отозван";
+  if (row.state === "EXPIRED") return "Истёк";
   const expiresAt = parseDate(row.expires_at);
-  if (expiresAt && expiresAt.getTime() <= Date.now()) return "Expired";
-  return "Active";
+  if (expiresAt && expiresAt.getTime() <= Date.now()) return "Истёк";
+  return "Активен";
 };
 
 const isExpiringInDays = (row: IntegrationToken, days: number) => {
   const expiresAt = parseDate(row.expires_at);
-  if (!expiresAt || tokenStatus(row) !== "Active") return false;
+  if (!expiresAt || tokenStatus(row) !== "Активен") return false;
   return expiresAt <= new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 };
 
@@ -179,9 +179,9 @@ const IntegrationTokensPage = () => {
     }
   }, [tokenIdFromRoute, items]);
 
-  const activeCount = useMemo(() => items.filter((it) => tokenStatus(it) === "Active").length, [items]);
+  const activeCount = useMemo(() => items.filter((it) => tokenStatus(it) === "Активен").length, [items]);
   const expiringSoonCount = useMemo(() => items.filter((it) => isExpiringInDays(it, 7)).length, [items]);
-  const revokedCount = useMemo(() => items.filter((it) => tokenStatus(it) === "Revoked").length, [items]);
+  const revokedCount = useMemo(() => items.filter((it) => tokenStatus(it) === "Отозван").length, [items]);
   const neverUsedCount = useMemo(() => items.filter((it) => !parseDate(it.last_used_at)).length, [items]);
   const hasActiveFilters = useMemo(
     () => Boolean(search || expiringIn || projectFilter !== "ALL" || statusFilter !== "ALL"),
@@ -190,57 +190,57 @@ const IntegrationTokensPage = () => {
   const projectOptions = useMemo(() => Array.from(new Set(items.map((it) => it.tenant.project_id).filter(Boolean))) as string[], [items]);
 
   const columns: GridColDef<IntegrationToken>[] = [
-    { field: "name", headerName: "Name", flex: 1.2 },
-    { field: "scope", headerName: "Scope", flex: 0.8, valueGetter: (_, row) => (row.tenant.project_id ? "Project" : "Org") },
+    { field: "name", headerName: "Название", flex: 1.2 },
+    { field: "scope", headerName: "Область", flex: 0.8, valueGetter: (_, row) => (row.tenant.project_id ? "Проект" : "Орг") },
     {
       field: "permissions",
-      headerName: "Permissions",
+      headerName: "Права",
       flex: 1.2,
       sortable: false,
       renderCell: (params) => {
         if ((params.row as any).__skeleton) return <Skeleton variant="text" width="70%" />;
         const scopeList = params.row.scopes || [];
         return (
-          <Tooltip title={scopeList.length ? <Box>{scopeList.map((s) => <Typography key={s} variant="caption" display="block">{s}</Typography>)}</Box> : "No permissions"}>
-            <Chip size="small" label={`${scopeList.length} scopes`} />
+          <Tooltip title={scopeList.length ? <Box>{scopeList.map((s) => <Typography key={s} variant="caption" display="block">{s}</Typography>)}</Box> : "Нет прав"}>
+            <Chip size="small" label={`${scopeList.length} прав`} />
           </Tooltip>
         );
       },
     },
     {
       field: "status",
-      headerName: "Status",
+      headerName: "Статус",
       flex: 0.8,
       valueGetter: (_, row) => tokenStatus(row),
       renderCell: (params) => {
         if ((params.row as any).__skeleton) return <Skeleton variant="text" width="60%" />;
-        return <Chip size="small" color={params.value === "Active" ? "success" : params.value === "Expired" ? "warning" : "default"} label={String(params.value)} />;
+        return <Chip size="small" color={params.value === "Активен" ? "success" : params.value === "Истёк" ? "warning" : "default"} label={String(params.value)} />;
       },
     },
     {
       field: "last_used_at",
-      headerName: "Last used",
+      headerName: "Последнее использование",
       flex: 1.1,
-      valueGetter: (_, row) => (parseDate(row.last_used_at) ? `${formatDate(row.last_used_at)} (${formatRelative(row.last_used_at)})` : "Never"),
+      valueGetter: (_, row) => (parseDate(row.last_used_at) ? `${formatDate(row.last_used_at)} (${formatRelative(row.last_used_at)})` : "Никогда"),
     },
-    { field: "expires_at", headerName: "Expires", flex: 1, valueGetter: (_, row) => formatDate(row.expires_at) },
-    { field: "created_at", headerName: "Created", flex: 1, valueGetter: (_, row) => formatDate(row.created_at) },
-    { field: "created_by", headerName: "Created by", flex: 1, valueGetter: (_, row) => formatCreatedBy(row.created_by) },
+    { field: "expires_at", headerName: "Истекает", flex: 1, valueGetter: (_, row) => formatDate(row.expires_at) },
+    { field: "created_at", headerName: "Создан", flex: 1, valueGetter: (_, row) => formatDate(row.created_at) },
+    { field: "created_by", headerName: "Кем создан", flex: 1, valueGetter: (_, row) => formatCreatedBy(row.created_by) },
     {
       field: "actions",
       type: "actions",
-      headerName: "Actions",
+      headerName: "Действия",
       getActions: (params) => {
         if ((params.row as any).__skeleton) return [];
         return [
-          <GridActionsCellItem icon={<span />} label="View details" showInMenu onClick={() => {
+          <GridActionsCellItem icon={<span />} label="Открыть детали" showInMenu onClick={() => {
             setDetailsToken(params.row);
             navigate(`/admin/integrations/tokens/${params.row.id}`);
           }} />,
-          <GridActionsCellItem icon={<span />} label="View audit" showInMenu onClick={() => openAudit(params.row.id)} />,
-          <GridActionsCellItem icon={<span />} label="Revoke" showInMenu onClick={() => setRevokeTarget({ ids: [params.row.id], label: `Revoke token “${params.row.name}”?` })} />,
-          <GridActionsCellItem icon={<span />} label="Rotate" showInMenu onClick={() => handleRotate(params.row.id)} />,
-          <GridActionsCellItem icon={<ContentCopyIcon fontSize="small" />} label="Copy id" showInMenu onClick={() => navigator.clipboard.writeText(params.row.id)} />,
+          <GridActionsCellItem icon={<span />} label="Аудит" showInMenu onClick={() => openAudit(params.row.id)} />,
+          <GridActionsCellItem icon={<span />} label="Отозвать" showInMenu onClick={() => setRevokeTarget({ ids: [params.row.id], label: `Отозвать токен «${params.row.name}»?` })} />,
+          <GridActionsCellItem icon={<span />} label="Ротировать" showInMenu onClick={() => handleRotate(params.row.id)} />,
+          <GridActionsCellItem icon={<ContentCopyIcon fontSize="small" />} label="Копировать ID" showInMenu onClick={() => navigator.clipboard.writeText(params.row.id)} />,
         ];
       },
     },
@@ -298,7 +298,7 @@ const IntegrationTokensPage = () => {
   };
 
   const handleExtend = async (id: string) => {
-    const value = window.prompt("New expiry ISO datetime", new Date(Date.now() + 30 * 86400000).toISOString());
+    const value = window.prompt("Новый срок (ISO datetime)", new Date(Date.now() + 30 * 86400000).toISOString());
     if (!value) return;
     await patchIntegrationToken(id, { expires_at: value });
     await load();
@@ -341,53 +341,53 @@ const IntegrationTokensPage = () => {
   );
 
   return (
-    <AdminV2Shell title="Integration Tokens" primaryAction={{ label: "Create Token", onClick: () => setCreateOpen(true) }}>
+    <AdminV2Shell title="Токены интеграции" primaryAction={{ label: "Создать токен", onClick: () => setCreateOpen(true) }}>
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">Токен показывается полностью только при создании.</Typography>
 
         {error && <Alert severity="error">{error}</Alert>}
 
         <Stack direction="row" spacing={1} flexWrap="wrap">
-          <Chip label={`Active: ${activeCount}`} color={statusFilter === "ACTIVE" ? "primary" : "default"} onClick={() => setStatusFilter("ACTIVE")} />
-          <Chip label={`Expiring soon (7d): ${expiringSoonCount}`} color={statusFilter === "EXPIRING" ? "primary" : "default"} onClick={() => setStatusFilter("EXPIRING")} />
-          <Chip label={`Revoked: ${revokedCount}`} color={statusFilter === "REVOKED" ? "primary" : "default"} onClick={() => setStatusFilter("REVOKED")} />
-          <Chip label={`Never used: ${neverUsedCount}`} onClick={() => setExpiringIn("")} />
+          <Chip label={`Активные: ${activeCount}`} color={statusFilter === "ACTIVE" ? "primary" : "default"} onClick={() => setStatusFilter("ACTIVE")} />
+          <Chip label={`Скоро истекают (7д): ${expiringSoonCount}`} color={statusFilter === "EXPIRING" ? "primary" : "default"} onClick={() => setStatusFilter("EXPIRING")} />
+          <Chip label={`Отозванные: ${revokedCount}`} color={statusFilter === "REVOKED" ? "primary" : "default"} onClick={() => setStatusFilter("REVOKED")} />
+          <Chip label={`Не использовались: ${neverUsedCount}`} onClick={() => setExpiringIn("")} />
         </Stack>
 
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1}>
-          <TextField label="Search (name/id)" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 220 }} />
+          <TextField label="Поиск (имя/ID)" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 220 }} />
           <FormControl sx={{ minWidth: 170 }}>
-            <InputLabel>Project</InputLabel>
-            <Select label="Project" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
-              <MenuItem value="ALL">All</MenuItem>
+            <InputLabel>Проект</InputLabel>
+            <Select label="Проект" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
+              <MenuItem value="ALL">Все</MenuItem>
               {projectOptions.map((project) => <MenuItem key={project} value={project}>{project}</MenuItem>)}
             </Select>
           </FormControl>
           <Box>
             <Tabs value={statusFilter} onChange={(_, value) => setStatusFilter(value)}>
-              <Tab label="Active" value="ACTIVE" />
-              <Tab label="Expiring soon" value="EXPIRING" />
-              <Tab label="Revoked" value="REVOKED" />
-              <Tab label="All" value="ALL" />
+              <Tab label="Активные" value="ACTIVE" />
+              <Tab label="Скоро истекают" value="EXPIRING" />
+              <Tab label="Отозванные" value="REVOKED" />
+              <Tab label="Все" value="ALL" />
             </Tabs>
           </Box>
           <FormControl sx={{ minWidth: 170 }}>
-            <InputLabel>Expiring in</InputLabel>
-            <Select label="Expiring in" value={expiringIn} onChange={(e) => setExpiringIn(e.target.value)}>
-              <MenuItem value="">Any</MenuItem>
-              <MenuItem value="7">7 days</MenuItem>
-              <MenuItem value="30">30 days</MenuItem>
-              <MenuItem value="90">90 days</MenuItem>
+            <InputLabel>Истекают через</InputLabel>
+            <Select label="Истекают через" value={expiringIn} onChange={(e) => setExpiringIn(e.target.value)}>
+              <MenuItem value="">Любой срок</MenuItem>
+              <MenuItem value="7">7 дней</MenuItem>
+              <MenuItem value="30">30 дней</MenuItem>
+              <MenuItem value="90">90 дней</MenuItem>
             </Select>
           </FormControl>
-          {hasActiveFilters && <Button variant="outlined" onClick={clearFilters}>Clear filters</Button>}
+          {hasActiveFilters && <Button variant="outlined" onClick={clearFilters}>Сбросить фильтры</Button>}
         </Stack>
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} justifyContent="space-between" sx={{ py: 1, px: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
-          <Typography variant="body2">{selected.length} selected</Typography>
+          <Typography variant="body2">Выбрано: {selected.length}</Typography>
           <Stack direction="row" spacing={1}>
-            <Button variant="outlined" onClick={() => setSelected([])} disabled={!selected.length}>Clear selection</Button>
-            <Button color="error" onClick={() => setRevokeTarget({ ids: selected, label: `Revoke ${selected.length} selected token(s)?` })} disabled={!selected.length}>Revoke selected</Button>
+            <Button variant="outlined" onClick={() => setSelected([])} disabled={!selected.length}>Очистить выбор</Button>
+            <Button color="error" onClick={() => setRevokeTarget({ ids: selected, label: `Отозвать выбранные токены (${selected.length})?` })} disabled={!selected.length}>Отозвать выбранные</Button>
           </Stack>
         </Stack>
 
@@ -412,66 +412,66 @@ const IntegrationTokensPage = () => {
         </Box>
 
         {!loading && items.length === 0 && !hasActiveFilters && (
-          <Alert severity="info" action={<Button onClick={() => setCreateOpen(true)}>Create token</Button>}>
-            No integration tokens yet.
+          <Alert severity="info" action={<Button onClick={() => setCreateOpen(true)}>Создать токен</Button>}>
+            Интеграционных токенов пока нет.
           </Alert>
         )}
         {!loading && items.length === 0 && hasActiveFilters && (
-          <Alert severity="info" action={<Button onClick={clearFilters}>Clear filters</Button>}>
-            Nothing matches current filters.
+          <Alert severity="info" action={<Button onClick={clearFilters}>Сбросить фильтры</Button>}>
+            По текущим фильтрам ничего не найдено.
           </Alert>
         )}
       </Stack>
 
       <Drawer anchor="right" open={createOpen} onClose={() => setCreateOpen(false)}>
         <Box sx={{ width: 420, p: 2 }}>
-          <Typography variant="h6">Create Token</Typography>
+          <Typography variant="h6">Создать токен</Typography>
           {createError && <Alert severity="error" sx={{ mt: 2 }}>{createError}</Alert>}
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField required label="Name" value={form.name} onChange={(e) => setForm((v) => ({ ...v, name: e.target.value }))} />
-            <TextField label="Org ID" value={form.org_id} onChange={(e) => setForm((v) => ({ ...v, org_id: e.target.value }))} />
+            <TextField required label="Название" value={form.name} onChange={(e) => setForm((v) => ({ ...v, name: e.target.value }))} />
+            <TextField label="ID организации" value={form.org_id} onChange={(e) => setForm((v) => ({ ...v, org_id: e.target.value }))} />
             <FormControl>
-              <InputLabel>Scope</InputLabel>
-              <Select label="Scope" value={form.scopeType} onChange={(e) => setForm((v) => ({ ...v, scopeType: e.target.value as "org" | "project" }))}>
-                <MenuItem value="org">Org</MenuItem>
-                <MenuItem value="project">Project</MenuItem>
+              <InputLabel>Область</InputLabel>
+              <Select label="Область" value={form.scopeType} onChange={(e) => setForm((v) => ({ ...v, scopeType: e.target.value as "org" | "project" }))}>
+                <MenuItem value="org">Орг</MenuItem>
+                <MenuItem value="project">Проект</MenuItem>
               </Select>
             </FormControl>
-            {form.scopeType === "project" && <TextField label="Project ID" value={form.project_id} onChange={(e) => setForm((v) => ({ ...v, project_id: e.target.value }))} />}
+            {form.scopeType === "project" && <TextField label="ID проекта" value={form.project_id} onChange={(e) => setForm((v) => ({ ...v, project_id: e.target.value }))} />}
             <FormControl>
-              <InputLabel>Expiration</InputLabel>
-              <Select label="Expiration" value={form.expiresDays} onChange={(e) => setForm((v) => ({ ...v, expiresDays: e.target.value }))}>
-                <MenuItem value="7">7 days</MenuItem>
-                <MenuItem value="30">30 days</MenuItem>
-                <MenuItem value="90">90 days</MenuItem>
+              <InputLabel>Срок действия</InputLabel>
+              <Select label="Срок действия" value={form.expiresDays} onChange={(e) => setForm((v) => ({ ...v, expiresDays: e.target.value }))}>
+                <MenuItem value="7">7 дней</MenuItem>
+                <MenuItem value="30">30 дней</MenuItem>
+                <MenuItem value="90">90 дней</MenuItem>
               </Select>
             </FormControl>
             <FormControl>
-              <InputLabel>Permissions</InputLabel>
+              <InputLabel>Права</InputLabel>
               <Select
                 multiple
-                label="Permissions"
+                label="Права"
                 value={form.scopes}
                 onChange={(e) => setForm((v) => ({ ...v, scopes: e.target.value as IntegrationTokenScope[] }))}
               >
                 {allScopes.map((scope) => <MenuItem key={scope} value={scope}>{scope}</MenuItem>)}
               </Select>
             </FormControl>
-            <Button onClick={handleCreate}>Create</Button>
+            <Button onClick={handleCreate}>Создать</Button>
           </Stack>
         </Box>
       </Drawer>
 
       <Dialog open={Boolean(createdToken)} onClose={() => setCreatedToken(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Token created</DialogTitle>
+        <DialogTitle>Токен создан</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" color="text.secondary">Token for {createdToken?.name}. It is shown once only.</Typography>
+          <Typography variant="body2" color="text.secondary">Токен для {createdToken?.name}. Полный секрет показывается только один раз.</Typography>
           {createdToken?.secret ? (
             <TextField fullWidth sx={{ mt: 2 }} value={createdToken.secret} InputProps={{ readOnly: true }} />
           ) : (
-            <Alert severity="info" sx={{ mt: 2 }}>API did not return a secret. Please use your secure vault flow.</Alert>
+            <Alert severity="info" sx={{ mt: 2 }}>API не вернул секрет токена. Используйте ваш защищённый процесс хранения.</Alert>
           )}
-          <FormControlLabel sx={{ mt: 2 }} control={<Checkbox checked={savedTokenAck} onChange={(e) => setSavedTokenAck(e.target.checked)} />} label="I saved it" />
+          <FormControlLabel sx={{ mt: 2 }} control={<Checkbox checked={savedTokenAck} onChange={(e) => setSavedTokenAck(e.target.checked)} />} label="Я сохранил токен" />
         </DialogContent>
         <DialogActions>
           <Button
@@ -482,21 +482,21 @@ const IntegrationTokensPage = () => {
             }}
             disabled={!createdToken?.secret}
           >
-            Copy
+            Копировать
           </Button>
-          <Button onClick={() => setCreatedToken(null)} disabled={!savedTokenAck}>Close</Button>
+          <Button onClick={() => setCreatedToken(null)} disabled={!savedTokenAck}>Закрыть</Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={Boolean(revokeTarget)} onClose={() => setRevokeTarget(null)}>
-        <DialogTitle>Confirm revoke</DialogTitle>
+        <DialogTitle>Подтвердите отзыв</DialogTitle>
         <DialogContent>
           <Typography>{revokeTarget?.label}</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>This action is destructive and cannot be undone.</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Это критичное действие, его нельзя отменить.</Typography>
         </DialogContent>
         <DialogActions>
-          <Button variant="outlined" onClick={() => setRevokeTarget(null)}>Cancel</Button>
-          <Button color="error" onClick={confirmRevoke}>Revoke</Button>
+          <Button variant="outlined" onClick={() => setRevokeTarget(null)}>Отмена</Button>
+          <Button color="error" onClick={confirmRevoke}>Отозвать</Button>
         </DialogActions>
       </Dialog>
 
@@ -505,25 +505,25 @@ const IntegrationTokensPage = () => {
         navigate("/admin/integrations/tokens");
       }}>
         <Box sx={{ width: 480, p: 2 }}>
-          <Typography variant="h6">Token details</Typography>
+          <Typography variant="h6">Детали токена</Typography>
           {detailsToken && (
             <Stack spacing={1.2} sx={{ mt: 2 }}>
-              <Typography><strong>Name:</strong> {detailsToken.name}</Typography>
-              <Typography><strong>Scope:</strong> {detailsToken.tenant.project_id ? `Project (${detailsToken.tenant.project_id})` : "Org"}</Typography>
-              <Typography><strong>Created by:</strong> {formatCreatedBy(detailsToken.created_by)}</Typography>
-              <Typography><strong>Created:</strong> {formatDate(detailsToken.created_at)}</Typography>
-              <Typography><strong>Last used:</strong> {formatDate(detailsToken.last_used_at, "Never")}</Typography>
-              <Typography><strong>Expires:</strong> {formatDate(detailsToken.expires_at)}</Typography>
-              <Typography><strong>Status:</strong> {tokenStatus(detailsToken)}</Typography>
-              <Typography><strong>Permissions:</strong></Typography>
+              <Typography><strong>Название:</strong> {detailsToken.name}</Typography>
+              <Typography><strong>Область:</strong> {detailsToken.tenant.project_id ? `Проект (${detailsToken.tenant.project_id})` : "Орг"}</Typography>
+              <Typography><strong>Кем создан:</strong> {formatCreatedBy(detailsToken.created_by)}</Typography>
+              <Typography><strong>Создан:</strong> {formatDate(detailsToken.created_at)}</Typography>
+              <Typography><strong>Последнее использование:</strong> {formatDate(detailsToken.last_used_at, "Никогда")}</Typography>
+              <Typography><strong>Истекает:</strong> {formatDate(detailsToken.expires_at)}</Typography>
+              <Typography><strong>Статус:</strong> {tokenStatus(detailsToken)}</Typography>
+              <Typography><strong>Права:</strong></Typography>
               <Box component="ul" sx={{ my: 0, pl: 2 }}>
                 {detailsToken.scopes.map((scope) => <li key={scope}><Typography variant="body2">{scope}</Typography></li>)}
               </Box>
               <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                <Button color="error" onClick={() => setRevokeTarget({ ids: [detailsToken.id], label: `Revoke token “${detailsToken.name}”?` })}>Revoke</Button>
-                <Button variant="outlined" onClick={() => handleRotate(detailsToken.id)}>Rotate</Button>
-                <Button variant="outlined" onClick={() => openAudit(detailsToken.id)}>Audit log</Button>
-                <Button variant="outlined" onClick={() => handleExtend(detailsToken.id)}>Extend expiry</Button>
+                <Button color="error" onClick={() => setRevokeTarget({ ids: [detailsToken.id], label: `Отозвать токен «${detailsToken.name}»?` })}>Отозвать</Button>
+                <Button variant="outlined" onClick={() => handleRotate(detailsToken.id)}>Ротировать</Button>
+                <Button variant="outlined" onClick={() => openAudit(detailsToken.id)}>Журнал аудита</Button>
+                <Button variant="outlined" onClick={() => handleExtend(detailsToken.id)}>Продлить срок</Button>
               </Stack>
             </Stack>
           )}
@@ -532,29 +532,29 @@ const IntegrationTokensPage = () => {
 
       <Drawer anchor="right" open={auditOpen} onClose={() => setAuditOpen(false)}>
         <Box sx={{ width: 560, p: 2 }}>
-          <Typography variant="h6">Token audit</Typography>
-          <Typography variant="body2" color="text.secondary">Token ID: {auditTokenId}</Typography>
+          <Typography variant="h6">Аудит токена</Typography>
+          <Typography variant="body2" color="text.secondary">ID токена: {auditTokenId}</Typography>
           <Stack direction="row" spacing={1} sx={{ my: 2 }}>
             <FormControl sx={{ minWidth: 160 }}>
-              <InputLabel>Event type</InputLabel>
-              <Select label="Event type" value={auditEventType} onChange={(e) => setAuditEventType(e.target.value)}>
-                <MenuItem value="">All</MenuItem>
-                <MenuItem value="ISSUED">created</MenuItem>
-                <MenuItem value="REVOKED">revoked</MenuItem>
-                <MenuItem value="ROTATED">rotated</MenuItem>
-                <MenuItem value="USED">used</MenuItem>
+              <InputLabel>Тип события</InputLabel>
+              <Select label="Тип события" value={auditEventType} onChange={(e) => setAuditEventType(e.target.value)}>
+                <MenuItem value="">Все</MenuItem>
+                <MenuItem value="ISSUED">создан</MenuItem>
+                <MenuItem value="REVOKED">отозван</MenuItem>
+                <MenuItem value="ROTATED">ротирован</MenuItem>
+                <MenuItem value="USED">использован</MenuItem>
               </Select>
             </FormControl>
-            <TextField type="date" label="From" InputLabelProps={{ shrink: true }} value={auditFrom} onChange={(e) => setAuditFrom(e.target.value)} />
-            <TextField type="date" label="To" InputLabelProps={{ shrink: true }} value={auditTo} onChange={(e) => setAuditTo(e.target.value)} />
+            <TextField type="date" label="С" InputLabelProps={{ shrink: true }} value={auditFrom} onChange={(e) => setAuditFrom(e.target.value)} />
+            <TextField type="date" label="По" InputLabelProps={{ shrink: true }} value={auditTo} onChange={(e) => setAuditTo(e.target.value)} />
           </Stack>
           <Box sx={{ height: 520 }}>
             <DataGrid
               rows={filteredAudit.map((e) => ({ ...e, id: e.id }))}
               columns={[
-                { field: "action", headerName: "Event", flex: 1 },
-                { field: "actor_type", headerName: "Actor", flex: 1 },
-                { field: "occurred_at", headerName: "At", flex: 1.2, valueGetter: (_, row) => formatDate(row.occurred_at) },
+                { field: "action", headerName: "Событие", flex: 1 },
+                { field: "actor_type", headerName: "Кто", flex: 1 },
+                { field: "occurred_at", headerName: "Когда", flex: 1.2, valueGetter: (_, row) => formatDate(row.occurred_at) },
                 { field: "ip", headerName: "IP", flex: 1 },
               ]}
               disableRowSelectionOnClick

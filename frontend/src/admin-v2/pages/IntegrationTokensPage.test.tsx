@@ -36,11 +36,11 @@ describe("IntegrationTokensPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("heading", { name: "Integration Tokens" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Токены интеграции" })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText(/Токен показывается полностью только при создании/i)).toBeInTheDocument();
       expect(screen.getByText("Alex Admin")).toBeInTheDocument();
-      expect(screen.getByText("Never")).toBeInTheDocument();
+      expect(screen.getByText("Никогда")).toBeInTheDocument();
     });
   });
 });
