@@ -16,6 +16,7 @@ import ProductsList from "./pages/ProductsList";
 import ProductDetailPage from "./pages/ProductDetail";
 import AnalyzeJobsPage from "./pages/AnalyzeJobsPage";
 import AnalysisJobDetail from "./pages/AnalysisJobDetail";
+import RunsPage from "./pages/RunsPage";
 
 import OverviewPage from "./admin-v2/pages/OverviewPage";
 import UsersPage from "./admin-v2/pages/UsersPage";
@@ -49,7 +50,10 @@ const App = () => {
               <Route path="/imports/:id" element={<ImportJobDetail />} />
               <Route path="/products" element={<ProductsList />} />
               <Route path="/products/:id" element={<ProductDetailPage />} />
-              <Route path="/analyze" element={<AnalyzeJobsPage />} />
+              <Route path="/runs" element={<RunsPage />} />
+              <Route path="/runs/:id" element={<AnalysisJobDetail />} />
+              {/* Legacy routes — redirect to new runs-first UI */}
+              <Route path="/analyze" element={<Navigate to="/runs" replace />} />
               <Route path="/analyze/:id" element={<AnalysisJobDetail />} />
 
               <Route path="/admin" element={<OverviewPage />} />
