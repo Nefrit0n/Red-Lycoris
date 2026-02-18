@@ -23,12 +23,34 @@ const pickProjectID = (value: unknown): string | undefined => {
   return undefined;
 };
 
+const pickNullableDateTime = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (normalized) return normalized;
+      continue;
+    }
+
+    if (value && typeof value === "object") {
+      const obj = value as { Time?: unknown; Valid?: unknown };
+      if (obj.Valid !== true) continue;
+      if (typeof obj.Time !== "string") continue;
+
+      const normalized = obj.Time.trim();
+      if (normalized) return normalized;
+    }
+  }
+
+  return undefined;
+};
+
 const normalizeToken = (raw: any): IntegrationToken => {
   const id = raw?.id ?? raw?.ID ?? "";
   const orgID = raw?.tenant?.org_id ?? raw?.org_id ?? raw?.OrgID ?? "";
   const projectID = raw?.tenant?.project_id ?? raw?.project_id ?? pickProjectID(raw?.ProjectID);
-  const expiresAt = raw?.expires_at ?? raw?.ExpiresAt;
-  const revokedAt = raw?.revoked_at ?? raw?.RevokedAt;
+  const expiresAt = pickNullableDateTime(raw?.expires_at, raw?.ExpiresAt);
+  const revokedAt = pickNullableDateTime(raw?.revoked_at, raw?.RevokedAt);
+  const lastUsedAt = pickNullableDateTime(raw?.last_used_at, raw?.LastUsedAt);
   const derivedState = revokedAt
     ? "REVOKED"
     : expiresAt && new Date(expiresAt).getTime() <= Date.now()
@@ -43,7 +65,7 @@ const normalizeToken = (raw: any): IntegrationToken => {
     scopes: raw?.scopes ?? raw?.Scopes ?? [],
     state: raw?.state ?? raw?.State ?? derivedState,
     expires_at: expiresAt,
-    last_used_at: raw?.last_used_at ?? raw?.LastUsedAt,
+    last_used_at: lastUsedAt,
     created_at: raw?.created_at ?? raw?.CreatedAt,
     created_by: raw?.created_by ?? raw?.createdBy ?? raw?.CreatedBy ?? raw?.CreatedByUser ?? raw?.CreatedByUserID,
     updated_at: raw?.updated_at ?? raw?.UpdatedAt,
@@ -72,7 +94,7 @@ export const listIntegrationTokens = (query: ListIntegrationTokensQuery) =>
 
 export const createIntegrationToken = (payload: {
   name: string;
-  tenant: { org_id: string; project_id?: string };
+  tenant: { org_id?: string; project_id?: string };
   scopes: IntegrationTokenScope[];
   expires_at?: string;
 }) =>
