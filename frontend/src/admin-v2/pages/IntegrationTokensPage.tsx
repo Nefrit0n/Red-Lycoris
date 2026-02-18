@@ -49,6 +49,8 @@ type StatusFilter = "ALL" | "ACTIVE" | "EXPIRING" | "REVOKED";
 
 type RevokeTarget = { ids: string[]; label: string } | null;
 
+const DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000000";
+
 const parseDate = (value?: string | null): Date | null => {
   if (!value) return null;
   const dt = new Date(value);
@@ -85,11 +87,10 @@ const formatCreatedBy = (createdBy: IntegrationToken["created_by"]): string => {
 };
 
 const tokenStatus = (row: IntegrationToken): "Активен" | "Отозван" | "Истёк" => {
-  if (row.state === "REVOKED") return "Отозван";
-  if (row.state === "EXPIRED") return "Истёк";
+  if (parseDate(row.revoked_at)) return "Отозван";
   const expiresAt = parseDate(row.expires_at);
   if (expiresAt && expiresAt.getTime() <= Date.now()) return "Истёк";
-  return "Активен";
+  return row.state === "EXPIRED" ? "Истёк" : "Активен";
 };
 
 const isExpiringInDays = (row: IntegrationToken, days: number) => {
@@ -127,7 +128,6 @@ const IntegrationTokensPage = () => {
 
   const [form, setForm] = useState({
     name: "",
-    org_id: "",
     project_id: "",
     scopeType: "org" as "org" | "project",
     expiresDays: "30",
@@ -139,7 +139,7 @@ const IntegrationTokensPage = () => {
     setError("");
     try {
       const response = await listIntegrationTokens({
-        org_id: form.org_id || "00000000-0000-0000-0000-000000000000",
+        org_id: DEFAULT_ORG_ID,
         project_id: projectFilter !== "ALL" ? projectFilter : undefined,
         page: pagination.page + 1,
         page_size: pagination.pageSize,
@@ -262,7 +262,6 @@ const IntegrationTokensPage = () => {
       const response = await createIntegrationToken({
         name: form.name.trim(),
         tenant: {
-          org_id: form.org_id || "00000000-0000-0000-0000-000000000000",
           project_id: form.scopeType === "project" ? form.project_id || undefined : undefined,
         },
         scopes: form.scopes,
@@ -274,7 +273,7 @@ const IntegrationTokensPage = () => {
       await load();
     } catch (e: any) {
       const status = e?.status;
-      if (status === 400) setCreateError("Некорректные поля формы. Проверьте дату/ID и попробуйте снова.");
+      if (status === 400) setCreateError("Некорректные поля формы. Проверьте формат UUID (org_id/project_id), дату и попробуйте снова.");
       else if (status === 409) setCreateError("Токен с таким именем уже существует в выбранном контуре.");
       else if (status === 422) setCreateError("Запрос отклонён политикой токенов (scope/TTL).");
       else if ([401, 403].includes(status)) setCreateError("Недостаточно прав для создания токена.");
@@ -429,7 +428,6 @@ const IntegrationTokensPage = () => {
           {createError && <Alert severity="error" sx={{ mt: 2 }}>{createError}</Alert>}
           <Stack spacing={2} sx={{ mt: 2 }}>
             <TextField required label="Название" value={form.name} onChange={(e) => setForm((v) => ({ ...v, name: e.target.value }))} />
-            <TextField label="ID организации" value={form.org_id} onChange={(e) => setForm((v) => ({ ...v, org_id: e.target.value }))} />
             <FormControl>
               <InputLabel>Область</InputLabel>
               <Select label="Область" value={form.scopeType} onChange={(e) => setForm((v) => ({ ...v, scopeType: e.target.value as "org" | "project" }))}>
