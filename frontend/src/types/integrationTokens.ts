@@ -15,7 +15,7 @@ export interface IntegrationToken {
   expires_at?: string;
   last_used_at?: string;
   created_at: string;
-  created_by?: string;
+  created_by?: string | { name?: string; email?: string; id?: string };
   updated_at?: string;
   revoked_at?: string;
 }
