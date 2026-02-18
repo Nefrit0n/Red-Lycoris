@@ -64,6 +64,50 @@ make dev
 
 That's it. The platform will start 12 services (database, message broker, workers, API, and frontend) — all configured and ready to go.
 
+
+### ⚡ Quick start (no install)
+
+Run `lw` without local Go toolchain/build step:
+
+```bash
+curl -fsSL https://<your-host>/lw.sh | sh -s -- upload \
+  --endpoint https://localhost:8443 \
+  --project my-project \
+  --token "$LW_TOKEN" \
+  --artifact reports/semgrep.sarif
+```
+
+Or use Python (stdlib-only bootstrap):
+
+```bash
+python3 scripts/lw.py upload \
+  --endpoint https://localhost:8443 \
+  --project my-project \
+  --token "$LW_TOKEN" \
+  --artifact reports/semgrep.sarif
+```
+
+Example GitLab CI job:
+
+```yaml
+upload_scan_results:
+  stage: security
+  image: alpine:3.20
+  script:
+    - apk add --no-cache curl python3
+    - curl -fsSL https://<your-host>/lw.sh | sh -s -- upload \
+        --endpoint "$LW_ENDPOINT" \
+        --project "$CI_PROJECT_PATH" \
+        --ci gitlab \
+        --token "$LW_TOKEN" \
+        --artifact gl-sast-report.json:format=sarif
+```
+
+> `--insecure` is for local/dev self-signed TLS only. For production, use a valid certificate chain or pass `--ca-file /path/to/ca.pem`.
+>
+> Never enable `CI_DEBUG_TRACE` to troubleshoot uploads and never print full environment variables in logs.
+
+
 ### 🏗️ How It Works
 
 ```
@@ -197,6 +241,50 @@ make dev
 ```
 
 Готово. Платформа поднимет 12 сервисов (база данных, брокер сообщений, воркеры, API и фронтенд) — всё настроено и готово к работе.
+
+
+### ⚡ Быстрый старт (без установки)
+
+Запуск `lw` без локального Go toolchain/сборки:
+
+```bash
+curl -fsSL https://<your-host>/lw.sh | sh -s -- upload \
+  --endpoint https://localhost:8443 \
+  --project my-project \
+  --token "$LW_TOKEN" \
+  --artifact reports/semgrep.sarif
+```
+
+Или через Python (только stdlib):
+
+```bash
+python3 scripts/lw.py upload \
+  --endpoint https://localhost:8443 \
+  --project my-project \
+  --token "$LW_TOKEN" \
+  --artifact reports/semgrep.sarif
+```
+
+Пример GitLab CI job:
+
+```yaml
+upload_scan_results:
+  stage: security
+  image: alpine:3.20
+  script:
+    - apk add --no-cache curl python3
+    - curl -fsSL https://<your-host>/lw.sh | sh -s -- upload \
+        --endpoint "$LW_ENDPOINT" \
+        --project "$CI_PROJECT_PATH" \
+        --ci gitlab \
+        --token "$LW_TOKEN" \
+        --artifact gl-sast-report.json:format=sarif
+```
+
+> `--insecure` используйте только в dev/self-signed окружении. В проде используйте корректный сертификат или `--ca-file /path/to/ca.pem`.
+>
+> Никогда не включайте `CI_DEBUG_TRACE` для дебага загрузок и не печатайте полный `env` в логах.
+
 
 ### 🏗️ Как это работает
 
