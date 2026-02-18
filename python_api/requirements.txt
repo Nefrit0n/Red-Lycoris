@@ -2,6 +2,6 @@ celery[redis]==5.6.2
 fastapi==0.128.0
 gunicorn==24.1.1
 httpx==0.28.1
-uvicorn==0.40.0
+uvicorn==0.41.0
 openpyxl==3.1.5
 psycopg2-binary==2.9.11
