@@ -12,14 +12,20 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import {
+  Replay as ReplayIcon,
+} from "@mui/icons-material";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AnalysisJob,
+  createAnalysisJob,
   downloadAnalysisArtifact,
   fetchAnalysisJob,
   SCANNER_CATALOG,
 } from "../api/analysisJobs";
+import { useNotification } from "../contexts/NotificationContext";
+import RunStatusBadge from "../features/analyze/components/RunStatusBadge";
 
 const STATUS_CONFIG: Record<string, { label: string; color: "default" | "warning" | "info" | "success" | "error" }> = {
   queued: { label: "В очереди", color: "warning" },
@@ -63,12 +69,14 @@ const ERROR_TRUNCATE_LENGTH = 200;
 const AnalysisJobDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showSuccess, showError: showNotifError } = useNotification();
   const [job, setJob] = useState<AnalysisJob | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
   const [elapsed, setElapsed] = useState<number>(0);
+  const [rerunning, setRerunning] = useState(false);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadJob = useCallback(async () => {
@@ -150,6 +158,26 @@ const AnalysisJobDetail = () => {
     });
   };
 
+  const handleRerun = useCallback(async () => {
+    if (!job || rerunning) return;
+    setRerunning(true);
+    try {
+      const response = await createAnalysisJob({
+        productId: job.productId || "",
+        scanners: job.scanners,
+        sourceMode: job.sourceKind === "snapshot" ? "latest" : undefined,
+        sourceSnapshotId: job.sourceSnapshotId,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      showSuccess("Повторный анализ поставлен в очередь.");
+      navigate(`/runs/${response.id}`);
+    } catch (err) {
+      showNotifError(err instanceof Error ? err.message : "Не удалось повторить анализ");
+    } finally {
+      setRerunning(false);
+    }
+  }, [job, navigate, rerunning, showNotifError, showSuccess]);
+
   if (!id) {
     return (
       <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }}>
@@ -175,18 +203,32 @@ const AnalysisJobDetail = () => {
     <Box px={{ xs: 2, md: 4 }} py={{ xs: 3, md: 4 }} sx={{ maxWidth: 1000, mx: "auto" }}>
       <Stack spacing={3}>
         {/* Header */}
-        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" flexWrap="wrap">
           <Stack direction="row" spacing={2} alignItems="center">
-            <Button variant="text" onClick={() => navigate("/analyze")}>
+            <Button variant="text" onClick={() => navigate("/runs")}>
               Назад
             </Button>
             <Typography variant="h5">
               Анализ #{id.slice(0, 8)}
             </Typography>
-            {jobStatus && (
-              <Chip label={jobStatus.label} color={jobStatus.color} size="small" />
+            {job && <RunStatusBadge status={job.status} />}
+            {isLive && elapsed > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                {formatElapsed(elapsed)}
+              </Typography>
             )}
           </Stack>
+          {job && !isLive && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={rerunning ? <CircularProgress size={14} /> : <ReplayIcon />}
+              disabled={rerunning || !job.productId}
+              onClick={handleRerun}
+            >
+              Повторить
+            </Button>
+          )}
         </Stack>
 
         {loading && !job && (

@@ -73,7 +73,7 @@ const Sidebar = ({ onOpenCommandPalette }: SidebarProps) => {
       { label: "Дашборд", path: "/dashboard", icon: <DashboardIcon /> },
       { label: "Находки", path: "/findings", icon: <BugReportIcon /> },
       { label: "Продукты", path: "/products", icon: <Inventory2Icon /> },
-      { label: "Анализ", path: "/analyze", icon: <AnalyticsIcon /> },
+      { label: "Запуски", path: "/runs", icon: <AnalyticsIcon /> },
       { label: "Импорты", path: "/imports", icon: <StorageIcon /> },
       { label: "Загрузить скан", path: "/scans/upload", icon: <CloudUploadIcon /> },
     ];
