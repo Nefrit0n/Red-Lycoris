@@ -409,7 +409,7 @@ jobs:
           path: trufflehog3.json
 
       - name: Trivy (fs)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           scan-type: "fs"
           scan-ref: "."
@@ -419,7 +419,7 @@ jobs:
           skip-dirs: "Red-Lycoris/docs/template,docs/template"
 
       - name: Trivy (config)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           scan-type: "config"
           scan-ref: "."
