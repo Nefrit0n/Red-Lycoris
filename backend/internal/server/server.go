@@ -25,6 +25,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/google/uuid"
 )
@@ -42,8 +43,12 @@ func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store ob
 		maxArchiveBytes = int64(math.MaxInt)
 	}
 	app := fiber.New(fiber.Config{
-		BodyLimit: int(maxArchiveBytes),
+		BodyLimit:    int(maxArchiveBytes),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	})
+	app.Use(recover.New())
 	app.Use(requestid.New())
 	app.Use(middleware.RequestLogger(slog.New(slog.NewJSONHandler(os.Stdout, nil))))
 	setupRoutes(app, cfg, db, publisher, store)
@@ -72,10 +77,27 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	})
 
 	app.Get("/readyz", func(c *fiber.Ctx) error {
+		checks := fiber.Map{}
+		ready := true
+
 		if err := db.PingContext(context.Background()); err != nil {
-			return c.Status(http.StatusServiceUnavailable).JSON(fiber.Map{"status": "not_ready"})
+			checks["db"] = "unavailable"
+			ready = false
+		} else {
+			checks["db"] = "ok"
 		}
-		return c.JSON(fiber.Map{"status": "ready"})
+
+		if publisher == nil || !publisher.IsConnected() {
+			checks["nats"] = "unavailable"
+			ready = false
+		} else {
+			checks["nats"] = "ok"
+		}
+
+		if !ready {
+			return c.Status(http.StatusServiceUnavailable).JSON(fiber.Map{"status": "not_ready", "checks": checks})
+		}
+		return c.JSON(fiber.Map{"status": "ready", "checks": checks})
 	})
 
 	app.Get("/api/ping", func(c *fiber.Ctx) error {
@@ -103,7 +125,7 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	app.Get("/metrics/risk", func(c *fiber.Ctx) error {
 		lag, err := storage.CountFindingsMissingCurrentRiskModel(c.Context(), db)
 		if err != nil {
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to compute risk lag"})
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to compute risk lag"})
 		}
 		return c.JSON(fiber.Map{
 			"risk_scheduler_enqueued_total": metrics.RiskSchedulerEnqueuedAll(),
@@ -114,11 +136,15 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 
 	api := app.Group("/api/v1")
 
-	// ✅ НОВЫЙ КОНТРАКТ (без rootPassword)
+	jwtExpiry, err := time.ParseDuration(cfg.JWTExpiryDuration)
+	if err != nil {
+		jwtExpiry = 24 * time.Hour
+	}
 	authHandler := handlers.NewAuthHandler(
 		db,
 		cfg.JWTSecret,
 		cfg.RootEmail,
+		jwtExpiry,
 	)
 
 	api.Post("/auth/login", authHandler.Login)

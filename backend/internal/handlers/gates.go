@@ -55,30 +55,30 @@ func NewGateCheckHandler(db *sql.DB, policyEngine policies.Evaluator) *GateCheck
 func (h *GateCheckHandler) Check(c *fiber.Ctx) error {
 	var req GateCheckRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		return respondError(c, http.StatusBadRequest, "invalid request body")
 	}
 	if err := h.validator.Struct(req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return respondError(c, http.StatusBadRequest, err.Error())
 	}
 
 	importJobID, err := uuid.Parse(req.ImportJobID)
 	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid importJobId"})
+		return respondError(c, http.StatusBadRequest, "invalid importJobId")
 	}
 
 	job, err := storage.GetImportJobByID(c.Context(), h.db, importJobID)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch import job"})
+		return respondError(c, http.StatusInternalServerError, "failed to fetch import job")
 	}
 	if job == nil {
-		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "import job not found"})
+		return respondError(c, http.StatusNotFound, "import job not found")
 	}
 
 	var productID *uuid.UUID
 	if req.ProductID != nil && strings.TrimSpace(*req.ProductID) != "" {
 		parsed, err := uuid.Parse(*req.ProductID)
 		if err != nil {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid productId"})
+			return respondError(c, http.StatusBadRequest, "invalid productId")
 		}
 		productID = &parsed
 	} else if job.ProductID.Valid {
@@ -92,7 +92,7 @@ func (h *GateCheckHandler) Check(c *fiber.Ctx) error {
 		IncludeRepeats: false,
 	})
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to compute severity counts"})
+		return respondError(c, http.StatusInternalServerError, "failed to compute severity counts")
 	}
 	categoryCounts, err := countFindingsByCategory(c.Context(), h.db, storage.FindingFilters{
 		ImportJobID:    &importJobID,
@@ -100,7 +100,7 @@ func (h *GateCheckHandler) Check(c *fiber.Ctx) error {
 		IncludeRepeats: false,
 	})
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to compute category counts"})
+		return respondError(c, http.StatusInternalServerError, "failed to compute category counts")
 	}
 
 	event := policies.Event{
@@ -149,7 +149,7 @@ func (h *GateCheckHandler) Check(c *fiber.Ctx) error {
 
 	decision, err := h.policyEngine.Evaluate(policyCtx)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "policy evaluation failed"})
+		return respondError(c, http.StatusInternalServerError, "policy evaluation failed")
 	}
 
 	decisionOutcome := normalizeOutcome(decision.Outcome)
@@ -170,7 +170,7 @@ func (h *GateCheckHandler) Check(c *fiber.Ctx) error {
 
 	blockingFindings, err := h.resolveBlockingFindings(c, decision.Violations, importJobID)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "failed to resolve blocking findings"})
+		return respondError(c, http.StatusInternalServerError, "failed to resolve blocking findings")
 	}
 
 	var policyMeta *v1dto.GateCheckPolicyDTO
