@@ -165,8 +165,15 @@ func ReplaceTeamMembers(ctx context.Context, db *sql.DB, tenantID, teamID uuid.U
 	if _, err := tx.ExecContext(ctx, `DELETE FROM team_members WHERE tenant_id=$1 AND team_id=$2`, tenantID, teamID); err != nil {
 		return err
 	}
-	for _, uid := range userIDs {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO team_members(tenant_id,team_id,user_id) VALUES($1,$2,$3)`, tenantID, teamID, uid); err != nil {
+	if len(userIDs) > 0 {
+		valueStrings := make([]string, 0, len(userIDs))
+		valueArgs := make([]interface{}, 0, len(userIDs)+2)
+		valueArgs = append(valueArgs, tenantID, teamID)
+		for i, uid := range userIDs {
+			valueStrings = append(valueStrings, fmt.Sprintf("($1,$2,$%d)", i+3))
+			valueArgs = append(valueArgs, uid)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO team_members(tenant_id,team_id,user_id) VALUES `+strings.Join(valueStrings, ","), valueArgs...); err != nil {
 			return err
 		}
 	}
