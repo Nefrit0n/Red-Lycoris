@@ -10,8 +10,10 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"red-lycoris/backend/internal/bdu"
@@ -77,12 +79,22 @@ func main() {
 		}
 	}
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	log.Printf("intel worker ready, waiting for messages")
 	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("intel worker shutting down")
+			return
+		default:
+		}
 		msgs, err := sub.Fetch(1, nats.MaxWait(5*time.Second))
 		if err != nil {
 			if errors.Is(err, nats.ErrTimeout) {
 				if cfg.BDUEnabled {
-					if syncErr := bdu.SyncIfDue(context.Background(), db, cfg.BDUXLSXPath, time.Now().UTC()); syncErr != nil {
+					if syncErr := bdu.SyncIfDue(ctx, db, cfg.BDUXLSXPath, time.Now().UTC()); syncErr != nil {
 						log.Printf("bdu periodic sync warning: %v", syncErr)
 					}
 				}
@@ -92,7 +104,7 @@ func main() {
 			continue
 		}
 		for _, msg := range msgs {
-			if err := handleIntelMessage(context.Background(), msg, db, publisher, service, cfg); err != nil {
+			if err := handleIntelMessage(ctx, msg, db, publisher, service, cfg); err != nil {
 				log.Printf("intel job failed: %v", err)
 			}
 		}
