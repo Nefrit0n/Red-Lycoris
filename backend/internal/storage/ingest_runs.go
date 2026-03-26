@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,11 +73,20 @@ func CreateIngestRunWithArtifacts(ctx context.Context, db *sql.DB, run IngestRun
 	if err != nil {
 		return err
 	}
-	for _, a := range artifacts {
+	if len(artifacts) > 0 {
+		valueStrings := make([]string, 0, len(artifacts))
+		valueArgs := make([]interface{}, 0, len(artifacts)*10)
+		for i, a := range artifacts {
+			base := i * 10
+			valueStrings = append(valueStrings, fmt.Sprintf(
+				"($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+				base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10,
+			))
+			valueArgs = append(valueArgs, a.ID, run.RunID, run.OrgID, run.ProjectID, a.Path, a.SHA256, a.SizeBytes, a.MediaType, a.FormatHint, a.ObjectKey)
+		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO ingest_artifacts (id, run_id, org_id, project_id, path, sha256, size_bytes, media_type, format_hint, object_key)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		`, a.ID, run.RunID, run.OrgID, run.ProjectID, a.Path, a.SHA256, a.SizeBytes, a.MediaType, a.FormatHint, a.ObjectKey)
+			VALUES `+strings.Join(valueStrings, ","), valueArgs...)
 		if err != nil {
 			return err
 		}
