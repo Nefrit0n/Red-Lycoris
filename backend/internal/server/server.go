@@ -25,6 +25,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/google/uuid"
 )
@@ -42,8 +43,12 @@ func NewApp(cfg config.Config, db *sql.DB, publisher *events.Publisher, store ob
 		maxArchiveBytes = int64(math.MaxInt)
 	}
 	app := fiber.New(fiber.Config{
-		BodyLimit: int(maxArchiveBytes),
+		BodyLimit:    int(maxArchiveBytes),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	})
+	app.Use(recover.New())
 	app.Use(requestid.New())
 	app.Use(middleware.RequestLogger(slog.New(slog.NewJSONHandler(os.Stdout, nil))))
 	setupRoutes(app, cfg, db, publisher, store)
