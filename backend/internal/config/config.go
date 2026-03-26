@@ -60,6 +60,7 @@ type Config struct {
 	SLAMediumDuration        string
 	SLALowDuration           string
 	SLABreachInterval        string
+	JWTExpiryDuration        string
 }
 
 func Load() Config {
@@ -113,6 +114,7 @@ func Load() Config {
 		SLAMediumDuration:        getEnv("SLA_MEDIUM_DURATION", "2160h"),
 		SLALowDuration:           getEnv("SLA_LOW_DURATION", "4320h"),
 		SLABreachInterval:        getEnv("SLA_BREACH_INTERVAL", getEnv("SLA_BREACH_CHECK_INTERVAL", "15m")),
+		JWTExpiryDuration:        getEnv("JWT_EXPIRY_DURATION", "24h"),
 	}
 }
 
