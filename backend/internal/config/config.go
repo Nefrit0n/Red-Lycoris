@@ -22,6 +22,7 @@ type Config struct {
 	DBMaxIdleConns           int
 	DBConnMaxLifetimeMinutes int
 	DBConnMaxIdleMinutes     int
+	DBStatementTimeoutMs     int
 	RedisURL                 string
 	NatsURL                  string
 	ObjectStoreEndpoint      string
@@ -76,6 +77,7 @@ func Load() Config {
 		DBMaxIdleConns:           getEnvAsInt("DB_MAX_IDLE_CONNS", 5),
 		DBConnMaxLifetimeMinutes: getEnvAsInt("DB_CONN_MAX_LIFETIME_MINUTES", 5),
 		DBConnMaxIdleMinutes:     getEnvAsInt("DB_CONN_MAX_IDLE_MINUTES", 1),
+		DBStatementTimeoutMs:     getEnvAsInt("DB_STATEMENT_TIMEOUT_MS", 30000),
 		RedisURL:                 getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:                  getEnv("NATS_URL", "nats://localhost:4222"),
 		ObjectStoreEndpoint:      getEnv("OBJECT_STORE_ENDPOINT", "localhost:9000"),

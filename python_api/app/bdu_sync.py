@@ -191,7 +191,7 @@ def parse_and_store(xlsx_path: str) -> dict[str, Any]:
 
             total += 1
 
-            # Batch insert every 5000 rows.
+            # Batch insert every 5000 rows (within the same transaction).
             if len(vuln_batch) >= 5000:
                 _upsert_batch(conn, vuln_batch, ident_batch)
                 vuln_batch.clear()
@@ -204,12 +204,16 @@ def parse_and_store(xlsx_path: str) -> dict[str, Any]:
 
         wb.close()
 
+        # Commit the entire sync atomically — either all rows land or none.
+        conn.commit()
+
         _update_sync_status(conn, total, None)
         logger.info("BDU sync complete: %d records, %d skipped", total, skipped)
         return {"status": "completed", "records": total, "skipped": skipped}
 
     except Exception as exc:
         logger.exception("BDU sync failed")
+        conn.rollback()
         try:
             _update_sync_status(conn, 0, str(exc))
         except Exception:
@@ -224,7 +228,11 @@ def _upsert_batch(
     vulns: list[tuple],
     idents: list[tuple[str, str]],
 ) -> None:
-    """Bulk upsert vulnerabilities and identifier mappings."""
+    """Bulk upsert vulnerabilities and identifier mappings.
+
+    Does NOT commit — the caller is responsible for committing the transaction
+    so that the entire sync is atomic.
+    """
     with conn.cursor() as cur:
         # Upsert vulnerabilities.
         psycopg2.extras.execute_values(
@@ -287,8 +295,6 @@ def _upsert_batch(
                 idents,
                 page_size=2000,
             )
-
-    conn.commit()
 
 
 def _mark_syncing(conn, syncing: bool) -> None:

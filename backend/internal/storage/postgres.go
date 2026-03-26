@@ -23,6 +23,10 @@ func Connect(cfg config.Config) (*sql.DB, error) {
 		cfg.DBSSL,
 	)
 
+	if cfg.DBStatementTimeoutMs > 0 {
+		dsn += fmt.Sprintf(" options='-c statement_timeout=%d'", cfg.DBStatementTimeoutMs)
+	}
+
 	var lastErr error
 
 	for i := 1; i <= 10; i++ {
