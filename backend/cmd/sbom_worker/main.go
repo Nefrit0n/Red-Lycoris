@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"red-lycoris/backend/internal/config"
@@ -59,7 +62,17 @@ func main() {
 		log.Fatalf("failed to subscribe: %v", err)
 	}
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	log.Printf("sbom worker ready, waiting for messages")
 	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("sbom worker shutting down")
+			return
+		default:
+		}
 		msgs, err := sub.Fetch(1, nats.MaxWait(5*time.Second))
 		if err != nil {
 			if errors.Is(err, nats.ErrTimeout) {
@@ -69,7 +82,7 @@ func main() {
 			continue
 		}
 		for _, msg := range msgs {
-			if err := handleMessage(context.Background(), msg, db, store); err != nil {
+			if err := handleMessage(ctx, msg, db, store); err != nil {
 				log.Printf("sbom index failed: %v", err)
 			}
 		}

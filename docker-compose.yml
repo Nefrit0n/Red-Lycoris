@@ -200,6 +200,12 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "pgrep -f analysis_worker || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     networks:
       - app-net
@@ -226,6 +232,12 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "pgrep -f intel_worker || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     networks:
       - app-net
@@ -271,6 +283,12 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "celery -A app.celery_app:celery_app inspect ping --timeout 5 2>/dev/null | grep -q pong || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     networks:
       - app-net

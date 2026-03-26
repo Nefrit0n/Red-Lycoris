@@ -227,6 +227,23 @@ func (p *Publisher) Close() {
 	p.nc.Close()
 }
 
+// Drain gracefully flushes pending messages and then closes the connection.
+// Prefer Drain over Close during graceful shutdown to avoid losing in-flight publishes.
+func (p *Publisher) Drain() error {
+	if p == nil || p.nc == nil {
+		return nil
+	}
+	return p.nc.Drain()
+}
+
+// IsConnected reports whether the underlying NATS connection is active.
+func (p *Publisher) IsConnected() bool {
+	if p == nil || p.nc == nil {
+		return false
+	}
+	return p.nc.IsConnected()
+}
+
 func (p *Publisher) PublishJSON(ctx context.Context, subject string, payload any) error {
 	if p == nil || p.js == nil {
 		return nil
