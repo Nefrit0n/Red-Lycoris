@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"red-lycoris/backend/internal/models"
@@ -30,14 +32,25 @@ func CreateAnalysisJobScanner(ctx context.Context, db *sql.DB, jobID uuid.UUID, 
 	return row, nil
 }
 
-// CreateAnalysisJobScannersBatch inserts pending rows for all scanners in one batch.
+// CreateAnalysisJobScannersBatch inserts pending rows for all scanners in one multi-row INSERT.
 func CreateAnalysisJobScannersBatch(ctx context.Context, db *sql.DB, jobID uuid.UUID, scannerNames []string) error {
-	for _, s := range scannerNames {
-		if _, err := CreateAnalysisJobScanner(ctx, db, jobID, s); err != nil {
-			return err
-		}
+	if len(scannerNames) == 0 {
+		return nil
 	}
-	return nil
+	valueStrings := make([]string, 0, len(scannerNames))
+	valueArgs := make([]interface{}, 0, len(scannerNames)*4)
+	for i, s := range scannerNames {
+		base := i * 4
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d)", base+1, base+2, base+3, base+4))
+		valueArgs = append(valueArgs, uuid.New(), jobID, s, models.AnalysisScannerPending)
+	}
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO analysis_job_scanners (id, job_id, scanner, status)
+		 VALUES `+strings.Join(valueStrings, ",")+`
+		 ON CONFLICT (job_id, scanner) DO NOTHING`,
+		valueArgs...,
+	)
+	return err
 }
 
 // UpdateAnalysisJobScannerStatus updates a scanner row's status + timing.
