@@ -42,18 +42,23 @@ type LoginResponse struct {
 }
 
 type AuthHandler struct {
-	db        *sql.DB
-	validator *validator.Validate
-	jwtSecret string
-	rootEmail string
+	db          *sql.DB
+	validator   *validator.Validate
+	jwtSecret   string
+	rootEmail   string
+	tokenExpiry time.Duration
 }
 
-func NewAuthHandler(db *sql.DB, jwtSecret string, rootEmail string) *AuthHandler {
+func NewAuthHandler(db *sql.DB, jwtSecret string, rootEmail string, tokenExpiry time.Duration) *AuthHandler {
+	if tokenExpiry <= 0 {
+		tokenExpiry = 24 * time.Hour
+	}
 	return &AuthHandler{
-		db:        db,
-		validator: validator.New(),
-		jwtSecret: jwtSecret,
-		rootEmail: rootEmail,
+		db:          db,
+		validator:   validator.New(),
+		jwtSecret:   jwtSecret,
+		rootEmail:   rootEmail,
+		tokenExpiry: tokenExpiry,
 	}
 }
 
@@ -104,7 +109,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		OrgRole:            string(resolveOrgRole(roles)),
 		MustChangePassword: needsPasswordChange,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(h.tokenExpiry)),
 		},
 	}
 
@@ -177,7 +182,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		OrgRole:            string(resolveOrgRole(roles)),
 		MustChangePassword: false,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(h.tokenExpiry)),
 		},
 	}
 
