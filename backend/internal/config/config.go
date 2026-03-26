@@ -22,6 +22,7 @@ type Config struct {
 	DBMaxIdleConns           int
 	DBConnMaxLifetimeMinutes int
 	DBConnMaxIdleMinutes     int
+	DBStatementTimeoutMs     int
 	RedisURL                 string
 	NatsURL                  string
 	ObjectStoreEndpoint      string
@@ -60,6 +61,7 @@ type Config struct {
 	SLAMediumDuration        string
 	SLALowDuration           string
 	SLABreachInterval        string
+	JWTExpiryDuration        string
 }
 
 func Load() Config {
@@ -75,6 +77,7 @@ func Load() Config {
 		DBMaxIdleConns:           getEnvAsInt("DB_MAX_IDLE_CONNS", 5),
 		DBConnMaxLifetimeMinutes: getEnvAsInt("DB_CONN_MAX_LIFETIME_MINUTES", 5),
 		DBConnMaxIdleMinutes:     getEnvAsInt("DB_CONN_MAX_IDLE_MINUTES", 1),
+		DBStatementTimeoutMs:     getEnvAsInt("DB_STATEMENT_TIMEOUT_MS", 30000),
 		RedisURL:                 getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:                  getEnv("NATS_URL", "nats://localhost:4222"),
 		ObjectStoreEndpoint:      getEnv("OBJECT_STORE_ENDPOINT", "localhost:9000"),
@@ -113,6 +116,7 @@ func Load() Config {
 		SLAMediumDuration:        getEnv("SLA_MEDIUM_DURATION", "2160h"),
 		SLALowDuration:           getEnv("SLA_LOW_DURATION", "4320h"),
 		SLABreachInterval:        getEnv("SLA_BREACH_INTERVAL", getEnv("SLA_BREACH_CHECK_INTERVAL", "15m")),
+		JWTExpiryDuration:        getEnv("JWT_EXPIRY_DURATION", "24h"),
 	}
 }
 

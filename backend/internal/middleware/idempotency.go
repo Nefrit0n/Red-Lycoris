@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
+	"os"
 	"strings"
 
 	"red-lycoris/backend/internal/storage"
@@ -12,6 +14,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
+
+var idempotencyLogger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 func RequireIdempotency(db *sql.DB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -53,6 +57,11 @@ func RequireIdempotency(db *sql.DB) fiber.Handler {
 
 		statusCode := c.Response().StatusCode()
 		if statusCode >= 500 {
+			idempotencyLogger.Warn("idempotency_skip_server_error",
+				slog.String("idempotency_key", key),
+				slog.String("scope", scope),
+				slog.Int("status", statusCode),
+			)
 			return nil
 		}
 
