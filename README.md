@@ -8,7 +8,7 @@
   <a href="https://github.com/Nefrit0n/Red-Lycoris/actions"><img src="https://github.com/Nefrit0n/Red-Lycoris/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white" alt="Go 1.24">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19">
-  <img src="https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white" alt="Python 3.12+">
+  <img src="https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white" alt="Python 3.14">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
 </p>
 
@@ -148,7 +148,7 @@ upload_scan_results:
 |-------|------------|
 | Backend API | Go 1.24, Fiber |
 | Frontend | React 19, TypeScript, MUI 7, Vite |
-| Async Workers | Python 3.12, FastAPI, Celery |
+| Async Workers | Python 3.14, FastAPI, Celery |
 | Database | PostgreSQL 16 |
 | Message Broker | NATS JetStream |
 | Cache / Queue | Redis 7 |
