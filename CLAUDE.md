@@ -17,11 +17,12 @@ Red-Lycoris/
 │   │   ├── analysis_worker/  # Processes scan reports, runs scanners via Docker
 │   │   ├── intel_worker/     # Enriches findings with NVD/EPSS/KEV/BDU data
 │   │   ├── sbom_worker/      # SBOM indexing
-│   │   └── scancli/          # CLI tool for scanning
+│   │   ├── scancli/          # CLI tool for scanning
+│   │   └── lw/              # Lightweight CLI for GitLab artifact ingestion
 │   ├── internal/
-│   │   ├── handlers/         # HTTP route handlers (~41 files)
+│   │   ├── handlers/         # HTTP route handlers (~44 files)
 │   │   ├── models/           # Domain models and database types (~17 files)
-│   │   ├── storage/          # PostgreSQL data access layer (~58 files)
+│   │   ├── storage/          # PostgreSQL data access layer (~60 files)
 │   │   ├── dto/v1/           # Data transfer objects (versioned, API shapes, ~10 files)
 │   │   ├── parser/           # Scanner report parsers (20 formats, 24 files)
 │   │   ├── importing/        # Report import orchestration + plugin registry
@@ -41,22 +42,24 @@ Red-Lycoris/
 │   │   ├── metrics/          # Prometheus metrics
 │   │   ├── sla/              # SLA tracking
 │   │   ├── sbomindex/        # SBOM component indexing
+│   │   ├── security/        # Token hashing (Argon2) and crypto utilities
 │   │   └── server/           # Fiber app setup and routing
-│   └── migrations/           # SQL migration files (47 migrations, sequential numbering)
+│   └── migrations/           # SQL migration files (50 migrations, sequential numbering)
 ├── frontend/                 # React 19 + TypeScript + MUI 7
 │   └── src/
-│       ├── api/              # API client functions (16 modules)
-│       ├── components/       # Reusable UI components (~39 files, filters/ subdir)
-│       ├── pages/            # Route-level page components (~17 pages)
+│       ├── api/              # API client functions (17 modules)
+│       ├── components/       # Reusable UI components (~40 files, filters/ subdir)
+│       ├── pages/            # Route-level page components (~31 files, admin/ and product-detail/ subdirs)
 │       ├── features/         # Feature-specific modules (analyze/, findings/, filters/)
 │       ├── contexts/         # React context providers (Notification, Theme)
 │       ├── hooks/            # Custom React hooks (~18 hooks)
-│       ├── types/            # TypeScript type definitions (~9 modules)
+│       ├── types/            # TypeScript type definitions (~10 modules)
 │       ├── utils/            # Utility functions (~12 files)
 │       ├── design-system/    # Design system: tokens, theme, components, docs
 │       ├── dashboard-v2/     # Dashboard v2: widgets, templates, layouts
+│       ├── admin-v2/         # Admin v2: layout, pages, shared components, routes
 │       └── test/             # Test setup (setup.ts)
-├── python_api/               # FastAPI + Celery worker (Python 3.12+)
+├── python_api/               # FastAPI + Celery worker (Python 3.14)
 │   ├── app/                  # Application code (main, celery_app, tasks, bdu_sync)
 │   └── tests/                # pytest test suite
 ├── policies/rego/            # OPA Rego policy files
@@ -239,18 +242,18 @@ cd python_api && ruff check . && ruff format --check . && pytest --cov=app
 - **DTO versioning**: DTOs live under `dto/v1/`, mappers under `mapper/v1/`
 
 ### TypeScript/React (frontend)
-- **Node version**: 20
+- **Node version**: 20 (not enforced via .nvmrc or engines)
 - **Key deps**: React 19.2.4, MUI 7.3.7, Vite 6.4.1, TypeScript 5.5.4, Vitest 4.0.18, Storybook 8.6.14
 - **Strict mode**: `tsconfig.json` has `strict: true`
 - **Components**: Functional components with hooks only
 - **Styling**: MUI `sx` prop and Emotion — no CSS files
 - **Type imports**: Use `import type { ... }` for type-only imports
-- **Linting**: ESLint flat config (`eslint.config.js`) with `@typescript-eslint` and React plugins
+- **Linting**: ESLint flat config (`eslint.config.js`) with `@typescript-eslint` and React plugins (legacy `.eslintrc.cjs` also present)
 - **Testing**: Vitest + @testing-library/react + jest-axe for accessibility
 - **Design system**: Custom tokens (colors, typography, spacing) in `src/design-system/`
 
 ### Python (python_api)
-- **Python version**: 3.12+ (Dockerfile uses 3.14-slim)
+- **Python version**: 3.14 (Dockerfile uses python:3.14-slim)
 - **Key deps**: FastAPI 0.128.0, Celery 5.6.2, Gunicorn 24.1.1, httpx 0.28.1, uvicorn 0.40.0, openpyxl 3.1.5, psycopg2-binary 2.9.11
 - **Formatting/Linting**: Ruff for both (enforced in CI)
 - **Type hints**: Required in function signatures
@@ -319,6 +322,9 @@ Defined in `.env.example` (ports, DB, Redis, Gunicorn) and `docker-compose.yml` 
 | `scripts/contracts/validate_fixtures.py` | Contract fixture validation |
 | `scripts/contracts/run_schemathesis.sh` | Schemathesis API testing |
 | `scripts/contracts/check_openapi_compat.sh` | OpenAPI backward compatibility check |
+| `scripts/test_upload_trivy.sh` | Trivy upload integration test |
+| `scripts/lw.py` | lw CLI helper (Python) |
+| `scripts/lw.sh` | lw CLI helper (shell) |
 | `stress_seed_findings.py` | Root-level stress test utility for seeding findings |
 
 ## Common Tasks for AI Assistants
@@ -338,7 +344,7 @@ Defined in `.env.example` (ports, DB, Redis, Gunicorn) and `docker-compose.yml` 
 4. Add example report fixture in `docs/template/`
 
 ### Modifying the database schema
-1. Create a new SQL file in `backend/migrations/` with the next sequential number (currently at 047)
+1. Create a new SQL file in `backend/migrations/` with the next sequential number (currently at 050)
 2. Create both `NNN_description.up.sql` and `NNN_description.down.sql`
 3. Migrations run automatically on startup via the `db-migrate` one-shot service
 
