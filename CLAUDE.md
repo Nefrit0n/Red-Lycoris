@@ -44,7 +44,8 @@ Red-Lycoris/
 │   │   ├── sbomindex/        # SBOM component indexing
 │   │   ├── security/        # Token hashing (Argon2) and crypto utilities
 │   │   └── server/           # Fiber app setup and routing
-│   └── migrations/           # SQL migration files (50 migrations, sequential numbering)
+│   └── migrations/           # SQL migrations (001_baseline squashed from 50 + 051_noop sync point)
+│   └── migrations_archive/   # Archived original migrations 001-050 (historical reference)
 ├── frontend/                 # React 19 + TypeScript + MUI 7
 │   └── src/
 │       ├── api/              # API client functions (17 modules)
@@ -344,7 +345,7 @@ Defined in `.env.example` (ports, DB, Redis, Gunicorn) and `docker-compose.yml` 
 4. Add example report fixture in `docs/template/`
 
 ### Modifying the database schema
-1. Create a new SQL file in `backend/migrations/` with the next sequential number (currently at 050)
+1. Create a new SQL file in `backend/migrations/` with the next sequential number (currently at 051)
 2. Create both `NNN_description.up.sql` and `NNN_description.down.sql`
 3. Migrations run automatically on startup via the `db-migrate` one-shot service
 
