@@ -1,0 +1,339 @@
+.page {
+  color: #e2e8f0;
+  padding: 20px;
+  animation: fadeIn 0.4s ease both;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.subtitle {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.error {
+  margin-bottom: 14px;
+  border: 1px solid #7f1d1d;
+  background: #3f1212;
+  color: #fecaca;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+  animation: fadeIn 0.4s ease both;
+  animation-delay: 0.05s;
+}
+
+.card {
+  border-radius: 10px;
+  border: 1px solid #1e293b;
+  background: #0c1220;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.cardAlert {
+  border-color: var(--accent-weak);
+  background: linear-gradient(135deg, var(--accent-faint) 0%, #0c1220 100%);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.iconWrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  font-size: 14px;
+}
+
+.trend {
+  font-size: 11px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-weight: 700;
+  color: #334155;
+}
+
+.trendUp { color: #ef4444; }
+.trendDown { color: #22c55e; }
+
+.value {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: #e2e8f0;
+}
+
+.valueAlert {
+  color: var(--accent);
+}
+
+.label {
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.spark {
+  margin-top: auto;
+  margin-left: -4px;
+  margin-right: -4px;
+  opacity: 0.75;
+}
+
+.gridTwo {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+  animation: fadeIn 0.4s ease both;
+  animation-delay: 0.1s;
+}
+
+.gridBottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  animation: fadeIn 0.4s ease both;
+  animation-delay: 0.15s;
+}
+
+.section {
+  border-radius: 10px;
+  border: 1px solid #1e293b;
+  background: #0c1220;
+  overflow: hidden;
+}
+
+.sectionHeader {
+  padding: 13px 16px;
+  background: #0a0f1a;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sectionTitle { margin: 0; font-size: 13px; font-weight: 700; }
+.sectionSubtitle { margin-top: 1px; color: #64748b; font-size: 10px; }
+
+.chartPad { padding: 16px 16px 8px 4px; }
+
+.mono { font-family: "JetBrains Mono", "Fira Code", monospace; }
+
+.severityBody {
+  padding: 20px 18px;
+}
+
+.donutWrap {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.legendRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.severityBars {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.barRow { display: flex; align-items: center; gap: 8px; }
+
+.shortLabel {
+  width: 32px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: right;
+  letter-spacing: 0.06em;
+}
+
+.barTrack {
+  flex: 1;
+  height: 10px;
+  border-radius: 2px;
+  background: #111827;
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+.tableHead,
+.productRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 74px minmax(180px, 1fr) 56px;
+  gap: 12px;
+  align-items: center;
+}
+
+.tableHead {
+  padding: 7px 16px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+  font-size: 9px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.06em;
+}
+
+.productRow {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.2);
+}
+
+.productRow:hover,
+.activityItem:hover {
+  background: #0f172a;
+}
+
+.productInfo { display: flex; gap: 8px; min-width: 0; align-items: center; }
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #dc2662 0%, #9333ea 100%);
+  color: #fff;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-weight: 800;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.version {
+  color: #64748b;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.scoreWrap { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.scoreDot { width: 6px; height: 6px; border-radius: 999px; }
+.scoreValue { font-size: 13px; font-weight: 700; }
+
+.stackBar { height: 16px; background: #111827; border-radius: 3px; overflow: hidden; display: flex; }
+.stackSeg { height: 100%; }
+.total { text-align: right; font-size: 13px; font-weight: 700; }
+
+.activityList {
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.activityItem {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.2);
+}
+
+.sevDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.activityTitle {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activityMeta { margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+.activityProduct { font-size: 10px; color: #64748b; }
+.toolBadge {
+  font-size: 9px;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-weight: 600;
+}
+.activityTime { margin-top: 3px; font-size: 10px; color: #64748b; flex-shrink: 0; }
+
+.empty {
+  padding: 16px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+@media (max-width: 1280px) {
+  .cardGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gridTwo, .gridBottom { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 700px) {
+  .page { padding: 12px; }
+  .cardGrid { grid-template-columns: 1fr; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
