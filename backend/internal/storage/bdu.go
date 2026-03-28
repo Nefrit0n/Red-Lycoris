@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lib/pq"
 )
@@ -216,8 +217,9 @@ func ReplaceBDUDataset(ctx context.Context, db *sql.DB, vulns []BDUVulnerability
 		if strings.TrimSpace(v.BDUID) == "" {
 			continue
 		}
+		softwareName := clampSoftwareNameForLegacyIndex(v.SoftwareName)
 		if _, err := vulnStmt.ExecContext(ctx,
-			v.BDUID, v.Name, v.Description, v.Vendor, v.SoftwareName, v.SoftwareVersion,
+			v.BDUID, v.Name, v.Description, v.Vendor, softwareName, v.SoftwareVersion,
 			v.SoftwareType, v.OSHardware, v.VulnClass, v.DetectionDate,
 			v.CVSSV2, v.CVSSV3, v.CVSSV4, v.Severity, v.Remediation, v.Status,
 			v.ExploitExists, v.FixInfo, v.SourceURLs, v.OtherIDs, v.OtherInfo,
@@ -261,11 +263,39 @@ func ReplaceBDUDataset(ctx context.Context, db *sql.DB, vulns []BDUVulnerability
 }
 
 func ensureBDUSoftwareNameIndex(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, "DROP INDEX IF EXISTS public.idx_bdu_vulnerabilities_software_name_lower"); err != nil {
+	// Legacy installs may have this index created in non-public schemas.
+	// Remove all occurrences defensively before creating the md5-based index.
+	if _, err := db.ExecContext(ctx, `
+DO $$
+DECLARE idx RECORD;
+BEGIN
+	FOR idx IN
+		SELECT schemaname, indexname
+		FROM pg_indexes
+		WHERE indexname = 'idx_bdu_vulnerabilities_software_name_lower'
+	LOOP
+		EXECUTE format('DROP INDEX IF EXISTS %I.%I', idx.schemaname, idx.indexname);
+	END LOOP;
+END$$;`); err != nil {
 		return err
 	}
 	_, err := db.ExecContext(ctx, `
 		CREATE INDEX IF NOT EXISTS idx_bdu_vulnerabilities_software_name_md5
 		ON public.bdu_vulnerabilities (md5(LOWER(software_name)))`)
 	return err
+}
+
+const legacySoftwareNameIndexSafeBytes = 512
+
+// clampSoftwareNameForLegacyIndex bounds software_name length to keep inserts
+// resilient even when a legacy LOWER(software_name) btree index still exists.
+func clampSoftwareNameForLegacyIndex(value string) string {
+	if len(value) <= legacySoftwareNameIndexSafeBytes {
+		return value
+	}
+	clamped := value[:legacySoftwareNameIndexSafeBytes]
+	for !utf8.ValidString(clamped) && len(clamped) > 0 {
+		clamped = clamped[:len(clamped)-1]
+	}
+	return clamped
 }
