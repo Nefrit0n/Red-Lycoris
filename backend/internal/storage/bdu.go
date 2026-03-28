@@ -110,6 +110,13 @@ func GetBDUByIdentifiers(ctx context.Context, db *sql.DB, identifiers []string) 
 
 // GetBDUSyncStatus returns the current BDU sync status.
 func GetBDUSyncStatus(ctx context.Context, db *sql.DB) (*BDUSyncStatus, error) {
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO bdu_sync_status (id, sync_interval_hours, record_count, is_syncing, updated_at)
+		VALUES (1, 24, 0, FALSE, NOW())
+		ON CONFLICT (id) DO NOTHING`); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT last_synced_at, record_count, sync_interval_hours,
 		       last_error, is_syncing, updated_at
@@ -167,6 +174,10 @@ func MarkBDUSyncFailed(ctx context.Context, db *sql.DB, errText string) error {
 }
 
 func ReplaceBDUDataset(ctx context.Context, db *sql.DB, vulns []BDUVulnerability, mappings []BDUIdentifierMapping, syncedAt time.Time) error {
+	if err := ensureBDUSoftwareNameIndex(ctx, db); err != nil {
+		return err
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -247,4 +258,14 @@ func ReplaceBDUDataset(ctx context.Context, db *sql.DB, vulns []BDUVulnerability
 	}
 
 	return tx.Commit()
+}
+
+func ensureBDUSoftwareNameIndex(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, "DROP INDEX IF EXISTS public.idx_bdu_vulnerabilities_software_name_lower"); err != nil {
+		return err
+	}
+	_, err := db.ExecContext(ctx, `
+		CREATE INDEX IF NOT EXISTS idx_bdu_vulnerabilities_software_name_md5
+		ON public.bdu_vulnerabilities (md5(LOWER(software_name)))`)
+	return err
 }
