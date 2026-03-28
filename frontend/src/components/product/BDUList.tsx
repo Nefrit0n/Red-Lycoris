@@ -40,11 +40,41 @@ const formatDate = (value?: string | null) => {
 const toText = (value: unknown): string => (typeof value === "string" ? value : "");
 const toNum = (value: unknown): number | null => (typeof value === "number" ? value : null);
 const toStrArray = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+const toBool = (value: unknown): boolean => {
+  if (value === true) return true;
+  if (typeof value === "string") {
+    const norm = value.trim().toLowerCase();
+    return norm === "true" || norm === "1" || norm === "yes" || norm === "да";
+  }
+  return false;
+};
+
+const extractBduItems = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+
+  const obj = payload as Record<string, unknown>;
+  if (Array.isArray(obj.items)) return obj.items;
+  if (Array.isArray(obj.vulnerabilities)) return obj.vulnerabilities;
+  if (Array.isArray(obj.records)) return obj.records;
+  if (Array.isArray(obj.data)) return obj.data;
+  if (obj.data && typeof obj.data === "object") return extractBduItems(obj.data);
+
+  const entries = Object.entries(obj);
+  const looksLikeMap = entries.some(([key, value]) => key.startsWith("BDU:") && value && typeof value === "object");
+  if (looksLikeMap) {
+    return entries
+      .filter(([, value]) => value && typeof value === "object")
+      .map(([key, value]) => ({ ...(value as Record<string, unknown>), id: (value as any).id || key }));
+  }
+
+  return [];
+};
 
 const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
   if (!raw || typeof raw !== "object") return null;
 
-  const id = toText(raw.id || raw.bduId || raw.bdu_id);
+  const id = toText(raw.id || raw.identifier || raw.bduId || raw.bdu_id);
   const legacyCvss3 = typeof raw.cvssV3 === "string" ? Number.parseFloat(raw.cvssV3) : null;
   const componentName = toText(raw.component || raw.componentName);
   const componentVersion = toText(raw.componentVersion);
@@ -75,7 +105,7 @@ const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
     cvss4: raw.cvss4 && typeof raw.cvss4 === "object" ? { vector: toText(raw.cvss4.vector), score: toNum(raw.cvss4.score) ?? 0 } : null,
     remediation: toText(raw.remediation),
     status: toText(raw.status),
-    exploitExists: Boolean(raw.exploitExists === true || raw.exploitExists === "true"),
+    exploitExists: toBool(raw.exploitExists),
     fixInfo: toText(raw.fixInfo),
     references: toStrArray(raw.references),
     otherIds: toStrArray(raw.otherIds),
@@ -92,12 +122,12 @@ const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
 
 const listProductBdu = async (productId: string): Promise<BDUVulnerabilityItem[]> => {
   try {
-    const response = await request<BDUVulnerabilityItem[] | { items?: BDUVulnerabilityItem[] }>(`/api/products/${productId}/bdu`);
-    const rawItems = Array.isArray(response) ? response : Array.isArray(response?.items) ? response.items : [];
+    const response = await request<unknown>(`/api/products/${productId}/bdu`);
+    const rawItems = extractBduItems(response);
     return rawItems.map(normalizeBduItem).filter((item): item is BDUVulnerabilityItem => Boolean(item));
   } catch {
-    const legacy = await request<{ items?: unknown[] }>(`/api/v1/products/${productId}/bdu-vulnerabilities`);
-    const rawItems = Array.isArray(legacy?.items) ? legacy.items : [];
+    const legacy = await request<unknown>(`/api/v1/products/${productId}/bdu-vulnerabilities`);
+    const rawItems = extractBduItems(legacy);
     return rawItems.map(normalizeBduItem).filter((item): item is BDUVulnerabilityItem => Boolean(item));
   }
 };
