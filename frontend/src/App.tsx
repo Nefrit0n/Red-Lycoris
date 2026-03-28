@@ -60,6 +60,7 @@ const App = () => {
                 />
 
                 {/* Dashboard - главная страница */}
+                <Route path="/" element={<Dashboard />} />
                 <Route path="/dashboard" element={<Dashboard />} />
 
                 {/* Каноничный список находок */}
@@ -91,9 +92,6 @@ const App = () => {
                   element={<IntegrationTokensPage />}
                 />
                 <Route path="/admin/audit" element={<AuditPage />} />
-
-                {/* Редиректы */}
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
                 {/* Catch-all */}
                 <Route
