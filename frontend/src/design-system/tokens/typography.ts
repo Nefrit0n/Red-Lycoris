@@ -14,13 +14,13 @@
 
 export const fontFamily = {
   // Primary - Clean, modern sans-serif for UI
-  sans: "'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  sans: "'IBM Plex Sans', 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 
   // Monospace - For code, technical data, numbers
   mono: "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
 
   // Display - For large headings (optional, can use sans)
-  display: "'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
+  display: "'IBM Plex Sans', 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
 } as const;
 
 // ============================================================
