@@ -1,5 +1,6 @@
 import { request, requestBlob } from "./client";
-import { SbomComponentItem, SbomIndexStatus, SbomItem } from "../types/sbom";
+import type { BDUMatchItem } from "../types/bdu";
+import type { SbomComponentItem, SbomIndexStatus, SbomItem } from "../types/sbom";
 
 export const listSboms = async (productId: string): Promise<SbomItem[]> => {
   return request<SbomItem[]>("/api/v1/sbom", {
@@ -59,6 +60,17 @@ export const listProductComponents = async (
 ): Promise<{ items: SbomComponentItem[]; total: number; indexStatus?: SbomIndexStatus | null }> =>
   request<{ items: SbomComponentItem[]; total: number; indexStatus?: SbomIndexStatus | null }>(
     `/api/v1/products/${productId}/components`,
+    {
+      query: params,
+    }
+  );
+
+export const listProductBduVulnerabilities = async (
+  productId: string,
+  params: { q?: string; limit?: number; offset?: number }
+): Promise<{ items: BDUMatchItem[]; total: number }> =>
+  request<{ items: BDUMatchItem[]; total: number }>(
+    `/api/v1/products/${productId}/bdu-vulnerabilities`,
     {
       query: params,
     }

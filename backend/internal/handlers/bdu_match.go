@@ -1,0 +1,99 @@
+package handlers
+
+import (
+	"database/sql"
+	"strings"
+
+	"red-lycoris/backend/internal/bdu"
+	v1 "red-lycoris/backend/internal/dto/v1"
+	"red-lycoris/backend/internal/storage"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+)
+
+type BDUMatchHandler struct {
+	db *sql.DB
+}
+
+func NewBDUMatchHandler(db *sql.DB) *BDUMatchHandler {
+	return &BDUMatchHandler{db: db}
+}
+
+// ListByProduct returns BDU vulnerabilities matched to SBOM components by software name + version.
+func (h *BDUMatchHandler) ListByProduct(c *fiber.Ctx) error {
+	productID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "error": "invalid product id"})
+	}
+
+	indexedSbom, err := storage.GetLatestIndexedSbomByProduct(c.Context(), h.db, productID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to fetch sbom"})
+	}
+	if indexedSbom == nil {
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"success": true,
+			"data": map[string]interface{}{
+				"items": []v1.BDUMatchDTO{},
+				"total": 0,
+			},
+		})
+	}
+
+	search := strings.TrimSpace(c.Query("q"))
+	limit := parseIntOrDefault(c.Query("limit"), 50)
+	offset := parseIntOrDefault(c.Query("offset"), 0)
+
+	// Phase 1: SQL name match
+	candidates, err := storage.ListBDUMatchesByName(c.Context(), h.db, indexedSbom.ID, search)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to query bdu matches"})
+	}
+
+	// Phase 2: Go-level version filtering
+	var matched []v1.BDUMatchDTO
+	for _, m := range candidates {
+		constraints := bdu.ParseVersionConstraints(m.SoftwareVersion)
+		if !bdu.MatchesAny(m.ComponentVersion, constraints) {
+			continue
+		}
+		matched = append(matched, v1.BDUMatchDTO{
+			ComponentName:    m.ComponentName,
+			ComponentVersion: m.ComponentVersion,
+			BDUID:            m.BDUID,
+			Name:             m.BDUName,
+			Severity:         m.Severity,
+			CVSSV3:           m.CVSSV3,
+			SoftwareName:     m.SoftwareName,
+			SoftwareVersion:  m.SoftwareVersion,
+			ExploitExists:    m.ExploitExists,
+			CWEID:            m.CWEID,
+			Status:           m.Status,
+			VulnClass:        m.VulnClass,
+			Vendor:           m.Vendor,
+			Remediation:      m.Remediation,
+			PublishedDate:    m.PublishedDate,
+		})
+	}
+
+	total := len(matched)
+
+	// Apply pagination
+	if offset > len(matched) {
+		offset = len(matched)
+	}
+	end := offset + limit
+	if end > len(matched) {
+		end = len(matched)
+	}
+	page := matched[offset:end]
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"data": map[string]interface{}{
+			"items": page,
+			"total": total,
+		},
+	})
+}
