@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useProductDetail } from "../hooks/useProductDetail";
 import { calculateHealthScore } from "../utils/productHealth";
-import { listSboms } from "../api/sbom";
+import { listSboms, uploadSbom } from "../api/sbom";
 import type { SbomItem } from "../types/sbom";
 import styles from "./ProductDetail.module.css";
 import ComponentsList from "../components/product/ComponentsList";
+import BDUList from "../components/product/BDUList";
 
 type SbomTab = "sbom" | "components" | "bdu";
 
@@ -185,14 +186,20 @@ function StatusBars({ open, fixed, fp }: { open: number; fixed: number; fp: numb
 
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { product, loading, error } = useProductDetail(id);
+  const findingsSectionRef = useRef<HTMLElement | null>(null);
 
   const [sbomTab, setSbomTab] = useState<SbomTab>("sbom");
   const [latestSbom, setLatestSbom] = useState<SbomItem | null>(null);
+  const [sbomLoading, setSbomLoading] = useState(false);
+  const [sbomUploadError, setSbomUploadError] = useState<string | null>(null);
+  const [sbomUploadSuccess, setSbomUploadSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
+    setSbomLoading(true);
     listSboms(id)
       .then((items) => {
         const sorted = [...items].sort(
@@ -200,13 +207,53 @@ const ProductDetailPage = () => {
         );
         setLatestSbom(sorted[0] ?? null);
       })
-      .catch(() => setLatestSbom(null));
+      .catch(() => setLatestSbom(null))
+      .finally(() => setSbomLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("section") !== "findings") return;
+    findingsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [location.search]);
 
   const healthScore = useMemo(
     () => (product ? calculateHealthScore(product.severityBreakdown) : 0),
     [product],
   );
+
+  const refreshLatestSbom = async () => {
+    if (!id) return;
+    setSbomLoading(true);
+    setSbomUploadError(null);
+    try {
+      const items = await listSboms(id);
+      const sorted = [...items].sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+      );
+      setLatestSbom(sorted[0] ?? null);
+    } catch (err) {
+      setSbomUploadError(err instanceof Error ? err.message : "Не удалось обновить список SBOM");
+    } finally {
+      setSbomLoading(false);
+    }
+  };
+
+  const handleSbomUpload = async (file: File) => {
+    if (!id) return;
+    setSbomLoading(true);
+    setSbomUploadError(null);
+    setSbomUploadSuccess(null);
+    try {
+      await uploadSbom(id, file);
+      await refreshLatestSbom();
+      setSbomUploadSuccess(`SBOM «${file.name}» успешно загружен.`);
+    } catch (err) {
+      setSbomUploadError(err instanceof Error ? err.message : "Не удалось загрузить SBOM");
+    } finally {
+      setSbomLoading(false);
+    }
+  };
 
   if (!id) {
     return <div className={styles.error}>Некорректный идентификатор продукта.</div>;
@@ -312,7 +359,7 @@ const ProductDetailPage = () => {
         ))}
       </section>
 
-      <section className={`${styles.block} ${styles.delay3}`}>
+      <section ref={findingsSectionRef} className={`${styles.block} ${styles.delay3}`}>
         <h2 className={styles.sectionHeading}>СОСТОЯНИЕ БЕЗОПАСНОСТИ</h2>
         <div className={styles.postureGrid}>
           {[
@@ -437,28 +484,51 @@ const ProductDetailPage = () => {
 
         <div className={styles.tabContent}>
           {sbomTab === "sbom" && (
-            <div className={styles.sbomGrid}>
-              <div className={styles.sbomCard}>
-                <div className={styles.sbomKey}>ФОРМАТ</div>
-                <div className={styles.sbomVal}>{latestSbom?.format || "CycloneDX"}</div>
+            <>
+              <div className={styles.actions}>
+                <button type="button" className={styles.outlineButton} onClick={refreshLatestSbom} disabled={sbomLoading}>
+                  {sbomLoading ? "Обновление…" : "Обновить SBOM"}
+                </button>
+                <label htmlFor="sbom-upload-input" className={styles.primaryButton} style={{ cursor: sbomLoading ? "not-allowed" : "pointer" }}>
+                  {sbomLoading ? "Загрузка…" : "Загрузить SBOM"}
+                </label>
+                <input
+                  id="sbom-upload-input"
+                  type="file"
+                  hidden
+                  disabled={sbomLoading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleSbomUpload(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
               </div>
-              <div className={styles.sbomCard}>
-                <div className={styles.sbomKey}>ИНСТРУМЕНТ</div>
-                <div className={styles.sbomVal}>{latestSbom?.originalFilename || "Syft"}</div>
+              {sbomUploadError && <p className={styles.error}>{sbomUploadError}</p>}
+              {sbomUploadSuccess && <p className={styles.loading}>{sbomUploadSuccess}</p>}
+              <div className={styles.sbomGrid}>
+                <div className={styles.sbomCard}>
+                  <div className={styles.sbomKey}>ФОРМАТ</div>
+                  <div className={styles.sbomVal}>{latestSbom?.format || "CycloneDX"}</div>
+                </div>
+                <div className={styles.sbomCard}>
+                  <div className={styles.sbomKey}>ИНСТРУМЕНТ</div>
+                  <div className={styles.sbomVal}>{latestSbom?.originalFilename || "Syft"}</div>
+                </div>
+                <div className={styles.sbomCard}>
+                  <div className={styles.sbomKey}>КОМПОНЕНТЫ</div>
+                  <div className={styles.sbomVal}>{latestSbom?.componentCount ?? "—"}</div>
+                </div>
+                <div className={styles.sbomCard}>
+                  <div className={styles.sbomKey}>ДАТА</div>
+                  <div className={styles.sbomVal}>{formatDate(latestSbom?.createdAt)}</div>
+                </div>
               </div>
-              <div className={styles.sbomCard}>
-                <div className={styles.sbomKey}>КОМПОНЕНТЫ</div>
-                <div className={styles.sbomVal}>{latestSbom?.componentCount ?? "—"}</div>
-              </div>
-              <div className={styles.sbomCard}>
-                <div className={styles.sbomKey}>ДАТА</div>
-                <div className={styles.sbomVal}>{formatDate(latestSbom?.createdAt)}</div>
-              </div>
-            </div>
+            </>
           )}
 
           {sbomTab === "components" && <ComponentsList productId={id} />}
-          {sbomTab === "bdu" && <p className={styles.tabPlaceholder}>Компонент вкладки «БДУ ФСТЭК» будет подключён отдельно.</p>}
+          {sbomTab === "bdu" && <BDUList productId={id} />}
         </div>
       </section>
     </main>
