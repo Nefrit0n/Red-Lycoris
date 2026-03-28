@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useProductDetail } from "../hooks/useProductDetail";
 import { calculateHealthScore } from "../utils/productHealth";
 import { listSboms } from "../api/sbom";
 import type { SbomItem } from "../types/sbom";
 import styles from "./ProductDetail.module.css";
 import ComponentsList from "../components/product/ComponentsList";
+import BDUList from "../components/product/BDUList";
 
 type SbomTab = "sbom" | "components" | "bdu";
 
@@ -185,8 +186,10 @@ function StatusBars({ open, fixed, fp }: { open: number; fixed: number; fp: numb
 
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { product, loading, error } = useProductDetail(id);
+  const findingsSectionRef = useRef<HTMLElement | null>(null);
 
   const [sbomTab, setSbomTab] = useState<SbomTab>("sbom");
   const [latestSbom, setLatestSbom] = useState<SbomItem | null>(null);
@@ -202,6 +205,12 @@ const ProductDetailPage = () => {
       })
       .catch(() => setLatestSbom(null));
   }, [id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("section") !== "findings") return;
+    findingsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [location.search]);
 
   const healthScore = useMemo(
     () => (product ? calculateHealthScore(product.severityBreakdown) : 0),
@@ -312,7 +321,7 @@ const ProductDetailPage = () => {
         ))}
       </section>
 
-      <section className={`${styles.block} ${styles.delay3}`}>
+      <section ref={findingsSectionRef} className={`${styles.block} ${styles.delay3}`}>
         <h2 className={styles.sectionHeading}>СОСТОЯНИЕ БЕЗОПАСНОСТИ</h2>
         <div className={styles.postureGrid}>
           {[
@@ -458,7 +467,7 @@ const ProductDetailPage = () => {
           )}
 
           {sbomTab === "components" && <ComponentsList productId={id} />}
-          {sbomTab === "bdu" && <p className={styles.tabPlaceholder}>Компонент вкладки «БДУ ФСТЭК» будет подключён отдельно.</p>}
+          {sbomTab === "bdu" && <BDUList productId={id} />}
         </div>
       </section>
     </main>
