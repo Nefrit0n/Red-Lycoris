@@ -1,6 +1,5 @@
 import { request, requestBlob } from "./client";
-import { normalizeBduMatch } from "../pages/product-detail/bduUtils";
-import type { BDUMatchItem, BDUMatchItemDTO } from "../types/bdu";
+import type { BDUMatchItem } from "../types/bdu";
 import type { SbomComponentItem, SbomIndexStatus, SbomItem } from "../types/sbom";
 
 export const listSboms = async (productId: string): Promise<SbomItem[]> => {
@@ -69,15 +68,10 @@ export const listProductComponents = async (
 export const listProductBduVulnerabilities = async (
   productId: string,
   params: { q?: string; limit?: number; offset?: number }
-): Promise<{ items: BDUMatchItem[]; total: number }> => {
-  const response = await request<{ items: BDUMatchItemDTO[]; total: number }>(
+): Promise<{ items: BDUMatchItem[]; total: number }> =>
+  request<{ items: BDUMatchItem[]; total: number }>(
     `/api/v1/products/${productId}/bdu-vulnerabilities`,
     {
       query: params,
     }
   );
-  return {
-    total: Number(response.total) || 0,
-    items: (response.items ?? []).map((item) => normalizeBduMatch(item)),
-  };
-};
