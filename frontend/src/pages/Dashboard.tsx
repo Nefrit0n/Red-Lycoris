@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { request } from "../api/client";
+import { useNavigate } from "react-router-dom";
 import styles from "./Dashboard.module.css";
 
 const API = import.meta.env.VITE_API_URL ?? "";
@@ -22,6 +23,7 @@ type ProductItem = {
 };
 type ActivityItem = {
   id: string;
+  productId?: string;
   title: string;
   product: string;
   severity: SeverityKey;
@@ -274,6 +276,7 @@ const initialState: DashboardState = {
 };
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardState>(initialState);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -330,6 +333,19 @@ export default function Dashboard() {
 
   const maxFindings = Math.max(...data.products.map((p) => p.findings), 1);
 
+  const goToProduct = (productId?: string) => {
+    if (!productId) return;
+    navigate(`/products/${productId}`);
+  };
+
+  const goToProductFindings = (item: ActivityItem) => {
+    const fromPayload = item.productId;
+    const fallback = data.products.find((product) => product.name === item.product)?.id;
+    const resolvedId = fromPayload ?? fallback;
+    if (!resolvedId) return;
+    navigate(`/products/${resolvedId}?section=findings`);
+  };
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -381,7 +397,12 @@ export default function Dashboard() {
             const scoreCol = scoreColor(product.score);
 
             return (
-              <div key={product.id} className={styles.productRow}>
+              <button
+                key={product.id}
+                type="button"
+                className={`${styles.productRow} ${styles.interactiveRow}`}
+                onClick={() => goToProduct(product.id)}
+              >
                 <div className={styles.productInfo}>
                   <div className={styles.avatar}>{product.name.charAt(0).toUpperCase()}</div>
                   <div style={{ minWidth: 0 }}>
@@ -405,7 +426,7 @@ export default function Dashboard() {
                 <span className={`${styles.total} ${styles.mono}`} style={{ color: product.findings > 10 ? "#fca5a5" : "#64748b" }}>
                   {product.findings}
                 </span>
-              </div>
+              </button>
             );
           })}
         </section>
@@ -421,7 +442,12 @@ export default function Dashboard() {
             {!loading && data.activity.map((item) => {
               const toolCfg = TOOL_CONFIG[item.tool];
               return (
-                <div key={item.id} className={styles.activityItem}>
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`${styles.activityItem} ${styles.interactiveRow}`}
+                  onClick={() => goToProductFindings(item)}
+                >
                   <span className={styles.sevDot} style={{ background: SEVERITY_COLORS[item.severity], boxShadow: `0 0 6px ${SEVERITY_COLORS[item.severity]}80` }} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className={styles.activityTitle}>{item.title}</div>
@@ -435,7 +461,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <span className={styles.activityTime}>{item.time ?? formatAgo(item.timestamp ?? "")}</span>
-                </div>
+                </button>
               );
             })}
           </div>
