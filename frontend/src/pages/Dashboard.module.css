@@ -236,6 +236,15 @@
   border-bottom: 1px solid rgba(30, 41, 59, 0.2);
 }
 
+.interactiveRow {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .productRow:hover,
 .activityItem:hover {
   background: #0f172a;
