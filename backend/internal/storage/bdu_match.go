@@ -55,7 +55,9 @@ SELECT
     bv.published_date
 FROM sbom_component_occurrences sco
 JOIN sca_components c ON c.id = sco.component_id
-JOIN bdu_vulnerabilities bv ON LOWER(bv.software_name) = LOWER(c.name)
+JOIN bdu_vulnerabilities bv
+  ON md5(LOWER(bv.software_name)) = md5(LOWER(c.name))
+ AND LOWER(bv.software_name) = LOWER(c.name)
 WHERE sco.sbom_id = $1
   AND sco.version IS NOT NULL AND sco.version != ''
   AND bv.software_version != ''`
