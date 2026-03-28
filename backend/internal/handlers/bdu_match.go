@@ -52,7 +52,7 @@ func (h *BDUMatchHandler) ListByProduct(c *fiber.Ctx) error {
 	}
 
 	// Phase 2: Go-level version filtering
-	var matched []v1.BDUMatchDTO
+	matched := make([]v1.BDUMatchDTO, 0)
 	for _, m := range candidates {
 		constraints := bdu.ParseVersionConstraints(m.SoftwareVersion)
 		if !bdu.MatchesAny(m.ComponentVersion, constraints) {
