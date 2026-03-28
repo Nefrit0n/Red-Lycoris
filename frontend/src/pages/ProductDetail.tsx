@@ -5,6 +5,7 @@ import { calculateHealthScore } from "../utils/productHealth";
 import { listSboms } from "../api/sbom";
 import type { SbomItem } from "../types/sbom";
 import styles from "./ProductDetail.module.css";
+import ComponentsList from "../components/product/ComponentsList";
 
 type SbomTab = "sbom" | "components" | "bdu";
 
@@ -456,7 +457,7 @@ const ProductDetailPage = () => {
             </div>
           )}
 
-          {sbomTab === "components" && <p className={styles.tabPlaceholder}>Компонент вкладки «Компоненты» будет подключён отдельно.</p>}
+          {sbomTab === "components" && <ComponentsList productId={id} />}
           {sbomTab === "bdu" && <p className={styles.tabPlaceholder}>Компонент вкладки «БДУ ФСТЭК» будет подключён отдельно.</p>}
         </div>
       </section>
