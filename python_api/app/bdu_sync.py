@@ -132,6 +132,8 @@ def parse_and_store(xlsx_path: str) -> dict[str, Any]:
     conn = psycopg2.connect(dsn)
 
     try:
+        _ensure_sync_status_row(conn)
+        _ensure_software_name_index(conn)
         _mark_syncing(conn, True)
 
         wb = load_workbook(xlsx_path, read_only=True, data_only=True)
@@ -319,5 +321,29 @@ def _update_sync_status(conn, count: int, error: str | None) -> None:
             WHERE id = 1
             """,
             (count, error),
+        )
+    conn.commit()
+
+
+def _ensure_sync_status_row(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO bdu_sync_status (id, sync_interval_hours, record_count, is_syncing, updated_at)
+            VALUES (1, 24, 0, FALSE, NOW())
+            ON CONFLICT (id) DO NOTHING
+            """
+        )
+    conn.commit()
+
+
+def _ensure_software_name_index(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DROP INDEX IF EXISTS public.idx_bdu_vulnerabilities_software_name_lower")
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_bdu_vulnerabilities_software_name_md5
+            ON public.bdu_vulnerabilities (md5(LOWER(software_name)))
+            """
         )
     conn.commit()
