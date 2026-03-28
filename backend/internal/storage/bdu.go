@@ -110,6 +110,13 @@ func GetBDUByIdentifiers(ctx context.Context, db *sql.DB, identifiers []string) 
 
 // GetBDUSyncStatus returns the current BDU sync status.
 func GetBDUSyncStatus(ctx context.Context, db *sql.DB) (*BDUSyncStatus, error) {
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO bdu_sync_status (id, sync_interval_hours, record_count, is_syncing, updated_at)
+		VALUES (1, 24, 0, FALSE, NOW())
+		ON CONFLICT (id) DO NOTHING`); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT last_synced_at, record_count, sync_interval_hours,
 		       last_error, is_syncing, updated_at
