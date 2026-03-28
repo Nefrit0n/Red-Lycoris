@@ -156,7 +156,7 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
         limit: 200,
         offset: 0,
       });
-      setBduItems(response.items);
+      setBduItems(response.items ?? []);
       setBduTotal(response.total);
     } catch (err) {
       setBduError(err instanceof Error ? err.message : "Failed to load BDU vulnerabilities");
