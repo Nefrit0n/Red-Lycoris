@@ -37,12 +37,68 @@ const formatDate = (value?: string | null) => {
   return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short", year: "numeric" }).format(dt);
 };
 
+const toText = (value: unknown): string => (typeof value === "string" ? value : "");
+const toNum = (value: unknown): number | null => (typeof value === "number" ? value : null);
+const toStrArray = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+
+const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
+  if (!raw || typeof raw !== "object") return null;
+
+  const id = toText(raw.id || raw.bduId || raw.bdu_id);
+  const legacyCvss3 = typeof raw.cvssV3 === "string" ? Number.parseFloat(raw.cvssV3) : null;
+  const componentName = toText(raw.component || raw.componentName);
+  const componentVersion = toText(raw.componentVersion);
+  const component = componentName && componentVersion ? `${componentName} ${componentVersion}` : componentName || componentVersion;
+
+  if (!id) return null;
+
+  return {
+    id,
+    name: toText(raw.name),
+    description: toText(raw.description || raw.bduDescription),
+    vendor: toText(raw.vendor),
+    softwareName: toText(raw.softwareName),
+    softwareVersion: toText(raw.softwareVersion),
+    softwareType: toText(raw.softwareType),
+    osPlatform: toText(raw.osPlatform),
+    vulnClass: toText(raw.vulnClass),
+    dateDiscovered: toText(raw.dateDiscovered),
+    datePublished: toText(raw.datePublished || raw.publishedDate),
+    dateUpdated: toText(raw.dateUpdated),
+    cvss2: raw.cvss2 && typeof raw.cvss2 === "object" ? { vector: toText(raw.cvss2.vector), score: toNum(raw.cvss2.score) ?? 0 } : null,
+    cvss3:
+      raw.cvss3 && typeof raw.cvss3 === "object"
+        ? { vector: toText(raw.cvss3.vector), score: toNum(raw.cvss3.score) ?? 0 }
+        : legacyCvss3 != null && Number.isFinite(legacyCvss3)
+          ? { vector: "", score: legacyCvss3 }
+          : null,
+    cvss4: raw.cvss4 && typeof raw.cvss4 === "object" ? { vector: toText(raw.cvss4.vector), score: toNum(raw.cvss4.score) ?? 0 } : null,
+    remediation: toText(raw.remediation),
+    status: toText(raw.status),
+    exploitExists: Boolean(raw.exploitExists === true || raw.exploitExists === "true"),
+    fixInfo: toText(raw.fixInfo),
+    references: toStrArray(raw.references),
+    otherIds: toStrArray(raw.otherIds),
+    vulnState: toText(raw.vulnState),
+    cweId: toText(raw.cweId),
+    cweDesc: toText(raw.cweDesc),
+    exploitMethod: toText(raw.exploitMethod),
+    fixMethod: toText(raw.fixMethod),
+    incidentRelation: toText(raw.incidentRelation),
+    additionalInfo: toText(raw.additionalInfo),
+    component,
+  };
+};
+
 const listProductBdu = async (productId: string): Promise<BDUVulnerabilityItem[]> => {
   try {
-    return await request<BDUVulnerabilityItem[]>(`/api/products/${productId}/bdu`);
+    const response = await request<BDUVulnerabilityItem[] | { items?: BDUVulnerabilityItem[] }>(`/api/products/${productId}/bdu`);
+    const rawItems = Array.isArray(response) ? response : Array.isArray(response?.items) ? response.items : [];
+    return rawItems.map(normalizeBduItem).filter((item): item is BDUVulnerabilityItem => Boolean(item));
   } catch {
-    const legacy = await request<{ items?: BDUVulnerabilityItem[] }>(`/api/v1/products/${productId}/bdu-vulnerabilities`);
-    return legacy.items ?? [];
+    const legacy = await request<{ items?: unknown[] }>(`/api/v1/products/${productId}/bdu-vulnerabilities`);
+    const rawItems = Array.isArray(legacy?.items) ? legacy.items : [];
+    return rawItems.map(normalizeBduItem).filter((item): item is BDUVulnerabilityItem => Boolean(item));
   }
 };
 
@@ -58,7 +114,7 @@ const BDUList = ({ productId }: { productId: string }) => {
     setLoading(true);
     setError(null);
     listProductBdu(productId)
-      .then((result) => setItems(Array.isArray(result) ? result : []))
+      .then((result) => setItems(result))
       .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить уязвимости БДУ"))
       .finally(() => setLoading(false));
   }, [productId]);
