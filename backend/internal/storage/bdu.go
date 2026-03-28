@@ -261,7 +261,20 @@ func ReplaceBDUDataset(ctx context.Context, db *sql.DB, vulns []BDUVulnerability
 }
 
 func ensureBDUSoftwareNameIndex(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, "DROP INDEX IF EXISTS public.idx_bdu_vulnerabilities_software_name_lower"); err != nil {
+	// Legacy installs may have this index created in non-public schemas.
+	// Remove all occurrences defensively before creating the md5-based index.
+	if _, err := db.ExecContext(ctx, `
+DO $$
+DECLARE idx RECORD;
+BEGIN
+	FOR idx IN
+		SELECT schemaname, indexname
+		FROM pg_indexes
+		WHERE indexname = 'idx_bdu_vulnerabilities_software_name_lower'
+	LOOP
+		EXECUTE format('DROP INDEX IF EXISTS %I.%I', idx.schemaname, idx.indexname);
+	END LOOP;
+END$$;`); err != nil {
 		return err
 	}
 	_, err := db.ExecContext(ctx, `
