@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_bdu_vulnerabilities_software_name_lower;
