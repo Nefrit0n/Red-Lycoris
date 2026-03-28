@@ -13,9 +13,16 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { downloadSbom, listProductComponents, listSboms, uploadSbom } from "../../api/sbom";
+import {
+  downloadSbom,
+  listProductBduVulnerabilities,
+  listProductComponents,
+  listSboms,
+  uploadSbom,
+} from "../../api/sbom";
 import { GlassCard } from "../../design-system/components";
 import { tableStyles } from "../../design-system/utils/tableStyles";
+import type { BDUMatchItem } from "../../types/bdu";
 import type { SbomComponentItem, SbomIndexStatus, SbomItem } from "../../types/sbom";
 
 interface SbomSectionProps {
@@ -78,6 +85,12 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
   });
   const [indexStatus, setIndexStatus] = useState<SbomIndexStatus | null>(null);
 
+  const [bduItems, setBduItems] = useState<BDUMatchItem[]>([]);
+  const [bduTotal, setBduTotal] = useState(0);
+  const [bduLoading, setBduLoading] = useState(false);
+  const [bduError, setBduError] = useState<string | null>(null);
+  const [bduSearch, setBduSearch] = useState("");
+
   const fetchSboms = useCallback(async () => {
     setSbomLoading(true);
     setSbomError(null);
@@ -134,6 +147,29 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
     return () => window.clearInterval(interval);
   }, [tabIndex, indexStatus?.status, fetchComponents]);
 
+  const fetchBdu = useCallback(async () => {
+    setBduLoading(true);
+    setBduError(null);
+    try {
+      const response = await listProductBduVulnerabilities(productId, {
+        q: bduSearch || undefined,
+        limit: 200,
+        offset: 0,
+      });
+      setBduItems(response.items);
+      setBduTotal(response.total);
+    } catch (err) {
+      setBduError(err instanceof Error ? err.message : "Failed to load BDU vulnerabilities");
+    } finally {
+      setBduLoading(false);
+    }
+  }, [bduSearch, productId]);
+
+  useEffect(() => {
+    if (tabIndex !== 2) return;
+    fetchBdu();
+  }, [fetchBdu, tabIndex]);
+
   const handleSbomUpload = async (file: File) => {
     setSbomUploading(true);
     setSbomUploadError(null);
@@ -173,6 +209,7 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
         >
           <Tab label="SBOM" />
           <Tab label="Components" />
+          <Tab label="БДУ ФСТЭК" />
         </Tabs>
 
         {tabIndex === 0 && (
@@ -408,6 +445,135 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
                 </Box>
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
                   Total: {componentsTotal}
+                </Typography>
+              </Box>
+            )}
+          </Stack>
+        )}
+
+        {tabIndex === 2 && (
+          <Stack spacing={2}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
+              <Typography variant="body2" color="text.secondary">
+                Matched: {bduTotal}
+              </Typography>
+              <TextField
+                label="Search (BDU ID, name, component)"
+                size="small"
+                value={bduSearch}
+                onChange={(event) => setBduSearch(event.target.value)}
+                sx={{ minWidth: 280 }}
+              />
+              <Button variant="outlined" onClick={fetchBdu} disabled={bduLoading}>
+                Refresh
+              </Button>
+            </Stack>
+            {bduError && <Alert severity="error">{bduError}</Alert>}
+            {bduLoading ? (
+              <Box display="flex" justifyContent="center" py={2}>
+                <CircularProgress size={20} />
+              </Box>
+            ) : bduItems.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No BDU FSTEC matches found for SBOM components.
+              </Typography>
+            ) : (
+              <Box sx={{ overflowX: "auto" }}>
+                <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
+                  <Box component="thead">
+                    <Box component="tr">
+                      {[
+                        "Component",
+                        "BDU ID",
+                        "Name",
+                        "Severity",
+                        "CVSS v3",
+                        "BDU Version",
+                        "Exploit",
+                        "Status",
+                        "CWE",
+                        "Vendor",
+                      ].map((label) => (
+                        <Box
+                          key={label}
+                          component="th"
+                          style={{
+                            fontWeight: 600,
+                            fontSize: 12,
+                            padding: "10px 8px",
+                            color: tableStyles.headerText,
+                            borderBottom: `1px solid ${tableStyles.cellBorder}`,
+                            background: tableStyles.headerBg,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {label}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                  <Box component="tbody">
+                    {bduItems.map((item, idx) => (
+                      <Box key={`${item.bduId}-${item.componentName}-${item.componentVersion}-${idx}`} component="tr">
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                          <Stack spacing={0.5}>
+                            <Typography variant="body2">{item.componentName}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {item.componentVersion}
+                            </Typography>
+                          </Stack>
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                          <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                            {item.bduId}
+                          </Typography>
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13, maxWidth: 300 }}>
+                          <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
+                            {item.name}
+                          </Typography>
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                          <Chip
+                            size="small"
+                            label={item.severity || "—"}
+                            color={
+                              item.severity.includes("Критич")
+                                ? "error"
+                                : item.severity.includes("Высок")
+                                  ? "warning"
+                                  : item.severity.includes("Средн")
+                                    ? "info"
+                                    : "default"
+                            }
+                          />
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                          {item.cvssV3 || "—"}
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13, maxWidth: 250 }}>
+                          <Typography variant="caption" sx={{ wordBreak: "break-word" }}>
+                            {item.softwareVersion}
+                          </Typography>
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                          {item.exploitExists || "—"}
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                          {item.status || "—"}
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                          {item.cweId || "—"}
+                        </Box>
+                        <Box component="td" style={{ padding: "10px 8px", fontSize: 13 }}>
+                          {item.vendor || "—"}
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                  Total: {bduTotal}
                 </Typography>
               </Box>
             )}

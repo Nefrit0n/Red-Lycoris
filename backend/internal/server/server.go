@@ -223,6 +223,9 @@ func setupRoutes(app *fiber.App, cfg config.Config, db *sql.DB, publisher *event
 	secured.Get("/sbom/:id/status", sbomComponentsHandler.Status)
 	secured.Get("/products/:id/components", sbomComponentsHandler.ListByProduct)
 
+	bduMatchHandler := handlers.NewBDUMatchHandler(db)
+	secured.Get("/products/:id/bdu-vulnerabilities", bduMatchHandler.ListByProduct)
+
 	intelHandler := handlers.NewIntelHandler(db, publisher)
 	secured.Post("/intel/refresh", middleware.AuthorizeRole("admin"), intelHandler.Refresh)
 
