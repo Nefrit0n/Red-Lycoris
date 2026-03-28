@@ -13,21 +13,36 @@ type BDUComponentMatch struct {
 	ComponentName    string
 	ComponentVersion string
 
-	BDUID           string
-	BDUName         string
-	BDUDescription  string
-	Severity        string
-	CVSSV3          string
-	SoftwareName    string
-	SoftwareVersion string
-	ExploitExists   string
-	CWEID           string
-	Status          string
-	VulnClass       string
-	Vendor          string
-	Remediation     string
-	FixInfo         string
-	PublishedDate   string
+	BDUID              string
+	BDUName            string
+	BDUDescription     string
+	Severity           string
+	CVSSV2             string
+	CVSSV3             string
+	CVSSV4             string
+	SoftwareName       string
+	SoftwareVersion    string
+	SoftwareType       string
+	OSHardware         string
+	ExploitExists      string
+	CWEID              string
+	CWEDescription     string
+	Status             string
+	VulnState          string
+	VulnClass          string
+	Vendor             string
+	Remediation        string
+	SourceURLs         string
+	OtherIDs           string
+	OtherInfo          string
+	IncidentInfo       string
+	ExploitationMethod string
+	FixMethod          string
+	DetectionDate      string
+	FixInfo            string
+	PublishedDate      string
+	UpdatedDate        string
+	Consequences       string
 }
 
 // ListBDUMatchesByName returns BDU vulnerabilities matched by software_name to SBOM component names.
@@ -42,17 +57,32 @@ SELECT
     bv.name,
     bv.description,
     bv.severity,
+    bv.cvss_v2,
     bv.cvss_v3,
+    bv.cvss_v4,
     bv.software_name,
     bv.software_version,
+    bv.software_type,
+    bv.os_hardware,
     bv.exploit_exists,
     bv.cwe_id,
+    bv.cwe_description,
     bv.status,
+    bv.vuln_state,
     bv.vuln_class,
     bv.vendor,
     bv.remediation,
+    bv.source_urls,
+    bv.other_ids,
+    bv.other_info,
+    bv.incident_info,
+    bv.exploitation_method,
+    bv.fix_method,
+    bv.detection_date,
     bv.fix_info,
-    bv.published_date
+    bv.published_date,
+    bv.updated_date,
+    bv.consequences
 FROM sbom_component_occurrences sco
 JOIN sca_components c ON c.id = sco.component_id
 JOIN bdu_vulnerabilities bv
@@ -90,17 +120,32 @@ LIMIT 10000`
 			&m.BDUName,
 			&m.BDUDescription,
 			&m.Severity,
+			&m.CVSSV2,
 			&m.CVSSV3,
+			&m.CVSSV4,
 			&m.SoftwareName,
 			&m.SoftwareVersion,
+			&m.SoftwareType,
+			&m.OSHardware,
 			&m.ExploitExists,
 			&m.CWEID,
+			&m.CWEDescription,
 			&m.Status,
+			&m.VulnState,
 			&m.VulnClass,
 			&m.Vendor,
 			&m.Remediation,
+			&m.SourceURLs,
+			&m.OtherIDs,
+			&m.OtherInfo,
+			&m.IncidentInfo,
+			&m.ExploitationMethod,
+			&m.FixMethod,
+			&m.DetectionDate,
 			&m.FixInfo,
 			&m.PublishedDate,
+			&m.UpdatedDate,
+			&m.Consequences,
 		); err != nil {
 			return nil, err
 		}
