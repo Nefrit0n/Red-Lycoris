@@ -96,7 +96,83 @@ const toArray = <T,>(value: T[] | null | undefined): T[] => (Array.isArray(value
 const toStringSafe = (value: string | null | undefined): string => value || "";
 const toNumberSafe = (value: number | null | undefined): number => (typeof value === "number" ? value : 0);
 
+type ParsedPurl = {
+  packageType?: string;
+  namespace?: string;
+  name?: string;
+  version?: string;
+  qualifiers?: Record<string, string>;
+  subpath?: string;
+};
+
+const parsePurl = (purlRaw: string): ParsedPurl => {
+  const purl = (purlRaw || "").trim();
+  if (!purl.startsWith("pkg:")) return {};
+
+  const noPrefix = purl.slice(4);
+  const [baseAndVersion, qualifierAndSubpath = ""] = noPrefix.split("?", 2);
+  const [basePart, versionPart = ""] = baseAndVersion.split("@", 2);
+  const [qualifierPart = "", subpath = ""] = qualifierAndSubpath.split("#", 2);
+
+  const segments = basePart.split("/");
+  const packageType = segments.shift() || "";
+  const name = segments.length > 0 ? segments[segments.length - 1] : "";
+  const namespace = segments.length > 1 ? segments.slice(0, -1).join("/") : "";
+
+  const qualifiers: Record<string, string> = {};
+  if (qualifierPart) {
+    qualifierPart.split("&").forEach((pair) => {
+      const [k, v = ""] = pair.split("=", 2);
+      if (!k) return;
+      qualifiers[decodeURIComponent(k)] = decodeURIComponent(v);
+    });
+  }
+
+  return {
+    packageType: packageType || undefined,
+    namespace: namespace || undefined,
+    name: name || undefined,
+    version: versionPart || undefined,
+    qualifiers,
+    subpath: subpath || undefined,
+  };
+};
+
+const pickPropertyValue = (raw: any, keys: string[]): string => {
+  const propMap: Record<string, string> = {};
+
+  if (Array.isArray(raw?.properties)) {
+    for (const prop of raw.properties) {
+      if (!prop || typeof prop !== "object") continue;
+      if (typeof prop.name === "string" && typeof prop.value === "string") {
+        propMap[prop.name.toLowerCase()] = prop.value;
+      }
+    }
+  }
+
+  for (const key of keys) {
+    const value = propMap[key.toLowerCase()];
+    if (value) return value;
+  }
+  return "";
+};
+
+const inferLanguage = (ecosystem: string, packageType: string): string => {
+  const hint = (ecosystem || packageType).toLowerCase();
+  if (hint.includes("maven")) return "Java";
+  if (hint.includes("npm")) return "JavaScript/TypeScript";
+  if (hint.includes("pypi")) return "Python";
+  if (hint.includes("golang") || hint === "go") return "Go";
+  if (hint.includes("nuget")) return ".NET";
+  if (hint.includes("cargo") || hint.includes("rust")) return "Rust";
+  if (hint.includes("deb") || hint.includes("rpm")) return "System";
+  return "";
+};
+
 const normalizeRawComponent = (raw: any): CycloneDxComponent => {
+  const purl = toStringSafe(raw?.purl);
+  const parsedPurl = parsePurl(purl);
+
   const licenses = Array.isArray(raw?.licenses)
     ? raw.licenses
         .map((l: unknown) => {
@@ -119,25 +195,45 @@ const normalizeRawComponent = (raw: any): CycloneDxComponent => {
         .filter((h: CycloneDxHash) => Boolean(h.alg || h.content))
     : [];
 
+  const group = toStringSafe(raw?.group || parsedPurl.namespace);
+  const name = toStringSafe(raw?.name || parsedPurl.name);
+  const version = toStringSafe(raw?.version || parsedPurl.version);
+  const ecosystem = toStringSafe(raw?.ecosystem || parsedPurl.packageType);
+  const packageType = toStringSafe(raw?.packageType || parsedPurl.packageType);
+  const componentType = toStringSafe(raw?.type || "library");
+  const location =
+    toStringSafe(raw?.location) ||
+    pickPropertyValue(raw, ["syft:location:0:path", "syft:location:path", "location", "path"]);
+  const layerId =
+    toStringSafe(raw?.layerId) ||
+    pickPropertyValue(raw, ["syft:metadata:layerid", "layerid", "layer_id", "layer"]);
+  const foundBy =
+    toStringSafe(raw?.foundBy) ||
+    toStringSafe(raw?.supplier) ||
+    pickPropertyValue(raw, ["syft:package:foundby", "foundby", "tool", "source"]);
+
+  const dependsOn = toArray(raw?.dependsOn ?? raw?.depends_on ?? raw?.dependencies);
+  const dependedBy = toArray(raw?.dependedBy ?? raw?.depended_by);
+
   return {
-    bomRef: toStringSafe(raw?.bomRef || raw?.["bom-ref"]),
-    type: toStringSafe(raw?.type),
-    group: toStringSafe(raw?.group),
-    name: toStringSafe(raw?.name),
-    version: toStringSafe(raw?.version),
+    bomRef: toStringSafe(raw?.bomRef || raw?.["bom-ref"] || raw?.id || purl || `${name}@${version}`),
+    type: componentType,
+    group,
+    name,
+    version,
     cpe: toStringSafe(raw?.cpe),
-    purl: toStringSafe(raw?.purl),
-    ecosystem: toStringSafe(raw?.ecosystem),
-    language: toStringSafe(raw?.language),
-    packageType: toStringSafe(raw?.packageType),
-    foundBy: toStringSafe(raw?.foundBy),
+    purl,
+    ecosystem,
+    language: toStringSafe(raw?.language || inferLanguage(ecosystem, packageType)),
+    packageType,
+    foundBy,
     licenses,
     hashes,
-    location: toStringSafe(raw?.location),
-    layerId: toStringSafe(raw?.layerId),
+    location,
+    layerId,
     vulns: toNumberSafe(raw?.vulns ?? raw?.vulnTotal),
-    dependsOn: toArray(raw?.dependsOn),
-    dependedBy: toArray(raw?.dependedBy),
+    dependsOn,
+    dependedBy,
   };
 };
 
