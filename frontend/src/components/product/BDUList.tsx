@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CircularProgress } from "@mui/material";
 import styles from "./BDUList.module.css";
 import type { BDUVulnerabilityItem } from "../../types/bdu";
+import { listProductBduVulnerabilities } from "../../api/sbom";
 
 type ThemeKey = "description" | "software" | "cvss" | "remediation" | "links";
 
@@ -115,18 +116,9 @@ const BDUList = ({ productId }: { productId: string }) => {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/v1/products/${productId}/bdu-vulnerabilities`)
-      .then(async (res) => {
-        const data = await res.json();
-        console.log("BDU response:", JSON.stringify(data, null, 2));
-        if (!res.ok) {
-          const message = typeof data?.error === "string" ? data.error : "Не удалось загрузить уязвимости БДУ";
-          throw new Error(message);
-        }
-        return data;
-      })
+    listProductBduVulnerabilities(productId, {})
       .then((data) => {
-        const rawItems = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+        const rawItems = Array.isArray(data?.items) ? data.items : [];
         const normalized = rawItems
           .map(normalizeBduItem)
           .filter((item): item is BDUVulnerabilityItem => Boolean(item));
