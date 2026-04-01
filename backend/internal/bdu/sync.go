@@ -79,7 +79,8 @@ func parseWorkbook(path string) ([]storage.BDUVulnerability, []storage.BDUIdenti
 	byBDU := make(map[string]storage.BDUVulnerability)
 	mapSet := make(map[string]storage.BDUIdentifierMapping)
 
-	for _, sheet := range sheets {
+	sheetsToParse := preferredSheets(sheets)
+	for _, sheet := range sheetsToParse {
 		rows, err := book.GetRows(sheet)
 		if err != nil {
 			return nil, nil, fmt.Errorf("read rows from sheet %s: %w", sheet, err)
