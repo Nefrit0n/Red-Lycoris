@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CircularProgress } from "@mui/material";
-import { request } from "../../api/client";
+import { listProductBduVulnerabilities } from "../../api/sbom";
 import styles from "./BDUList.module.css";
 import type { BDUVulnerabilityItem } from "../../types/bdu";
 
@@ -49,27 +49,6 @@ const toBool = (value: unknown): boolean => {
   return false;
 };
 
-const extractBduItems = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== "object") return [];
-
-  const obj = payload as Record<string, unknown>;
-  if (Array.isArray(obj.items)) return obj.items;
-  if (Array.isArray(obj.vulnerabilities)) return obj.vulnerabilities;
-  if (Array.isArray(obj.records)) return obj.records;
-  if (Array.isArray(obj.data)) return obj.data;
-  if (obj.data && typeof obj.data === "object") return extractBduItems(obj.data);
-
-  const entries = Object.entries(obj);
-  const looksLikeMap = entries.some(([key, value]) => key.startsWith("BDU:") && value && typeof value === "object");
-  if (looksLikeMap) {
-    return entries
-      .filter(([, value]) => value && typeof value === "object")
-      .map(([key, value]) => ({ ...(value as Record<string, unknown>), id: (value as any).id || key }));
-  }
-
-  return [];
-};
 
 const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
   if (!raw || typeof raw !== "object") return null;
@@ -120,18 +99,6 @@ const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
   };
 };
 
-const listProductBdu = async (productId: string): Promise<BDUVulnerabilityItem[]> => {
-  try {
-    const response = await request<unknown>(`/api/products/${productId}/bdu`);
-    const rawItems = extractBduItems(response);
-    return rawItems.map(normalizeBduItem).filter((item): item is BDUVulnerabilityItem => Boolean(item));
-  } catch {
-    const legacy = await request<unknown>(`/api/v1/products/${productId}/bdu-vulnerabilities`);
-    const rawItems = extractBduItems(legacy);
-    return rawItems.map(normalizeBduItem).filter((item): item is BDUVulnerabilityItem => Boolean(item));
-  }
-};
-
 const BDUList = ({ productId }: { productId: string }) => {
   const [items, setItems] = useState<BDUVulnerabilityItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -143,8 +110,13 @@ const BDUList = ({ productId }: { productId: string }) => {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    listProductBdu(productId)
-      .then((result) => setItems(result))
+    listProductBduVulnerabilities(productId, { limit: 500 })
+      .then(({ items: rawItems }) => {
+        const normalized = rawItems
+          .map(normalizeBduItem)
+          .filter((item): item is BDUVulnerabilityItem => Boolean(item));
+        setItems(normalized);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить уязвимости БДУ"))
       .finally(() => setLoading(false));
   }, [productId]);
