@@ -85,11 +85,18 @@ func parseWorkbook(path string) ([]storage.BDUVulnerability, []storage.BDUIdenti
 		if err != nil {
 			return nil, nil, fmt.Errorf("read rows from sheet %s: %w", sheet, err)
 		}
+		if len(rows) == 0 {
+			continue
+		}
+		columns := buildColumnMap(rows[0])
+		if columns["bdu_id"] < 0 {
+			continue
+		}
 		for idx, row := range rows {
 			if idx == 0 {
 				continue
 			}
-			v := vulnerabilityFromRow(row)
+			v := vulnerabilityFromRow(row, columns)
 			if strings.TrimSpace(v.BDUID) == "" || !strings.HasPrefix(strings.ToUpper(v.BDUID), "BDU:") {
 				continue
 			}
@@ -114,58 +121,107 @@ func parseWorkbook(path string) ([]storage.BDUVulnerability, []storage.BDUIdenti
 	return vulns, mappings, nil
 }
 
-func preferredSheets(sheets []string) []string {
-	preferred := make([]string, 0, 1)
-	for _, sheet := range sheets {
-		normalized := strings.ToLower(strings.TrimSpace(sheet))
-		if strings.Contains(normalized, "компонент") || strings.Contains(normalized, "component") {
-			preferred = append(preferred, sheet)
-		}
+func buildColumnMap(headerRow []string) map[string]int {
+	columns := map[string]int{
+		"bdu_id":              findHeaderColumn(headerRow, "идентификатор", "identifier", "bdu"),
+		"name":                findVulnerabilityNameColumn(headerRow),
+		"description":         findHeaderColumn(headerRow, "описание уязвимости", "описание", "vulnerability description", "description"),
+		"vendor":              findHeaderColumn(headerRow, "вендор", "vendor"),
+		"software_name":       findHeaderColumn(headerRow, "название по", "программного обеспечения", "software name", "product name"),
+		"software_version":    findHeaderColumn(headerRow, "версия по", "версия", "software version", "version"),
+		"software_type":       findHeaderColumn(headerRow, "тип по", "тип", "software type"),
+		"os_hardware":         findHeaderColumn(headerRow, "наименование ос", "os", "аппаратной платформы", "platform"),
+		"vuln_class":          findHeaderColumn(headerRow, "класс уязвимости", "vulnerability class"),
+		"detection_date":      findHeaderColumn(headerRow, "дата выявления", "detection date"),
+		"cvss2":               findHeaderColumn(headerRow, "cvss 2", "cvss2"),
+		"cvss3":               findHeaderColumn(headerRow, "cvss 3", "cvss3"),
+		"cvss4":               findHeaderColumn(headerRow, "cvss 4", "cvss4"),
+		"severity":            findHeaderColumn(headerRow, "уровень опасности", "severity"),
+		"remediation":         findHeaderColumn(headerRow, "меры по устранению", "remediation", "mitigation"),
+		"status":              findHeaderColumn(headerRow, "статус уязвимости", "status"),
+		"exploit_exists":      findHeaderColumn(headerRow, "наличие эксплойта", "exploit"),
+		"fix_info":            findHeaderColumn(headerRow, "информация об устранении", "fix info"),
+		"source_urls":         findHeaderColumn(headerRow, "ссылки на источники", "source", "references"),
+		"other_ids":           findHeaderColumn(headerRow, "идентификаторы других систем", "other id"),
+		"other_info":          findHeaderColumn(headerRow, "прочая информация", "other info"),
+		"incident_info":       findHeaderColumn(headerRow, "инцидентами", "incident"),
+		"exploitation_method": findHeaderColumn(headerRow, "способ эксплуатации", "exploitation method"),
+		"fix_method":          findHeaderColumn(headerRow, "способ устранения", "fix method"),
+		"published_date":      findHeaderColumn(headerRow, "дата публикации", "published date"),
+		"updated_date":        findHeaderColumn(headerRow, "дата последнего обновления", "updated date", "last update"),
+		"consequences":        findHeaderColumn(headerRow, "последствия эксплуатации", "consequences"),
+		"vuln_state":          findHeaderColumn(headerRow, "состояние уязвимости", "vulnerability state"),
+		"cwe_description":     findHeaderColumn(headerRow, "описание ошибки cwe", "cwe description"),
+		"cwe_id":              findHeaderColumn(headerRow, "тип ошибки cwe", "cwe id"),
 	}
-	if len(preferred) > 0 {
-		return preferred
-	}
-	return sheets
+	return columns
 }
 
-func vulnerabilityFromRow(row []string) storage.BDUVulnerability {
-	field := func(i int) string {
-		if i < len(row) {
+func findVulnerabilityNameColumn(headerRow []string) int {
+	idx := findHeaderColumn(headerRow, "наименование уязвимости", "название уязвимости", "vulnerability name")
+	if idx >= 0 {
+		return idx
+	}
+	for i, raw := range headerRow {
+		h := strings.ToLower(strings.TrimSpace(raw))
+		if strings.Contains(h, "наименование") && !strings.Contains(h, "ос") {
+			return i
+		}
+	}
+	return findHeaderColumn(headerRow, "name")
+}
+
+func findHeaderColumn(headerRow []string, variants ...string) int {
+	for idx, raw := range headerRow {
+		header := strings.ToLower(strings.TrimSpace(raw))
+		for _, variant := range variants {
+			if strings.Contains(header, variant) {
+				return idx
+			}
+		}
+	}
+	return -1
+}
+
+func vulnerabilityFromRow(row []string, columns map[string]int) storage.BDUVulnerability {
+	field := func(key string) string {
+		i := columns[key]
+		if i >= 0 && i < len(row) {
 			return strings.TrimSpace(row[i])
 		}
 		return ""
 	}
 	return storage.BDUVulnerability{
-		BDUID:              field(0),
-		Name:               field(1),
-		Description:        field(2),
-		Vendor:             field(3),
-		SoftwareName:       field(4),
-		SoftwareVersion:    field(5),
-		SoftwareType:       field(6),
-		OSHardware:         field(7),
-		VulnClass:          field(8),
-		DetectionDate:      field(9),
-		CVSSV2:             field(10),
-		CVSSV3:             field(11),
-		CVSSV4:             field(12),
-		Severity:           field(13),
-		Remediation:        field(14),
-		Status:             field(15),
-		ExploitExists:      field(16),
-		FixInfo:            field(17),
-		SourceURLs:         field(18),
-		OtherIDs:           field(19),
-		OtherInfo:          field(20),
-		IncidentInfo:       field(21),
-		ExploitationMethod: field(22),
-		FixMethod:          field(23),
-		PublishedDate:      field(24),
-		UpdatedDate:        field(25),
-		Consequences:       field(26),
-		VulnState:          field(27),
-		CWEDescription:     field(28),
-		CWEID:              field(29),
+		BDUID:              field("bdu_id"),
+		Name:               field("name"),
+		Description:        field("description"),
+		Vendor:             field("vendor"),
+		SoftwareName:       field("software_name"),
+		SoftwareVersion:    field("software_version"),
+		SoftwareType:       field("software_type"),
+		OSHardware:         field("os_hardware"),
+		VulnClass:          field("vuln_class"),
+		DetectionDate:      field("detection_date"),
+		CVSSV2:             field("cvss2"),
+		CVSSV3:             field("cvss3"),
+		CVSSV4:             field("cvss4"),
+		Severity:           field("severity"),
+		Remediation:        field("remediation"),
+		Status:             field("status"),
+		ExploitExists:      field("exploit_exists"),
+		FixInfo:            field("fix_info"),
+		SourceURLs:         field("source_urls"),
+		OtherIDs:           field("other_ids"),
+		OtherInfo:          field("other_info"),
+		IncidentInfo:       field("incident_info"),
+		ExploitationMethod: field("exploitation_method"),
+		FixMethod:          field("fix_method"),
+		PublishedDate:      field("published_date"),
+		UpdatedDate:        field("updated_date"),
+		Consequences:       field("consequences"),
+		VulnState:          field("vuln_state"),
+		CWEDescription:     field("cwe_description"),
+		CWEID:              field("cwe_id"),
 	}
 }
 
