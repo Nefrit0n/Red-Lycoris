@@ -121,6 +121,23 @@ func parseWorkbook(path string) ([]storage.BDUVulnerability, []storage.BDUIdenti
 	return vulns, mappings, nil
 }
 
+func preferredSheets(sheets []string) []string {
+	if len(sheets) == 0 {
+		return nil
+	}
+	preferred := make([]string, 0, len(sheets))
+	for _, sheet := range sheets {
+		name := strings.ToLower(strings.TrimSpace(sheet))
+		if strings.Contains(name, "уязв") || strings.Contains(name, "vuln") {
+			preferred = append(preferred, sheet)
+		}
+	}
+	if len(preferred) > 0 {
+		return preferred
+	}
+	return sheets
+}
+
 func buildColumnMap(headerRow []string) map[string]int {
 	columns := map[string]int{
 		"bdu_id":              findHeaderColumn(headerRow, "идентификатор", "identifier", "bdu"),
