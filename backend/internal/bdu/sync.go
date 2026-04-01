@@ -79,7 +79,7 @@ func parseWorkbook(path string) ([]storage.BDUVulnerability, []storage.BDUIdenti
 	byBDU := make(map[string]storage.BDUVulnerability)
 	mapSet := make(map[string]storage.BDUIdentifierMapping)
 
-	sheetsToParse := preferredSheets(sheets)
+	sheetsToParse := selectSheetsToParse(sheets)
 	for _, sheet := range sheetsToParse {
 		rows, err := book.GetRows(sheet)
 		if err != nil {
@@ -121,7 +121,7 @@ func parseWorkbook(path string) ([]storage.BDUVulnerability, []storage.BDUIdenti
 	return vulns, mappings, nil
 }
 
-func preferredSheets(sheets []string) []string {
+func selectSheetsToParse(sheets []string) []string {
 	if len(sheets) == 0 {
 		return nil
 	}
