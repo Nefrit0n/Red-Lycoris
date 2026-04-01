@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { CircularProgress } from "@mui/material";
-import { listProductBduVulnerabilities } from "../../api/sbom";
 import styles from "./BDUList.module.css";
 import type { BDUVulnerabilityItem } from "../../types/bdu";
 
@@ -55,8 +54,8 @@ const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
 
   const id = toText(raw.id || raw.identifier || raw.bduId || raw.bdu_id);
   const legacyCvss3 = typeof raw.cvssV3 === "string" ? Number.parseFloat(raw.cvssV3) : null;
-  const componentName = toText(raw.component || raw.componentName);
-  const componentVersion = toText(raw.componentVersion);
+  const componentName = toText(raw.component || raw.componentName || raw.component_name);
+  const componentVersion = toText(raw.componentVersion || raw.component_version);
   const component = componentName && componentVersion ? `${componentName} ${componentVersion}` : componentName || componentVersion;
 
   if (!id) return null;
@@ -71,26 +70,32 @@ const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
     softwareType: toText(raw.softwareType),
     osPlatform: toText(raw.osPlatform),
     vulnClass: toText(raw.vulnClass),
-    dateDiscovered: toText(raw.dateDiscovered),
-    datePublished: toText(raw.datePublished || raw.publishedDate),
-    dateUpdated: toText(raw.dateUpdated),
-    cvss2: raw.cvss2 && typeof raw.cvss2 === "object" ? { vector: toText(raw.cvss2.vector), score: toNum(raw.cvss2.score) ?? 0 } : null,
+    dateDiscovered: toText(raw.dateDiscovered || raw.date_discovered),
+    datePublished: toText(raw.datePublished || raw.publishedDate || raw.date_published || raw.published_date),
+    dateUpdated: toText(raw.dateUpdated || raw.date_updated),
+    cvss2:
+      (raw.cvss2 || raw.cvss_v2) && typeof (raw.cvss2 || raw.cvss_v2) === "object"
+        ? { vector: toText((raw.cvss2 || raw.cvss_v2).vector), score: toNum((raw.cvss2 || raw.cvss_v2).score) ?? 0 }
+        : null,
     cvss3:
-      raw.cvss3 && typeof raw.cvss3 === "object"
-        ? { vector: toText(raw.cvss3.vector), score: toNum(raw.cvss3.score) ?? 0 }
+      (raw.cvss3 || raw.cvss_v3) && typeof (raw.cvss3 || raw.cvss_v3) === "object"
+        ? { vector: toText((raw.cvss3 || raw.cvss_v3).vector), score: toNum((raw.cvss3 || raw.cvss_v3).score) ?? 0 }
         : legacyCvss3 != null && Number.isFinite(legacyCvss3)
           ? { vector: "", score: legacyCvss3 }
           : null,
-    cvss4: raw.cvss4 && typeof raw.cvss4 === "object" ? { vector: toText(raw.cvss4.vector), score: toNum(raw.cvss4.score) ?? 0 } : null,
+    cvss4:
+      (raw.cvss4 || raw.cvss_v4) && typeof (raw.cvss4 || raw.cvss_v4) === "object"
+        ? { vector: toText((raw.cvss4 || raw.cvss_v4).vector), score: toNum((raw.cvss4 || raw.cvss_v4).score) ?? 0 }
+        : null,
     remediation: toText(raw.remediation),
     status: toText(raw.status),
-    exploitExists: toBool(raw.exploitExists),
+    exploitExists: toBool(raw.exploitExists ?? raw.exploit_exists),
     fixInfo: toText(raw.fixInfo),
     references: toStrArray(raw.references),
-    otherIds: toStrArray(raw.otherIds),
+    otherIds: toStrArray(raw.otherIds || raw.cve_ids),
     vulnState: toText(raw.vulnState),
-    cweId: toText(raw.cweId),
-    cweDesc: toText(raw.cweDesc),
+    cweId: toText(raw.cweId || raw.cwe_id),
+    cweDesc: toText(raw.cweDesc || raw.cwe_description),
     exploitMethod: toText(raw.exploitMethod),
     fixMethod: toText(raw.fixMethod),
     incidentRelation: toText(raw.incidentRelation),
@@ -110,8 +115,18 @@ const BDUList = ({ productId }: { productId: string }) => {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    listProductBduVulnerabilities(productId, { limit: 500 })
-      .then(({ items: rawItems }) => {
+    fetch(`/api/v1/products/${productId}/bdu-vulnerabilities`)
+      .then(async (res) => {
+        const data = await res.json();
+        console.log("BDU response:", JSON.stringify(data, null, 2));
+        if (!res.ok) {
+          const message = typeof data?.error === "string" ? data.error : "Не удалось загрузить уязвимости БДУ";
+          throw new Error(message);
+        }
+        return data;
+      })
+      .then((data) => {
+        const rawItems = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
         const normalized = rawItems
           .map(normalizeBduItem)
           .filter((item): item is BDUVulnerabilityItem => Boolean(item));
