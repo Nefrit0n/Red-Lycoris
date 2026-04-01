@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { request } from "../api/client";
+import { fetchDashboard } from "../api/dashboard";
 import { useNavigate } from "react-router-dom";
 import styles from "./Dashboard.module.css";
-
-const API = import.meta.env.VITE_API_URL ?? "";
 
 type TrendPoint = { date: string; value: number };
 type SeverityKey = "critical" | "high" | "medium" | "low" | "info";
@@ -280,6 +278,7 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardState>(initialState);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fixedWeek, setFixedWeek] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -288,22 +287,49 @@ export default function Dashboard() {
       setLoading(true);
       setError(null);
       try {
-        const [trend, severity, products, activity] = await Promise.all([
-          request<TrendPoint[]>(`${API}/api/dashboard/findings-trend`, { signal: controller.signal }),
-          request<SeverityBucket[]>(`${API}/api/dashboard/severity-distribution`, { signal: controller.signal }),
-          request<ProductItem[]>(`${API}/api/dashboard/top-products`, { signal: controller.signal }),
-          request<ActivityItem[]>(`${API}/api/dashboard/recent-activity`, { signal: controller.signal }),
-        ]);
+        const dashboard = await fetchDashboard(controller.signal);
 
-        setData({
-          trend: trend ?? [],
-          severity: orderSeverity(severity ?? []),
-          products: [...(products ?? [])].sort((a, b) => b.findings - a.findings),
-          activity: activity ?? [],
-        });
+        const trend = (dashboard.trend ?? []).map((p) => ({
+          date: p.date,
+          value: p.total,
+        }));
+
+        const severity = orderSeverity(
+          (dashboard.severityDistribution ?? []).map((s) => ({
+            severity: s.severity as SeverityKey,
+            count: s.count,
+          }))
+        );
+
+        const products = (dashboard.topProducts ?? [])
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            version: p.identifier,
+            score: Math.max(0, Math.min(100, 100 - p.criticalCount * 20 - p.highCount * 8)),
+            findings: p.findingsCount,
+            critical: p.criticalCount,
+            high: p.highCount,
+            medium: 0,
+            low: 0,
+            info: 0,
+          }))
+          .sort((a, b) => b.findings - a.findings);
+
+        const activity = (dashboard.recentActivity ?? []).map((a) => ({
+          id: a.id,
+          title: a.title,
+          product: a.description ?? "—",
+          severity: (a.severity ?? "info") as SeverityKey,
+          tool: "trivy" as const,
+          timestamp: a.timestamp,
+        }));
+
+        setData({ trend, severity, products, activity });
+        setFixedWeek(dashboard.metrics.fixedThisWeek);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Ошибка загрузки дашборда";
-        setError(message);
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : "Ошибка загрузки дашборда");
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -318,7 +344,6 @@ export default function Dashboard() {
     () => data.severity.filter((x) => x.severity === "critical" || x.severity === "high").reduce((s, x) => s + x.count, 0),
     [data.severity]
   );
-  const fixedWeek = 0;
   const atRisk = data.products.filter((x) => x.findings > 0).length;
   const trendDelta = statTrend(data.trend);
 
