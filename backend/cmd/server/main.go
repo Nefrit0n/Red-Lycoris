@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +12,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -50,6 +54,25 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("connected to PostgreSQL")
+
+	// Migrations
+	m, err := migrate.New("file://migrations", cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("failed to init migrations", "error", err)
+		os.Exit(1)
+	}
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+	srcErr, dbErr := m.Close()
+	if srcErr != nil {
+		slog.Error("failed to close migration source", "error", srcErr)
+	}
+	if dbErr != nil {
+		slog.Error("failed to close migration db", "error", dbErr)
+	}
+	slog.Info("migrations applied")
 
 	// Redis
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
