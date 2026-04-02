@@ -66,7 +66,10 @@ func (h *BDUMatchHandler) ListByProduct(c *fiber.Ctx) error {
 	matched := make([]v1.BDUMatchDTO, 0)
 	for _, m := range candidates {
 		constraints := bdu.ParseVersionConstraints(m.SoftwareVersion)
-		if !bdu.MatchesAny(m.ComponentVersion, constraints) {
+		componentVersion := strings.TrimSpace(m.ComponentVersion)
+		softwareVersion := strings.TrimSpace(m.SoftwareVersion)
+		// Keep match if version data is absent or cannot be parsed; otherwise enforce constraint match.
+		if componentVersion != "" && softwareVersion != "" && len(constraints) > 0 && !bdu.MatchesAny(componentVersion, constraints) {
 			continue
 		}
 		dedupKey := m.BDUID + "|" + m.ComponentName + "|" + m.ComponentVersion
@@ -75,21 +78,37 @@ func (h *BDUMatchHandler) ListByProduct(c *fiber.Ctx) error {
 		}
 		seen[dedupKey] = struct{}{}
 		matched = append(matched, v1.BDUMatchDTO{
-			ComponentName:    m.ComponentName,
-			ComponentVersion: m.ComponentVersion,
-			BDUID:            m.BDUID,
-			Name:             m.BDUName,
-			Severity:         m.Severity,
-			CVSSV3:           m.CVSSV3,
-			SoftwareName:     m.SoftwareName,
-			SoftwareVersion:  m.SoftwareVersion,
-			ExploitExists:    m.ExploitExists,
-			CWEID:            m.CWEID,
-			Status:           m.Status,
-			VulnClass:        m.VulnClass,
-			Vendor:           m.Vendor,
-			Remediation:      m.Remediation,
-			PublishedDate:    m.PublishedDate,
+			ComponentName:      m.ComponentName,
+			ComponentVersion:   m.ComponentVersion,
+			BDUID:              m.BDUID,
+			Name:               m.BDUName,
+			Description:        m.BDUDescription,
+			Severity:           m.Severity,
+			CVSSV2:             m.CVSSV2,
+			CVSSV3:             m.CVSSV3,
+			CVSSV4:             m.CVSSV4,
+			SoftwareName:       m.SoftwareName,
+			SoftwareVersion:    m.SoftwareVersion,
+			SoftwareType:       m.SoftwareType,
+			OSHardware:         m.OSHardware,
+			ExploitExists:      m.ExploitExists,
+			CWEID:              m.CWEID,
+			CWEDescription:     m.CWEDescription,
+			Status:             m.Status,
+			VulnClass:          m.VulnClass,
+			Vendor:             m.Vendor,
+			Remediation:        m.Remediation,
+			FixInfo:            m.FixInfo,
+			SourceURLs:         m.SourceURLs,
+			OtherIDs:           m.OtherIDs,
+			OtherInfo:          m.OtherInfo,
+			IncidentInfo:       m.IncidentInfo,
+			ExploitationMethod: m.ExploitationMethod,
+			FixMethod:          m.FixMethod,
+			DetectionDate:      m.DetectionDate,
+			PublishedDate:      m.PublishedDate,
+			UpdatedDate:        m.UpdatedDate,
+			VulnState:          m.VulnState,
 		})
 	}
 
