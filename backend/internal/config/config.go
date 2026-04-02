@@ -8,6 +8,7 @@ type Config struct {
 	ServerHost  string
 	ServerPort  string
 	LogLevel    string
+	CORSOrigins string
 }
 
 func Load() *Config {
@@ -17,6 +18,7 @@ func Load() *Config {
 		ServerHost:  getEnv("SERVER_HOST", "0.0.0.0"),
 		ServerPort:  getEnv("SERVER_PORT", "8080"),
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
+		CORSOrigins: getEnv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"),
 	}
 }
 
