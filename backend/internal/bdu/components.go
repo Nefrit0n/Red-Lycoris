@@ -31,7 +31,11 @@ func parseComponentsSheet(xlsxPath string) ([]storage.BDUComponent, error) {
 		return nil, nil
 	}
 
-	columns := buildComponentColumnMap(rows[0])
+	headerRowIdx := detectHeaderRow(rows)
+	if headerRowIdx < 0 {
+		return nil, fmt.Errorf("components sheet %q: header row not found", sheetName)
+	}
+	columns := buildComponentColumnMap(rows[headerRowIdx])
 	if columns["bdu_id"] < 0 {
 		return nil, fmt.Errorf("components sheet %q: bdu_id column not found", sheetName)
 	}
@@ -42,7 +46,7 @@ func parseComponentsSheet(xlsxPath string) ([]storage.BDUComponent, error) {
 	seen := make(map[string]struct{})
 	var result []storage.BDUComponent
 
-	for i := 1; i < len(rows); i++ {
+	for i := headerRowIdx + 1; i < len(rows); i++ {
 		row := rows[i]
 		comp := componentFromRow(row, columns)
 		if strings.TrimSpace(comp.BDUID) == "" || !strings.HasPrefix(strings.ToUpper(comp.BDUID), "BDU:") {
