@@ -28,3 +28,9 @@
 .titleCol span { display:block; font-family:"JetBrains Mono", monospace; font-size:10px; color:#4b5563; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
 .product { color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .date { font-family:"JetBrains Mono", monospace; color:#64748b; font-size:11px; }
+.errorBox { margin:8px 0; padding:8px 10px; border:1px solid #7f1d1d; background:#1f1111; border-radius:8px; display:flex; justify-content:space-between; align-items:center; }
+.errorBox button { border:1px solid #7f1d1d; background:#450a0a; color:#fecaca; border-radius:6px; padding:4px 10px; cursor:pointer; }
+.empty { padding:20px; color:#94a3b8; text-align:center; background:#0c1220; }
+.pagination { margin-top:10px; display:flex; justify-content:space-between; align-items:center; border:1px solid #1e293b; background:#0c1220; border-radius:8px; padding:8px 10px; }
+.pagination button { border:1px solid #334155; background:#111827; color:#e2e8f0; border-radius:6px; padding:6px 10px; cursor:pointer; }
+.pagination button:disabled { opacity:0.5; cursor:not-allowed; }
