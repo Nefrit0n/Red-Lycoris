@@ -1,0 +1,78 @@
+package api
+
+import (
+	"fmt"
+	"log/slog"
+	"net/http"
+	"runtime/debug"
+	"strings"
+	"time"
+)
+
+func CORSMiddleware(allowedOrigins string) func(http.Handler) http.Handler {
+	origins := strings.Split(allowedOrigins, ",")
+	originSet := make(map[string]bool, len(origins))
+	for _, o := range origins {
+		originSet[strings.TrimSpace(o)] = true
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if originSet[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (sw *statusWriter) WriteHeader(code int) {
+	sw.status = code
+	sw.ResponseWriter.WriteHeader(code)
+}
+
+func RequestLoggerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+
+		next.ServeHTTP(sw, r)
+
+		slog.Info("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", sw.status,
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
+	})
+}
+
+func RecoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				slog.Error("panic recovered",
+					"error", fmt.Sprintf("%v", rec),
+					"stack", string(debug.Stack()),
+				)
+				respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}

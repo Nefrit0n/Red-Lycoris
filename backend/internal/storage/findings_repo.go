@@ -66,7 +66,9 @@ var allowedSortFields = map[string]string{
 	"priority_score": "fs.priority_score",
 }
 
-func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) error {
+// Create inserts a finding or updates last_seen/times_seen on fingerprint conflict.
+// Returns true if a new row was inserted, false if an existing row was updated.
+func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted bool, err error) {
 	const q = `
 		INSERT INTO findings (
 			id, title, description, severity, confidence, status,
@@ -81,7 +83,8 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) error {
 		)
 		ON CONFLICT (fingerprint) DO UPDATE SET
 			last_seen  = EXCLUDED.last_seen,
-			times_seen = findings.times_seen + 1`
+			times_seen = findings.times_seen + 1
+		RETURNING (xmax = 0) AS inserted`
 
 	if f.ID == uuid.Nil {
 		f.ID = uuid.New()
@@ -97,16 +100,16 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) error {
 		f.TimesSeen = 1
 	}
 
-	_, err := r.pool.Exec(ctx, q,
+	err = r.pool.QueryRow(ctx, q,
 		f.ID, f.Title, f.Description, f.Severity, f.Confidence, f.Status,
 		f.FilePath, f.LineStart, f.LineEnd, f.Component, f.ComponentVersion,
 		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint, f.FirstSeen, f.LastSeen,
 		f.TimesSeen, f.ProjectID, f.SourceType,
-	)
+	).Scan(&inserted)
 	if err != nil {
-		return fmt.Errorf("storage.FindingsRepo.Create: %w", err)
+		return false, fmt.Errorf("storage.FindingsRepo.Create: %w", err)
 	}
-	return nil
+	return inserted, nil
 }
 
 var findingColumns = `

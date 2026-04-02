@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"vulnscope/internal/api"
 	"vulnscope/internal/config"
 )
 
@@ -90,31 +89,12 @@ func main() {
 	slog.Info("connected to Redis")
 
 	// Router
-	r := chi.NewRouter()
-
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		dbStatus := "connected"
-		if err := pool.Ping(r.Context()); err != nil {
-			dbStatus = "disconnected"
-		}
-
-		redisStatus := "connected"
-		if err := rdb.Ping(r.Context()).Err(); err != nil {
-			redisStatus = "disconnected"
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"status": "ok",
-			"db":     dbStatus,
-			"redis":  redisStatus,
-		})
-	})
+	handler := api.NewRouter(pool, rdb, cfg.CORSOrigins)
 
 	// HTTP server
 	srv := &http.Server{
 		Addr:         cfg.Addr(),
-		Handler:      r,
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
