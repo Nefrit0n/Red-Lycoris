@@ -66,7 +66,10 @@ func (h *BDUMatchHandler) ListByProduct(c *fiber.Ctx) error {
 	matched := make([]v1.BDUMatchDTO, 0)
 	for _, m := range candidates {
 		constraints := bdu.ParseVersionConstraints(m.SoftwareVersion)
-		if !bdu.MatchesAny(m.ComponentVersion, constraints) {
+		componentVersion := strings.TrimSpace(m.ComponentVersion)
+		softwareVersion := strings.TrimSpace(m.SoftwareVersion)
+		// Keep match if version data is absent or cannot be parsed; otherwise enforce constraint match.
+		if componentVersion != "" && softwareVersion != "" && len(constraints) > 0 && !bdu.MatchesAny(componentVersion, constraints) {
 			continue
 		}
 		dedupKey := m.BDUID + "|" + m.ComponentName + "|" + m.ComponentVersion
