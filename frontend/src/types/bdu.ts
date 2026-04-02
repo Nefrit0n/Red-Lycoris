@@ -16,6 +16,23 @@ export interface BDUMatchItem {
   publishedDate: string;
 }
 
+export interface BduDatasetStatus {
+  isLoaded: boolean;
+  isSyncing: boolean;
+  lastError?: string | null;
+  syncedAt?: string | null;
+  vulnerabilityCount: number;
+  componentCount: number;
+}
+
+export interface BduIndexStatus {
+  status: string;
+  error?: string | null;
+  componentCount: number;
+  edgeCount: number;
+  indexedAt?: string | null;
+}
+
 export type BDUCvss = {
   vector: string;
   score: number;
