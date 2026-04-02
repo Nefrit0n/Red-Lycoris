@@ -1,0 +1,5 @@
+# Compiled binaries
+backend/server
+
+# Environment
+.env.local
