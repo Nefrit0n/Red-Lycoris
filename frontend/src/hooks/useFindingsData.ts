@@ -66,6 +66,7 @@ export function useFindingsData({
     filters.showRepeats,
     filters.sortField,
     filters.sortOrder,
+    filters.importJobId,
     debouncedSearch,
   ].join("|");
 
@@ -180,6 +181,7 @@ export function useFindingsData({
       filters.showRepeats,
       filters.sortField,
       filters.sortOrder,
+      filters.importJobId,
       debouncedSearch,
     ]
   );
@@ -260,6 +262,7 @@ export function useFindingsData({
     filters.showRepeats,
     filters.sortField,
     filters.sortOrder,
+    filters.importJobId,
     debouncedSearch,
   ]);
 
