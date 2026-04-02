@@ -91,6 +91,12 @@ JOIN bdu_vulnerabilities bv
       LOWER(bv.software_name) = LOWER(c.name)
       OR LOWER(bv.software_name) LIKE '%%' || LOWER(c.name) || '%%'
       OR LOWER(c.name) LIKE '%%' || LOWER(bv.software_name) || '%%'
+      OR regexp_replace(LOWER(bv.software_name), '[^[:alnum:]]+', '', 'g')
+         = regexp_replace(LOWER(c.name), '[^[:alnum:]]+', '', 'g')
+      OR regexp_replace(LOWER(bv.software_name), '[^[:alnum:]]+', '', 'g')
+         LIKE '%%' || regexp_replace(LOWER(c.name), '[^[:alnum:]]+', '', 'g') || '%%'
+      OR regexp_replace(LOWER(c.name), '[^[:alnum:]]+', '', 'g')
+         LIKE '%%' || regexp_replace(LOWER(bv.software_name), '[^[:alnum:]]+', '', 'g') || '%%'
     )
   )
 WHERE sco.sbom_id = $1
@@ -200,6 +206,12 @@ JOIN sca_components c ON c.id = sco.component_id
 JOIN bdu_components bc ON (
     LOWER(bc.software_name) LIKE '%%' || LOWER(c.name) || '%%'
     OR LOWER(c.name) LIKE '%%' || LOWER(bc.software_name) || '%%'
+    OR regexp_replace(LOWER(bc.software_name), '[^[:alnum:]]+', '', 'g')
+       = regexp_replace(LOWER(c.name), '[^[:alnum:]]+', '', 'g')
+    OR regexp_replace(LOWER(bc.software_name), '[^[:alnum:]]+', '', 'g')
+       LIKE '%%' || regexp_replace(LOWER(c.name), '[^[:alnum:]]+', '', 'g') || '%%'
+    OR regexp_replace(LOWER(c.name), '[^[:alnum:]]+', '', 'g')
+       LIKE '%%' || regexp_replace(LOWER(bc.software_name), '[^[:alnum:]]+', '', 'g') || '%%'
 )
 JOIN bdu_vulnerabilities bv ON bc.bdu_id = bv.bdu_id
 WHERE sco.sbom_id = $1
