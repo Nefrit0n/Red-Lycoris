@@ -11,7 +11,7 @@ import LoginPage from "./pages/LoginPage";
 // Lazy-loaded route pages — split into separate chunks.
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const FindingDetailPage = lazy(() => import("./pages/FindingDetailPage"));
-const FindingsList = lazy(() => import("./pages/FindingsList"));
+const FindingsPage = lazy(() => import("./pages/FindingsPage"));
 const ChangePasswordPage = lazy(() => import("./pages/ChangePasswordPage"));
 const ScanUploadPage = lazy(() => import("./pages/ScanUploadPage"));
 const ImportJobsList = lazy(() => import("./pages/ImportJobsList"));
@@ -64,7 +64,7 @@ const App = () => {
                 <Route path="/dashboard" element={<Dashboard />} />
 
                 {/* Каноничный список находок */}
-                <Route path="/findings" element={<FindingsList />} />
+                <Route path="/findings" element={<FindingsPage />} />
                 <Route path="/findings/:id" element={<FindingDetailPage />} />
 
                 <Route path="/scans/upload" element={<ScanUploadPage />} />
