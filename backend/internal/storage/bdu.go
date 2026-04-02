@@ -50,6 +50,17 @@ type BDUIdentifierMapping struct {
 	BDUID      string
 }
 
+// BDUComponent represents a row from the "Компоненты" sheet of the BDU XLSX.
+// It links a BDU vulnerability ID to a specific software product.
+type BDUComponent struct {
+	BDUID           string
+	Vendor          string
+	SoftwareName    string
+	SoftwareVersion string
+	SoftwareType    string
+	OSPlatform      string
+}
+
 // BDUSyncStatus represents the singleton sync status row.
 type BDUSyncStatus struct {
 	LastSyncedAt      *time.Time `json:"last_synced_at"`
@@ -298,4 +309,40 @@ func clampSoftwareNameForLegacyIndex(value string) string {
 		clamped = clamped[:len(clamped)-1]
 	}
 	return clamped
+}
+
+// ReplaceBDUComponents replaces all rows in bdu_components within a transaction.
+func ReplaceBDUComponents(ctx context.Context, db *sql.DB, components []BDUComponent, syncedAt time.Time) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM bdu_components"); err != nil {
+		return fmt.Errorf("delete bdu_components: %w", err)
+	}
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO bdu_components (bdu_id, vendor, software_name, software_version, software_type, os_platform, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT ON CONSTRAINT uq_bdu_comp DO NOTHING`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, c := range components {
+		if strings.TrimSpace(c.BDUID) == "" || strings.TrimSpace(c.SoftwareName) == "" {
+			continue
+		}
+		if _, err := stmt.ExecContext(ctx,
+			c.BDUID, c.Vendor, c.SoftwareName, c.SoftwareVersion,
+			c.SoftwareType, c.OSPlatform, syncedAt,
+		); err != nil {
+			return fmt.Errorf("insert bdu_component %s/%s: %w", c.BDUID, c.SoftwareName, err)
+		}
+	}
+
+	return tx.Commit()
 }
