@@ -100,7 +100,8 @@ const FindingDetailPage = () => {
   const [commentText, setCommentText] = useState("");
 
   useEffect(() => {
-    request<FindingDetail>(`/api/v1/findings/${id}`).then((data) => {
+    request<unknown>(`/api/v1/findings/${id}`).then((payload) => {
+      const data = mapFindingDetail(payload);
       setDetail(data);
       setStatus(data.status);
     }).catch(() => null);
@@ -242,3 +243,83 @@ function BDUFullCard({ bdu, accent }: { bdu: BDUMatch; accent: string }) {
 }
 
 export default FindingDetailPage;
+
+function mapFindingDetail(raw: unknown): FindingDetail {
+  const row = raw as Record<string, unknown>;
+  const details = ((row.sast as Record<string, unknown> | undefined) ??
+    (row.details as Record<string, unknown> | undefined) ??
+    {}) as Record<string, unknown>;
+  const remediation = (row.remediation as Record<string, unknown> | undefined) ?? {};
+  const tags = Array.isArray(row.tags) ? row.tags.map((t) => String(t)) : [];
+
+  return {
+    id: String(row.id ?? ""),
+    title: String(row.title ?? "Без названия"),
+    severity: normalizeSeverity(row.severity),
+    status: normalizeStatus(row.status),
+    type: normalizeType(row.type ?? row.category),
+    product: String(row.product ?? row.productName ?? "—"),
+    productId: Number(row.productId ?? 0),
+    tool: String(row.tool ?? row.scannerType ?? "unknown"),
+    firstSeen: String(row.firstSeen ?? row.firstSeenAt ?? row.createdAt ?? "—"),
+    lastSeen: String(row.lastSeen ?? row.lastSeenAt ?? row.updatedAt ?? "—"),
+    description: String(row.description ?? ""),
+    riskScore: Number(row.riskScore ?? 0),
+    slaLeft: Number(row.slaLeft ?? row.slaDaysRemaining ?? 0),
+    tags,
+    occurrences: Number(row.occurrences ?? 0),
+    comments: Number(row.comments ?? 0),
+    duplicates: Number(row.duplicates ?? 0),
+    historyCount: Number(row.historyCount ?? 0),
+    sast: {
+      rule: String(details.rule ?? details.ruleId ?? ""),
+      file: String(details.file ?? details.filePath ?? ""),
+      range: String(details.range ?? `${details.startLine ?? "?"}:${details.endLine ?? "?"}`),
+      lineNum: Number(details.lineNum ?? details.startLine ?? 1),
+      snippet: String(details.snippet ?? ""),
+      severityRaw: String(details.severityRaw ?? row.severity ?? ""),
+      message: String(details.message ?? ""),
+      metadata: (details.metadata as Record<string, string> | undefined) ?? {},
+    },
+    remediation: {
+      cwe: String(remediation.cwe ?? ""),
+      cweName: String(remediation.cweName ?? ""),
+      howToFix: Array.isArray(remediation.howToFix) ? remediation.howToFix.map((x) => String(x)) : [],
+      references: Array.isArray(remediation.references)
+        ? remediation.references.map((x) => String(x))
+        : [],
+    },
+  };
+}
+
+function normalizeSeverity(value: unknown): Severity {
+  const v = String(value ?? "info").toLowerCase();
+  if (v === "critical" || v === "high" || v === "medium" || v === "low") return v;
+  return "info";
+}
+
+function normalizeStatus(value: unknown): FindingStatus {
+  const v = String(value ?? "new").toLowerCase();
+  if (
+    v === "new" ||
+    v === "open" ||
+    v === "in_progress" ||
+    v === "fixed" ||
+    v === "false_positive" ||
+    v === "accepted_risk"
+  ) {
+    return v;
+  }
+  if (v === "under_review") return "open";
+  if (v === "confirmed") return "in_progress";
+  if (v === "mitigated") return "fixed";
+  if (v === "risk_accepted") return "accepted_risk";
+  return "new";
+}
+
+function normalizeType(value: unknown): FindingType {
+  const v = String(value ?? "SAST").toUpperCase();
+  if (v === "SAST" || v === "DAST" || v === "SCA" || v === "SECRETS" || v === "IAC") return v;
+  if (v === "CONFIG" || v === "CONTAINER") return "IAC";
+  return "SAST";
+}
