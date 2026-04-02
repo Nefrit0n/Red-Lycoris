@@ -31,8 +31,15 @@ interface Finding {
 }
 
 interface FindingsResponse {
-  items: Finding[];
-  total: number;
+  items?: unknown[];
+  data?: unknown[];
+  total?: number;
+  meta?: {
+    total?: number;
+    severityCounts?: Partial<Record<Severity, number>>;
+    statusCounts?: Record<string, number>;
+    categoryCounts?: Array<{ category: string; count: number }>;
+  };
 }
 
 interface StatsResponse {
@@ -80,29 +87,48 @@ const FindingsPage = () => {
   const [sort, setSort] = useState<{ key: "severity" | "title" | "status" | "type" | "date"; dir: "asc" | "desc" }>({ key: "date", dir: "desc" });
 
   useEffect(() => {
-    const params = new URLSearchParams({ page: "1", limit: "50" });
+    const params = new URLSearchParams({ offset: "0", limit: "50", includeMeta: "true" });
     if (severity !== "all") params.set("severity", severity);
     if (status !== "all") params.set("status", status);
     if (type !== "all") params.set("type", type);
     if (search.trim()) params.set("search", search.trim());
 
     request<FindingsResponse>(`/api/v1/findings?${params.toString()}`)
-      .then((res) => setItems(res.items ?? []))
+      .then((res) => {
+        const rawItems = Array.isArray(res.items) ? res.items : Array.isArray(res.data) ? res.data : [];
+        const mapped = rawItems.map(mapFinding);
+        setItems(mapped);
+
+        const bySeverity: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+        mapped.forEach((item) => {
+          bySeverity[item.severity] += 1;
+        });
+
+        const byType: Record<string, number> = {};
+        mapped.forEach((item) => {
+          byType[item.type] = (byType[item.type] ?? 0) + 1;
+        });
+
+        const metaType = res.meta?.categoryCounts?.reduce<Record<string, number>>((acc, curr) => {
+          acc[curr.category] = curr.count;
+          return acc;
+        }, {});
+
+        setStats({
+          total: res.meta?.total ?? mapped.length,
+          bySeverity: {
+            critical: res.meta?.severityCounts?.critical ?? bySeverity.critical,
+            high: res.meta?.severityCounts?.high ?? bySeverity.high,
+            medium: res.meta?.severityCounts?.medium ?? bySeverity.medium,
+            low: res.meta?.severityCounts?.low ?? bySeverity.low,
+            info: res.meta?.severityCounts?.info ?? bySeverity.info,
+          },
+          byStatus: res.meta?.statusCounts ?? {},
+          byType: metaType ?? byType,
+        });
+      })
       .catch(() => setItems([]));
   }, [severity, status, type, search]);
-
-  useEffect(() => {
-    request<StatsResponse>("/api/v1/findings/stats")
-      .then(setStats)
-      .catch(() =>
-        setStats({
-          total: items.length,
-          bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
-          byStatus: {},
-          byType: {},
-        })
-      );
-  }, [items.length]);
 
   const sorted = useMemo(() => {
     const copy = [...items];
@@ -127,9 +153,13 @@ const FindingsPage = () => {
 
   const bulkUpdate = async (nextStatus: FindingStatus) => {
     await request("/api/v1/findings/bulk", {
-      method: "PATCH",
+      method: "POST",
       json: true,
-      body: { ids: [...selected], status: nextStatus },
+      body: {
+        ids: [...selected],
+        action: "set_status",
+        payload: { status: nextStatus },
+      },
     });
     setSelected(new Set());
   };
@@ -215,3 +245,43 @@ const FindingsPage = () => {
 };
 
 export default FindingsPage;
+
+function mapFinding(raw: unknown): Finding {
+  const row = raw as Record<string, unknown>;
+  const severity = normalizeSeverity(row.severity);
+  return {
+    id: String(row.id ?? ""),
+    title: String(row.title ?? "Без названия"),
+    severity,
+    status: normalizeStatus(row.status),
+    type: normalizeType(row.type ?? row.category),
+    product: String(row.product ?? row.productName ?? "—"),
+    productId: Number(row.productId ?? 0),
+    tool: String(row.tool ?? row.scannerType ?? row.sourceType ?? "unknown"),
+    firstSeen: String(row.firstSeen ?? row.firstSeenAt ?? row.createdAt ?? "—"),
+    lastSeen: String(row.lastSeen ?? row.lastSeenAt ?? row.updatedAt ?? "—"),
+  };
+}
+
+function normalizeSeverity(value: unknown): Severity {
+  const v = String(value ?? "info").toLowerCase();
+  if (v === "critical" || v === "high" || v === "medium" || v === "low") return v;
+  return "info";
+}
+
+function normalizeStatus(value: unknown): FindingStatus {
+  const v = String(value ?? "new").toLowerCase();
+  if (v === "new" || v === "open" || v === "in_progress" || v === "fixed" || v === "false_positive" || v === "accepted_risk") return v;
+  if (v === "under_review") return "open";
+  if (v === "confirmed") return "in_progress";
+  if (v === "mitigated") return "fixed";
+  if (v === "risk_accepted") return "accepted_risk";
+  return "new";
+}
+
+function normalizeType(value: unknown): FindingType {
+  const v = String(value ?? "SAST").toUpperCase();
+  if (v === "SAST" || v === "DAST" || v === "SCA" || v === "SECRETS" || v === "IAC") return v;
+  if (v === "CONFIG" || v === "CONTAINER") return "IAC";
+  return "SAST";
+}
