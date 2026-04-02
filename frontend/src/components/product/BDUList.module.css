@@ -1,7 +1,12 @@
 .wrap { display: grid; gap: 10px; }
+.summaryRow { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+.summaryRow > div { border: 1px solid #1e293b; border-radius: 10px; background: #0b1221; padding: 10px; }
+.summaryRow small { display: block; color: #94a3b8; font-size: 10px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .06em; }
+.summaryRow strong { color: #e2e8f0; font: 700 13px/1.2 "JetBrains Mono", monospace; }
 .toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .matched { font: 600 12px/1.1 "JetBrains Mono", monospace; color: #93c5fd; }
 .search { flex: 1; max-width: 380px; background: #0b1221; color: #e2e8f0; border: 1px solid #1e293b; border-radius: 8px; padding: 8px 10px; }
+.select { background: #0b1221; color: #e2e8f0; border: 1px solid #1e293b; border-radius: 8px; padding: 8px 10px; }
 .header { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 12px; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; padding: 2px 4px; }
 .cvssHead { justify-self: end; }
 .rowWrap { border: 1px solid #1e293b; border-radius: 10px; overflow: hidden; background: #080d19; }
@@ -18,6 +23,7 @@
 .component { background: #1e293b; color: #94a3b8; }
 .exploit { background: rgba(220, 38, 38, .2); color: #fca5a5; font-weight: 700; letter-spacing: .06em; }
 .name { margin: 0; color: #cbd5e1; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 .miniCols { display: flex; align-items: center; gap: 6px; padding: 0 12px 0 0; }
 .miniPill { border: 1px solid; border-radius: 6px; font: 600 10px/1.2 "JetBrains Mono", monospace; padding: 4px 6px; background: rgba(15, 23, 42, .8); }
 .chevron { color: #94a3b8; transition: transform .2s ease; }
@@ -57,6 +63,7 @@
 .stateLoading { border: 1px dashed #334155; border-radius: 10px; padding: 14px; color: #94a3b8; display: flex; align-items: center; justify-content: center; gap: 10px; }
 
 @media (max-width: 980px) {
+  .summaryRow { grid-template-columns: 1fr; }
   .header { display: none; }
   .row { grid-template-columns: 54px minmax(0,1fr); }
   .miniCols { grid-column: 1 / -1; justify-content: flex-end; padding: 0 10px 10px; }

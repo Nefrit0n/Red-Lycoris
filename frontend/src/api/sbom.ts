@@ -1,5 +1,5 @@
 import { request, requestBlob } from "./client";
-import type { BDUMatchItem } from "../types/bdu";
+import type { BduDatasetStatus, BduIndexStatus, BDUMatchItem } from "../types/bdu";
 import type { SbomComponentItem, SbomIndexStatus, SbomItem } from "../types/sbom";
 
 export const listSboms = async (productId: string): Promise<SbomItem[]> => {
@@ -68,8 +68,8 @@ export const listProductComponents = async (
 export const listProductBduVulnerabilities = async (
   productId: string,
   params: { q?: string; limit?: number; offset?: number }
-): Promise<{ items: BDUMatchItem[]; total: number }> =>
-  request<{ items: BDUMatchItem[]; total: number }>(
+): Promise<{ items: BDUMatchItem[]; total: number; indexStatus: BduIndexStatus | null; datasetStatus: BduDatasetStatus | null }> =>
+  request<{ items: BDUMatchItem[]; total: number; indexStatus: BduIndexStatus | null; datasetStatus: BduDatasetStatus | null }>(
     `/api/v1/products/${productId}/bdu-vulnerabilities`,
     {
       query: params,
