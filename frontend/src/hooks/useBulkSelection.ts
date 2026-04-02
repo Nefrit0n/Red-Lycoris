@@ -88,6 +88,7 @@ export function useBulkSelection({
     filters.search,
     filters.sortField,
     filters.sortOrder,
+    filters.importJobId,
   ]);
 
   // Auto-select all when selectAllMatching is enabled
@@ -157,6 +158,7 @@ export function useBulkSelection({
                 policyDecision: toBulkFilter(filters.policyDecisions),
                 category: toBulkFilter(filters.categories),
                 q: debouncedSearch || undefined,
+                import_job_id: filters.importJobId || undefined,
                 dateFrom: normalizeDateFrom(filters.dateFrom),
                 dateTo: normalizeDateTo(filters.dateTo),
                 canonicalOnly: !filters.showRepeats,
