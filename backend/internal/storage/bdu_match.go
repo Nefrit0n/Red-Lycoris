@@ -84,8 +84,15 @@ SELECT
 FROM sbom_component_occurrences sco
 JOIN sca_components c ON c.id = sco.component_id
 JOIN bdu_vulnerabilities bv
-  ON md5(LOWER(bv.software_name)) = md5(LOWER(c.name))
- AND LOWER(bv.software_name) = LOWER(c.name)
+  ON (
+    NULLIF(BTRIM(bv.software_name), '') IS NOT NULL
+    AND NULLIF(BTRIM(c.name), '') IS NOT NULL
+    AND (
+      LOWER(bv.software_name) = LOWER(c.name)
+      OR LOWER(bv.software_name) LIKE '%%' || LOWER(c.name) || '%%'
+      OR LOWER(c.name) LIKE '%%' || LOWER(bv.software_name) || '%%'
+    )
+  )
 WHERE sco.sbom_id = $1
 `
 

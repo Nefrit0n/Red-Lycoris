@@ -18,10 +18,24 @@ func TestParseVersionConstraints(t *testing.T) {
 			},
 		},
 		{
+			name:  "up to without inclusive keyword",
+			input: "до 2.8",
+			expected: []VersionConstraint{
+				{MaxVersion: "2.8"},
+			},
+		},
+		{
 			name:  "from-to inclusive",
 			input: "от 1.1 до 2.2.13 включительно (Dovecot)",
 			expected: []VersionConstraint{
 				{MinVersion: "1.1", MaxVersion: "2.2.13"},
+			},
+		},
+		{
+			name:  "from-to without inclusive keyword and suffix",
+			input: "от 1.0.2 до 1.0.2zh",
+			expected: []VersionConstraint{
+				{MinVersion: "1.0.2", MaxVersion: "1.0.2zh"},
 			},
 		},
 		{
@@ -87,6 +101,20 @@ func TestParseVersionConstraints(t *testing.T) {
 			input: "2.0.5 (nginx)",
 			expected: []VersionConstraint{
 				{ExactVersion: "2.0.5"},
+			},
+		},
+		{
+			name:  "decimal comma exact version",
+			input: "7,3",
+			expected: []VersionConstraint{
+				{ExactVersion: "7.3"},
+			},
+		},
+		{
+			name:  "hyphen package version treated as exact",
+			input: "1.14.0-1",
+			expected: []VersionConstraint{
+				{ExactVersion: "1.14.0-1"},
 			},
 		},
 		{
