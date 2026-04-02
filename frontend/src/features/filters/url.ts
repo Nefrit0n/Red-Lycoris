@@ -83,6 +83,7 @@ export const filtersToQuery = (state: FiltersState): URLSearchParams => {
   toArrayParam(params, "policyDecision", state.policyDecisions);
 
   if (state.search) params.set("search", state.search);
+  if (state.importJobId) params.set("import_job_id", state.importJobId);
   if (state.datePreset) params.set("datePreset", state.datePreset);
   if (state.dateFrom) params.set("dateFrom", state.dateFrom);
   if (state.dateTo) params.set("dateTo", state.dateTo);
@@ -119,6 +120,7 @@ export const queryToFilters = (params: URLSearchParams, base: FiltersState): Fil
   );
 
   const search = params.get("search") ?? params.get("q") ?? "";
+  const importJobId = params.get("import_job_id") ?? "";
   const datePreset = params.get("datePreset") ?? "";
   const resolvedDatePreset = datePresetOptions.includes(datePreset as DatePreset)
     ? (datePreset as DatePreset)
@@ -137,6 +139,7 @@ export const queryToFilters = (params: URLSearchParams, base: FiltersState): Fil
     pageSize: limit > 0 ? limit : base.pageSize,
     productIds,
     search,
+    importJobId,
     severities,
     statuses,
     categories,
@@ -165,6 +168,7 @@ export const filtersAreEqual = (left: FiltersState, right: FiltersState): boolea
     left.sortOrder === right.sortOrder &&
     arraysEqual(left.productIds, right.productIds) &&
     left.search === right.search &&
+    left.importJobId === right.importJobId &&
     arraysEqual(left.severities, right.severities) &&
     arraysEqual(left.statuses, right.statuses) &&
     arraysEqual(left.categories, right.categories) &&
@@ -191,6 +195,7 @@ export const normalizeFilters = (state: FiltersState): FiltersState => {
         : 20,
     sortOrder: state.sortOrder === "asc" ? "asc" : "desc",
     search: state.search.trim(),
+    importJobId: state.importJobId.trim(),
     productIds: sortValues(uniq(normalize(state.productIds))),
     severities: sortValues(
       normalizeArray(normalize(state.severities), severityOptions)
@@ -222,7 +227,8 @@ export const countActiveFilters = (state: FiltersState): number => {
     state.riskBands.length +
     state.categories.length;
   const searchCount = state.search.trim() ? 1 : 0;
+  const importJobCount = state.importJobId.trim() ? 1 : 0;
   const dateCount = state.datePreset || state.dateFrom || state.dateTo ? 1 : 0;
   const repeatsCount = state.showRepeats ? 1 : 0;
-  return filtersCount + searchCount + dateCount + repeatsCount;
+  return filtersCount + searchCount + importJobCount + dateCount + repeatsCount;
 };

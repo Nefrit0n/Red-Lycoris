@@ -42,6 +42,7 @@ export const buildFindingsParamsFromFilters = (
     dateTo: normalizeDateTo(filters.dateTo),
     canonicalOnly: !filters.showRepeats,
     includeRepeats: filters.showRepeats,
+    importJobId: filters.importJobId || undefined,
     sortField: filters.sortField,
     sortOrder: filters.sortOrder,
   };
