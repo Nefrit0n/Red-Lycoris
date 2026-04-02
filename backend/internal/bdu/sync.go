@@ -103,14 +103,16 @@ func parseWorkbook(path string) ([]storage.BDUVulnerability, []storage.BDUIdenti
 		if len(rows) == 0 {
 			continue
 		}
-		columns := buildColumnMap(rows[0])
+		headerRowIdx := detectHeaderRow(rows)
+		if headerRowIdx < 0 {
+			continue
+		}
+		columns := buildColumnMap(rows[headerRowIdx])
 		if columns["bdu_id"] < 0 {
 			continue
 		}
-		for idx, row := range rows {
-			if idx == 0 {
-				continue
-			}
+		for idx := headerRowIdx + 1; idx < len(rows); idx++ {
+			row := rows[idx]
 			v := vulnerabilityFromRow(row, columns)
 			if strings.TrimSpace(v.BDUID) == "" || !strings.HasPrefix(strings.ToUpper(v.BDUID), "BDU:") {
 				continue
@@ -223,6 +225,26 @@ func findHeaderColumn(headerRow []string, variants ...string) int {
 				return idx
 			}
 		}
+	}
+	return -1
+}
+
+// detectHeaderRow scans first ~10 rows and returns the row index containing
+// both "Идентификатор" and "Название ПО" columns.
+func detectHeaderRow(rows [][]string) int {
+	maxRows := 10
+	if len(rows) < maxRows {
+		maxRows = len(rows)
+	}
+	for i := 0; i < maxRows; i++ {
+		row := rows[i]
+		if findHeaderColumn(row, "идентификатор", "identifier", "bdu") < 0 {
+			continue
+		}
+		if findHeaderColumn(row, "название по", "название программного", "software name", "product name") < 0 {
+			continue
+		}
+		return i
 	}
 	return -1
 }
