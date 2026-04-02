@@ -1,0 +1,121 @@
+services:
+  # ──────────────────────────────────────────────
+  # PostgreSQL 16 — основное хранилище
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: vulnscope-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vulnscope}
+      POSTGRES_USER: ${POSTGRES_USER:-vulnscope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vulnscope_secret}
+      # Оптимизации для работы с большими объёмами
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
+    command: >
+      postgres
+        -c shared_buffers=256MB
+        -c effective_cache_size=768MB
+        -c work_mem=16MB
+        -c maintenance_work_mem=128MB
+        -c random_page_cost=1.1
+        -c effective_io_concurrency=200
+        -c max_connections=100
+        -c wal_buffers=16MB
+        -c max_wal_size=1GB
+        -c checkpoint_completion_target=0.9
+        -c default_statistics_target=100
+        -c log_min_duration_statement=200
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vulnscope}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # Redis 7 — кэш + очередь обогащения
+  # ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: vulnscope-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --appendonly yes
+        --appendfsync everysec
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # Backend — Go API server
+  # ──────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vulnscope-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      # Сервер
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # PostgreSQL
+      DATABASE_URL: "postgres://${POSTGRES_USER:-vulnscope}:${POSTGRES_PASSWORD:-vulnscope_secret}@postgres:5432/${POSTGRES_DB:-vulnscope}?sslmode=disable"
+      DATABASE_MAX_CONNS: "25"
+      DATABASE_MIN_CONNS: "5"
+      # Redis
+      REDIS_URL: "redis://redis:6379/0"
+      # Обогащение
+      NVD_API_KEY: "${NVD_API_KEY:-}"
+      ENRICHMENT_ENABLED: "${ENRICHMENT_ENABLED:-true}"
+      # CORS
+      CORS_ORIGINS: "http://localhost:${FRONTEND_PORT:-3000},http://localhost:5173"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────
+  # Frontend — React (dev: vite, prod: nginx)
+  # ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: ${FRONTEND_TARGET:-development}
+    container_name: vulnscope-ui
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      VITE_API_URL: "http://localhost:${API_PORT:-8080}"
+    volumes:
+      # Dev mode: mount source для hot reload
+      - ./frontend/src:/app/src:ro
+      - ./frontend/index.html:/app/index.html:ro
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
