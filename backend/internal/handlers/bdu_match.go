@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"strings"
 
 	"red-lycoris/backend/internal/bdu"
@@ -45,19 +46,34 @@ func (h *BDUMatchHandler) ListByProduct(c *fiber.Ctx) error {
 	limit := parseIntOrDefault(c.Query("limit"), 50)
 	offset := parseIntOrDefault(c.Query("offset"), 0)
 
-	// Phase 1: SQL name match
+	// Phase 1a: SQL name match via bdu_vulnerabilities.software_name
 	candidates, err := storage.ListBDUMatchesByName(c.Context(), h.db, indexedSbom.ID, search)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "failed to query bdu matches"})
 	}
 
-	// Phase 2: Go-level version filtering
+	// Phase 1b: SQL match via bdu_components table (from "Компоненты" sheet)
+	compCandidates, err := storage.ListBDUComponentMatches(c.Context(), h.db, indexedSbom.ID, search)
+	if err != nil {
+		// Non-fatal: bdu_components table may not exist yet
+		log.Printf("[bdu-match] warning: component match query failed: %v", err)
+	} else {
+		candidates = append(candidates, compCandidates...)
+	}
+
+	// Phase 2: Go-level version filtering + dedup by (bdu_id, component_name, component_version)
+	seen := make(map[string]struct{})
 	matched := make([]v1.BDUMatchDTO, 0)
 	for _, m := range candidates {
 		constraints := bdu.ParseVersionConstraints(m.SoftwareVersion)
 		if !bdu.MatchesAny(m.ComponentVersion, constraints) {
 			continue
 		}
+		dedupKey := m.BDUID + "|" + m.ComponentName + "|" + m.ComponentVersion
+		if _, ok := seen[dedupKey]; ok {
+			continue
+		}
+		seen[dedupKey] = struct{}{}
 		matched = append(matched, v1.BDUMatchDTO{
 			ComponentName:    m.ComponentName,
 			ComponentVersion: m.ComponentVersion,

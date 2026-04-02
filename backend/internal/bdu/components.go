@@ -1,0 +1,106 @@
+package bdu
+
+import (
+	"fmt"
+	"strings"
+
+	"red-lycoris/backend/internal/storage"
+
+	"github.com/xuri/excelize/v2"
+)
+
+// parseComponentsSheet reads the "Компоненты" sheet from the BDU XLSX file
+// and returns a slice of BDUComponent records linking BDU IDs to specific software.
+func parseComponentsSheet(xlsxPath string) ([]storage.BDUComponent, error) {
+	book, err := excelize.OpenFile(xlsxPath)
+	if err != nil {
+		return nil, fmt.Errorf("open xlsx: %w", err)
+	}
+	defer book.Close()
+
+	sheetName := findComponentsSheet(book.GetSheetList())
+	if sheetName == "" {
+		return nil, nil // no components sheet — not an error
+	}
+
+	rows, err := book.GetRows(sheetName)
+	if err != nil {
+		return nil, fmt.Errorf("read rows from sheet %s: %w", sheetName, err)
+	}
+	if len(rows) < 2 {
+		return nil, nil
+	}
+
+	columns := buildComponentColumnMap(rows[0])
+	if columns["bdu_id"] < 0 {
+		return nil, fmt.Errorf("components sheet %q: bdu_id column not found", sheetName)
+	}
+	if columns["software_name"] < 0 {
+		return nil, fmt.Errorf("components sheet %q: software_name column not found", sheetName)
+	}
+
+	seen := make(map[string]struct{})
+	var result []storage.BDUComponent
+
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		comp := componentFromRow(row, columns)
+		if strings.TrimSpace(comp.BDUID) == "" || !strings.HasPrefix(strings.ToUpper(comp.BDUID), "BDU:") {
+			continue
+		}
+		if strings.TrimSpace(comp.SoftwareName) == "" {
+			continue
+		}
+
+		// Deduplicate by (bdu_id, software_name, software_version)
+		key := comp.BDUID + "|" + strings.ToLower(comp.SoftwareName) + "|" + strings.ToLower(comp.SoftwareVersion)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, comp)
+	}
+
+	return result, nil
+}
+
+// findComponentsSheet returns the first sheet name containing "компонент".
+func findComponentsSheet(sheets []string) string {
+	for _, s := range sheets {
+		if strings.Contains(strings.ToLower(s), "компонент") {
+			return s
+		}
+	}
+	return ""
+}
+
+// buildComponentColumnMap maps logical column names to indices for the components sheet.
+func buildComponentColumnMap(headerRow []string) map[string]int {
+	return map[string]int{
+		"bdu_id":           findHeaderColumn(headerRow, "идентификатор", "identifier", "bdu"),
+		"vendor":           findHeaderColumn(headerRow, "вендор", "vendor", "производитель"),
+		"software_name":    findHeaderColumn(headerRow, "название по", "название программного", "программного обеспечения", "software name", "product name"),
+		"software_version": findHeaderColumn(headerRow, "версия по", "версия", "software version", "version"),
+		"software_type":    findHeaderColumn(headerRow, "тип по", "тип программного", "software type", "тип"),
+		"os_platform":      findHeaderColumn(headerRow, "наименование ос", "платформ", "os", "platform"),
+	}
+}
+
+// componentFromRow extracts a BDUComponent from a single row using the column map.
+func componentFromRow(row []string, columns map[string]int) storage.BDUComponent {
+	field := func(key string) string {
+		i := columns[key]
+		if i >= 0 && i < len(row) {
+			return strings.TrimSpace(row[i])
+		}
+		return ""
+	}
+	return storage.BDUComponent{
+		BDUID:           field("bdu_id"),
+		Vendor:          field("vendor"),
+		SoftwareName:    field("software_name"),
+		SoftwareVersion: field("software_version"),
+		SoftwareType:    field("software_type"),
+		OSPlatform:      field("os_platform"),
+	}
+}
