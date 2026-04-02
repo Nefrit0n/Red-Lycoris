@@ -22,7 +22,7 @@ import {
 } from "../../api/sbom";
 import { GlassCard } from "../../design-system/components";
 import { tableStyles } from "../../design-system/utils/tableStyles";
-import type { BDUMatchItem } from "../../types/bdu";
+import type { BDUMatchItem, BduDatasetStatus, BduIndexStatus } from "../../types/bdu";
 import type { SbomComponentItem, SbomIndexStatus, SbomItem } from "../../types/sbom";
 
 interface SbomSectionProps {
@@ -90,6 +90,8 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
   const [bduLoading, setBduLoading] = useState(false);
   const [bduError, setBduError] = useState<string | null>(null);
   const [bduSearch, setBduSearch] = useState("");
+  const [bduIndexStatus, setBduIndexStatus] = useState<BduIndexStatus | null>(null);
+  const [bduDatasetStatus, setBduDatasetStatus] = useState<BduDatasetStatus | null>(null);
 
   const fetchSboms = useCallback(async () => {
     setSbomLoading(true);
@@ -158,6 +160,8 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
       });
       setBduItems(response.items ?? []);
       setBduTotal(response.total);
+      setBduIndexStatus(response.indexStatus ?? null);
+      setBduDatasetStatus(response.datasetStatus ?? null);
     } catch (err) {
       setBduError(err instanceof Error ? err.message : "Failed to load BDU vulnerabilities");
     } finally {
@@ -170,12 +174,25 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
     fetchBdu();
   }, [fetchBdu, tabIndex]);
 
+
+  useEffect(() => {
+    if (tabIndex !== 2) return;
+    const state = bduIndexStatus?.status;
+    if (state !== "queued" && state !== "processing" && state !== "pending") return;
+    const interval = window.setInterval(() => {
+      if (!document.hidden) fetchBdu();
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [tabIndex, bduIndexStatus?.status, fetchBdu]);
+
   const handleSbomUpload = async (file: File) => {
     setSbomUploading(true);
     setSbomUploadError(null);
     try {
       await uploadSbom(productId, file);
       await fetchSboms();
+      if (tabIndex === 1) await fetchComponents();
+      if (tabIndex === 2) await fetchBdu();
     } catch (err) {
       setSbomUploadError(err instanceof Error ? err.message : "Failed to upload SBOM");
     } finally {
@@ -192,6 +209,10 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
   };
 
   const statusChip = formatIndexStatus(indexStatus);
+  const bduStatus = bduIndexStatus?.status ?? null;
+  const bduIsIndexing = bduStatus === "queued" || bduStatus === "pending" || bduStatus === "processing";
+  const bduHasFailed = bduStatus === "failed";
+  const hasSbom = Boolean(indexStatus) || Boolean(bduIndexStatus);
 
   return (
     <GlassCard variant="subtle" padding="comfortable">
@@ -457,6 +478,7 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
               <Typography variant="body2" color="text.secondary">
                 Matched: {bduTotal}
               </Typography>
+              {bduIndexStatus && <Chip label={`Index: ${bduIndexStatus.status}`} color={bduHasFailed ? "error" : bduIsIndexing ? "warning" : "success"} />}
               <TextField
                 label="Search (BDU ID, name, component)"
                 size="small"
@@ -469,14 +491,26 @@ export const SbomSection = ({ productId }: SbomSectionProps) => {
               </Button>
             </Stack>
             {bduError && <Alert severity="error">{bduError}</Alert>}
+            {bduHasFailed && (
+              <Alert severity="error">
+                {bduIndexStatus?.error || "Индексация SBOM завершилась с ошибкой."}
+              </Alert>
+            )}
+            {!hasSbom && !bduLoading && (
+              <Alert severity="info">Сначала загрузите SBOM для получения совпадений БДУ.</Alert>
+            )}
+            {bduIsIndexing && !bduHasFailed && (
+              <Alert severity="info">SBOM ещё индексируется. Совпадения БДУ появятся после завершения.</Alert>
+            )}
+            {bduDatasetStatus?.lastError && (
+              <Alert severity="warning">Ошибка датасета БДУ: {bduDatasetStatus.lastError}</Alert>
+            )}
             {bduLoading ? (
               <Box display="flex" justifyContent="center" py={2}>
                 <CircularProgress size={20} />
               </Box>
-            ) : bduItems.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No BDU FSTEC matches found for SBOM components.
-              </Typography>
+            ) : bduItems.length === 0 && !bduIsIndexing && !bduHasFailed ? (
+              <Typography variant="body2" color="text.secondary">Нет совпадений</Typography>
             ) : (
               <Box sx={{ overflowX: "auto" }}>
                 <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
