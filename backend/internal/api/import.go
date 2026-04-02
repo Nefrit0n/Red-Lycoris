@@ -1,7 +1,7 @@
 package api
 
 import (
-	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -9,29 +9,9 @@ import (
 	"github.com/google/uuid"
 
 	"vulnscope/internal/domain"
+	"vulnscope/internal/parser"
 	"vulnscope/internal/storage"
 )
-
-type importRequest struct {
-	ProjectID  uuid.UUID       `json:"project_id"`
-	SourceType string          `json:"source_type"`
-	Findings   []importFinding `json:"findings"`
-}
-
-type importFinding struct {
-	Title            string   `json:"title"`
-	Description      string   `json:"description"`
-	Severity         int      `json:"severity"`
-	Confidence       int      `json:"confidence"`
-	FilePath         string   `json:"file_path"`
-	LineStart        int      `json:"line_start"`
-	LineEnd          int      `json:"line_end"`
-	Component        string   `json:"component"`
-	ComponentVersion string   `json:"component_version"`
-	CVEIDs           []string `json:"cve_ids"`
-	CWEIDs           []int    `json:"cwe_ids"`
-	CPEURI           string   `json:"cpe_uri"`
-}
 
 type importError struct {
 	Index   int    `json:"index"`
@@ -40,22 +20,31 @@ type importError struct {
 
 func handleImport(repo *storage.FindingsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req importRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+		projectID := r.URL.Query().Get("project_id")
+		var overrideProjectID uuid.UUID
+		if projectID != "" {
+			id, err := uuid.Parse(projectID)
+			if err != nil {
+				respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project_id query param")
+				return
+			}
+			overrideProjectID = id
+		}
+
+		data, err := io.ReadAll(io.LimitReader(r.Body, 50<<20)) // 50MB limit
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "failed to read request body")
 			return
 		}
 
-		if req.ProjectID == uuid.Nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "project_id is required")
+		format, findings, err := parser.DetectAndParse(r.Context(), data)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "PARSE_ERROR", err.Error())
 			return
 		}
-		if req.SourceType == "" {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "source_type is required")
-			return
-		}
-		if len(req.Findings) == 0 {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "findings must not be empty")
+
+		if len(findings) == 0 {
+			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "no findings found in input")
 			return
 		}
 
@@ -63,43 +52,38 @@ func handleImport(repo *storage.FindingsRepo) http.HandlerFunc {
 		var errs []importError
 		now := time.Now()
 
-		for i, item := range req.Findings {
-			f := domain.Finding{
-				Title:            item.Title,
-				Description:      item.Description,
-				Severity:         item.Severity,
-				Confidence:       item.Confidence,
-				Status:           domain.StatusOpen,
-				FilePath:         item.FilePath,
-				LineStart:        item.LineStart,
-				LineEnd:          item.LineEnd,
-				Component:        item.Component,
-				ComponentVersion: item.ComponentVersion,
-				CVEIDs:           item.CVEIDs,
-				CWEIDs:           item.CWEIDs,
-				CPEURI:           item.CPEURI,
-				ProjectID:        req.ProjectID,
-				SourceType:       req.SourceType,
-				FirstSeen:        now,
-				LastSeen:         now,
-				TimesSeen:        1,
+		for i := range findings {
+			f := &findings[i]
+
+			// Override project_id from query param if provided
+			if overrideProjectID != uuid.Nil {
+				f.ProjectID = overrideProjectID
 			}
 
-			if f.CVEIDs == nil {
-				f.CVEIDs = []string{}
-			}
-			if f.CWEIDs == nil {
-				f.CWEIDs = []int{}
+			if f.ProjectID == uuid.Nil {
+				errs = append(errs, importError{Index: i, Message: "project_id is required"})
+				continue
 			}
 
-			f.Fingerprint = domain.CalculateFingerprint(&f)
+			if f.FirstSeen.IsZero() {
+				f.FirstSeen = now
+			}
+			if f.LastSeen.IsZero() {
+				f.LastSeen = now
+			}
+			if f.TimesSeen == 0 {
+				f.TimesSeen = 1
+			}
+			if f.Fingerprint == "" {
+				f.Fingerprint = domain.CalculateFingerprint(f)
+			}
 
 			if err := f.Validate(); err != nil {
 				errs = append(errs, importError{Index: i, Message: err.Error()})
 				continue
 			}
 
-			isNew, err := repo.Create(r.Context(), &f)
+			isNew, err := repo.Create(r.Context(), f)
 			if err != nil {
 				slog.Error("import: failed to create finding", "index", i, "error", err)
 				errs = append(errs, importError{Index: i, Message: "failed to save finding"})
@@ -113,7 +97,15 @@ func handleImport(repo *storage.FindingsRepo) http.HandlerFunc {
 			}
 		}
 
+		slog.Info("import completed",
+			"format", format,
+			"imported", imported,
+			"updated", updated,
+			"errors", len(errs),
+		)
+
 		respondJSON(w, http.StatusOK, map[string]any{
+			"format":   format,
 			"imported": imported,
 			"updated":  updated,
 			"errors":   errs,
