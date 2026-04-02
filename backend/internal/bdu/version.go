@@ -14,20 +14,24 @@ type VersionConstraint struct {
 }
 
 var (
-	// "от 1.1 до 2.2.13 включительно (Dovecot)"
-	reFromTo = regexp.MustCompile(`от\s+([\d][\d.]*\d*)\s+до\s+([\d][\d.]*\d*)\s+включительно`)
-	// "до 7.7.5 включительно (QuickTime)"
-	reUpTo = regexp.MustCompile(`до\s+([\d][\d.]*\d*)\s+включительно`)
+	versionToken = `[0-9][0-9A-Za-z._:-]*`
+	// "от 1.1 до 2.2.13 включительно (Dovecot)" / "от 1.1 до 2.2.13"
+	reFromTo = regexp.MustCompile(`от\s+(` + versionToken + `)\s+до\s+(` + versionToken + `)(?:\s+включительно)?`)
+	// "до 7.7.5 включительно (QuickTime)" / "до 7.7.5"
+	reUpTo = regexp.MustCompile(`до\s+(` + versionToken + `)(?:\s+включительно)?`)
 	// "9.0.0 - 9.0.16 (PostgreSQL)"  but NOT "CVE-2024-1234"
-	reDashRange = regexp.MustCompile(`([\d][\d.]*\d*)\s*-\s*([\d][\d.]*\d*)`)
+	reDashRange = regexp.MustCompile(`(` + versionToken + `)\s+-\s+(` + versionToken + `)`)
 	// bare version like "2.0.5" or "11.1.0.7 (Database)"
-	reExact = regexp.MustCompile(`([\d][\d.]*\d*)`)
+	reExact = regexp.MustCompile(`(` + versionToken + `)`)
+	// Decimal comma in Russian notation: "7,3" => "7.3"
+	reDecimalComma = regexp.MustCompile(`([0-9]),([0-9])`)
 )
 
 // ParseVersionConstraints parses a BDU software_version string into a list of constraints.
 // The input may contain comma-separated entries, each with optional parenthesized software names.
 func ParseVersionConstraints(softwareVersion string) []VersionConstraint {
-	fragments := splitFragments(softwareVersion)
+	normalized := normalizeVersionText(softwareVersion)
+	fragments := splitFragments(normalized)
 	var constraints []VersionConstraint
 	for _, frag := range fragments {
 		frag = strings.TrimSpace(frag)
@@ -41,6 +45,11 @@ func ParseVersionConstraints(softwareVersion string) []VersionConstraint {
 	return constraints
 }
 
+func normalizeVersionText(s string) string {
+	// Keep list separators intact (", ") and normalize only decimal commas between digits.
+	return reDecimalComma.ReplaceAllString(s, `$1.$2`)
+}
+
 // splitFragments splits the software_version string by commas, but respects
 // that each entry may contain parenthesized software names like "11.1.0.7 (Database)".
 // We split on ", " followed by a digit or "от"/"до" to avoid splitting inside parentheses.
@@ -52,10 +61,13 @@ func splitFragments(s string) []string {
 		if runes[i] == ',' {
 			// Look ahead: skip whitespace and check if next token starts a new version entry.
 			j := i + 1
+			hasSpace := false
 			for j < len(runes) && runes[j] == ' ' {
+				hasSpace = true
 				j++
 			}
-			if j < len(runes) && isFragmentStart(runes, j) {
+			// Split only on ", " boundaries; plain "," can be decimal notation (e.g. "7,3").
+			if hasSpace && j < len(runes) && isFragmentStart(runes, j) {
 				fragments = append(fragments, current.String())
 				current.Reset()
 				i = j - 1 // will be incremented by loop
