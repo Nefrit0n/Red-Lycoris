@@ -193,7 +193,9 @@ func (h *BDUMatchHandler) datasetStatus(ctx context.Context) (map[string]interfa
 	lastError := ""
 	isSyncing := false
 	if status != nil {
-		lastError = status.LastError
+		if status.LastError != nil {
+			lastError = *status.LastError
+		}
 		isSyncing = status.IsSyncing
 	}
 	return map[string]interface{}{
