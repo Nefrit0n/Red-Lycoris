@@ -68,10 +68,11 @@ func parseComponentsSheet(xlsxPath string) ([]storage.BDUComponent, error) {
 	return result, nil
 }
 
-// findComponentsSheet returns the first sheet name containing "компонент".
+// findComponentsSheet returns the first sheet name containing component keywords.
 func findComponentsSheet(sheets []string) string {
 	for _, s := range sheets {
-		if strings.Contains(strings.ToLower(s), "компонент") {
+		name := strings.ToLower(s)
+		if strings.Contains(name, "компонент") || strings.Contains(name, "component") {
 			return s
 		}
 	}
@@ -83,11 +84,35 @@ func buildComponentColumnMap(headerRow []string) map[string]int {
 	return map[string]int{
 		"bdu_id":           findHeaderColumn(headerRow, "идентификатор", "identifier", "bdu"),
 		"vendor":           findHeaderColumn(headerRow, "вендор", "vendor", "производитель"),
-		"software_name":    findHeaderColumn(headerRow, "название по", "название программного", "программного обеспечения", "software name", "product name"),
+		"software_name":    findSoftwareNameColumn(headerRow),
 		"software_version": findHeaderColumn(headerRow, "версия по", "версия", "software version", "version"),
 		"software_type":    findHeaderColumn(headerRow, "тип по", "тип программного", "software type", "тип"),
 		"os_platform":      findHeaderColumn(headerRow, "наименование ос", "платформ", "os", "platform"),
 	}
+}
+
+func findSoftwareNameColumn(headerRow []string) int {
+	idx := findHeaderColumn(
+		headerRow,
+		"название по",
+		"наименование по",
+		"название программного",
+		"наименование программного",
+		"программного обеспечения",
+		"software name",
+		"product name",
+		"component name",
+	)
+	if idx >= 0 {
+		return idx
+	}
+	for i, raw := range headerRow {
+		h := strings.ToLower(strings.TrimSpace(raw))
+		if strings.Contains(h, "по") && (strings.Contains(h, "наименование") || strings.Contains(h, "название")) {
+			return i
+		}
+	}
+	return findHeaderColumn(headerRow, "наименование", "название", "name")
 }
 
 // componentFromRow extracts a BDUComponent from a single row using the column map.

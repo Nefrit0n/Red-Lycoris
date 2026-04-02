@@ -241,7 +241,7 @@ func detectHeaderRow(rows [][]string) int {
 		if findHeaderColumn(row, "идентификатор", "identifier", "bdu") < 0 {
 			continue
 		}
-		if findHeaderColumn(row, "название по", "название программного", "software name", "product name") < 0 {
+		if findSoftwareNameColumn(row) < 0 {
 			continue
 		}
 		return i
