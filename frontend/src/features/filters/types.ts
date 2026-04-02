@@ -15,6 +15,7 @@ export interface FiltersState {
   sortField: keyof FindingListItemDTO;
   sortOrder: "asc" | "desc";
   search: string;
+  importJobId: string;
   severities: FindingSeverity[];
   statuses: FindingStatus[];
   categories: string[];
@@ -37,6 +38,7 @@ export const DEFAULT_FILTERS_STATE: FiltersState = {
   sortField: "lastSeenAt",
   sortOrder: "desc",
   search: "",
+  importJobId: "",
   severities: [],
   statuses: [],
   categories: [],
