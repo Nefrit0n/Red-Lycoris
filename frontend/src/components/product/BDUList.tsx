@@ -126,18 +126,50 @@ const BDUList = ({ productId }: { productId: string }) => {
   const [tabById, setTabById] = useState<Record<string, ThemeKey>>({});
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    listProductBduVulnerabilities(productId, {})
-      .then((data) => {
-        const rawItems = Array.isArray(data?.items) ? data.items : [];
-        const normalized = rawItems
-          .map(normalizeBduItem)
-          .filter((item): item is BDUVulnerabilityItem => Boolean(item));
-        setItems(normalized);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить уязвимости БДУ"))
-      .finally(() => setLoading(false));
+    const maxAttempts = 6;
+    const retryDelayMs = 1500;
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const fetchWithRetry = (attempt: number) => {
+      if (cancelled) return;
+      if (attempt === 0) {
+        setLoading(true);
+        setError(null);
+      }
+
+      listProductBduVulnerabilities(productId, {})
+        .then((data) => {
+          if (cancelled) return;
+          const rawItems = Array.isArray(data?.items) ? data.items : [];
+          const normalized = rawItems
+            .map(normalizeBduItem)
+            .filter((item): item is BDUVulnerabilityItem => Boolean(item));
+
+          setItems(normalized);
+
+          if (normalized.length === 0 && attempt < maxAttempts) {
+            retryTimer = setTimeout(() => fetchWithRetry(attempt + 1), retryDelayMs);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : "Не удалось загрузить уязвимости БДУ");
+          }
+        })
+        .finally(() => {
+          if (!cancelled && attempt === 0) {
+            setLoading(false);
+          }
+        });
+    };
+
+    fetchWithRetry(0);
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [productId]);
 
   const filtered = useMemo(() => {
