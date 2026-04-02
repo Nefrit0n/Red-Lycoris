@@ -14,6 +14,7 @@ import (
 func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string) http.Handler {
 	findingsRepo := storage.NewFindingsRepo(pool)
 	projectsRepo := storage.NewProjectsRepo(pool)
+	dashboardRepo := storage.NewDashboardRepo(pool)
 
 	r := chi.NewRouter()
 
@@ -63,6 +64,9 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string) http.H
 			r.Patch("/bulk/status", handleBulkUpdateStatus(findingsRepo))
 			r.Delete("/{id}", handleDeleteFinding(findingsRepo))
 		})
+
+		// Dashboard
+		r.Get("/dashboard/stats", handleDashboardStats(dashboardRepo))
 
 		// Import
 		r.Post("/import", handleImport(findingsRepo))
