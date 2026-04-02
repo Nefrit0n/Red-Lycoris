@@ -40,6 +40,14 @@ const formatDate = (value?: string | null) => {
 const toText = (value: unknown): string => (typeof value === "string" ? value : "");
 const toNum = (value: unknown): number | null => (typeof value === "number" ? value : null);
 const toStrArray = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+const parseDelimited = (value: unknown): string[] => {
+  if (Array.isArray(value)) return toStrArray(value);
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[\n,;]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
 const toBool = (value: unknown): boolean => {
   if (value === true) return true;
   if (typeof value === "string") {
@@ -69,14 +77,16 @@ const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
     softwareName: toText(raw.softwareName),
     softwareVersion: toText(raw.softwareVersion),
     softwareType: toText(raw.softwareType),
-    osPlatform: toText(raw.osPlatform),
+    osPlatform: toText(raw.osPlatform || raw.osHardware),
     vulnClass: toText(raw.vulnClass),
-    dateDiscovered: toText(raw.dateDiscovered || raw.date_discovered),
+    dateDiscovered: toText(raw.dateDiscovered || raw.detectionDate || raw.date_discovered),
     datePublished: toText(raw.datePublished || raw.publishedDate || raw.date_published || raw.published_date),
     dateUpdated: toText(raw.dateUpdated || raw.date_updated),
     cvss2:
-      (raw.cvss2 || raw.cvss_v2) && typeof (raw.cvss2 || raw.cvss_v2) === "object"
-        ? { vector: toText((raw.cvss2 || raw.cvss_v2).vector), score: toNum((raw.cvss2 || raw.cvss_v2).score) ?? 0 }
+      (raw.cvss2 || raw.cvssV2 || raw.cvss_v2) && typeof (raw.cvss2 || raw.cvssV2 || raw.cvss_v2) === "object"
+        ? { vector: toText((raw.cvss2 || raw.cvssV2 || raw.cvss_v2).vector), score: toNum((raw.cvss2 || raw.cvssV2 || raw.cvss_v2).score) ?? 0 }
+        : typeof raw.cvssV2 === "string" && Number.isFinite(Number.parseFloat(raw.cvssV2))
+          ? { vector: "", score: Number.parseFloat(raw.cvssV2) }
         : null,
     cvss3:
       (raw.cvss3 || raw.cvss_v3) && typeof (raw.cvss3 || raw.cvss_v3) === "object"
@@ -85,22 +95,24 @@ const normalizeBduItem = (raw: any): BDUVulnerabilityItem | null => {
           ? { vector: "", score: legacyCvss3 }
           : null,
     cvss4:
-      (raw.cvss4 || raw.cvss_v4) && typeof (raw.cvss4 || raw.cvss_v4) === "object"
-        ? { vector: toText((raw.cvss4 || raw.cvss_v4).vector), score: toNum((raw.cvss4 || raw.cvss_v4).score) ?? 0 }
+      (raw.cvss4 || raw.cvssV4 || raw.cvss_v4) && typeof (raw.cvss4 || raw.cvssV4 || raw.cvss_v4) === "object"
+        ? { vector: toText((raw.cvss4 || raw.cvssV4 || raw.cvss_v4).vector), score: toNum((raw.cvss4 || raw.cvssV4 || raw.cvss_v4).score) ?? 0 }
+        : typeof raw.cvssV4 === "string" && Number.isFinite(Number.parseFloat(raw.cvssV4))
+          ? { vector: "", score: Number.parseFloat(raw.cvssV4) }
         : null,
     remediation: toText(raw.remediation),
     status: toText(raw.status),
     exploitExists: toBool(raw.exploitExists ?? raw.exploit_exists),
     fixInfo: toText(raw.fixInfo),
-    references: toStrArray(raw.references),
-    otherIds: toStrArray(raw.otherIds || raw.cve_ids),
-    vulnState: toText(raw.vulnState),
+    references: parseDelimited(raw.references || raw.sourceUrls || raw.source_urls),
+    otherIds: parseDelimited(raw.otherIds || raw.other_ids || raw.cve_ids),
+    vulnState: toText(raw.vulnState || raw.vuln_state),
     cweId: toText(raw.cweId || raw.cwe_id),
-    cweDesc: toText(raw.cweDesc || raw.cwe_description),
-    exploitMethod: toText(raw.exploitMethod),
+    cweDesc: toText(raw.cweDesc || raw.cweDescription || raw.cwe_description),
+    exploitMethod: toText(raw.exploitMethod || raw.exploitationMethod),
     fixMethod: toText(raw.fixMethod),
-    incidentRelation: toText(raw.incidentRelation),
-    additionalInfo: toText(raw.additionalInfo),
+    incidentRelation: toText(raw.incidentRelation || raw.incidentInfo || raw.incident_info),
+    additionalInfo: toText(raw.additionalInfo || raw.otherInfo || raw.other_info),
     component,
   };
 };
@@ -165,19 +177,20 @@ const BDUList = ({ productId }: { productId: string }) => {
       {filtered.length === 0 && <div className={styles.state}>Нет совпадений по БДУ ФСТЭК.</div>}
 
       {filtered.map((item) => {
+        const rowId = `${item.id}::${item.component || "unknown"}`;
         const score = bestScore(item);
         const sev = getSeverity(score);
-        const isOpen = expanded === item.id;
-        const activeTab = tabById[item.id] ?? "description";
+        const isOpen = expanded === rowId;
+        const activeTab = tabById[rowId] ?? "description";
         const theme = TAB_THEMES[activeTab];
 
         return (
-          <article key={item.id} className={styles.rowWrap}>
+          <article key={rowId} className={styles.rowWrap}>
             <button
               type="button"
               className={`${styles.row} ${isOpen ? styles.rowOpen : ""}`}
               style={{ borderLeftColor: sev.color } as React.CSSProperties}
-              onClick={() => setExpanded(isOpen ? null : item.id)}
+              onClick={() => setExpanded(isOpen ? null : rowId)}
             >
               <div className={styles.severity} style={{ background: sev.bg, boxShadow: `inset 0 0 20px ${sev.glow}` }}>
                 <strong>{score?.toFixed(1) ?? "—"}</strong>
@@ -217,7 +230,7 @@ const BDUList = ({ productId }: { productId: string }) => {
                         key={key}
                         type="button"
                         className={`${styles.panelTab} ${activeTab === key ? styles.panelTabActive : ""}`}
-                        onClick={() => setTabById((prev) => ({ ...prev, [item.id]: key }))}
+                        onClick={() => setTabById((prev) => ({ ...prev, [rowId]: key }))}
                       >
                         <span className={styles.tabIcon}>{tabTheme.icon}</span>
                         {tabTheme.label}
