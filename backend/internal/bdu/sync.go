@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -19,7 +20,7 @@ const (
 )
 
 var (
-	idRegexp = regexp.MustCompile(`(?i)\b(?:CVE-\d{4}-\d+|CWE-\d+)\b`)
+	idRegexp = regexp.MustCompile(`(?i)\b(?:CVE-\d{4}-\d+)\b`)
 )
 
 func SyncIfDue(ctx context.Context, db *sql.DB, xlsxPath string, now time.Time) error {
@@ -61,6 +62,20 @@ func SyncNow(ctx context.Context, db *sql.DB, xlsxPath string, now time.Time) er
 		_ = storage.MarkBDUSyncFailed(ctx, db, err.Error())
 		return err
 	}
+
+	// Parse "Компоненты" sheet for SBOM component matching.
+	// Non-fatal: log warnings but do not fail the overall sync.
+	components, err := parseComponentsSheet(xlsxPath)
+	if err != nil {
+		log.Printf("[bdu] warning: components sheet parse failed: %v", err)
+	} else if len(components) > 0 {
+		if err := storage.ReplaceBDUComponents(ctx, db, components, now.UTC()); err != nil {
+			log.Printf("[bdu] warning: save bdu components failed: %v", err)
+		} else {
+			log.Printf("[bdu] indexed %d component-vulnerability mappings", len(components))
+		}
+	}
+
 	return nil
 }
 
@@ -128,6 +143,11 @@ func selectSheetsToParse(sheets []string) []string {
 	preferred := make([]string, 0, len(sheets))
 	for _, sheet := range sheets {
 		name := strings.ToLower(strings.TrimSpace(sheet))
+		// Skip the "Компоненты" sheet — it has a different structure
+		// and is parsed separately by parseComponentsSheet().
+		if strings.Contains(name, "компонент") {
+			continue
+		}
 		if strings.Contains(name, "уязв") || strings.Contains(name, "vuln") {
 			preferred = append(preferred, sheet)
 		}
@@ -135,7 +155,14 @@ func selectSheetsToParse(sheets []string) []string {
 	if len(preferred) > 0 {
 		return preferred
 	}
-	return sheets
+	// Fallback: return first sheet that is NOT a components sheet.
+	for _, sheet := range sheets {
+		name := strings.ToLower(strings.TrimSpace(sheet))
+		if !strings.Contains(name, "компонент") {
+			return []string{sheet}
+		}
+	}
+	return sheets[:1]
 }
 
 func buildColumnMap(headerRow []string) map[string]int {
