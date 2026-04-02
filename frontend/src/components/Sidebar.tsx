@@ -1,0 +1,90 @@
+import { NavLink } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Shield,
+  Folder,
+  Upload,
+  Database,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const navItems = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/findings", label: "Findings", icon: Shield },
+  { to: "/projects", label: "Projects", icon: Folder },
+  { to: "/import", label: "Import", icon: Upload },
+  { to: "/enrichment", label: "Enrichment", icon: Database },
+] as const;
+
+interface SidebarProps {
+  collapsed: boolean;
+  onToggle: () => void;
+}
+
+export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  return (
+    <aside
+      className={cn(
+        "fixed inset-y-0 left-0 z-30 flex flex-col border-r border-zinc-800 bg-zinc-950 transition-[width] duration-200",
+        collapsed ? "w-16" : "w-60",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-14 shrink-0 items-center border-b border-zinc-800 px-4",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        <Shield className="size-6 shrink-0 text-violet-500" />
+        {!collapsed && (
+          <span className="ml-2.5 text-lg font-semibold tracking-tight text-zinc-100">
+            VulnScope
+          </span>
+        )}
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
+        {navItems.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === "/"}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                collapsed && "justify-center px-0",
+                isActive
+                  ? "bg-violet-600/15 text-violet-400"
+                  : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200",
+              )
+            }
+          >
+            <Icon className="size-5 shrink-0" />
+            {!collapsed && <span>{label}</span>}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="border-t border-zinc-800 p-2">
+        <button
+          onClick={onToggle}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-800/60 hover:text-zinc-300",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="size-5" />
+          ) : (
+            <>
+              <PanelLeftClose className="size-5" />
+              <span>Collapse</span>
+            </>
+          )}
+        </button>
+      </div>
+    </aside>
+  );
+}
