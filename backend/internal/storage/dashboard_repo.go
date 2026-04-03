@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -46,35 +45,35 @@ type DashboardStats struct {
 	EnrichmentCoverage EnrichmentCoverage `json:"enrichment_coverage"`
 }
 
+// GetStats читает статистику из materialized view dashboard_stats.
 func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
 	stats := &DashboardStats{}
 
-	// Total, open, critical+open in one query
-	const countsQ = `
+	// Агрегируем из materialized view dashboard_stats
+	const mvQ = `
 		SELECT
-			count(*),
-			count(*) FILTER (WHERE status = 0),
-			count(*) FILTER (WHERE status = 0 AND severity = 4)
-		FROM findings`
+			COALESCE(SUM(count), 0),
+			COALESCE(SUM(count) FILTER (WHERE status = 0), 0),
+			COALESCE(SUM(count) FILTER (WHERE status = 0 AND severity = 4), 0),
+			COALESCE(SUM(new_this_week), 0)
+		FROM dashboard_stats`
 
-	err := r.pool.QueryRow(ctx, countsQ).Scan(
+	err := r.pool.QueryRow(ctx, mvQ).Scan(
 		&stats.TotalFindings,
 		&stats.TotalOpen,
 		&stats.TotalCriticalOpen,
+		&stats.NewThisWeek,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: counts: %w", err)
+		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: matview counts: %w", err)
 	}
 
-	// New this week
-	weekAgo := time.Now().AddDate(0, 0, -7)
-	const newQ = `SELECT count(*) FROM findings WHERE first_seen >= $1`
-	if err := r.pool.QueryRow(ctx, newQ, weekAgo).Scan(&stats.NewThisWeek); err != nil {
-		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: new_this_week: %w", err)
-	}
-
-	// By severity
-	const sevQ = `SELECT severity, count(*) FROM findings GROUP BY severity ORDER BY severity`
+	// By severity — из materialized view
+	const sevQ = `
+		SELECT severity, COALESCE(SUM(count), 0)
+		FROM dashboard_stats
+		GROUP BY severity
+		ORDER BY severity`
 	sevRows, err := r.pool.Query(ctx, sevQ)
 	if err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: by_severity: %w", err)
@@ -95,8 +94,12 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
 		stats.BySeverity = []SeverityCount{}
 	}
 
-	// By status
-	const statusQ = `SELECT status, count(*) FROM findings GROUP BY status ORDER BY status`
+	// By status — из materialized view
+	const statusQ = `
+		SELECT status, COALESCE(SUM(count), 0)
+		FROM dashboard_stats
+		GROUP BY status
+		ORDER BY status`
 	statusRows, err := r.pool.Query(ctx, statusQ)
 	if err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: by_status: %w", err)
@@ -117,7 +120,7 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
 		stats.ByStatus = []StatusCount{}
 	}
 
-	// Top-10 by priority_score
+	// Top-10 by priority_score (по-прежнему из findings, т.к. нужны полные данные)
 	topQ := `SELECT ` + findingColumns + `
 		FROM findings f
 		LEFT JOIN finding_scores fs ON fs.finding_id = f.id
@@ -157,29 +160,38 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
 		stats.TopFindings = []domain.Finding{}
 	}
 
-	// Enrichment coverage
+	// Enrichment coverage — из materialized view enrichment_coverage
 	const enrichQ = `
-		SELECT
-			count(DISTINCT fe.finding_id) FILTER (WHERE fe.source = 'nvd'),
-			count(DISTINCT fe.finding_id) FILTER (WHERE fe.source = 'epss'),
-			count(DISTINCT fe.finding_id) FILTER (WHERE fe.source = 'kev'),
-			count(DISTINCT fe.finding_id) FILTER (WHERE fe.source = 'bdu'),
-			count(*)
-		FROM findings f
-		LEFT JOIN finding_enrichments fe ON fe.finding_id = f.id`
+		SELECT source, enriched_count, total_findings
+		FROM enrichment_coverage`
 
-	var nvdCount, epssCount, kevCount, bduCount, totalForEnrich int
-	err = r.pool.QueryRow(ctx, enrichQ).Scan(&nvdCount, &epssCount, &kevCount, &bduCount, &totalForEnrich)
+	enrichRows, err := r.pool.Query(ctx, enrichQ)
 	if err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: enrichment_coverage: %w", err)
 	}
+	defer enrichRows.Close()
 
-	if totalForEnrich > 0 {
+	var totalFindings int
+	sourceCounts := make(map[string]int)
+	for enrichRows.Next() {
+		var source string
+		var enrichedCount, tf int
+		if err := enrichRows.Scan(&source, &enrichedCount, &tf); err != nil {
+			return nil, fmt.Errorf("storage.DashboardRepo.GetStats: enrichment_coverage scan: %w", err)
+		}
+		sourceCounts[source] = enrichedCount
+		totalFindings = tf
+	}
+	if err := enrichRows.Err(); err != nil {
+		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: enrichment_coverage rows: %w", err)
+	}
+
+	if totalFindings > 0 {
 		stats.EnrichmentCoverage = EnrichmentCoverage{
-			NVD:  float64(nvdCount) / float64(totalForEnrich) * 100,
-			EPSS: float64(epssCount) / float64(totalForEnrich) * 100,
-			KEV:  float64(kevCount) / float64(totalForEnrich) * 100,
-			BDU:  float64(bduCount) / float64(totalForEnrich) * 100,
+			NVD:  float64(sourceCounts["nvd"]) / float64(totalFindings) * 100,
+			EPSS: float64(sourceCounts["epss"]) / float64(totalFindings) * 100,
+			KEV:  float64(sourceCounts["kev"]) / float64(totalFindings) * 100,
+			BDU:  float64(sourceCounts["bdu"]) / float64(totalFindings) * 100,
 		}
 	}
 

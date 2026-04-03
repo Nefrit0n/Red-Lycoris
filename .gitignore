@@ -1,5 +1,6 @@
 # Compiled binaries
 backend/server
+backend/seed
 
 # Environment
 .env.local

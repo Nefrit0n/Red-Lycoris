@@ -83,14 +83,14 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		})
 
 		// Dashboard
-		r.Get("/dashboard/stats", handleDashboardStats(dashboardRepo))
+		r.Get("/dashboard/stats", handleDashboardStats(dashboardRepo, rdb))
 
 		// Import
 		r.Post("/import", handleImport(findingsRepo, rdb))
 
 		// Enrichment
 		r.Route("/enrichment", func(r chi.Router) {
-			r.Get("/status", handleEnrichmentStatus(pool))
+			r.Get("/status", handleEnrichmentStatus(pool, rdb))
 			r.Post("/enrich-all", handleEnrichAll(pool))
 			if cfg.scheduler != nil {
 				r.Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))

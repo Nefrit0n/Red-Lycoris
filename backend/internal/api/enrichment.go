@@ -11,11 +11,21 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"vulnscope/internal/enrichment"
+	"vulnscope/internal/storage"
 )
 
-func handleEnrichmentStatus(pool *pgxpool.Pool) http.HandlerFunc {
+func handleEnrichmentStatus(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		statuses, err := enrichment.GetAllSyncStatuses(r.Context(), pool)
+		ctx := r.Context()
+
+		// Пробуем Redis-кэш (30 секунд)
+		var cached []enrichment.SyncStatus
+		if storage.CacheGet(ctx, rdb, storage.CacheSyncStatus, &cached) {
+			respondJSON(w, http.StatusOK, map[string]any{"data": cached})
+			return
+		}
+
+		statuses, err := enrichment.GetAllSyncStatuses(ctx, pool)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get sync statuses")
 			return
@@ -23,6 +33,9 @@ func handleEnrichmentStatus(pool *pgxpool.Pool) http.HandlerFunc {
 		if statuses == nil {
 			statuses = []enrichment.SyncStatus{}
 		}
+
+		storage.CacheSet(ctx, rdb, storage.CacheSyncStatus, statuses, storage.TTLSyncStatus)
+
 		respondJSON(w, http.StatusOK, map[string]any{"data": statuses})
 	}
 }
@@ -60,6 +73,9 @@ func handleEnrichFinding(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc
 			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
 			return
 		}
+
+		// Инвалидируем кэш enrichment для этого finding
+		storage.CacheInvalidateEnrichment(r.Context(), rdb, id.String())
 
 		// Публикуем в Redis Stream для обработки воркером
 		if err := enrichment.PublishEnrichment(r.Context(), rdb, id); err != nil {

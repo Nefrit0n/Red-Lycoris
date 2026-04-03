@@ -19,6 +19,7 @@ import (
 	"vulnscope/internal/api"
 	"vulnscope/internal/config"
 	"vulnscope/internal/enrichment"
+	"vulnscope/internal/storage"
 	"vulnscope/internal/enrichment/bdu"
 	"vulnscope/internal/enrichment/cpe"
 	"vulnscope/internal/enrichment/cwe"
@@ -114,6 +115,9 @@ func main() {
 		slog.Info("enrichment scheduler started")
 		routerOpts = append(routerOpts, api.WithScheduler(scheduler))
 	}
+
+	// Materialized view refresher (every 5 minutes)
+	storage.StartMatViewRefresher(ctx, pool, 5*time.Minute)
 
 	// Router
 	handler := api.NewRouter(pool, rdb, cfg.CORSOrigins, routerOpts...)
