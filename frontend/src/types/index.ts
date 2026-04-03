@@ -58,6 +58,32 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface EnrichmentSourceStatus {
+  source: string;
+  status: "syncing" | "success" | "error" | "pending";
+  last_sync_at?: string;
+  records_count: number;
+  duration_ms?: number;
+  error_message?: string;
+  next_sync_at?: string;
+}
+
+export interface EnrichmentStatusResponse {
+  sources: EnrichmentSourceStatus[];
+  coverage: EnrichmentCoverageStats;
+}
+
+export interface EnrichmentCoverageStats {
+  total_findings: number;
+  nvd: number;
+  epss: number;
+  kev: number;
+  bdu: number;
+  osv: number;
+  cwe: number;
+  cpe: number;
+}
+
 export interface ApiError {
   error: {
     code: string;
