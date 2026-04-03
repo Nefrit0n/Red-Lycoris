@@ -8,10 +8,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"vulnscope/internal/enrichment"
 	"vulnscope/internal/storage"
 )
 
-func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string) http.Handler {
+type routerConfig struct {
+	scheduler *enrichment.Scheduler
+}
+
+type RouterOption func(*routerConfig)
+
+func WithScheduler(s *enrichment.Scheduler) RouterOption {
+	return func(c *routerConfig) { c.scheduler = s }
+}
+
+func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts ...RouterOption) http.Handler {
+	var cfg routerConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	findingsRepo := storage.NewFindingsRepo(pool)
 	projectsRepo := storage.NewProjectsRepo(pool)
 	dashboardRepo := storage.NewDashboardRepo(pool)
@@ -70,6 +86,14 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string) http.H
 
 		// Import
 		r.Post("/import", handleImport(findingsRepo))
+
+		// Enrichment
+		r.Route("/enrichment", func(r chi.Router) {
+			r.Get("/status", handleEnrichmentStatus(pool))
+			if cfg.scheduler != nil {
+				r.Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
+			}
+		})
 	})
 
 	return r

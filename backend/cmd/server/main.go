@@ -18,6 +18,9 @@ import (
 
 	"vulnscope/internal/api"
 	"vulnscope/internal/config"
+	"vulnscope/internal/enrichment"
+	"vulnscope/internal/enrichment/epss"
+	"vulnscope/internal/enrichment/kev"
 )
 
 func main() {
@@ -88,8 +91,19 @@ func main() {
 	}
 	slog.Info("connected to Redis")
 
+	// Enrichment scheduler
+	var routerOpts []api.RouterOption
+	if cfg.EnrichmentEnabled {
+		scheduler := enrichment.NewScheduler(pool)
+		scheduler.Register(epss.NewSyncer(pool), 24*time.Hour)
+		scheduler.Register(kev.NewSyncer(pool), 6*time.Hour)
+		scheduler.Start(ctx)
+		slog.Info("enrichment scheduler started")
+		routerOpts = append(routerOpts, api.WithScheduler(scheduler))
+	}
+
 	// Router
-	handler := api.NewRouter(pool, rdb, cfg.CORSOrigins)
+	handler := api.NewRouter(pool, rdb, cfg.CORSOrigins, routerOpts...)
 
 	// HTTP server
 	srv := &http.Server{
