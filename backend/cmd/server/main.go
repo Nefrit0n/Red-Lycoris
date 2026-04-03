@@ -19,6 +19,8 @@ import (
 	"vulnscope/internal/api"
 	"vulnscope/internal/config"
 	"vulnscope/internal/enrichment"
+	"vulnscope/internal/enrichment/cpe"
+	"vulnscope/internal/enrichment/cwe"
 	"vulnscope/internal/enrichment/epss"
 	"vulnscope/internal/enrichment/kev"
 	"vulnscope/internal/enrichment/nvd"
@@ -99,6 +101,8 @@ func main() {
 		scheduler.Register(nvd.NewSyncer(pool, cfg.NVDAPIKey), 2*time.Hour)
 		scheduler.Register(epss.NewSyncer(pool), 24*time.Hour)
 		scheduler.Register(kev.NewSyncer(pool), 6*time.Hour)
+		scheduler.Register(cwe.NewSyncer(pool), 30*24*time.Hour)
+		scheduler.Register(cpe.NewSyncer(pool, cfg.NVDAPIKey), 7*24*time.Hour)
 		scheduler.Start(ctx)
 		slog.Info("enrichment scheduler started")
 		routerOpts = append(routerOpts, api.WithScheduler(scheduler))
