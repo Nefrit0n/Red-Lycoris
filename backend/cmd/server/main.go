@@ -18,6 +18,14 @@ import (
 
 	"vulnscope/internal/api"
 	"vulnscope/internal/config"
+	"vulnscope/internal/enrichment"
+	"vulnscope/internal/enrichment/bdu"
+	"vulnscope/internal/enrichment/cpe"
+	"vulnscope/internal/enrichment/cwe"
+	"vulnscope/internal/enrichment/epss"
+	"vulnscope/internal/enrichment/kev"
+	"vulnscope/internal/enrichment/nvd"
+	"vulnscope/internal/enrichment/osv"
 )
 
 func main() {
@@ -88,8 +96,27 @@ func main() {
 	}
 	slog.Info("connected to Redis")
 
+	// Enrichment workers (Redis Streams consumer group)
+	enrichment.StartWorkers(ctx, pool, rdb, 3)
+
+	// Enrichment scheduler
+	var routerOpts []api.RouterOption
+	if cfg.EnrichmentEnabled {
+		scheduler := enrichment.NewScheduler(pool)
+		scheduler.Register(nvd.NewSyncer(pool, cfg.NVDAPIKey), 2*time.Hour)
+		scheduler.Register(epss.NewSyncer(pool), 24*time.Hour)
+		scheduler.Register(kev.NewSyncer(pool), 6*time.Hour)
+		scheduler.Register(cwe.NewSyncer(pool), 30*24*time.Hour)
+		scheduler.Register(cpe.NewSyncer(pool, cfg.NVDAPIKey), 7*24*time.Hour)
+		scheduler.Register(bdu.NewSyncer(pool), 7*24*time.Hour)
+		scheduler.Register(osv.NewSyncer(pool), 24*time.Hour)
+		scheduler.Start(ctx)
+		slog.Info("enrichment scheduler started")
+		routerOpts = append(routerOpts, api.WithScheduler(scheduler))
+	}
+
 	// Router
-	handler := api.NewRouter(pool, rdb, cfg.CORSOrigins)
+	handler := api.NewRouter(pool, rdb, cfg.CORSOrigins, routerOpts...)
 
 	// HTTP server
 	srv := &http.Server{

@@ -8,10 +8,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"vulnscope/internal/enrichment"
 	"vulnscope/internal/storage"
 )
 
-func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string) http.Handler {
+type routerConfig struct {
+	scheduler *enrichment.Scheduler
+}
+
+type RouterOption func(*routerConfig)
+
+func WithScheduler(s *enrichment.Scheduler) RouterOption {
+	return func(c *routerConfig) { c.scheduler = s }
+}
+
+func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts ...RouterOption) http.Handler {
+	var cfg routerConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	findingsRepo := storage.NewFindingsRepo(pool)
 	projectsRepo := storage.NewProjectsRepo(pool)
 	dashboardRepo := storage.NewDashboardRepo(pool)
@@ -59,8 +75,9 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string) http.H
 		// Findings
 		r.Route("/findings", func(r chi.Router) {
 			r.Get("/", handleListFindings(findingsRepo))
-			r.Get("/{id}", handleGetFinding(findingsRepo))
+			r.Get("/{id}", handleGetFinding(findingsRepo, pool))
 			r.Patch("/{id}/status", handleUpdateStatus(findingsRepo))
+			r.Post("/{id}/enrich", handleEnrichFinding(pool, rdb))
 			r.Patch("/bulk/status", handleBulkUpdateStatus(findingsRepo))
 			r.Delete("/{id}", handleDeleteFinding(findingsRepo))
 		})
@@ -69,7 +86,16 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string) http.H
 		r.Get("/dashboard/stats", handleDashboardStats(dashboardRepo))
 
 		// Import
-		r.Post("/import", handleImport(findingsRepo))
+		r.Post("/import", handleImport(findingsRepo, rdb))
+
+		// Enrichment
+		r.Route("/enrichment", func(r chi.Router) {
+			r.Get("/status", handleEnrichmentStatus(pool))
+			r.Post("/enrich-all", handleEnrichAll(pool))
+			if cfg.scheduler != nil {
+				r.Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
+			}
+		})
 	})
 
 	return r

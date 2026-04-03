@@ -8,7 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	"vulnscope/internal/enrichment"
 	"vulnscope/internal/storage"
 )
 
@@ -83,7 +85,7 @@ func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
 	}
 }
 
-func handleGetFinding(repo *storage.FindingsRepo) http.HandlerFunc {
+func handleGetFinding(repo *storage.FindingsRepo, pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
@@ -97,7 +99,19 @@ func handleGetFinding(repo *storage.FindingsRepo) http.HandlerFunc {
 			return
 		}
 
-		respondJSON(w, http.StatusOK, map[string]any{"data": finding})
+		result := map[string]any{"finding": finding}
+
+		enrichments, err := enrichment.GetFindingEnrichments(r.Context(), pool, id)
+		if err == nil && len(enrichments) > 0 {
+			result["enrichments"] = enrichments
+		}
+
+		score, err := enrichment.GetFindingScore(r.Context(), pool, id)
+		if err == nil && score != nil {
+			result["score"] = score
+		}
+
+		respondJSON(w, http.StatusOK, map[string]any{"data": result})
 	}
 }
 

@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 
 	"vulnscope/internal/domain"
+	"vulnscope/internal/enrichment"
 	"vulnscope/internal/parser"
 	"vulnscope/internal/storage"
 )
@@ -18,7 +20,7 @@ type importError struct {
 	Message string `json:"message"`
 }
 
-func handleImport(repo *storage.FindingsRepo) http.HandlerFunc {
+func handleImport(repo *storage.FindingsRepo, rdb *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID := r.URL.Query().Get("project_id")
 		var overrideProjectID uuid.UUID
@@ -50,6 +52,7 @@ func handleImport(repo *storage.FindingsRepo) http.HandlerFunc {
 
 		var imported, updated int
 		var errs []importError
+		var importedIDs []uuid.UUID
 		now := time.Now()
 
 		for i := range findings {
@@ -92,6 +95,7 @@ func handleImport(repo *storage.FindingsRepo) http.HandlerFunc {
 
 			if isNew {
 				imported++
+				importedIDs = append(importedIDs, f.ID)
 			} else {
 				updated++
 			}
@@ -103,6 +107,13 @@ func handleImport(repo *storage.FindingsRepo) http.HandlerFunc {
 			"updated", updated,
 			"errors", len(errs),
 		)
+
+		// Публикуем импортированные findings в Redis Stream для обогащения
+		if len(importedIDs) > 0 {
+			if err := enrichment.PublishEnrichment(r.Context(), rdb, importedIDs...); err != nil {
+				slog.Error("import: failed to publish enrichment", "error", err)
+			}
+		}
 
 		respondJSON(w, http.StatusOK, map[string]any{
 			"format":   format,
