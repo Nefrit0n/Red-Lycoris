@@ -96,6 +96,9 @@ func main() {
 	}
 	slog.Info("connected to Redis")
 
+	// Enrichment workers (Redis Streams consumer group)
+	enrichment.StartWorkers(ctx, pool, rdb, 3)
+
 	// Enrichment scheduler
 	var routerOpts []api.RouterOption
 	if cfg.EnrichmentEnabled {

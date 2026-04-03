@@ -75,8 +75,9 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		// Findings
 		r.Route("/findings", func(r chi.Router) {
 			r.Get("/", handleListFindings(findingsRepo))
-			r.Get("/{id}", handleGetFinding(findingsRepo))
+			r.Get("/{id}", handleGetFinding(findingsRepo, pool))
 			r.Patch("/{id}/status", handleUpdateStatus(findingsRepo))
+			r.Post("/{id}/enrich", handleEnrichFinding(pool, rdb))
 			r.Patch("/bulk/status", handleBulkUpdateStatus(findingsRepo))
 			r.Delete("/{id}", handleDeleteFinding(findingsRepo))
 		})
@@ -85,11 +86,12 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		r.Get("/dashboard/stats", handleDashboardStats(dashboardRepo))
 
 		// Import
-		r.Post("/import", handleImport(findingsRepo))
+		r.Post("/import", handleImport(findingsRepo, rdb))
 
 		// Enrichment
 		r.Route("/enrichment", func(r chi.Router) {
 			r.Get("/status", handleEnrichmentStatus(pool))
+			r.Post("/enrich-all", handleEnrichAll(pool))
 			if cfg.scheduler != nil {
 				r.Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
 			}
