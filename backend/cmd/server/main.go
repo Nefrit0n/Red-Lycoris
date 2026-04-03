@@ -21,6 +21,7 @@ import (
 	"vulnscope/internal/enrichment"
 	"vulnscope/internal/enrichment/epss"
 	"vulnscope/internal/enrichment/kev"
+	"vulnscope/internal/enrichment/nvd"
 )
 
 func main() {
@@ -95,6 +96,7 @@ func main() {
 	var routerOpts []api.RouterOption
 	if cfg.EnrichmentEnabled {
 		scheduler := enrichment.NewScheduler(pool)
+		scheduler.Register(nvd.NewSyncer(pool, cfg.NVDAPIKey), 2*time.Hour)
 		scheduler.Register(epss.NewSyncer(pool), 24*time.Hour)
 		scheduler.Register(kev.NewSyncer(pool), 6*time.Hour)
 		scheduler.Start(ctx)

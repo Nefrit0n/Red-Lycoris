@@ -10,6 +10,7 @@ type Config struct {
 	LogLevel          string
 	CORSOrigins       string
 	EnrichmentEnabled bool
+	NVDAPIKey         string
 }
 
 func Load() *Config {
@@ -21,6 +22,7 @@ func Load() *Config {
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		CORSOrigins:       getEnv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"),
 		EnrichmentEnabled: getEnv("ENRICHMENT_ENABLED", "true") == "true",
+		NVDAPIKey:         getEnv("NVD_API_KEY", ""),
 	}
 }
 
