@@ -164,6 +164,7 @@ vulnscope/
 - **Zustand** для клиентского стейта (фильтры, UI state).
 - **Tailwind CSS** — утилитарные классы, никакого CSS-in-JS.
 - **shadcn/ui** — компоненты (Button, Dialog, Select, Badge, Tabs, Card).
+- **Язык** - Весь текст который визуально отображается в интерфейсе должен быть на русском языке.
 - **React Router v6** — маршрутизация.
 - **Форматы:** даты через `date-fns`, числа — `Intl.NumberFormat`.
 - **TypeScript strict mode** — никаких `any`.
