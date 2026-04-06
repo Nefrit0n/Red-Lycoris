@@ -35,21 +35,21 @@ const SOURCE_META: SourceMeta[] = [
   {
     key: "nvd",
     label: "NVD",
-    description: "Национальная база уязвимостей NIST",
+    description: "NIST National Vulnerability Database",
     icon: Shield,
     color: "text-blue-400",
   },
   {
     key: "epss",
     label: "EPSS",
-    description: "Система оценки вероятности эксплуатации",
+    description: "Exploit Prediction Scoring System",
     icon: TrendingUp,
-    color: "text-red-500",
+    color: "text-violet-400",
   },
   {
     key: "kev",
     label: "CISA KEV",
-    description: "Известные эксплуатируемые уязвимости",
+    description: "Known Exploited Vulnerabilities",
     icon: AlertTriangle,
     color: "text-red-400",
   },
@@ -63,21 +63,21 @@ const SOURCE_META: SourceMeta[] = [
   {
     key: "osv",
     label: "OSV",
-    description: "Уязвимости Open Source",
+    description: "Open Source Vulnerabilities",
     icon: Package,
     color: "text-emerald-400",
   },
   {
     key: "cwe",
     label: "CWE",
-    description: "Перечень распространённых слабостей",
+    description: "Common Weakness Enumeration",
     icon: BookOpen,
     color: "text-cyan-400",
   },
   {
     key: "cpe",
     label: "CPE",
-    description: "Перечень платформ",
+    description: "Common Platform Enumeration",
     icon: Cpu,
     color: "text-pink-400",
   },
@@ -281,7 +281,7 @@ function CoverageBar({
 function CoverageSection({ coverage }: { coverage: EnrichmentCoverageStats }) {
   const items = [
     { label: "NVD", count: coverage.nvd, color: "bg-blue-500" },
-    { label: "EPSS", count: coverage.epss, color: "bg-red-600" },
+    { label: "EPSS", count: coverage.epss, color: "bg-violet-500" },
     { label: "KEV", count: coverage.kev, color: "bg-red-500" },
     { label: "БДУ", count: coverage.bdu, color: "bg-amber-500" },
     { label: "OSV", count: coverage.osv, color: "bg-emerald-500" },
@@ -293,7 +293,7 @@ function CoverageSection({ coverage }: { coverage: EnrichmentCoverageStats }) {
     <Card className="border-zinc-800 bg-zinc-900/50">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-          <Database className="size-4 text-red-500" />
+          <Database className="size-4 text-violet-400" />
           Покрытие обогащения
         </CardTitle>
         <p className="text-xs text-zinc-500">

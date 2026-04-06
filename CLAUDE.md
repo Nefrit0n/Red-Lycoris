@@ -1,4 +1,4 @@
-# ASOC Platform — Red Lycoris
+# ASOC Platform — VulnScope
 
 ## Что это
 
