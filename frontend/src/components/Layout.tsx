@@ -6,15 +6,15 @@ import Sidebar from "@/components/Sidebar";
 import { cn } from "@/lib/utils";
 
 const routeTitles: Record<string, string> = {
-  "/": "Дашборд",
-  "/findings": "Находки",
-  "/projects": "Проекты",
-  "/import": "Импорт",
-  "/enrichment": "Обогащение",
+  "/": "Dashboard",
+  "/findings": "Findings",
+  "/projects": "Projects",
+  "/import": "Import",
+  "/enrichment": "Enrichment",
 };
 
 function breadcrumbFor(pathname: string): string[] {
-  if (pathname === "/") return ["Дашборд"];
+  if (pathname === "/") return ["Dashboard"];
 
   const segments = pathname.split("/").filter(Boolean);
   const crumbs: string[] = [];
@@ -65,8 +65,8 @@ export default function Layout() {
           <div className="relative w-64">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
             <Input
-              placeholder="Поиск..."
-              className="h-8 border-zinc-800 bg-zinc-900 pl-8 text-sm text-zinc-300 placeholder:text-zinc-600 focus-visible:ring-red-700/40"
+              placeholder="Search..."
+              className="h-8 border-zinc-800 bg-zinc-900 pl-8 text-sm text-zinc-300 placeholder:text-zinc-600 focus-visible:ring-violet-600/40"
             />
           </div>
         </header>

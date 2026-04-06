@@ -57,8 +57,8 @@ async function parseFile(file: File): Promise<ParsedFile> {
 
 const formatLabels: Record<string, { label: string; className: string }> = {
   sarif: { label: "SARIF", className: "border-blue-700/50 bg-blue-950/50 text-blue-400" },
-  generic: { label: "Generic JSON", className: "border-red-800/50 bg-red-950/50 text-red-500" },
-  unknown: { label: "Неизвестно", className: "border-zinc-600 bg-zinc-800/60 text-zinc-400" },
+  generic: { label: "Generic JSON", className: "border-violet-700/50 bg-violet-950/50 text-violet-400" },
+  unknown: { label: "Unknown", className: "border-zinc-600 bg-zinc-800/60 text-zinc-400" },
 };
 
 export default function ImportUpload({ files, onFilesChange, disabled }: ImportUploadProps) {
@@ -116,17 +116,17 @@ export default function ImportUpload({ files, onFilesChange, disabled }: ImportU
         className={cn(
           "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 transition-colors",
           dragOver
-            ? "border-red-600 bg-red-600/5"
+            ? "border-violet-500 bg-violet-500/5"
             : "border-zinc-700 bg-zinc-900/30 hover:border-zinc-600 hover:bg-zinc-900/50",
           disabled && "pointer-events-none opacity-50",
         )}
       >
-        <Upload className={cn("size-8", dragOver ? "text-red-500" : "text-zinc-500")} />
+        <Upload className={cn("size-8", dragOver ? "text-violet-400" : "text-zinc-500")} />
         <div className="text-center">
           <p className="text-sm font-medium text-zinc-300">
-            Перетащите файлы сюда или нажмите для выбора
+            Drop files here or click to browse
           </p>
-          <p className="mt-1 text-xs text-zinc-500">Поддерживаются JSON и SARIF файлы</p>
+          <p className="mt-1 text-xs text-zinc-500">JSON, SARIF files supported</p>
         </div>
         <input
           type="file"
@@ -161,7 +161,7 @@ export default function ImportUpload({ files, onFilesChange, disabled }: ImportU
                   </Badge>
                   {pf.findingsCount != null && (
                     <span className="text-xs text-zinc-500">
-                      {pf.findingsCount} находок
+                      {pf.findingsCount} findings
                     </span>
                   )}
                 </>
