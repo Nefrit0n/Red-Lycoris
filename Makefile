@@ -25,7 +25,7 @@ migrate: ## Запуск миграций (через backend контейнер
 	$(COMPOSE) exec backend ./vulnscope
 
 seed: ## Генерация тестовых данных (100k findings)
-	cd backend && go build -o /tmp/vulnscope-seed ./cmd/seed && /tmp/vulnscope-seed
+	cd backend && go build -o /tmp/redlycoris-seed ./cmd/seed && /tmp/redlycoris-seed
 
 ## ── Enrichment ────────────────────────────────
 

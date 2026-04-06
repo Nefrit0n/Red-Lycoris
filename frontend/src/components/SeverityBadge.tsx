@@ -3,23 +3,23 @@ import { cn } from "@/lib/utils";
 
 const config: Record<number, { label: string; className: string }> = {
   0: {
-    label: "Info",
+    label: "Инфо",
     className: "border-zinc-600 bg-zinc-800/60 text-zinc-400",
   },
   1: {
-    label: "Low",
+    label: "Низкая",
     className: "border-blue-700/50 bg-blue-950/50 text-blue-400",
   },
   2: {
-    label: "Medium",
+    label: "Средняя",
     className: "border-yellow-700/50 bg-yellow-950/40 text-yellow-400",
   },
   3: {
-    label: "High",
+    label: "Высокая",
     className: "border-orange-700/50 bg-orange-950/40 text-orange-400",
   },
   4: {
-    label: "Critical",
+    label: "Критическая",
     className: "border-red-700/50 bg-red-950/40 text-red-400",
   },
 };
