@@ -83,22 +83,22 @@ export default function PriorityScore({
                   breakdown.is_kev ? "font-medium text-red-400" : "text-zinc-500"
                 }
               >
-                {breakdown.is_kev ? "Yes" : "No"}
+                {breakdown.is_kev ? "Да" : "Нет"}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-400">BDU FSTEC</span>
+              <span className="text-zinc-400">БДУ ФСТЭК</span>
               <span
                 className={
                   breakdown.is_bdu ? "font-medium text-amber-400" : "text-zinc-500"
                 }
               >
-                {breakdown.is_bdu ? "Yes" : "No"}
+                {breakdown.is_bdu ? "Да" : "Нет"}
               </span>
             </div>
             <div className="mt-1 border-t border-zinc-700 pt-1">
               <div className="flex justify-between font-medium">
-                <span className="text-zinc-300">Priority Score</span>
+                <span className="text-zinc-300">Приоритет</span>
                 <span className={cn("font-mono", scoreTextColor(breakdown.priority_score))}>
                   {breakdown.priority_score.toFixed(1)}
                 </span>

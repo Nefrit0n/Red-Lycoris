@@ -14,11 +14,11 @@ import { useFiltersStore } from "@/store/filters";
 import type { Finding } from "@/types";
 
 const statusOptions = [
-  { value: 0, label: "Open" },
-  { value: 1, label: "Confirmed" },
-  { value: 2, label: "False Positive" },
-  { value: 3, label: "Resolved" },
-  { value: 4, label: "Risk Accepted" },
+  { value: 0, label: "Открыта" },
+  { value: 1, label: "Подтверждена" },
+  { value: 2, label: "Ложное срабатывание" },
+  { value: 3, label: "Устранена" },
+  { value: 4, label: "Риск принят" },
 ];
 
 export default function FindingsList() {
@@ -76,18 +76,17 @@ export default function FindingsList() {
       <FacetedFilters />
 
       <div className="flex min-w-0 flex-1 flex-col gap-4">
-        {/* Toolbar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm text-zinc-400">
               <span className="font-medium text-zinc-200">
                 {total.toLocaleString()}
               </span>{" "}
-              findings
+              находок
             </span>
             {selectedIds.size > 0 && (
-              <span className="text-sm text-violet-400">
-                {selectedIds.size} selected
+              <span className="text-sm text-red-500">
+                {selectedIds.size} выбрано
               </span>
             )}
           </div>
@@ -104,7 +103,7 @@ export default function FindingsList() {
                     />
                   }
                 >
-                  Set status
+                  Изменить статус
                   <ChevronDown className="size-3.5" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="border-zinc-700 bg-zinc-900">
@@ -132,7 +131,6 @@ export default function FindingsList() {
           </div>
         </div>
 
-        {/* Table */}
         <FindingsTable
           findings={findings}
           isLoading={isLoading}
@@ -142,7 +140,6 @@ export default function FindingsList() {
           allSelected={selectedIds.size === findings.length && findings.length > 0}
         />
 
-        {/* Load more */}
         {hasNextPage && (
           <div className="flex justify-center pb-2">
             <Button
@@ -155,7 +152,7 @@ export default function FindingsList() {
               {isFetchingNextPage ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : null}
-              Load more
+              Загрузить ещё
             </Button>
           </div>
         )}

@@ -42,7 +42,7 @@ function CheckboxRow({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-violet-500"
+        className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-red-600"
       />
       <span className="flex-1">{children}</span>
       {count !== undefined && (
@@ -100,19 +100,19 @@ export default function FacetedFilters({ counts }: FacetedFiltersProps) {
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
         <Input
-          placeholder="Search findings..."
+          placeholder="Поиск находок..."
           value={localQuery}
           onChange={(e) => {
             setLocalQuery(e.target.value);
             debouncedSetQuery(e.target.value);
           }}
-          className="h-8 border-zinc-800 bg-zinc-900 pl-8 text-sm text-zinc-300 placeholder:text-zinc-600 focus-visible:ring-violet-600/40"
+          className="h-8 border-zinc-800 bg-zinc-900 pl-8 text-sm text-zinc-300 placeholder:text-zinc-600 focus-visible:ring-red-700/40"
         />
       </div>
 
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-          Severity
+          КРИТИЧНОСТЬ
         </h3>
         <div className="space-y-0.5">
           {severityLevels.map((sev) => (
@@ -132,7 +132,7 @@ export default function FacetedFilters({ counts }: FacetedFiltersProps) {
 
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-          Status
+          СТАТУС
         </h3>
         <div className="space-y-0.5">
           {statusLevels.map((st) => (
@@ -158,7 +158,7 @@ export default function FacetedFilters({ counts }: FacetedFiltersProps) {
             className="w-full text-zinc-400 hover:text-zinc-200"
           >
             <X className="size-3.5" />
-            Reset filters
+            Сбросить фильтры
           </Button>
         </>
       )}

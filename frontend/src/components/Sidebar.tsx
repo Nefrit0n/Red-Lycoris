@@ -11,11 +11,11 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/findings", label: "Findings", icon: Shield },
-  { to: "/projects", label: "Projects", icon: Folder },
-  { to: "/import", label: "Import", icon: Upload },
-  { to: "/enrichment", label: "Enrichment", icon: Database },
+  { to: "/", label: "Дашборд", icon: LayoutDashboard },
+  { to: "/findings", label: "Находки", icon: Shield },
+  { to: "/projects", label: "Проекты", icon: Folder },
+  { to: "/import", label: "Импорт", icon: Upload },
+  { to: "/enrichment", label: "Обогащение", icon: Database },
 ] as const;
 
 interface SidebarProps {
@@ -37,12 +37,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           collapsed && "justify-center px-0",
         )}
       >
-        <Shield className="size-6 shrink-0 text-violet-500" />
-        {!collapsed && (
-          <span className="ml-2.5 text-lg font-semibold tracking-tight text-zinc-100">
-            VulnScope
-          </span>
-        )}
+        <img
+          src={collapsed ? "/logo.svg" : "/logo_full.svg"}
+          alt="Red Lycoris"
+          className={cn("w-auto shrink-0", collapsed ? "h-6" : "h-7")}
+        />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
@@ -56,7 +55,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 collapsed && "justify-center px-0",
                 isActive
-                  ? "bg-violet-600/15 text-violet-400"
+                  ? "bg-red-600/15 text-red-400"
                   : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200",
               )
             }
@@ -80,7 +79,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           ) : (
             <>
               <PanelLeftClose className="size-5" />
-              <span>Collapse</span>
+              <span>Свернуть</span>
             </>
           )}
         </button>
