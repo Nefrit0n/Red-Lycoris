@@ -9,7 +9,6 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { ru } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
 import SeverityBadge from "@/components/SeverityBadge";
 import StatusBadge from "@/components/StatusBadge";
@@ -23,9 +22,9 @@ function SortIcon({ field }: { field: string }) {
   const { sortField, sortDir } = useFiltersStore();
   if (sortField !== field) return <ArrowUpDown className="size-3.5 text-zinc-600" />;
   return sortDir === "asc" ? (
-    <ArrowUp className="size-3.5 text-red-500" />
+    <ArrowUp className="size-3.5 text-violet-400" />
   ) : (
-    <ArrowDown className="size-3.5 text-red-500" />
+    <ArrowDown className="size-3.5 text-violet-400" />
   );
 }
 
@@ -72,7 +71,7 @@ export default function FindingsTable({
             type="checkbox"
             checked={allSelected && findings.length > 0}
             onChange={onToggleAll}
-            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-red-600"
+            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-violet-500"
           />
         ),
         cell: ({ row }) => (
@@ -84,25 +83,25 @@ export default function FindingsTable({
               onToggleSelect(row.original.id);
             }}
             onClick={(e) => e.stopPropagation()}
-            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-red-600"
+            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-violet-500"
           />
         ),
         size: 40,
       }),
       col.accessor("severity", {
-        header: "Критичность",
+        header: "Severity",
         cell: (info) => <SeverityBadge severity={info.getValue()} />,
         size: 100,
       }),
       col.accessor("title", {
-        header: "Название",
+        header: "Title",
         cell: (info) => (
           <span className="line-clamp-1 text-zinc-200">{info.getValue()}</span>
         ),
         size: 320,
       }),
       col.accessor("component", {
-        header: "Компонент",
+        header: "Component",
         cell: (info) => (
           <span className="line-clamp-1 font-mono text-xs text-zinc-400">
             {info.getValue() ?? "\u2014"}
@@ -111,7 +110,7 @@ export default function FindingsTable({
         size: 160,
       }),
       col.accessor("file_path", {
-        header: "Файл",
+        header: "File",
         cell: (info) => (
           <span className="line-clamp-1 font-mono text-xs text-zinc-500">
             {info.getValue() ?? "\u2014"}
@@ -120,12 +119,12 @@ export default function FindingsTable({
         size: 200,
       }),
       col.accessor("status", {
-        header: "Статус",
+        header: "Status",
         cell: (info) => <StatusBadge status={info.getValue()} />,
         size: 120,
       }),
       col.accessor("priority_score", {
-        header: "Приоритет",
+        header: "Priority",
         cell: (info) => {
           const v = info.getValue();
           if (v == null) return <span className="text-zinc-600">\u2014</span>;
@@ -147,19 +146,18 @@ export default function FindingsTable({
         size: 80,
       }),
       col.accessor("first_seen", {
-        header: "Обнаружено",
+        header: "First Seen",
         cell: (info) => (
           <span className="text-xs text-zinc-500">
             {formatDistanceToNow(new Date(info.getValue()), {
               addSuffix: true,
-              locale: ru,
             })}
           </span>
         ),
         size: 120,
       }),
       col.accessor("times_seen", {
-        header: "Кол-во",
+        header: "Seen",
         cell: (info) => (
           <span className="font-mono text-xs text-zinc-400">
             {info.getValue()}
@@ -247,7 +245,7 @@ export default function FindingsTable({
                 key={row.id}
                 className={cn(
                   "absolute inset-x-0 flex cursor-pointer border-b border-zinc-800/60 transition-colors hover:bg-zinc-800/40",
-                  isSelected && "bg-red-950/20",
+                  isSelected && "bg-violet-950/20",
                 )}
                 style={{
                   height: ROW_HEIGHT,
@@ -271,7 +269,7 @@ export default function FindingsTable({
 
         {findings.length === 0 && !isLoading && (
           <div className="flex h-40 items-center justify-center text-sm text-zinc-500">
-            Нет находок, соответствующих текущим фильтрам.
+            No findings match the current filters.
           </div>
         )}
       </div>

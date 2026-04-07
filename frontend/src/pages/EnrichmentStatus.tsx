@@ -43,21 +43,21 @@ const SOURCE_META: SourceMeta[] = [
   {
     key: "nvd",
     label: "NVD",
-    description: "Национальная база уязвимостей NIST",
+    description: "NIST National Vulnerability Database",
     icon: Shield,
     color: "text-blue-400",
   },
   {
     key: "epss",
     label: "EPSS",
-    description: "Система оценки вероятности эксплуатации",
+    description: "Exploit Prediction Scoring System",
     icon: TrendingUp,
-    color: "text-red-500",
+    color: "text-violet-400",
   },
   {
     key: "kev",
     label: "CISA KEV",
-    description: "Известные эксплуатируемые уязвимости",
+    description: "Known Exploited Vulnerabilities",
     icon: AlertTriangle,
     color: "text-red-400",
   },
@@ -71,21 +71,21 @@ const SOURCE_META: SourceMeta[] = [
   {
     key: "osv",
     label: "OSV",
-    description: "Уязвимости Open Source",
+    description: "Open Source Vulnerabilities",
     icon: Package,
     color: "text-emerald-400",
   },
   {
     key: "cwe",
     label: "CWE",
-    description: "Перечень распространённых слабостей",
+    description: "Common Weakness Enumeration",
     icon: BookOpen,
     color: "text-cyan-400",
   },
   {
     key: "cpe",
     label: "CPE",
-    description: "Перечень платформ",
+    description: "Common Platform Enumeration",
     icon: Cpu,
     color: "text-pink-400",
   },
@@ -249,17 +249,46 @@ function SummaryCard({
 }: {
   statuses: SyncStatus[];
 }) {
-  const totalRecords = statuses.reduce((acc, item) => acc + (item.records_count || 0), 0);
-  const successCount = statuses.filter((item) => item.status === "success").length;
-  const runningCount = statuses.filter((item) => item.status === "running").length;
-  const errorCount = statuses.filter((item) => item.status === "error").length;
+  const pct = total > 0 ? (count / total) * 100 : 0;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-zinc-400">{label}</span>
+        <span className="font-mono text-zinc-300">
+          {pct.toFixed(1)}%{" "}
+          <span className="text-zinc-500">
+            ({formatCount(count)} / {formatCount(total)})
+          </span>
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className={cn("h-full rounded-full transition-all", color)}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CoverageSection({ coverage }: { coverage: EnrichmentCoverageStats }) {
+  const items = [
+    { label: "NVD", count: coverage.nvd, color: "bg-blue-500" },
+    { label: "EPSS", count: coverage.epss, color: "bg-violet-500" },
+    { label: "KEV", count: coverage.kev, color: "bg-red-500" },
+    { label: "БДУ", count: coverage.bdu, color: "bg-amber-500" },
+    { label: "OSV", count: coverage.osv, color: "bg-emerald-500" },
+    { label: "CWE", count: coverage.cwe, color: "bg-cyan-500" },
+    { label: "CPE", count: coverage.cpe, color: "bg-pink-500" },
+  ];
 
   return (
     <Card className="border-zinc-800 bg-zinc-900/50">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-          <Database className="size-4 text-red-500" />
-          Сводка по источникам
+          <Database className="size-4 text-violet-400" />
+          Покрытие обогащения
         </CardTitle>
         <p className="text-xs text-zinc-500">
           Текущее состояние синхронизации enrichment-источников

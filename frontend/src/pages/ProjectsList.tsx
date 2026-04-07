@@ -22,7 +22,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects, useCreateProject } from "@/api/projects";
 import { formatDistanceToNow } from "date-fns";
-import { ru } from "date-fns/locale";
 
 export default function ProjectsList() {
   const navigate = useNavigate();
@@ -70,15 +69,15 @@ export default function ProjectsList() {
       <div className="flex items-center justify-between">
         <span className="text-sm text-zinc-400">
           <span className="font-medium text-zinc-200">{projects.length}</span>{" "}
-          проектов
+          project{projects.length !== 1 ? "s" : ""}
         </span>
         <Button
           onClick={() => setShowCreate(true)}
-          className="bg-red-700 text-white hover:bg-red-800"
+          className="bg-violet-600 text-white hover:bg-violet-700"
           size="sm"
         >
           <Plus className="size-4" />
-          Новый проект
+          New Project
         </Button>
       </div>
 
@@ -86,14 +85,14 @@ export default function ProjectsList() {
       {projects.length === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-zinc-800 text-zinc-500">
           <Folder className="size-10 text-zinc-700" />
-          <p className="text-sm">Проектов пока нет</p>
+          <p className="text-sm">No projects yet</p>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowCreate(true)}
             className="border-zinc-700 text-zinc-300"
           >
-            Создайте первый проект
+            Create your first project
           </Button>
         </div>
       ) : (
@@ -129,10 +128,9 @@ export default function ProjectsList() {
                   </div>
                 )}
                 <p className="text-xs text-zinc-600">
-                  Обновлён{" "}
+                  Updated{" "}
                   {formatDistanceToNow(new Date(p.updated_at), {
                     addSuffix: true,
-                    locale: ru,
                   })}
                 </p>
               </CardContent>
@@ -145,35 +143,35 @@ export default function ProjectsList() {
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="border-zinc-700 bg-zinc-900">
           <DialogHeader>
-            <DialogTitle className="text-zinc-100">Создать проект</DialogTitle>
+            <DialogTitle className="text-zinc-100">Create Project</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
               <label className="mb-1 block text-xs text-zinc-500">
-                Название <span className="text-red-400">*</span>
+                Name <span className="text-red-400">*</span>
               </label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Мой проект"
+                placeholder="My Project"
                 className="border-zinc-700 bg-zinc-800 text-zinc-200"
                 autoFocus
               />
             </div>
             <div>
               <label className="mb-1 block text-xs text-zinc-500">
-                Описание
+                Description
               </label>
               <Input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Описание (опционально)"
+                placeholder="Optional description"
                 className="border-zinc-700 bg-zinc-800 text-zinc-200"
               />
             </div>
             <div>
               <label className="mb-1 block text-xs text-zinc-500">
-                Теги (через запятую)
+                Tags (comma-separated)
               </label>
               <Input
                 value={tagsInput}
@@ -189,17 +187,17 @@ export default function ProjectsList() {
                 <Button variant="ghost" className="text-zinc-400" />
               }
             >
-              Отмена
+              Cancel
             </DialogClose>
             <Button
               onClick={handleCreate}
               disabled={!name.trim() || createProject.isPending}
-              className="bg-red-700 text-white hover:bg-red-800"
+              className="bg-violet-600 text-white hover:bg-violet-700"
             >
               {createProject.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : null}
-              Создать
+              Create
             </Button>
           </DialogFooter>
         </DialogContent>

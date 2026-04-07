@@ -11,7 +11,6 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import { ru } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -40,11 +39,11 @@ import { useFinding, useUpdateStatus } from "@/api/findings";
 import { useFindingScore } from "@/api/enrichment";
 
 const statusOptions = [
-  { value: 0, label: "Открыта" },
-  { value: 1, label: "Подтверждена" },
-  { value: 2, label: "Ложное срабатывание" },
-  { value: 3, label: "Устранена" },
-  { value: 4, label: "Риск принят" },
+  { value: 0, label: "Open" },
+  { value: 1, label: "Confirmed" },
+  { value: 2, label: "False Positive" },
+  { value: 3, label: "Resolved" },
+  { value: 4, label: "Risk Accepted" },
 ];
 
 function DetailRow({
@@ -110,7 +109,7 @@ export default function FindingDetail() {
           className="mb-4 text-zinc-400 hover:text-zinc-200"
         >
           <ArrowLeft className="size-4" />
-          Назад к находкам
+          Back to findings
         </Button>
         <LoadingSkeleton />
       </div>
@@ -131,7 +130,7 @@ export default function FindingDetail() {
         className="mb-4 text-zinc-400 hover:text-zinc-200"
       >
         <ArrowLeft className="size-4" />
-        Назад к находкам
+        Back to findings
       </Button>
 
       {/* Header */}
@@ -185,20 +184,20 @@ export default function FindingDetail() {
       {/* Tabs */}
       <Tabs defaultValue="overview">
         <TabsList variant="line" className="mb-4">
-          <TabsTrigger value="overview">Обзор</TabsTrigger>
-          <TabsTrigger value="identifiers">Идентификаторы</TabsTrigger>
-          <TabsTrigger value="enrichment">Обогащение</TabsTrigger>
-          <TabsTrigger value="history">История</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="identifiers">Identifiers</TabsTrigger>
+          <TabsTrigger value="enrichment">Enrichment</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
-        {/* Обзор */}
+        {/* Overview */}
         <TabsContent value="overview">
           <div className="space-y-4">
             {finding.description && (
               <Card className="border-zinc-800 bg-zinc-900/50">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm text-zinc-400">
-                    Описание
+                    Description
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -212,7 +211,7 @@ export default function FindingDetail() {
             <Card className="border-zinc-800 bg-zinc-900/50">
               <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
                 {finding.file_path && (
-                  <DetailRow icon={FileCode} label="Расположение">
+                  <DetailRow icon={FileCode} label="Location">
                     <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs">
                       {finding.file_path}
                       {finding.line_start
@@ -223,7 +222,7 @@ export default function FindingDetail() {
                 )}
 
                 {finding.component && (
-                  <DetailRow icon={Package} label="Компонент">
+                  <DetailRow icon={Package} label="Component">
                     {finding.component}
                     {finding.component_version && (
                       <span className="ml-1 text-zinc-500">
@@ -233,33 +232,31 @@ export default function FindingDetail() {
                   </DetailRow>
                 )}
 
-                <DetailRow icon={Scan} label="Источник">
+                <DetailRow icon={Scan} label="Source">
                   {finding.source_type}
                 </DetailRow>
 
-                <DetailRow icon={Eye} label="Количество обнаружений">
+                <DetailRow icon={Eye} label="Times Seen">
                   {finding.times_seen}
                 </DetailRow>
 
-                <DetailRow icon={Clock} label="Первое обнаружение">
+                <DetailRow icon={Clock} label="First Seen">
                   {format(new Date(finding.first_seen), "PPp")}
                   <span className="ml-1 text-zinc-500">
                     (
                     {formatDistanceToNow(new Date(finding.first_seen), {
                       addSuffix: true,
-                      locale: ru,
                     })}
                     )
                   </span>
                 </DetailRow>
 
-                <DetailRow icon={Clock} label="Последнее обнаружение">
+                <DetailRow icon={Clock} label="Last Seen">
                   {format(new Date(finding.last_seen), "PPp")}
                   <span className="ml-1 text-zinc-500">
                     (
                     {formatDistanceToNow(new Date(finding.last_seen), {
                       addSuffix: true,
-                      locale: ru,
                     })}
                     )
                   </span>
@@ -269,7 +266,7 @@ export default function FindingDetail() {
           </div>
         </TabsContent>
 
-        {/* Идентификаторы */}
+        {/* Identifiers */}
         <TabsContent value="identifiers">
           <div className="space-y-4">
             <Card className="border-zinc-800 bg-zinc-900/50">
@@ -285,7 +282,7 @@ export default function FindingDetail() {
                         href={`https://nvd.nist.gov/vuln/detail/${cve}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 font-mono text-xs text-red-500 transition-colors hover:bg-zinc-700 hover:text-red-400"
+                        className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 font-mono text-xs text-violet-400 transition-colors hover:bg-zinc-700 hover:text-violet-300"
                       >
                         {cve}
                         <ExternalLink className="size-3" />
@@ -293,7 +290,7 @@ export default function FindingDetail() {
                     ))}
                   </div>
                 ) : (
-                  <span className="text-sm text-zinc-600">Нет CVE</span>
+                  <span className="text-sm text-zinc-600">No CVE IDs</span>
                 )}
               </CardContent>
             </Card>
@@ -319,7 +316,7 @@ export default function FindingDetail() {
                     ))}
                   </div>
                 ) : (
-                  <span className="text-sm text-zinc-600">Нет CWE</span>
+                  <span className="text-sm text-zinc-600">No CWE IDs</span>
                 )}
               </CardContent>
             </Card>
@@ -341,18 +338,18 @@ export default function FindingDetail() {
           </div>
         </TabsContent>
 
-        {/* Обогащение */}
+        {/* Enrichment */}
         <TabsContent value="enrichment">
           <EnrichmentTabs findingId={finding.id} />
         </TabsContent>
 
-        {/* История */}
+        {/* History */}
         <TabsContent value="history">
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-6">
               <div className="relative space-y-6 pl-6 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-zinc-800">
                 <TimelineItem
-                  label="Впервые обнаружено"
+                  label="First detected"
                   date={finding.first_seen}
                 />
                 {finding.times_seen > 1 && (
@@ -360,13 +357,17 @@ export default function FindingDetail() {
                     <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-zinc-700 bg-zinc-900" />
                     <div>
                       <div className="text-sm text-zinc-300">
-                        Обнаружено {finding.times_seen} раз
+                        Seen{" "}
+                        <span className="font-medium text-zinc-100">
+                          {finding.times_seen} times
+                        </span>{" "}
+                        total
                       </div>
                     </div>
                   </div>
                 )}
                 <TimelineItem
-                  label="Последнее обнаружение"
+                  label="Last seen"
                   date={finding.last_seen}
                 />
               </div>
@@ -381,12 +382,12 @@ export default function FindingDetail() {
 function TimelineItem({ label, date }: { label: string; date: string }) {
   return (
     <div className="relative flex items-start gap-3">
-      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-red-700 bg-zinc-900" />
+      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-violet-600 bg-zinc-900" />
       <div>
         <div className="text-sm text-zinc-300">{label}</div>
         <div className="mt-0.5 text-xs text-zinc-500">
           {format(new Date(date), "PPp")} &middot;{" "}
-          {formatDistanceToNow(new Date(date), { addSuffix: true, locale: ru })}
+          {formatDistanceToNow(new Date(date), { addSuffix: true })}
         </div>
       </div>
     </div>
