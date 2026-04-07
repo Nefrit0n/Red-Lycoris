@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEnrichmentStatus, useTriggerSync } from "@/api/enrichment";
-import type { EnrichmentSourceStatus, EnrichmentCoverageStats } from "@/types";
 import { cn } from "@/lib/utils";
 
 interface SourceMeta {
@@ -29,6 +28,15 @@ interface SourceMeta {
   description: string;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
+}
+
+interface SyncStatus {
+  source: string;
+  last_sync_at: string | null;
+  records_count: number;
+  status: "running" | "success" | "error" | string;
+  error_message?: string;
+  duration_seconds: number;
 }
 
 const SOURCE_META: SourceMeta[] = [
@@ -83,13 +91,9 @@ const SOURCE_META: SourceMeta[] = [
   },
 ];
 
-function StatusIndicator({
-  status,
-}: {
-  status: EnrichmentSourceStatus["status"];
-}) {
+function StatusIndicator({ status }: { status: string }) {
   switch (status) {
-    case "syncing":
+    case "running":
       return (
         <Badge className="gap-1 border-blue-800 bg-blue-950/50 text-blue-400">
           <Loader2 className="size-3 animate-spin" />
@@ -120,12 +124,13 @@ function StatusIndicator({
   }
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}мс`;
-  const seconds = Math.floor(ms / 1000);
+function formatDurationSeconds(seconds: number): string {
+  if (seconds <= 0) return "—";
   if (seconds < 60) return `${seconds}с`;
+
   const minutes = Math.floor(seconds / 60);
   const remainSec = seconds % 60;
+
   return remainSec > 0 ? `${minutes}м ${remainSec}с` : `${minutes}м`;
 }
 
@@ -140,24 +145,24 @@ function SourceCard({
   onSync,
 }: {
   meta: SourceMeta;
-  status?: EnrichmentSourceStatus;
+  status?: SyncStatus;
   isSyncing: boolean;
   onSync: () => void;
 }) {
   const Icon = meta.icon;
   const syncStatus = status?.status ?? "pending";
-  const disabled = isSyncing || syncStatus === "syncing";
+  const disabled = isSyncing || syncStatus === "running";
 
   return (
     <Card
       className={cn(
         "border-zinc-800 bg-zinc-900/50 transition-colors",
         syncStatus === "error" && "border-red-900/50",
-        syncStatus === "syncing" && "border-blue-900/50",
+        syncStatus === "running" && "border-blue-900/50",
       )}
     >
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div
               className={cn(
@@ -177,6 +182,7 @@ function SourceCard({
           <StatusIndicator status={syncStatus} />
         </div>
       </CardHeader>
+
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <div>
@@ -186,36 +192,30 @@ function SourceCard({
             <p className="text-zinc-300">
               {status?.last_sync_at
                 ? formatDistanceToNow(new Date(status.last_sync_at), {
-                    addSuffix: true,
-                    locale: ru,
-                  })
+                  addSuffix: true,
+                  locale: ru,
+                })
                 : "—"}
             </p>
           </div>
+
           <div>
             <span className="text-xs text-zinc-500">Записей в базе</span>
             <p className="font-mono text-zinc-300">
               {status ? formatCount(status.records_count) : "—"}
             </p>
           </div>
+
           <div>
             <span className="text-xs text-zinc-500">Длительность</span>
             <p className="text-zinc-300">
-              {status?.duration_ms != null
-                ? formatDuration(status.duration_ms)
-                : "—"}
+              {status ? formatDurationSeconds(status.duration_seconds) : "—"}
             </p>
           </div>
+
           <div>
-            <span className="text-xs text-zinc-500">Следующая синхр.</span>
-            <p className="text-zinc-300">
-              {status?.next_sync_at
-                ? formatDistanceToNow(new Date(status.next_sync_at), {
-                    addSuffix: true,
-                    locale: ru,
-                  })
-                : "—"}
-            </p>
+            <span className="text-xs text-zinc-500">Источник</span>
+            <p className="text-zinc-300">{meta.label}</p>
           </div>
         </div>
 
@@ -244,72 +244,58 @@ function SourceCard({
   );
 }
 
-function CoverageBar({
-  label,
-  count,
-  total,
-  color,
+function SummaryCard({
+  statuses,
 }: {
-  label: string;
-  count: number;
-  total: number;
-  color: string;
+  statuses: SyncStatus[];
 }) {
-  const pct = total > 0 ? (count / total) * 100 : 0;
-
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-zinc-400">{label}</span>
-        <span className="font-mono text-zinc-300">
-          {pct.toFixed(1)}%{" "}
-          <span className="text-zinc-500">
-            ({formatCount(count)} / {formatCount(total)})
-          </span>
-        </span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={cn("h-full rounded-full transition-all", color)}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function CoverageSection({ coverage }: { coverage: EnrichmentCoverageStats }) {
-  const items = [
-    { label: "NVD", count: coverage.nvd, color: "bg-blue-500" },
-    { label: "EPSS", count: coverage.epss, color: "bg-red-600" },
-    { label: "KEV", count: coverage.kev, color: "bg-red-500" },
-    { label: "БДУ", count: coverage.bdu, color: "bg-amber-500" },
-    { label: "OSV", count: coverage.osv, color: "bg-emerald-500" },
-    { label: "CWE", count: coverage.cwe, color: "bg-cyan-500" },
-    { label: "CPE", count: coverage.cpe, color: "bg-pink-500" },
-  ];
+  const totalRecords = statuses.reduce((acc, item) => acc + (item.records_count || 0), 0);
+  const successCount = statuses.filter((item) => item.status === "success").length;
+  const runningCount = statuses.filter((item) => item.status === "running").length;
+  const errorCount = statuses.filter((item) => item.status === "error").length;
 
   return (
     <Card className="border-zinc-800 bg-zinc-900/50">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
           <Database className="size-4 text-red-500" />
-          Покрытие обогащения
+          Сводка по источникам
         </CardTitle>
         <p className="text-xs text-zinc-500">
-          Процент findings с данными из каждого источника
+          Текущее состояние синхронизации enrichment-источников
         </p>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {items.map((item) => (
-          <CoverageBar
-            key={item.label}
-            label={item.label}
-            count={item.count}
-            total={coverage.total_findings}
-            color={item.color}
-          />
-        ))}
+
+      <CardContent>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+            <div className="text-xs text-zinc-500">Всего записей</div>
+            <div className="mt-1 text-2xl font-semibold text-zinc-100">
+              {formatCount(totalRecords)}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-emerald-900/40 bg-emerald-950/20 p-4">
+            <div className="text-xs text-emerald-400/80">Успешных источников</div>
+            <div className="mt-1 text-2xl font-semibold text-emerald-400">
+              {successCount}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-blue-900/40 bg-blue-950/20 p-4">
+            <div className="text-xs text-blue-400/80">Сейчас синхронизируются</div>
+            <div className="mt-1 text-2xl font-semibold text-blue-400">
+              {runningCount}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-red-900/40 bg-red-950/20 p-4">
+            <div className="text-xs text-red-400/80">С ошибками</div>
+            <div className="mt-1 text-2xl font-semibold text-red-400">
+              {errorCount}
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -319,6 +305,7 @@ function LoadingSkeleton() {
   return (
     <div className="space-y-6">
       <Skeleton className="h-8 w-64 bg-zinc-800/50" />
+      <Skeleton className="h-40 bg-zinc-800/50" />
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 7 }).map((_, i) => (
           <Skeleton key={i} className="h-56 bg-zinc-800/50" />
@@ -334,9 +321,7 @@ export default function EnrichmentStatus() {
 
   if (isLoading) return <LoadingSkeleton />;
 
-  const sources = data?.data.sources ?? [];
-  const coverage = data?.data.coverage;
-
+  const sources: SyncStatus[] = data?.data ?? [];
   const sourceMap = new Map(sources.map((s) => [s.source, s]));
 
   return (
@@ -351,7 +336,7 @@ export default function EnrichmentStatus() {
         </p>
       </div>
 
-      {coverage && <CoverageSection coverage={coverage} />}
+      <SummaryCard statuses={sources} />
 
       <div>
         <h2 className="mb-3 text-lg font-semibold text-zinc-200">
@@ -364,8 +349,7 @@ export default function EnrichmentStatus() {
               meta={meta}
               status={sourceMap.get(meta.key)}
               isSyncing={
-                triggerSync.isPending &&
-                triggerSync.variables === meta.key
+                triggerSync.isPending && triggerSync.variables === meta.key
               }
               onSync={() => triggerSync.mutate(meta.key)}
             />

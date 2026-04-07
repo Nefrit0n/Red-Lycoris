@@ -7,9 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -30,29 +32,18 @@ func NewSyncer(pool *pgxpool.Pool) *KEVSyncer {
 func (s *KEVSyncer) Name() string { return "kev" }
 
 func (s *KEVSyncer) Sync(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kevURL, nil)
-	if err != nil {
-		return fmt.Errorf("kev.Sync: create request: %w", err)
-	}
-
-	resp, err := s.client.Do(req)
+	body, err := s.downloadWithRetry(ctx, kevURL)
 	if err != nil {
 		return fmt.Errorf("kev.Sync: download: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("kev.Sync: unexpected status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("kev.Sync: read body: %w", err)
 	}
 
 	vulns, err := parseKEV(body)
 	if err != nil {
 		return fmt.Errorf("kev.Sync: parse: %w", err)
+	}
+
+	if len(vulns) == 0 {
+		return fmt.Errorf("kev.Sync: parsed zero vulnerabilities")
 	}
 
 	if err := s.upsert(ctx, vulns); err != nil {
@@ -63,21 +54,137 @@ func (s *KEVSyncer) Sync(ctx context.Context) error {
 	return nil
 }
 
+func (s *KEVSyncer) downloadWithRetry(ctx context.Context, url string) ([]byte, error) {
+	const maxRetries = 4
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		body, retryable, retryAfter, err := s.downloadOnce(ctx, url)
+		if err == nil {
+			return body, nil
+		}
+
+		if !retryable || attempt == maxRetries-1 {
+			return nil, err
+		}
+
+		backoff := retryAfter
+		if backoff <= 0 {
+			backoff = defaultBackoff(attempt)
+		}
+
+		slog.Warn("KEV download failed, retrying",
+			"url", url,
+			"attempt", attempt+1,
+			"backoff", backoff,
+			"error", err,
+		)
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+
+	return nil, fmt.Errorf("unreachable")
+}
+
+func (s *KEVSyncer) downloadOnce(ctx context.Context, url string) ([]byte, bool, time.Duration, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, false, 0, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "vulnscope/1.0")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, true, 0, fmt.Errorf("read body: %w", readErr)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return body, false, 0, nil
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return nil, true, parseRetryAfter(resp.Header.Get("Retry-After")), fmt.Errorf(
+			"transient status %d, body=%q",
+			resp.StatusCode,
+			bodyPreview(body, 512),
+		)
+	default:
+		return nil, false, 0, fmt.Errorf(
+			"unexpected status %d, body=%q",
+			resp.StatusCode,
+			bodyPreview(body, 512),
+		)
+	}
+}
+
+func defaultBackoff(attempt int) time.Duration {
+	steps := []time.Duration{
+		2 * time.Second,
+		4 * time.Second,
+		8 * time.Second,
+		16 * time.Second,
+	}
+	if attempt < len(steps) {
+		return steps[attempt]
+	}
+	return 16 * time.Second
+}
+
+func parseRetryAfter(value string) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+
+	if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+
+	if t, err := http.ParseTime(value); err == nil {
+		d := time.Until(t)
+		if d > 0 {
+			return d
+		}
+	}
+
+	return 0
+}
+
+func bodyPreview(body []byte, limit int) string {
+	if len(body) == 0 {
+		return ""
+	}
+	if len(body) > limit {
+		return string(body[:limit])
+	}
+	return string(body)
+}
+
 type kevCatalog struct {
 	Vulnerabilities []kevEntry `json:"vulnerabilities"`
 }
 
 type kevEntry struct {
-	CVEID                    string `json:"cveID"`
-	VendorProject            string `json:"vendorProject"`
-	Product                  string `json:"product"`
-	VulnerabilityName        string `json:"vulnerabilityName"`
-	DateAdded                string `json:"dateAdded"`
-	ShortDescription         string `json:"shortDescription"`
-	RequiredAction           string `json:"requiredAction"`
-	DueDate                  string `json:"dueDate"`
+	CVEID                      string `json:"cveID"`
+	VendorProject              string `json:"vendorProject"`
+	Product                    string `json:"product"`
+	VulnerabilityName          string `json:"vulnerabilityName"`
+	DateAdded                  string `json:"dateAdded"`
+	ShortDescription           string `json:"shortDescription"`
+	RequiredAction             string `json:"requiredAction"`
+	DueDate                    string `json:"dueDate"`
 	KnownRansomwareCampaignUse string `json:"knownRansomwareCampaignUse"`
-	Notes                    string `json:"notes"`
+	Notes                      string `json:"notes"`
 }
 
 func parseKEV(data []byte) ([]kevEntry, error) {
@@ -85,87 +192,152 @@ func parseKEV(data []byte) ([]kevEntry, error) {
 	if err := json.Unmarshal(data, &catalog); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
-	return catalog.Vulnerabilities, nil
+
+	out := make([]kevEntry, 0, len(catalog.Vulnerabilities))
+	seen := make(map[string]struct{}, len(catalog.Vulnerabilities))
+
+	for _, v := range catalog.Vulnerabilities {
+		v.CVEID = strings.ToUpper(strings.TrimSpace(v.CVEID))
+		v.VendorProject = strings.TrimSpace(v.VendorProject)
+		v.Product = strings.TrimSpace(v.Product)
+		v.VulnerabilityName = strings.TrimSpace(v.VulnerabilityName)
+		v.ShortDescription = strings.TrimSpace(v.ShortDescription)
+		v.RequiredAction = strings.TrimSpace(v.RequiredAction)
+		v.DueDate = strings.TrimSpace(v.DueDate)
+		v.DateAdded = strings.TrimSpace(v.DateAdded)
+		v.KnownRansomwareCampaignUse = strings.TrimSpace(v.KnownRansomwareCampaignUse)
+		v.Notes = strings.TrimSpace(v.Notes)
+
+		if !strings.HasPrefix(v.CVEID, "CVE-") {
+			continue
+		}
+		if _, exists := seen[v.CVEID]; exists {
+			continue
+		}
+		seen[v.CVEID] = struct{}{}
+
+		out = append(out, v)
+	}
+
+	return out, nil
 }
 
 func (s *KEVSyncer) upsert(ctx context.Context, vulns []kevEntry) error {
-	const query = `
-		INSERT INTO kev_catalog (cve_id, vendor, product, vulnerability_name,
-		                         date_added, due_date, known_ransomware, notes, synced_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-		ON CONFLICT (cve_id) DO UPDATE
-		SET vendor           = EXCLUDED.vendor,
-		    product          = EXCLUDED.product,
-		    vulnerability_name = EXCLUDED.vulnerability_name,
-		    date_added       = EXCLUDED.date_added,
-		    due_date         = EXCLUDED.due_date,
-		    known_ransomware = EXCLUDED.known_ransomware,
-		    notes            = EXCLUDED.notes,
-		    synced_at        = now()
-	`
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
 
-	// Пакетный upsert через pgx batch
-	b := &pgxBatch{}
-	for _, v := range vulns {
+	_, err = tx.Exec(ctx, `
+		CREATE TEMP TABLE kev_staging (
+			cve_id            TEXT NOT NULL,
+			vendor            TEXT,
+			product           TEXT,
+			vulnerability_name TEXT,
+			date_added        DATE,
+			due_date          DATE,
+			known_ransomware  BOOLEAN,
+			notes             TEXT
+		) ON COMMIT DROP
+	`)
+	if err != nil {
+		return fmt.Errorf("create staging: %w", err)
+	}
+
+	rows := make([][]any, len(vulns))
+	for i, v := range vulns {
 		dateAdded := parseDate(v.DateAdded)
 		dueDate := parseDate(v.DueDate)
-		knownRansomware := strings.EqualFold(v.KnownRansomwareCampaignUse, "Known")
 
-		b.entries = append(b.entries, batchEntry{
-			query: query,
-			args: []any{
-				v.CVEID, v.VendorProject, v.Product, v.VulnerabilityName,
-				dateAdded, dueDate, knownRansomware, v.Notes,
-			},
-		})
-	}
-
-	return b.execute(ctx, s.pool)
-}
-
-type batchEntry struct {
-	query string
-	args  []any
-}
-
-type pgxBatch struct {
-	entries []batchEntry
-}
-
-func (b *pgxBatch) execute(ctx context.Context, pool *pgxpool.Pool) error {
-	// Выполняем пакетами по 500 для баланса между скоростью и памятью
-	const batchSize = 500
-
-	for i := 0; i < len(b.entries); i += batchSize {
-		end := i + batchSize
-		if end > len(b.entries) {
-			end = len(b.entries)
-		}
-		chunk := b.entries[i:end]
-
-		tx, err := pool.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("begin tx at offset %d: %w", i, err)
+		knownRansomware := false
+		switch strings.ToLower(strings.TrimSpace(v.KnownRansomwareCampaignUse)) {
+		case "known", "yes", "true":
+			knownRansomware = true
 		}
 
-		for _, entry := range chunk {
-			if _, err := tx.Exec(ctx, entry.query, entry.args...); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Errorf("exec at offset %d: %w", i, err)
-			}
+		notes := strings.TrimSpace(v.Notes)
+		if notes == "" && v.RequiredAction != "" {
+			notes = v.RequiredAction
 		}
 
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit at offset %d: %w", i, err)
+		rows[i] = []any{
+			v.CVEID,
+			v.VendorProject,
+			v.Product,
+			v.VulnerabilityName,
+			dateAdded,
+			dueDate,
+			knownRansomware,
+			notes,
 		}
 	}
-	return nil
+
+	_, err = tx.CopyFrom(
+		ctx,
+		pgx.Identifier{"kev_staging"},
+		[]string{
+			"cve_id",
+			"vendor",
+			"product",
+			"vulnerability_name",
+			"date_added",
+			"due_date",
+			"known_ransomware",
+			"notes",
+		},
+		pgx.CopyFromRows(rows),
+	)
+	if err != nil {
+		return fmt.Errorf("copy into staging: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO kev_catalog (
+			cve_id,
+			vendor,
+			product,
+			vulnerability_name,
+			date_added,
+			due_date,
+			known_ransomware,
+			notes,
+			synced_at
+		)
+		SELECT
+			cve_id,
+			vendor,
+			product,
+			vulnerability_name,
+			date_added,
+			due_date,
+			known_ransomware,
+			notes,
+			now()
+		FROM kev_staging
+		ON CONFLICT (cve_id) DO UPDATE
+		SET vendor             = EXCLUDED.vendor,
+		    product            = EXCLUDED.product,
+		    vulnerability_name = EXCLUDED.vulnerability_name,
+		    date_added         = EXCLUDED.date_added,
+		    due_date           = EXCLUDED.due_date,
+		    known_ransomware   = EXCLUDED.known_ransomware,
+		    notes              = EXCLUDED.notes,
+		    synced_at          = now()
+	`)
+	if err != nil {
+		return fmt.Errorf("upsert from staging: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 func parseDate(s string) *time.Time {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}
+
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {
 		return nil

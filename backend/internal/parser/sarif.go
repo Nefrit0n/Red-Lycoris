@@ -33,12 +33,12 @@ type sarifDriver struct {
 }
 
 type sarifRule struct {
-	ID                string          `json:"id"`
-	ShortDescription  sarifMessage    `json:"shortDescription"`
-	FullDescription   sarifMessage    `json:"fullDescription"`
-	DefaultConfig     sarifRuleConfig `json:"defaultConfiguration"`
-	Properties        sarifProperties `json:"properties"`
-	HelpURI           string          `json:"helpUri"`
+	ID               string          `json:"id"`
+	ShortDescription sarifMessage    `json:"shortDescription"`
+	FullDescription  sarifMessage    `json:"fullDescription"`
+	DefaultConfig    sarifRuleConfig `json:"defaultConfiguration"`
+	Properties       sarifProperties `json:"properties"`
+	HelpURI          string          `json:"helpUri"`
 }
 
 type sarifRuleConfig struct {
@@ -54,11 +54,11 @@ type sarifMessage struct {
 }
 
 type sarifResult struct {
-	RuleID    string           `json:"ruleId"`
-	RuleIndex int              `json:"ruleIndex"`
-	Level     string           `json:"level"`
-	Message   sarifMessage     `json:"message"`
-	Locations []sarifLocation  `json:"locations"`
+	RuleID    string          `json:"ruleId"`
+	RuleIndex int             `json:"ruleIndex"`
+	Level     string          `json:"level"`
+	Message   sarifMessage    `json:"message"`
+	Locations []sarifLocation `json:"locations"`
 }
 
 type sarifLocation struct {

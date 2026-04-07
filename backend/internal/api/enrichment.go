@@ -18,13 +18,6 @@ func handleEnrichmentStatus(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerF
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// Пробуем Redis-кэш (30 секунд)
-		var cached []enrichment.SyncStatus
-		if storage.CacheGet(ctx, rdb, storage.CacheSyncStatus, &cached) {
-			respondJSON(w, http.StatusOK, map[string]any{"data": cached})
-			return
-		}
-
 		statuses, err := enrichment.GetAllSyncStatuses(ctx, pool)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get sync statuses")
@@ -33,8 +26,6 @@ func handleEnrichmentStatus(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerF
 		if statuses == nil {
 			statuses = []enrichment.SyncStatus{}
 		}
-
-		storage.CacheSet(ctx, rdb, storage.CacheSyncStatus, statuses, storage.TTLSyncStatus)
 
 		respondJSON(w, http.StatusOK, map[string]any{"data": statuses})
 	}
@@ -54,7 +45,11 @@ func handleManualSync(pool *pgxpool.Pool, scheduler *enrichment.Scheduler) http.
 			return
 		}
 
-		go enrichment.RunSync(context.Background(), syncer, pool)
+		go func(source string) {
+			if err := scheduler.TriggerSync(context.Background(), source); err != nil {
+				slog.Error("manual sync failed", "source", source, "error", err)
+			}
+		}(source)
 
 		respondJSON(w, http.StatusAccepted, map[string]any{
 			"data": map[string]string{

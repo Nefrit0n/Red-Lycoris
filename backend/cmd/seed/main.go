@@ -449,9 +449,9 @@ func runBenchmarks(cfg *config.Config) {
 	baseURL := fmt.Sprintf("http://localhost:%s", cfg.ServerPort)
 
 	benchmarks := []struct {
-		name      string
-		path      string
-		maxMs     int64
+		name  string
+		path  string
+		maxMs int64
 	}{
 		{"GET /api/v1/findings?limit=50", "/api/v1/findings?limit=50", 100},
 		{"GET /api/v1/dashboard/stats", "/api/v1/dashboard/stats", 50},

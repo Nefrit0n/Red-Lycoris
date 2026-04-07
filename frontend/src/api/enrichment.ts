@@ -29,8 +29,7 @@ export function useFindingScore(findingId: string) {
 export function useEnrichmentStatus() {
   return useQuery({
     queryKey: ["enrichment-status"],
-    queryFn: () =>
-      apiGet<{ data: EnrichmentStatusResponse }>("/api/v1/enrichment/status"),
+    queryFn: () => apiGet<EnrichmentStatusResponse>("/api/v1/enrichment/status"),
     refetchInterval: 30_000,
   });
 }
@@ -41,8 +40,9 @@ export function useTriggerSync() {
   return useMutation({
     mutationFn: (source: string) =>
       apiPost<void>(`/api/v1/enrichment/sync/${source}`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["enrichment-status"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["enrichment-status"] });
+      await queryClient.refetchQueries({ queryKey: ["enrichment-status"] });
     },
   });
 }

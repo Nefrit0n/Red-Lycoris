@@ -35,24 +35,9 @@ func NewSyncer(pool *pgxpool.Pool) *CWESyncer {
 func (s *CWESyncer) Name() string { return "cwe" }
 
 func (s *CWESyncer) Sync(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cweURL, nil)
-	if err != nil {
-		return fmt.Errorf("cwe.Sync: create request: %w", err)
-	}
-
-	resp, err := s.client.Do(req)
+	body, err := s.downloadWithRetry(ctx, cweURL)
 	if err != nil {
 		return fmt.Errorf("cwe.Sync: download: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("cwe.Sync: unexpected status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("cwe.Sync: read body: %w", err)
 	}
 
 	xmlData, err := extractZIP(body)
@@ -65,12 +50,132 @@ func (s *CWESyncer) Sync(ctx context.Context) error {
 		return fmt.Errorf("cwe.Sync: parse xml: %w", err)
 	}
 
+	if len(records) == 0 {
+		return fmt.Errorf("cwe.Sync: parsed zero records")
+	}
+
 	if err := s.upsert(ctx, records); err != nil {
 		return fmt.Errorf("cwe.Sync: upsert: %w", err)
 	}
 
 	slog.Info("CWE sync: imported records", "count", len(records))
 	return nil
+}
+
+func (s *CWESyncer) downloadWithRetry(ctx context.Context, url string) ([]byte, error) {
+	const maxRetries = 4
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		body, retryable, retryAfter, err := s.downloadOnce(ctx, url)
+		if err == nil {
+			return body, nil
+		}
+
+		if !retryable || attempt == maxRetries-1 {
+			return nil, err
+		}
+
+		backoff := retryAfter
+		if backoff <= 0 {
+			backoff = defaultBackoff(attempt)
+		}
+
+		slog.Warn("CWE download failed, retrying",
+			"url", url,
+			"attempt", attempt+1,
+			"backoff", backoff,
+			"error", err,
+		)
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+
+	return nil, fmt.Errorf("unreachable")
+}
+
+func (s *CWESyncer) downloadOnce(ctx context.Context, url string) ([]byte, bool, time.Duration, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, false, 0, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/zip, application/octet-stream, */*")
+	req.Header.Set("User-Agent", "vulnscope/1.0")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, true, 0, fmt.Errorf("read body: %w", readErr)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return body, false, 0, nil
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return nil, true, parseRetryAfter(resp.Header.Get("Retry-After")), fmt.Errorf(
+			"transient status %d, body=%q",
+			resp.StatusCode,
+			bodyPreview(body, 512),
+		)
+	default:
+		return nil, false, 0, fmt.Errorf(
+			"unexpected status %d, body=%q",
+			resp.StatusCode,
+			bodyPreview(body, 512),
+		)
+	}
+}
+
+func defaultBackoff(attempt int) time.Duration {
+	steps := []time.Duration{
+		2 * time.Second,
+		4 * time.Second,
+		8 * time.Second,
+		16 * time.Second,
+	}
+	if attempt < len(steps) {
+		return steps[attempt]
+	}
+	return 16 * time.Second
+}
+
+func parseRetryAfter(value string) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+
+	if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+
+	if t, err := http.ParseTime(value); err == nil {
+		d := time.Until(t)
+		if d > 0 {
+			return d
+		}
+	}
+
+	return 0
+}
+
+func bodyPreview(body []byte, limit int) string {
+	if len(body) == 0 {
+		return ""
+	}
+	if len(body) > limit {
+		return string(body[:limit])
+	}
+	return string(body)
 }
 
 func extractZIP(data []byte) ([]byte, error) {
@@ -80,7 +185,7 @@ func extractZIP(data []byte) ([]byte, error) {
 	}
 
 	for _, f := range r.File {
-		if strings.HasSuffix(f.Name, ".xml") {
+		if strings.HasSuffix(strings.ToLower(f.Name), ".xml") {
 			rc, err := f.Open()
 			if err != nil {
 				return nil, fmt.Errorf("open %s: %w", f.Name, err)
@@ -95,20 +200,20 @@ func extractZIP(data []byte) ([]byte, error) {
 // --- XML structures для CWE ---
 
 type weaknessCatalog struct {
-	XMLName    xml.Name   `xml:"Weakness_Catalog"`
+	XMLName    xml.Name      `xml:"Weakness_Catalog"`
 	Weaknesses []xmlWeakness `xml:"Weaknesses>Weakness"`
 }
 
 type xmlWeakness struct {
-	ID                   string                `xml:"ID,attr"`
-	Name                 string                `xml:"Name,attr"`
-	Abstraction          string                `xml:"Abstraction,attr"`
-	Description          string                `xml:"Description"`
-	ExtendedDescription  xmlStructuredText     `xml:"Extended_Description"`
-	RelatedWeaknesses    []xmlRelatedWeakness  `xml:"Related_Weaknesses>Related_Weakness"`
-	LikelihoodOfExploit  string                `xml:"Likelihood_Of_Exploit"`
-	CommonConsequences   []xmlConsequence      `xml:"Common_Consequences>Consequence"`
-	PotentialMitigations []xmlMitigation       `xml:"Potential_Mitigations>Mitigation"`
+	ID                   string               `xml:"ID,attr"`
+	Name                 string               `xml:"Name,attr"`
+	Abstraction          string               `xml:"Abstraction,attr"`
+	Description          string               `xml:"Description"`
+	ExtendedDescription  xmlStructuredText    `xml:"Extended_Description"`
+	RelatedWeaknesses    []xmlRelatedWeakness `xml:"Related_Weaknesses>Related_Weakness"`
+	LikelihoodOfExploit  string               `xml:"Likelihood_Of_Exploit"`
+	CommonConsequences   []xmlConsequence     `xml:"Common_Consequences>Consequence"`
+	PotentialMitigations []xmlMitigation      `xml:"Potential_Mitigations>Mitigation"`
 }
 
 type xmlStructuredText struct {
@@ -116,8 +221,8 @@ type xmlStructuredText struct {
 }
 
 type xmlRelatedWeakness struct {
-	Nature  string `xml:"Nature,attr"`
-	CWEID   string `xml:"CWE_ID,attr"`
+	Nature string `xml:"Nature,attr"`
+	CWEID  string `xml:"CWE_ID,attr"`
 }
 
 type xmlConsequence struct {
@@ -153,51 +258,75 @@ func parseXML(data []byte) ([]cweRecord, error) {
 
 	records := make([]cweRecord, 0, len(catalog.Weaknesses))
 	for _, w := range catalog.Weaknesses {
-		id, err := strconv.Atoi(w.ID)
-		if err != nil {
+		id, err := strconv.Atoi(strings.TrimSpace(w.ID))
+		if err != nil || id <= 0 {
 			continue
 		}
 
 		rec := cweRecord{
 			ID:           int32(id),
-			Name:         w.Name,
-			Description:  stripXMLTags(w.Description),
-			ExtendedDesc: stripXMLTags(w.ExtendedDescription.Content),
-			Category:     w.Abstraction,
-			Likelihood:   w.LikelihoodOfExploit,
+			Name:         strings.TrimSpace(w.Name),
+			Description:  strings.TrimSpace(w.Description),
+			ExtendedDesc: extractXMLText(w.ExtendedDescription.Content),
+			Category:     strings.TrimSpace(w.Abstraction),
+			Likelihood:   strings.TrimSpace(w.LikelihoodOfExploit),
 		}
 
-		// parent_ids из ChildOf-связей (дедупликация — один CWE может быть ChildOf одного родителя в разных views)
 		parentSeen := make(map[int32]struct{})
 		for _, rel := range w.RelatedWeaknesses {
-			if rel.Nature == "ChildOf" {
-				pid, err := strconv.Atoi(rel.CWEID)
-				if err == nil {
-					p := int32(pid)
-					if _, ok := parentSeen[p]; !ok {
-						parentSeen[p] = struct{}{}
-						rec.ParentIDs = append(rec.ParentIDs, p)
-					}
-				}
+			if !strings.EqualFold(strings.TrimSpace(rel.Nature), "ChildOf") {
+				continue
 			}
+
+			pid, err := strconv.Atoi(strings.TrimSpace(rel.CWEID))
+			if err != nil || pid <= 0 {
+				continue
+			}
+
+			parentID := int32(pid)
+			if _, ok := parentSeen[parentID]; ok {
+				continue
+			}
+			parentSeen[parentID] = struct{}{}
+			rec.ParentIDs = append(rec.ParentIDs, parentID)
 		}
 
-		// impact — объединяем уникальные значения из всех Consequence
 		impacts := collectImpacts(w.CommonConsequences)
 		if len(impacts) > 0 {
 			rec.Impact = strings.Join(impacts, ", ")
 		}
 
-		// mitigations → JSONB
 		if len(w.PotentialMitigations) > 0 {
 			mits := make([]map[string]any, 0, len(w.PotentialMitigations))
 			for _, m := range w.PotentialMitigations {
+				description := strings.TrimSpace(m.Description)
+				if description == "" {
+					continue
+				}
+
+				phases := make([]string, 0, len(m.Phase))
+				seenPhase := make(map[string]struct{})
+				for _, p := range m.Phase {
+					p = strings.TrimSpace(p)
+					if p == "" {
+						continue
+					}
+					if _, exists := seenPhase[p]; exists {
+						continue
+					}
+					seenPhase[p] = struct{}{}
+					phases = append(phases, p)
+				}
+
 				mits = append(mits, map[string]any{
-					"phases":      m.Phase,
-					"description": stripXMLTags(m.Description),
+					"phases":      phases,
+					"description": description,
 				})
 			}
-			rec.Mitigations, _ = json.Marshal(mits)
+
+			if len(mits) > 0 {
+				rec.Mitigations, _ = json.Marshal(mits)
+			}
 		}
 
 		records = append(records, rec)
@@ -208,22 +337,65 @@ func parseXML(data []byte) ([]cweRecord, error) {
 
 func collectImpacts(consequences []xmlConsequence) []string {
 	seen := make(map[string]struct{})
-	var out []string
+	out := make([]string, 0)
+
 	for _, c := range consequences {
 		for _, imp := range c.Impact {
-			if _, ok := seen[imp]; !ok {
-				seen[imp] = struct{}{}
-				out = append(out, imp)
+			imp = strings.TrimSpace(imp)
+			if imp == "" {
+				continue
 			}
+			if _, ok := seen[imp]; ok {
+				continue
+			}
+			seen[imp] = struct{}{}
+			out = append(out, imp)
 		}
 	}
+
 	return out
 }
 
-// stripXMLTags убирает вложенные XML/HTML-теги из текста.
-func stripXMLTags(s string) string {
+// extractXMLText аккуратно достаёт текст из XML/HTML-фрагмента.
+func extractXMLText(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+
+	decoder := xml.NewDecoder(strings.NewReader("<root>" + s + "</root>"))
+	var b strings.Builder
+
+	for {
+		tok, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return strings.TrimSpace(stripXMLTagsFallback(s))
+		}
+
+		switch t := tok.(type) {
+		case xml.CharData:
+			text := strings.TrimSpace(string(t))
+			if text == "" {
+				continue
+			}
+			if b.Len() > 0 {
+				b.WriteString(" ")
+			}
+			b.WriteString(text)
+		}
+	}
+
+	return normalizeWhitespace(b.String())
+}
+
+// Fallback на случай кривого innerxml.
+func stripXMLTagsFallback(s string) string {
 	var b strings.Builder
 	inTag := false
+
 	for _, r := range s {
 		switch {
 		case r == '<':
@@ -234,7 +406,12 @@ func stripXMLTags(s string) string {
 			b.WriteRune(r)
 		}
 	}
-	return strings.TrimSpace(b.String())
+
+	return normalizeWhitespace(b.String())
+}
+
+func normalizeWhitespace(s string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
 }
 
 func (s *CWESyncer) upsert(ctx context.Context, records []cweRecord) error {
@@ -279,8 +456,17 @@ func (s *CWESyncer) upsert(ctx context.Context, records []cweRecord) error {
 	_, err = tx.CopyFrom(
 		ctx,
 		pgx.Identifier{"cwe_staging"},
-		[]string{"cwe_id", "name", "description", "extended_desc",
-			"parent_ids", "category", "likelihood", "impact", "mitigations"},
+		[]string{
+			"cwe_id",
+			"name",
+			"description",
+			"extended_desc",
+			"parent_ids",
+			"category",
+			"likelihood",
+			"impact",
+			"mitigations",
+		},
 		pgx.CopyFromRows(rows),
 	)
 	if err != nil {
@@ -288,10 +474,29 @@ func (s *CWESyncer) upsert(ctx context.Context, records []cweRecord) error {
 	}
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO cwe_catalog (cwe_id, name, description, extended_desc,
-		                         parent_ids, category, likelihood, impact, mitigations, synced_at)
-		SELECT cwe_id, name, description, extended_desc,
-		       parent_ids, category, likelihood, impact, mitigations, now()
+		INSERT INTO cwe_catalog (
+			cwe_id,
+			name,
+			description,
+			extended_desc,
+			parent_ids,
+			category,
+			likelihood,
+			impact,
+			mitigations,
+			synced_at
+		)
+		SELECT
+			cwe_id,
+			name,
+			description,
+			extended_desc,
+			parent_ids,
+			category,
+			likelihood,
+			impact,
+			mitigations,
+			now()
 		FROM cwe_staging
 		ON CONFLICT (cwe_id) DO UPDATE
 		SET name          = EXCLUDED.name,

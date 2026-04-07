@@ -2,9 +2,10 @@ package nvd
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -18,64 +19,31 @@ import (
 const (
 	baseURL        = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 	resultsPerPage = 2000
+
+	defaultNoKeyDelay = 6 * time.Second
+	defaultKeyDelay   = 600 * time.Millisecond
+
+	maxRetries    = 5
+	windowOverlap = 5 * time.Minute
+	maxDateRange  = 120 * 24 * time.Hour
 )
 
-// NVDSyncer синхронизирует CVE из NVD API 2.0.
 type NVDSyncer struct {
 	pool   *pgxpool.Pool
 	apiKey string
 	client *http.Client
 
-	// requestInterval — минимальный интервал между запросами к NVD API.
 	// 50 req/30s с ключом (600ms), 5 req/30s без ключа (6s).
 	requestInterval time.Duration
 }
 
-func NewSyncer(pool *pgxpool.Pool, apiKey string) *NVDSyncer {
-	interval := 6 * time.Second // без ключа: 5 req/30s
-	if apiKey != "" {
-		interval = 600 * time.Millisecond // с ключом: 50 req/30s
-	}
-
-	return &NVDSyncer{
-		pool:            pool,
-		apiKey:          apiKey,
-		client:          &http.Client{Timeout: 60 * time.Second},
-		requestInterval: interval,
-	}
+type syncState struct {
+	LastSuccessAt *time.Time
 }
 
-func (s *NVDSyncer) Name() string { return "nvd" }
-
-func (s *NVDSyncer) Sync(ctx context.Context) error {
-	// Проверяем, есть ли уже данные — если да, incremental sync
-	var count int
-	err := s.pool.QueryRow(ctx, "SELECT count(*) FROM nvd_cves").Scan(&count)
-	if err != nil {
-		return fmt.Errorf("nvd.Sync: count existing: %w", err)
-	}
-
-	if count == 0 {
-		slog.Info("NVD sync: no existing data, starting full sync")
-		return s.fullSync(ctx)
-	}
-
-	slog.Info("NVD sync: existing data found, starting incremental sync", "existing_records", count)
-	return s.incrementalSync(ctx)
-}
-
-func (s *NVDSyncer) fullSync(ctx context.Context) error {
-	return s.fetchAndStore(ctx, nil)
-}
-
-func (s *NVDSyncer) incrementalSync(ctx context.Context) error {
-	now := time.Now().UTC()
-	start := now.Add(-24 * time.Hour)
-	params := &timeParams{
-		lastModStartDate: start.Format("2006-01-02T15:04:05.000"),
-		lastModEndDate:   now.Format("2006-01-02T15:04:05.000"),
-	}
-	return s.fetchAndStore(ctx, params)
+type syncResult struct {
+	Watermark time.Time
+	Upserted  int
 }
 
 type timeParams struct {
@@ -83,25 +51,186 @@ type timeParams struct {
 	lastModEndDate   string
 }
 
-// fetchAndStore скачивает CVE постранично и сохраняет в БД.
-func (s *NVDSyncer) fetchAndStore(ctx context.Context, params *timeParams) error {
-	ticker := time.NewTicker(s.requestInterval)
-	defer ticker.Stop()
+func NewSyncer(pool *pgxpool.Pool, apiKey string) *NVDSyncer {
+	interval := defaultNoKeyDelay
+	if apiKey != "" {
+		interval = defaultKeyDelay
+	}
 
-	startIndex := 0
-	totalResults := -1 // неизвестно пока
+	return &NVDSyncer{
+		pool:   pool,
+		apiKey: apiKey,
+		client: &http.Client{
+			Timeout: 90 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        20,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
+		requestInterval: interval,
+	}
+}
+
+func (s *NVDSyncer) Name() string { return "nvd" }
+
+func (s *NVDSyncer) Sync(ctx context.Context) error {
+	runStartedAt := time.Now().UTC()
+
+	if err := s.markSyncRunning(ctx); err != nil {
+		return fmt.Errorf("nvd.Sync: mark running: %w", err)
+	}
+
+	hasData, err := s.hasAnyData(ctx)
+	if err != nil {
+		_ = s.markSyncFailed(ctx, err.Error(), secondsSince(runStartedAt))
+		return fmt.Errorf("nvd.Sync: check existing data: %w", err)
+	}
+
+	state, err := s.loadSyncState(ctx)
+	if err != nil {
+		_ = s.markSyncFailed(ctx, err.Error(), secondsSince(runStartedAt))
+		return fmt.Errorf("nvd.Sync: load sync state: %w", err)
+	}
+
+	var result syncResult
+
+	switch {
+	case !hasData:
+		slog.Info("NVD sync: no local data, forcing full sync")
+		result, err = s.fullSync(ctx)
+
+	case state.LastSuccessAt == nil:
+		// Есть данные, но нет watermark.
+		// Это грязное состояние: safest choice — full sync с upsert.
+		slog.Warn("NVD sync: local data exists but watermark is missing, forcing full sync")
+		result, err = s.fullSync(ctx)
+
+	default:
+		slog.Info("NVD sync: incremental sync started", "last_success_at", *state.LastSuccessAt)
+		result, err = s.incrementalSync(ctx, *state.LastSuccessAt, runStartedAt)
+	}
+
+	if err != nil {
+		_ = s.markSyncFailed(ctx, err.Error(), secondsSince(runStartedAt))
+		return err
+	}
+
+	if err := s.markSyncSuccess(ctx, result.Watermark, result.Upserted, secondsSince(runStartedAt)); err != nil {
+		return fmt.Errorf("nvd.Sync: mark success: %w", err)
+	}
+
+	slog.Info("NVD sync: finished",
+		"watermark", result.Watermark,
+		"upserted", result.Upserted,
+		"duration_seconds", secondsSince(runStartedAt),
+	)
+
+	return nil
+}
+
+func (s *NVDSyncer) fullSync(ctx context.Context) (syncResult, error) {
+	// Берём watermark ДО старта полной загрузки.
+	// Следующий incremental доберёт всё, что изменилось во время full sync.
+	fullSyncStartedAt := time.Now().UTC()
+
+	upserted, err := s.fetchAndStore(ctx, nil)
+	if err != nil {
+		return syncResult{}, fmt.Errorf("nvd.fullSync: %w", err)
+	}
+
+	slog.Info("NVD sync: bootstrap full sync completed",
+		"watermark", fullSyncStartedAt,
+		"upserted", upserted,
+	)
+
+	return syncResult{
+		Watermark: fullSyncStartedAt,
+		Upserted:  upserted,
+	}, nil
+}
+
+func (s *NVDSyncer) incrementalSync(ctx context.Context, lastSuccessAt time.Time, runStartedAt time.Time) (syncResult, error) {
+	now := time.Now().UTC()
+
+	from := lastSuccessAt.Add(-windowOverlap)
+	if from.After(now) {
+		from = now.Add(-windowOverlap)
+	}
+
 	totalUpserted := 0
+	windowStart := from
+
+	for windowStart.Before(now) {
+		windowEnd := minTime(windowStart.Add(maxDateRange), now)
+
+		params := &timeParams{
+			lastModStartDate: formatNVDTime(windowStart),
+			lastModEndDate:   formatNVDTime(windowEnd),
+		}
+
+		slog.Info("NVD sync: incremental window",
+			"from", params.lastModStartDate,
+			"to", params.lastModEndDate,
+		)
+
+		upserted, err := s.fetchAndStore(ctx, params)
+		if err != nil {
+			return syncResult{}, fmt.Errorf(
+				"nvd.incrementalSync: window %s..%s: %w",
+				params.lastModStartDate,
+				params.lastModEndDate,
+				err,
+			)
+		}
+
+		totalUpserted += upserted
+
+		// Чекпоинтим watermark после каждого успешного окна.
+		// Это важно, если gap > 120 дней и процесс упадёт на середине.
+		if err := s.markSyncWindowCheckpoint(ctx, windowEnd, totalUpserted, secondsSince(runStartedAt)); err != nil {
+			return syncResult{}, fmt.Errorf("nvd.incrementalSync: checkpoint: %w", err)
+		}
+
+		if windowEnd.Equal(now) {
+			break
+		}
+
+		windowStart = windowEnd
+	}
+
+	slog.Info("NVD sync: incremental sync completed",
+		"watermark", now,
+		"upserted", totalUpserted,
+	)
+
+	return syncResult{
+		Watermark: now,
+		Upserted:  totalUpserted,
+	}, nil
+}
+
+// fetchAndStore скачивает CVE постранично и сохраняет в БД.
+func (s *NVDSyncer) fetchAndStore(ctx context.Context, params *timeParams) (int, error) {
+	startIndex := 0
+	totalResults := -1
+	totalUpserted := 0
+	requestNo := 0
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
+		// Первый запрос идёт сразу.
+		if requestNo > 0 {
+			select {
+			case <-ctx.Done():
+				return totalUpserted, ctx.Err()
+			case <-time.After(s.requestInterval):
+			}
 		}
+		requestNo++
 
 		resp, err := s.fetchPage(ctx, startIndex, params)
 		if err != nil {
-			return fmt.Errorf("nvd.Sync: fetch page at startIndex=%d: %w", startIndex, err)
+			return totalUpserted, fmt.Errorf("nvd.fetchAndStore: fetch page at startIndex=%d: %w", startIndex, err)
 		}
 
 		if totalResults < 0 {
@@ -109,55 +238,71 @@ func (s *NVDSyncer) fetchAndStore(ctx context.Context, params *timeParams) error
 			slog.Info("NVD sync: total results", "total", totalResults)
 		}
 
+		if resp.ResultsPerPage <= 0 && totalResults > 0 {
+			return totalUpserted, fmt.Errorf("nvd.fetchAndStore: invalid resultsPerPage=%d", resp.ResultsPerPage)
+		}
+
 		records := parseResponse(resp)
 		if len(records) > 0 {
 			if err := s.upsertBatch(ctx, records); err != nil {
-				return fmt.Errorf("nvd.Sync: upsert at startIndex=%d: %w", startIndex, err)
+				return totalUpserted, fmt.Errorf("nvd.fetchAndStore: upsert at startIndex=%d: %w", startIndex, err)
 			}
 			totalUpserted += len(records)
 		}
 
-		startIndex += resp.ResultsPerPage
+		fetched := resp.StartIndex + len(resp.Vulnerabilities)
+		if fetched > totalResults {
+			fetched = totalResults
+		}
 
 		if totalResults > 0 {
-			pct := float64(startIndex) / float64(totalResults) * 100
+			pct := float64(fetched) / float64(totalResults) * 100
 			if pct > 100 {
 				pct = 100
 			}
+
 			slog.Info("NVD sync: progress",
-				"fetched", startIndex,
+				"fetched", fetched,
 				"total", totalResults,
 				"percent", fmt.Sprintf("%.1f%%", pct),
 				"upserted", totalUpserted,
 			)
 		}
 
-		if startIndex >= totalResults {
+		if fetched >= totalResults {
 			break
 		}
+
+		startIndex = resp.StartIndex + resp.ResultsPerPage
 	}
 
-	slog.Info("NVD sync: completed", "total_upserted", totalUpserted)
-	return nil
+	slog.Info("NVD sync: completed batch", "total_upserted", totalUpserted)
+	return totalUpserted, nil
 }
 
-// fetchPage делает один запрос к NVD API с retry и exponential backoff при 403/429.
+// fetchPage делает один запрос к NVD API с retry/backoff.
 func (s *NVDSyncer) fetchPage(ctx context.Context, startIndex int, params *timeParams) (*nvdResponse, error) {
-	const maxRetries = 3
+	var lastErr error
 
-	for attempt := range maxRetries {
-		resp, retryable, err := s.doRequest(ctx, startIndex, params)
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		resp, retryAfter, retryable, err := s.doRequest(ctx, startIndex, params)
 		if err == nil {
 			return resp, nil
 		}
 
+		lastErr = err
 		if !retryable || attempt == maxRetries-1 {
-			return nil, err
+			break
 		}
 
-		backoff := time.Duration(1<<uint(attempt+1)) * time.Second // 2s, 4s, 8s
+		backoff := retryAfter
+		if backoff <= 0 {
+			backoff = time.Duration(1<<attempt) * time.Second // 1s, 2s, 4s, 8s, 16s
+		}
+
 		slog.Warn("NVD API request failed, retrying",
 			"attempt", attempt+1,
+			"startIndex", startIndex,
 			"backoff", backoff,
 			"error", err,
 		)
@@ -169,14 +314,15 @@ func (s *NVDSyncer) fetchPage(ctx context.Context, startIndex int, params *timeP
 		}
 	}
 
-	return nil, fmt.Errorf("unreachable")
+	return nil, lastErr
 }
 
-// doRequest выполняет один HTTP-запрос. Возвращает (response, retryable, error).
-func (s *NVDSyncer) doRequest(ctx context.Context, startIndex int, params *timeParams) (*nvdResponse, bool, error) {
+// doRequest выполняет один HTTP-запрос.
+// Возвращает: (response, retryAfter, retryable, error).
+func (s *NVDSyncer) doRequest(ctx context.Context, startIndex int, params *timeParams) (*nvdResponse, time.Duration, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL, nil)
 	if err != nil {
-		return nil, false, fmt.Errorf("create request: %w", err)
+		return nil, 0, false, fmt.Errorf("create request: %w", err)
 	}
 
 	q := req.URL.Query()
@@ -188,43 +334,232 @@ func (s *NVDSyncer) doRequest(ctx context.Context, startIndex int, params *timeP
 	}
 	req.URL.RawQuery = q.Encode()
 
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "red-lycoris-nvd-sync/1.0")
 	if s.apiKey != "" {
 		req.Header.Set("apiKey", s.apiKey)
 	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, true, fmt.Errorf("http request: %w", err)
+		return nil, 0, true, fmt.Errorf("http request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-		return nil, true, fmt.Errorf("rate limited: status %d", resp.StatusCode)
-	}
+	switch resp.StatusCode {
+	case http.StatusOK:
+		var nvdResp nvdResponse
+		dec := json.NewDecoder(resp.Body)
+		if err := dec.Decode(&nvdResp); err != nil {
+			return nil, 0, true, fmt.Errorf("decode body: %w", err)
+		}
+		return &nvdResp, 0, false, nil
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, false, fmt.Errorf("unexpected status %d", resp.StatusCode)
-	}
+	case http.StatusTooManyRequests, http.StatusForbidden:
+		msg := responseMessage(resp)
+		retryAfter := parseRetryAfter(resp)
+		if msg == "" {
+			msg = resp.Status
+		}
+		return nil, retryAfter, true, fmt.Errorf("rate limited: status=%d message=%q", resp.StatusCode, msg)
 
-	body, err := io.ReadAll(resp.Body)
+	default:
+		msg := responseMessage(resp)
+		if msg == "" {
+			msg = resp.Status
+		}
+		return nil, 0, false, fmt.Errorf("unexpected status=%d message=%q", resp.StatusCode, msg)
+	}
+}
+
+func (s *NVDSyncer) hasAnyData(ctx context.Context) (bool, error) {
+	var exists bool
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM nvd_cves
+			LIMIT 1
+		)
+	`).Scan(&exists)
 	if err != nil {
-		return nil, true, fmt.Errorf("read body: %w", err)
+		return false, fmt.Errorf("check nvd_cves existence: %w", err)
 	}
 
-	var nvdResp nvdResponse
-	if err := json.Unmarshal(body, &nvdResp); err != nil {
-		return nil, false, fmt.Errorf("unmarshal: %w", err)
+	return exists, nil
+}
+
+func (s *NVDSyncer) loadSyncState(ctx context.Context) (syncState, error) {
+	var st syncState
+	var lastSync sql.NullTime
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT last_sync_at
+		FROM sync_status
+		WHERE source = $1
+	`, s.Name()).Scan(&lastSync)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return syncState{}, nil
+		}
+		return syncState{}, err
 	}
 
-	return &nvdResp, false, nil
+	if lastSync.Valid {
+		t := lastSync.Time.UTC()
+		st.LastSuccessAt = &t
+	}
+
+	return st, nil
+}
+
+func (s *NVDSyncer) markSyncRunning(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO sync_status (
+			source,
+			status,
+			error_message,
+			updated_at
+		)
+		VALUES ($1, 'running', NULL, now())
+		ON CONFLICT (source) DO UPDATE
+		SET status        = 'running',
+		    error_message = NULL,
+		    updated_at    = now()
+	`, s.Name())
+	return err
+}
+
+func (s *NVDSyncer) markSyncWindowCheckpoint(
+	ctx context.Context,
+	watermark time.Time,
+	recordsCount int,
+	durationSeconds int,
+) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO sync_status (
+			source,
+			last_sync_at,
+			records_count,
+			status,
+			error_message,
+			duration_seconds,
+			updated_at
+		)
+		VALUES ($1, $2, $3, 'running', NULL, $4, now())
+		ON CONFLICT (source) DO UPDATE
+		SET last_sync_at     = $2,
+		    records_count    = $3,
+		    status           = 'running',
+		    error_message    = NULL,
+		    duration_seconds = $4,
+		    updated_at       = now()
+	`, s.Name(), watermark, recordsCount, durationSeconds)
+
+	return err
+}
+
+func (s *NVDSyncer) markSyncSuccess(
+	ctx context.Context,
+	watermark time.Time,
+	recordsCount int,
+	durationSeconds int,
+) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO sync_status (
+			source,
+			last_sync_at,
+			records_count,
+			status,
+			error_message,
+			duration_seconds,
+			updated_at
+		)
+		VALUES ($1, $2, $3, 'success', NULL, $4, now())
+		ON CONFLICT (source) DO UPDATE
+		SET last_sync_at     = $2,
+		    records_count    = $3,
+		    status           = 'success',
+		    error_message    = NULL,
+		    duration_seconds = $4,
+		    updated_at       = now()
+	`, s.Name(), watermark, recordsCount, durationSeconds)
+
+	return err
+}
+
+func (s *NVDSyncer) markSyncFailed(ctx context.Context, errText string, durationSeconds int) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO sync_status (
+			source,
+			status,
+			error_message,
+			duration_seconds,
+			updated_at
+		)
+		VALUES ($1, 'error', $2, $3, now())
+		ON CONFLICT (source) DO UPDATE
+		SET status           = 'error',
+		    error_message    = $2,
+		    duration_seconds = $3,
+		    updated_at       = now()
+	`, s.Name(), truncateError(errText, 4000), durationSeconds)
+	return err
+}
+
+func formatNVDTime(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.000") + "Z"
+}
+
+func responseMessage(resp *http.Response) string {
+	return strings.TrimSpace(resp.Header.Get("message"))
+}
+
+func parseRetryAfter(resp *http.Response) time.Duration {
+	raw := strings.TrimSpace(resp.Header.Get("Retry-After"))
+	if raw == "" {
+		return 0
+	}
+
+	if secs, err := strconv.Atoi(raw); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+
+	if ts, err := http.ParseTime(raw); err == nil {
+		d := time.Until(ts)
+		if d > 0 {
+			return d
+		}
+	}
+
+	return 0
+}
+
+func secondsSince(t time.Time) int {
+	return int(time.Since(t).Seconds())
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
+func truncateError(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max]
 }
 
 // --- NVD API 2.0 response structures ---
 
 type nvdResponse struct {
-	ResultsPerPage int              `json:"resultsPerPage"`
-	StartIndex     int              `json:"startIndex"`
-	TotalResults   int              `json:"totalResults"`
+	ResultsPerPage  int             `json:"resultsPerPage"`
+	StartIndex      int             `json:"startIndex"`
+	TotalResults    int             `json:"totalResults"`
 	Vulnerabilities []vulnerability `json:"vulnerabilities"`
 }
 
@@ -276,11 +611,11 @@ type nvdRecord struct {
 	V40Score    *float32
 	V40Vector   *string
 	CWEIDs      []int32
-	CPEMatches  []byte // JSON
-	References  []byte // JSON
+	CPEMatches  []byte
+	References  []byte
 	PublishedAt *time.Time
 	ModifiedAt  *time.Time
-	RawData     []byte // JSON
+	RawData     []byte
 }
 
 func parseResponse(resp *nvdResponse) []nvdRecord {
@@ -290,7 +625,6 @@ func parseResponse(resp *nvdResponse) []nvdRecord {
 		cve := &resp.Vulnerabilities[i].CVE
 		rec := nvdRecord{CVEID: cve.ID}
 
-		// description — первый en
 		for _, d := range cve.Descriptions {
 			if d.Lang == "en" {
 				rec.Description = d.Value
@@ -298,7 +632,6 @@ func parseResponse(resp *nvdResponse) []nvdRecord {
 			}
 		}
 
-		// CVSS v3.1
 		if len(cve.Metrics.CvssMetricV31) > 0 {
 			score := float32(cve.Metrics.CvssMetricV31[0].CvssData.BaseScore)
 			vec := cve.Metrics.CvssMetricV31[0].CvssData.VectorString
@@ -306,7 +639,6 @@ func parseResponse(resp *nvdResponse) []nvdRecord {
 			rec.V31Vector = &vec
 		}
 
-		// CVSS v4.0
 		if len(cve.Metrics.CvssMetricV40) > 0 {
 			score := float32(cve.Metrics.CvssMetricV40[0].CvssData.BaseScore)
 			vec := cve.Metrics.CvssMetricV40[0].CvssData.VectorString
@@ -314,7 +646,6 @@ func parseResponse(resp *nvdResponse) []nvdRecord {
 			rec.V40Vector = &vec
 		}
 
-		// CWE IDs
 		for _, w := range cve.Weaknesses {
 			for _, d := range w.Description {
 				id := parseCWEID(d.Value)
@@ -323,24 +654,19 @@ func parseResponse(resp *nvdResponse) []nvdRecord {
 				}
 			}
 		}
-		// дедупликация cwe_ids
 		rec.CWEIDs = dedup32(rec.CWEIDs)
 
-		// configurations → cpe_matches (raw JSON)
 		if len(cve.Configurations) > 0 {
 			rec.CPEMatches = cve.Configurations
 		}
 
-		// references (raw JSON)
 		if len(cve.References) > 0 {
 			rec.References = cve.References
 		}
 
-		// timestamps
 		rec.PublishedAt = parseNVDTime(cve.Published)
 		rec.ModifiedAt = parseNVDTime(cve.LastModified)
 
-		// raw_data — полный CVE JSON
 		raw, _ := json.Marshal(cve)
 		rec.RawData = raw
 
@@ -350,7 +676,7 @@ func parseResponse(resp *nvdResponse) []nvdRecord {
 	return records
 }
 
-// parseCWEID извлекает числовой ID из "CWE-79" → 79.
+// parseCWEID извлекает числовой ID из "CWE-79" -> 79.
 func parseCWEID(s string) int {
 	s = strings.TrimSpace(s)
 	if !strings.HasPrefix(s, "CWE-") {
@@ -367,9 +693,10 @@ func parseNVDTime(s string) *time.Time {
 	if s == "" {
 		return nil
 	}
-	// NVD формат: "2024-01-15T12:00:00.000"
+
 	for _, layout := range []string{
 		"2006-01-02T15:04:05.000",
+		"2006-01-02T15:04:05.000Z",
 		"2006-01-02T15:04:05",
 		time.RFC3339,
 	} {
@@ -378,6 +705,7 @@ func parseNVDTime(s string) *time.Time {
 			return &t
 		}
 	}
+
 	return nil
 }
 
@@ -385,14 +713,17 @@ func dedup32(s []int32) []int32 {
 	if len(s) <= 1 {
 		return s
 	}
+
 	seen := make(map[int32]struct{}, len(s))
 	out := make([]int32, 0, len(s))
+
 	for _, v := range s {
 		if _, ok := seen[v]; !ok {
 			seen[v] = struct{}{}
 			out = append(out, v)
 		}
 	}
+
 	return out
 }
 
@@ -445,9 +776,20 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 	_, err = tx.CopyFrom(
 		ctx,
 		pgx.Identifier{"nvd_staging"},
-		[]string{"cve_id", "description", "cvss_v31_score", "cvss_v31_vector",
-			"cvss_v40_score", "cvss_v40_vector", "cwe_ids", "cpe_matches",
-			"refs", "published_at", "modified_at", "raw_data"},
+		[]string{
+			"cve_id",
+			"description",
+			"cvss_v31_score",
+			"cvss_v31_vector",
+			"cvss_v40_score",
+			"cvss_v40_vector",
+			"cwe_ids",
+			"cpe_matches",
+			"refs",
+			"published_at",
+			"modified_at",
+			"raw_data",
+		},
 		pgx.CopyFromRows(rows),
 	)
 	if err != nil {
@@ -455,12 +797,35 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 	}
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO nvd_cves (cve_id, description, cvss_v31_score, cvss_v31_vector,
-		                      cvss_v40_score, cvss_v40_vector, cwe_ids, cpe_matches,
-		                      "references", published_at, modified_at, raw_data, synced_at)
-		SELECT cve_id, description, cvss_v31_score, cvss_v31_vector,
-		       cvss_v40_score, cvss_v40_vector, cwe_ids, cpe_matches,
-		       refs, published_at, modified_at, raw_data, now()
+		INSERT INTO nvd_cves (
+			cve_id,
+			description,
+			cvss_v31_score,
+			cvss_v31_vector,
+			cvss_v40_score,
+			cvss_v40_vector,
+			cwe_ids,
+			cpe_matches,
+			"references",
+			published_at,
+			modified_at,
+			raw_data,
+			synced_at
+		)
+		SELECT
+			cve_id,
+			description,
+			cvss_v31_score,
+			cvss_v31_vector,
+			cvss_v40_score,
+			cvss_v40_vector,
+			cwe_ids,
+			cpe_matches,
+			refs,
+			published_at,
+			modified_at,
+			raw_data,
+			now()
 		FROM nvd_staging
 		ON CONFLICT (cve_id) DO UPDATE
 		SET description     = EXCLUDED.description,
@@ -483,7 +848,7 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 	return tx.Commit(ctx)
 }
 
-// jsonbOrNull конвертирует []byte в значение для JSONB-столбца (nil → NULL).
+// jsonbOrNull конвертирует []byte в значение для JSONB-столбца (nil -> NULL).
 func jsonbOrNull(data []byte) any {
 	if len(data) == 0 {
 		return nil

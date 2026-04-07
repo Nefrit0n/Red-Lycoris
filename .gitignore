@@ -4,3 +4,5 @@ backend/seed
 
 # Environment
 .env.local
+.env
+
