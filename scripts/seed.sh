@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/../backend"
 
-echo "=== VulnScope Seed Tool ==="
+echo "=== Red Lycoris Seed Tool ==="
 echo ""
 
 # Check if .env exists and source it
@@ -17,11 +17,11 @@ fi
 
 echo "Building seed tool..."
 cd "$BACKEND_DIR"
-go build -o /tmp/vulnscope-seed ./cmd/seed
+go build -o /tmp/redlycoris-seed ./cmd/seed
 
 echo "Running seed..."
 echo ""
-/tmp/vulnscope-seed
+/tmp/redlycoris-seed
 
 echo ""
 echo "=== Seed complete ==="

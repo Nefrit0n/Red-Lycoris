@@ -15,11 +15,11 @@ import { useFiltersStore } from "@/store/filters";
 import type { Finding } from "@/types";
 
 const statusOptions = [
-  { value: 0, label: "Open" },
-  { value: 1, label: "Confirmed" },
-  { value: 2, label: "False Positive" },
-  { value: 3, label: "Resolved" },
-  { value: 4, label: "Risk Accepted" },
+  { value: 0, label: "Открыта" },
+  { value: 1, label: "Подтверждена" },
+  { value: 2, label: "Ложное срабатывание" },
+  { value: 3, label: "Устранена" },
+  { value: 4, label: "Риск принят" },
 ];
 
 function isFinding(value: unknown): value is Finding {
@@ -145,12 +145,12 @@ export default function FindingsList() {
               <span className="font-medium text-zinc-200">
                 {total.toLocaleString()}
               </span>{" "}
-              findings
+              находок
             </span>
 
             {selectedIds.size > 0 && (
-              <span className="text-sm text-violet-400">
-                {selectedIds.size} selected
+              <span className="text-sm text-red-500">
+                {selectedIds.size} выбрано
               </span>
             )}
           </div>
@@ -168,7 +168,7 @@ export default function FindingsList() {
                     {bulkUpdate.isPending ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : null}
-                    Set status
+                    Изменить статус
                     <ChevronDown className="size-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -208,15 +208,15 @@ export default function FindingsList() {
 
         {isLoading ? (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 text-sm text-zinc-400">
-            Loading findings...
+            Загрузка находок...
           </div>
         ) : findings.length === 0 ? (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8">
             <div className="text-base font-medium text-zinc-200">
-              No findings yet
+              Находок пока нет
             </div>
             <div className="mt-1 text-sm text-zinc-500">
-              Upload a scan result or change filters to see findings here.
+              Загрузите результат сканирования или измените фильтры.
             </div>
           </div>
         ) : (
@@ -242,10 +242,10 @@ export default function FindingsList() {
               {isFetchingNextPage ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Loading...
+                  Загрузка...
                 </>
               ) : (
-                "Load more"
+                "Загрузить ещё"
               )}
             </Button>
           </div>

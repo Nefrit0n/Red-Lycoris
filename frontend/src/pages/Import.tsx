@@ -143,7 +143,7 @@ export default function Import() {
       <Card className="border-zinc-800 bg-zinc-900/50">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium text-zinc-300">
-            Files
+            Файлы
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -159,7 +159,7 @@ export default function Import() {
       <Card className="border-zinc-800 bg-zinc-900/50">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium text-zinc-300">
-            Target Project
+            Целевой проект
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center gap-3">
@@ -171,7 +171,7 @@ export default function Import() {
             }
           }}>
             <SelectTrigger className="flex-1 border-zinc-700 bg-zinc-900 text-zinc-200">
-              <SelectValue placeholder="Select a project..." />
+              <SelectValue placeholder="Выберите проект..." />
             </SelectTrigger>
             <SelectContent className="border-zinc-700 bg-zinc-900">
               {projects.map((p) => (
@@ -179,8 +179,8 @@ export default function Import() {
                   {p.name}
                 </SelectItem>
               ))}
-              <SelectItem value="__new__" className="text-violet-400 focus:bg-zinc-800 focus:text-violet-300">
-                + Create new project
+              <SelectItem value="__new__" className="text-red-500 focus:bg-zinc-800 focus:text-red-400">
+                + Создать новый проект
               </SelectItem>
             </SelectContent>
           </Select>
@@ -191,12 +191,12 @@ export default function Import() {
       {isImporting && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span>Importing file {importState.current} of {importState.total}...</span>
+            <span>Импорт файла {importState.current} из {importState.total}...</span>
             <span>{Math.round(progressPct)}%</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
             <div
-              className="h-full rounded-full bg-violet-500 transition-all duration-300"
+              className="h-full rounded-full bg-red-600 transition-all duration-300"
               style={{ width: `${progressPct}%` }}
             />
           </div>
@@ -208,15 +208,15 @@ export default function Import() {
         <Button
           onClick={handleImport}
           disabled={!canImport}
-          className="w-full bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40"
+          className="w-full bg-red-700 text-white hover:bg-red-800 disabled:opacity-40"
         >
           {isImporting ? (
             <>
               <Loader2 className="size-4 animate-spin" />
-              Importing...
+              Импорт...
             </>
           ) : (
-            `Import ${validFiles.length > 0 ? validFiles.length + " file" + (validFiles.length > 1 ? "s" : "") : ""}`
+            `Импортировать ${validFiles.length > 0 ? validFiles.length + " файл" + (validFiles.length > 1 ? (validFiles.length < 5 ? "а" : "ов") : "") : ""}`
           )}
         </Button>
       )}
@@ -227,7 +227,7 @@ export default function Import() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm font-medium text-zinc-300">
               <CheckCircle className="size-4 text-emerald-400" />
-              Import Complete
+              Импорт завершён
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -251,14 +251,14 @@ export default function Import() {
                   </div>
                   <div className="mt-1.5 flex gap-4 text-xs">
                     <span className="text-emerald-400">
-                      +{r.imported} imported
+                      +{r.imported} импортировано
                     </span>
                     <span className="text-blue-400">
-                      ~{r.updated} updated
+                      ~{r.updated} обновлено
                     </span>
                     {hasErrors && (
                       <span className="text-red-400">
-                        {r.errors.length} error{r.errors.length > 1 ? "s" : ""}
+                        {r.errors.length} ошибок
                       </span>
                     )}
                   </div>
@@ -272,7 +272,7 @@ export default function Import() {
                       ))}
                       {r.errors.length > 5 && (
                         <span className="text-xs text-zinc-600">
-                          ...and {r.errors.length - 5} more
+                          ...и ещё {r.errors.length - 5}
                         </span>
                       )}
                     </div>
@@ -285,7 +285,7 @@ export default function Import() {
               onClick={handleReset}
               className="w-full border-zinc-700 text-zinc-300"
             >
-              Import more files
+              Импортировать ещё
             </Button>
           </CardContent>
         </Card>
@@ -295,24 +295,24 @@ export default function Import() {
       <Dialog open={showNewProject} onOpenChange={setShowNewProject}>
         <DialogContent className="border-zinc-700 bg-zinc-900">
           <DialogHeader>
-            <DialogTitle className="text-zinc-100">Create Project</DialogTitle>
+            <DialogTitle className="text-zinc-100">Создать проект</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <label className="mb-1 block text-xs text-zinc-500">Name</label>
+              <label className="mb-1 block text-xs text-zinc-500">Название</label>
               <Input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="Project name"
+                placeholder="Название проекта"
                 className="border-zinc-700 bg-zinc-800 text-zinc-200"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-zinc-500">Description</label>
+              <label className="mb-1 block text-xs text-zinc-500">Описание</label>
               <Input
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
-                placeholder="Optional description"
+                placeholder="Описание (опционально)"
                 className="border-zinc-700 bg-zinc-800 text-zinc-200"
               />
             </div>
@@ -323,17 +323,17 @@ export default function Import() {
                 <Button variant="ghost" className="text-zinc-400" />
               }
             >
-              Cancel
+              Отмена
             </DialogClose>
             <Button
               onClick={handleCreateProject}
               disabled={!newName.trim() || createProject.isPending}
-              className="bg-violet-600 text-white hover:bg-violet-700"
+              className="bg-red-700 text-white hover:bg-red-800"
             >
               {createProject.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : null}
-              Create
+              Создать
             </Button>
           </DialogFooter>
         </DialogContent>
