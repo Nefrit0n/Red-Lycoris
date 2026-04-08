@@ -1,18 +1,26 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/api/client";
-import type {
-  FindingEnrichment,
-  FindingScore,
-  EnrichmentStatusResponse,
-} from "@/types";
+import type { FindingEnrichment, FindingScore, EnrichmentStatusResponse } from "@/types";
+import { normalizeEnrichmentData } from "@/api/enrichmentAdapter";
 
 export function useFindingEnrichments(findingId: string) {
   return useQuery({
     queryKey: ["finding-enrichments", findingId],
-    queryFn: () =>
-      apiGet<{ data: FindingEnrichment[] }>(
-        `/api/v1/findings/${findingId}/enrichments`,
-      ),
+    queryFn: async () => {
+      const response = await apiGet<unknown>(`/api/v1/findings/${findingId}/enrichments`);
+      const normalized = normalizeEnrichmentData(response);
+
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.debug("[enrichment] GET /findings/{id}/enrichments", {
+          findingId,
+          raw: response,
+          normalized,
+        });
+      }
+
+      return { data: normalized } satisfies { data: FindingEnrichment[] };
+    },
     enabled: !!findingId,
   });
 }
