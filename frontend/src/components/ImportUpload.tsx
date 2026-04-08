@@ -57,7 +57,7 @@ async function parseFile(file: File): Promise<ParsedFile> {
 
 const formatLabels: Record<string, { label: string; className: string }> = {
   sarif: { label: "SARIF", className: "border-blue-700/50 bg-blue-950/50 text-blue-400" },
-  generic: { label: "Generic JSON", className: "border-violet-700/50 bg-violet-950/50 text-violet-400" },
+  generic: { label: "Generic JSON", className: "border-red-800/50 bg-red-950/50 text-red-500" },
   unknown: { label: "Unknown", className: "border-zinc-600 bg-zinc-800/60 text-zinc-400" },
 };
 
@@ -65,7 +65,7 @@ export default function ImportUpload({ files, onFilesChange, disabled }: ImportU
   const [dragOver, setDragOver] = useState(false);
 
   const processFiles = useCallback(
-    async (fileList: FileList | File[]) => {
+    async (fileList: FileList | File[]) {
       const arr = Array.from(fileList).filter(
         (f) => f.type === "application/json" || f.name.endsWith(".json") || f.name.endsWith(".sarif"),
       );
@@ -116,17 +116,17 @@ export default function ImportUpload({ files, onFilesChange, disabled }: ImportU
         className={cn(
           "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 transition-colors",
           dragOver
-            ? "border-violet-500 bg-violet-500/5"
+            ? "border-red-600 bg-red-600/5"
             : "border-zinc-700 bg-zinc-900/30 hover:border-zinc-600 hover:bg-zinc-900/50",
           disabled && "pointer-events-none opacity-50",
         )}
       >
-        <Upload className={cn("size-8", dragOver ? "text-violet-400" : "text-zinc-500")} />
+        <Upload className={cn("size-8", dragOver ? "text-red-500" : "text-zinc-500")} />
         <div className="text-center">
           <p className="text-sm font-medium text-zinc-300">
-            Drop files here or click to browse
+            Перетащите файлы сюда или нажмите для выбора
           </p>
-          <p className="mt-1 text-xs text-zinc-500">JSON, SARIF files supported</p>
+          <p className="mt-1 text-xs text-zinc-500">Поддерживаются JSON и SARIF файлы</p>
         </div>
         <input
           type="file"
@@ -161,7 +161,7 @@ export default function ImportUpload({ files, onFilesChange, disabled }: ImportU
                   </Badge>
                   {pf.findingsCount != null && (
                     <span className="text-xs text-zinc-500">
-                      {pf.findingsCount} findings
+                      {pf.findingsCount} находок
                     </span>
                   )}
                 </>

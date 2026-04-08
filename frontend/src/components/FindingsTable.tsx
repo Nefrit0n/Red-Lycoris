@@ -9,6 +9,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { formatDistanceToNow, isValid } from "date-fns";
+import { ru } from "date-fns/locale";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import SeverityBadge from "@/components/SeverityBadge";
@@ -36,7 +37,7 @@ function formatRelativeDate(value: string | null | undefined) {
   const date = new Date(value);
   if (!isValid(date)) return "—";
 
-  return formatDistanceToNow(date, { addSuffix: true });
+  return formatDistanceToNow(date, { addSuffix: true, locale: ru });
 }
 
 function SortIcon({ field }: { field: string }) {
@@ -47,9 +48,9 @@ function SortIcon({ field }: { field: string }) {
   }
 
   return sortDir === "asc" ? (
-    <ArrowUp className="size-3.5 text-violet-400" />
+    <ArrowUp className="size-3.5 text-red-500" />
   ) : (
-    <ArrowDown className="size-3.5 text-violet-400" />
+    <ArrowDown className="size-3.5 text-red-500" />
   );
 }
 
@@ -97,7 +98,7 @@ export default function FindingsTable({
             checked={allSelected && findings.length > 0}
             onChange={onToggleAll}
             aria-label="Select all findings"
-            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-violet-500"
+            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-red-600"
           />
         ),
         cell: ({ row }) => (
@@ -110,7 +111,7 @@ export default function FindingsTable({
             }}
             onClick={(e) => e.stopPropagation()}
             aria-label={`Select finding ${row.original.id}`}
-            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-violet-500"
+            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-red-600"
           />
         ),
         size: 40,
@@ -118,14 +119,14 @@ export default function FindingsTable({
 
       col.accessor("severity", {
         id: "severity",
-        header: "Severity",
+        header: "Критичность",
         cell: (info) => <SeverityBadge severity={info.getValue()} />,
         size: 100,
       }),
 
       col.accessor("title", {
         id: "title",
-        header: "Title",
+        header: "Название",
         cell: (info) => (
           <span className="line-clamp-1 text-zinc-200">
             {info.getValue() || "Untitled finding"}
@@ -136,7 +137,7 @@ export default function FindingsTable({
 
       col.accessor("component", {
         id: "component",
-        header: "Component",
+        header: "Компонент",
         cell: (info) => (
           <span className="line-clamp-1 font-mono text-xs text-zinc-400">
             {info.getValue() || "—"}
@@ -147,7 +148,7 @@ export default function FindingsTable({
 
       col.accessor("file_path", {
         id: "file_path",
-        header: "File",
+        header: "Файл",
         cell: (info) => (
           <span className="line-clamp-1 font-mono text-xs text-zinc-500">
             {info.getValue() || "—"}
@@ -158,14 +159,14 @@ export default function FindingsTable({
 
       col.accessor("status", {
         id: "status",
-        header: "Status",
+        header: "Статус",
         cell: (info) => <StatusBadge status={info.getValue()} />,
         size: 120,
       }),
 
       col.accessor("priority_score", {
         id: "priority_score",
-        header: "Priority",
+        header: "Приоритет",
         cell: (info) => {
           const value = info.getValue();
 
@@ -193,7 +194,7 @@ export default function FindingsTable({
 
       col.accessor("first_seen", {
         id: "first_seen",
-        header: "First Seen",
+        header: "Обнаружено",
         cell: (info) => (
           <span className="text-xs text-zinc-500">
             {formatRelativeDate(info.getValue())}
@@ -204,7 +205,7 @@ export default function FindingsTable({
 
       col.accessor("times_seen", {
         id: "times_seen",
-        header: "Seen",
+        header: "Кол-во",
         cell: (info) => (
           <span className="font-mono text-xs text-zinc-400">
             {info.getValue() ?? 0}
@@ -245,7 +246,7 @@ export default function FindingsTable({
   if (findings.length === 0) {
     return (
       <div className="flex min-h-[320px] flex-1 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/30 text-sm text-zinc-500">
-        No findings match the current filters.
+        Нет находок, соответствующих текущим фильтрам.
       </div>
     );
   }
@@ -299,7 +300,7 @@ export default function FindingsTable({
                 key={row.id}
                 className={cn(
                   "absolute inset-x-0 flex cursor-pointer border-b border-zinc-800/60 transition-colors hover:bg-zinc-800/40",
-                  isSelected && "bg-violet-950/20",
+                  isSelected && "bg-red-950/20",
                 )}
                 style={{
                   height: ROW_HEIGHT,

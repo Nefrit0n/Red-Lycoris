@@ -50,7 +50,7 @@ const SOURCE_META: SourceMeta[] = [
     label: "EPSS",
     description: "Exploit Prediction Scoring System",
     icon: TrendingUp,
-    color: "text-violet-400",
+    color: "text-red-500",
   },
   {
     key: "kev",
@@ -333,7 +333,7 @@ function SummaryCard({ statuses }: { statuses: SyncStatus[] }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-              <Database className="size-4 text-violet-400" />
+              <Database className="size-4 text-red-500" />
               Сводка по enrichment
             </CardTitle>
             <p className="mt-1 text-xs text-zinc-500">

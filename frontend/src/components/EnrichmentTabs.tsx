@@ -155,7 +155,7 @@ function NvdSection({ data }: { data: NvdData }) {
                   href={ref.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-violet-400 hover:underline"
+                  className="inline-flex items-center gap-1 text-xs text-red-400 hover:underline"
                 >
                   {ref.source || ref.url}
                   <ExternalLink className="size-3" />
@@ -404,7 +404,7 @@ function OsvSection({ data }: { data: OsvData }) {
           href={`https://osv.dev/vulnerability/${osvId}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 font-mono text-sm text-violet-400 hover:underline"
+          className="inline-flex items-center gap-1 font-mono text-sm text-red-400 hover:underline"
         >
           {osvId}
           <ExternalLink className="size-3" />

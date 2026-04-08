@@ -42,25 +42,25 @@ export function StatCards({ stats }: { stats: DashboardStats }) {
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <StatCard
-        title="Total Findings"
+        title="Всего находок"
         value={stats.total_findings}
         icon={Shield}
-        accent="bg-violet-500/15 text-violet-400"
+        accent="bg-red-600/15 text-red-500"
       />
       <StatCard
-        title="Open"
+        title="Открытые"
         value={stats.total_open}
         icon={AlertTriangle}
         accent="bg-blue-500/15 text-blue-400"
       />
       <StatCard
-        title="Critical Open"
+        title="Критические открытые"
         value={stats.total_critical_open}
         icon={ShieldAlert}
         accent="bg-red-500/15 text-red-400"
       />
       <StatCard
-        title="New This Week"
+        title="Новые за неделю"
         value={stats.new_this_week}
         icon={TrendingUp}
         accent="bg-emerald-500/15 text-emerald-400"
@@ -72,11 +72,11 @@ export function StatCards({ stats }: { stats: DashboardStats }) {
 // ---------- Severity Distribution ----------
 
 const severityConfig: Record<number, { label: string; color: string }> = {
-  0: { label: "Info", color: "bg-zinc-500" },
-  1: { label: "Low", color: "bg-blue-500" },
-  2: { label: "Medium", color: "bg-yellow-500" },
-  3: { label: "High", color: "bg-orange-500" },
-  4: { label: "Critical", color: "bg-red-500" },
+  0: { label: "Инфо", color: "bg-zinc-500" },
+  1: { label: "Низкая", color: "bg-blue-500" },
+  2: { label: "Средняя", color: "bg-yellow-500" },
+  3: { label: "Высокая", color: "bg-orange-500" },
+  4: { label: "Критическая", color: "bg-red-500" },
 };
 
 export function SeverityDistribution({ stats }: { stats: DashboardStats }) {
@@ -86,7 +86,7 @@ export function SeverityDistribution({ stats }: { stats: DashboardStats }) {
     <Card className="border-zinc-800 bg-zinc-900/50">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium text-zinc-300">
-          Severity Distribution
+          Распределение по критичности
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -137,11 +137,11 @@ export function SeverityDistribution({ stats }: { stats: DashboardStats }) {
 // ---------- Status Donut ----------
 
 const statusConfig: Record<number, { label: string; color: string; stroke: string }> = {
-  0: { label: "Open", color: "text-blue-400", stroke: "#60a5fa" },
-  1: { label: "Confirmed", color: "text-violet-400", stroke: "#a78bfa" },
-  2: { label: "False Positive", color: "text-zinc-400", stroke: "#71717a" },
-  3: { label: "Resolved", color: "text-emerald-400", stroke: "#34d399" },
-  4: { label: "Risk Accepted", color: "text-amber-400", stroke: "#fbbf24" },
+  0: { label: "Открыта", color: "text-blue-400", stroke: "#60a5fa" },
+  1: { label: "Подтверждена", color: "text-red-500", stroke: "#ef4444" },
+  2: { label: "Ложное срабатывание", color: "text-zinc-400", stroke: "#71717a" },
+  3: { label: "Устранена", color: "text-emerald-400", stroke: "#34d399" },
+  4: { label: "Риск принят", color: "text-amber-400", stroke: "#fbbf24" },
 };
 
 export function StatusDonut({ stats }: { stats: DashboardStats }) {
@@ -170,7 +170,7 @@ export function StatusDonut({ stats }: { stats: DashboardStats }) {
     <Card className="border-zinc-800 bg-zinc-900/50">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium text-zinc-300">
-          Status Breakdown
+          Распределение по статусу
         </CardTitle>
       </CardHeader>
       <CardContent className="flex items-center gap-6">
@@ -242,7 +242,7 @@ export function TopFindings({ stats }: { stats: DashboardStats }) {
     <Card className="border-zinc-800 bg-zinc-900/50">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium text-zinc-300">
-          Top Findings by Priority
+          Топ находок по приоритету
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
@@ -275,7 +275,7 @@ export function TopFindings({ stats }: { stats: DashboardStats }) {
           ))}
           {stats.top_findings.length === 0 && (
             <div className="px-6 py-8 text-center text-sm text-zinc-600">
-              No scored findings yet
+              Нет оценённых находок
             </div>
           )}
         </div>
@@ -315,14 +315,14 @@ export function EnrichmentCoverageWidget({ stats }: { stats: DashboardStats }) {
     <Card className="border-zinc-800 bg-zinc-900/50">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium text-zinc-300">
-          Enrichment Coverage
+          Покрытие обогащения
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <CoverageBar label="NVD" value={c.nvd} color="bg-violet-500" />
+        <CoverageBar label="NVD" value={c.nvd} color="bg-red-600" />
         <CoverageBar label="EPSS" value={c.epss} color="bg-blue-500" />
         <CoverageBar label="CISA KEV" value={c.kev} color="bg-red-500" />
-        <CoverageBar label="BDU FSTEC" value={c.bdu} color="bg-amber-500" />
+        <CoverageBar label="БДУ ФСТЭК" value={c.bdu} color="bg-amber-500" />
       </CardContent>
     </Card>
   );

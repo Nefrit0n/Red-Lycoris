@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { format, formatDistanceToNow, isValid } from "date-fns";
+import { ru } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -41,23 +42,23 @@ import { useFinding, useUpdateStatus } from "@/api/findings";
 import { useFindingScore } from "@/api/enrichment";
 
 const statusOptions = [
-  { value: 0, label: "Open" },
-  { value: 1, label: "Confirmed" },
-  { value: 2, label: "False Positive" },
-  { value: 3, label: "Resolved" },
-  { value: 4, label: "Risk Accepted" },
+  { value: 0, label: "Открыта" },
+  { value: 1, label: "Подтверждена" },
+  { value: 2, label: "Ложное срабатывание" },
+  { value: 3, label: "Устранена" },
+  { value: 4, label: "Риск принят" },
 ];
 
 function formatAbsoluteDate(date: string) {
   const parsed = new Date(date);
   if (!isValid(parsed)) return "—";
-  return format(parsed, "PPp");
+  return format(parsed, "PPp", { locale: ru });
 }
 
 function formatRelativeDate(date: string) {
   const parsed = new Date(date);
   if (!isValid(parsed)) return "—";
-  return formatDistanceToNow(parsed, { addSuffix: true });
+  return formatDistanceToNow(parsed, { addSuffix: true, locale: ru });
 }
 
 function normalizeCweId(raw: string | number) {
@@ -88,7 +89,7 @@ function DetailRow({
 function TimelineItem({ label, date }: { label: string; date: string }) {
   return (
     <div className="relative flex items-start gap-3">
-      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-violet-600 bg-zinc-900" />
+      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-red-700 bg-zinc-900" />
       <div>
         <div className="text-sm text-zinc-300">{label}</div>
         <div className="mt-0.5 text-xs text-zinc-500">
@@ -169,7 +170,7 @@ export default function FindingDetail() {
           className="mb-4 text-zinc-400 hover:text-zinc-200"
         >
           <ArrowLeft className="size-4" />
-          Back to findings
+          Назад к находкам
         </Button>
         <LoadingSkeleton />
       </div>
@@ -186,7 +187,7 @@ export default function FindingDetail() {
           className="mb-4 text-zinc-400 hover:text-zinc-200"
         >
           <ArrowLeft className="size-4" />
-          Back to findings
+          Назад к находкам
         </Button>
 
         <Card className="border-zinc-800 bg-zinc-900/50">
@@ -215,7 +216,7 @@ export default function FindingDetail() {
           className="mb-4 text-zinc-400 hover:text-zinc-200"
         >
           <ArrowLeft className="size-4" />
-          Back to findings
+          Назад к находкам
         </Button>
 
         <Card className="border-zinc-800 bg-zinc-900/50">
@@ -243,7 +244,7 @@ export default function FindingDetail() {
         className="mb-4 text-zinc-400 hover:text-zinc-200"
       >
         <ArrowLeft className="size-4" />
-        Back to findings
+        Назад к находкам
       </Button>
 
       <div className="mb-6 space-y-3">
@@ -302,10 +303,10 @@ export default function FindingDetail() {
 
       <Tabs defaultValue="overview">
         <TabsList variant="line" className="mb-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="identifiers">Identifiers</TabsTrigger>
-          <TabsTrigger value="enrichment">Enrichment</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="overview">Обзор</TabsTrigger>
+          <TabsTrigger value="identifiers">Идентификаторы</TabsTrigger>
+          <TabsTrigger value="enrichment">Обогащение</TabsTrigger>
+          <TabsTrigger value="history">История</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -314,7 +315,7 @@ export default function FindingDetail() {
               <Card className="border-zinc-800 bg-zinc-900/50">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm text-zinc-400">
-                    Description
+                    Описание
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -328,7 +329,7 @@ export default function FindingDetail() {
             <Card className="border-zinc-800 bg-zinc-900/50">
               <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
                 {finding.file_path && (
-                  <DetailRow icon={FileCode} label="Location">
+                  <DetailRow icon={FileCode} label="Расположение">
                     <code className="break-all rounded bg-zinc-800 px-1.5 py-0.5 text-xs">
                       {finding.file_path}
                       {finding.line_start
@@ -342,7 +343,7 @@ export default function FindingDetail() {
                 )}
 
                 {finding.component && (
-                  <DetailRow icon={Package} label="Component">
+                  <DetailRow icon={Package} label="Компонент">
                     <span className="break-all">
                       {finding.component}
                       {finding.component_version && (
@@ -354,22 +355,22 @@ export default function FindingDetail() {
                   </DetailRow>
                 )}
 
-                <DetailRow icon={Scan} label="Source">
+                <DetailRow icon={Scan} label="Источник">
                   {finding.source_type}
                 </DetailRow>
 
-                <DetailRow icon={Eye} label="Times Seen">
+                <DetailRow icon={Eye} label="Количество обнаружений">
                   {finding.times_seen}
                 </DetailRow>
 
-                <DetailRow icon={Clock} label="First Seen">
+                <DetailRow icon={Clock} label="Первое обнаружение">
                   {formatAbsoluteDate(finding.first_seen)}
                   <span className="ml-1 text-zinc-500">
                     ({formatRelativeDate(finding.first_seen)})
                   </span>
                 </DetailRow>
 
-                <DetailRow icon={Clock} label="Last Seen">
+                <DetailRow icon={Clock} label="Последнее обнаружение">
                   {formatAbsoluteDate(finding.last_seen)}
                   <span className="ml-1 text-zinc-500">
                     ({formatRelativeDate(finding.last_seen)})
@@ -395,7 +396,7 @@ export default function FindingDetail() {
                         href={`https://nvd.nist.gov/vuln/detail/${cve}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 font-mono text-xs text-violet-400 transition-colors hover:bg-zinc-700 hover:text-violet-300"
+                        className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 font-mono text-xs text-red-400 transition-colors hover:bg-zinc-700 hover:text-red-300"
                       >
                         {cve}
                         <ExternalLink className="size-3" />
@@ -403,7 +404,7 @@ export default function FindingDetail() {
                     ))}
                   </div>
                 ) : (
-                  <span className="text-sm text-zinc-600">No CVE IDs</span>
+                  <span className="text-sm text-zinc-600">Нет CVE</span>
                 )}
               </CardContent>
             </Card>
@@ -433,7 +434,7 @@ export default function FindingDetail() {
                     })}
                   </div>
                 ) : (
-                  <span className="text-sm text-zinc-600">No CWE IDs</span>
+                  <span className="text-sm text-zinc-600">Нет CWE</span>
                 )}
               </CardContent>
             </Card>
@@ -461,24 +462,23 @@ export default function FindingDetail() {
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-6">
               <div className="relative space-y-6 pl-6 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-zinc-800">
-                <TimelineItem label="First detected" date={finding.first_seen} />
+                <TimelineItem label="Впервые обнаружено" date={finding.first_seen} />
 
                 {finding.times_seen > 1 && (
                   <div className="relative flex items-start gap-3">
                     <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-zinc-700 bg-zinc-900" />
                     <div>
                       <div className="text-sm text-zinc-300">
-                        Seen{" "}
+                        Обнаружено{" "}
                         <span className="font-medium text-zinc-100">
-                          {finding.times_seen} times
-                        </span>{" "}
-                        total
+                          {finding.times_seen} раз
+                        </span>
                       </div>
                     </div>
                   </div>
                 )}
 
-                <TimelineItem label="Last seen" date={finding.last_seen} />
+                <TimelineItem label="Последнее обнаружение" date={finding.last_seen} />
               </div>
             </CardContent>
           </Card>

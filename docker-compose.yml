@@ -4,7 +4,7 @@ services:
   # ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: vulnscope-db
+    container_name: redlycoris-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vulnscope}
@@ -53,7 +53,7 @@ services:
   # ──────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: vulnscope-redis
+    container_name: redlycoris-redis
     restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -90,7 +90,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: vulnscope-api
+    container_name: redlycoris-api
     restart: unless-stopped
     ports:
       - "${API_PORT:-8080}:8080"
@@ -137,7 +137,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: ${FRONTEND_TARGET:-development}
-    container_name: vulnscope-ui
+    container_name: redlycoris-ui
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3000}:3000"

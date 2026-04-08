@@ -22,10 +22,10 @@ prod-down: ## Остановка production
 ## ── Database ──────────────────────────────────
 
 migrate: ## Запуск миграций (через backend контейнер)
-	$(COMPOSE) exec backend ./vulnscope
+	$(COMPOSE) exec backend ./redlycoris
 
 seed: ## Генерация тестовых данных (100k findings)
-	cd backend && go build -o /tmp/vulnscope-seed ./cmd/seed && /tmp/vulnscope-seed
+	cd backend && go build -o /tmp/redlycoris-seed ./cmd/seed && /tmp/redlycoris-seed
 
 ## ── Enrichment ────────────────────────────────
 
