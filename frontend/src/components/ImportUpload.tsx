@@ -65,7 +65,7 @@ export default function ImportUpload({ files, onFilesChange, disabled }: ImportU
   const [dragOver, setDragOver] = useState(false);
 
   const processFiles = useCallback(
-    async (fileList: FileList | File[]) {
+    async (fileList: FileList | File[]) => {
       const arr = Array.from(fileList).filter(
         (f) => f.type === "application/json" || f.name.endsWith(".json") || f.name.endsWith(".sarif"),
       );
