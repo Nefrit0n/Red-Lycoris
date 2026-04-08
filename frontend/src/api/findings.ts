@@ -210,7 +210,7 @@ export function useUpdateStatus() {
 
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: number }) =>
-      apiPatch<{ data: Finding }>(`/api/v1/findings/${id}`, { status }),
+      apiPatch<{ status: string }>(`/api/v1/findings/${id}/status`, { status }),
 
     onSuccess: async (_result, variables) => {
       patchFindingStatusesInListCache(qc, [variables.id], variables.status);
@@ -229,7 +229,7 @@ export function useBulkUpdateStatus() {
 
   return useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: number }) =>
-      apiPatch<{ data: { updated: number } }>("/api/v1/findings/bulk", {
+      apiPatch<{ status: string; updated: number }>("/api/v1/findings/bulk/status", {
         ids,
         status,
       }),
