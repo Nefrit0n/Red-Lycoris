@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"vulnscope/internal/domain"
 	"vulnscope/internal/enrichment"
 	"vulnscope/internal/storage"
 )
@@ -28,6 +29,49 @@ func handleEnrichmentStatus(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerF
 		}
 
 		respondJSON(w, http.StatusOK, map[string]any{"data": statuses})
+	}
+}
+
+func handleGetFindingEnrichments(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
+			return
+		}
+
+		enrichmentsData, err := enrichment.GetFindingEnrichments(r.Context(), pool, id)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get finding enrichments")
+			return
+		}
+		if enrichmentsData == nil {
+			enrichmentsData = []domain.FindingEnrichment{}
+		}
+
+		respondJSON(w, http.StatusOK, map[string]any{"data": enrichmentsData})
+	}
+}
+
+func handleGetFindingScore(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
+			return
+		}
+
+		score, err := enrichment.GetFindingScore(r.Context(), pool, id)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get finding score")
+			return
+		}
+		if score == nil {
+			respondJSON(w, http.StatusOK, map[string]any{"data": nil})
+			return
+		}
+
+		respondJSON(w, http.StatusOK, map[string]any{"data": score})
 	}
 }
 
@@ -75,19 +119,27 @@ func handleEnrichFinding(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc
 		// Публикуем в Redis Stream для обработки воркером
 		if err := enrichment.PublishEnrichment(r.Context(), rdb, id); err != nil {
 			slog.Error("failed to publish enrichment", "finding_id", id, "error", err)
+
 			// Fallback: обогащаем синхронно
 			if err := enrichment.EnrichFinding(r.Context(), pool, id); err != nil {
 				respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "enrichment failed")
 				return
 			}
+
 			respondJSON(w, http.StatusOK, map[string]any{
-				"data": map[string]any{"finding_id": id, "status": "enriched_sync"},
+				"data": map[string]any{
+					"finding_id": id,
+					"status":     "enriched_sync",
+				},
 			})
 			return
 		}
 
 		respondJSON(w, http.StatusAccepted, map[string]any{
-			"data": map[string]any{"finding_id": id, "status": "queued"},
+			"data": map[string]any{
+				"finding_id": id,
+				"status":     "queued",
+			},
 		})
 	}
 }
@@ -103,7 +155,8 @@ func handleEnrichAll(pool *pgxpool.Pool) http.HandlerFunc {
 			for {
 				// Находим необогащённые findings (без записи в finding_scores)
 				rows, err := pool.Query(ctx, `
-					SELECT f.id FROM findings f
+					SELECT f.id
+					FROM findings f
 					LEFT JOIN finding_scores fs ON fs.finding_id = f.id
 					WHERE fs.finding_id IS NULL
 					LIMIT 100
@@ -130,10 +183,13 @@ func handleEnrichAll(pool *pgxpool.Pool) http.HandlerFunc {
 				enriched, failed := enrichment.EnrichBatch(ctx, pool, ids)
 				totalEnriched += enriched
 				totalFailed += failed
-				slog.Info("enrich-all: batch completed",
+
+				slog.Info(
+					"enrich-all: batch completed",
 					"batch_enriched", enriched,
 					"batch_failed", failed,
 					"total_enriched", totalEnriched,
+					"total_failed", totalFailed,
 				)
 			}
 
@@ -141,7 +197,9 @@ func handleEnrichAll(pool *pgxpool.Pool) http.HandlerFunc {
 		}()
 
 		respondJSON(w, http.StatusAccepted, map[string]any{
-			"data": map[string]string{"status": "enrich-all started"},
+			"data": map[string]string{
+				"status": "enrich-all started",
+			},
 		})
 	}
 }

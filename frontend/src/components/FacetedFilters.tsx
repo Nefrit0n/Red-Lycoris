@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, X } from "lucide-react";
+
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -9,8 +10,8 @@ import { useFiltersStore } from "@/store/filters";
 import { cn } from "@/lib/utils";
 
 interface FacetCounts {
-  severity: Record<number, number>;
-  status: Record<number, number>;
+  severity?: Record<number, number>;
+  status?: Record<number, number>;
 }
 
 interface FacetedFiltersProps {
@@ -29,7 +30,7 @@ function CheckboxRow({
   checked: boolean;
   onChange: (v: boolean) => void;
   count?: number;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <label
@@ -45,7 +46,7 @@ function CheckboxRow({
         className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-violet-500"
       />
       <span className="flex-1">{children}</span>
-      {count !== undefined && (
+      {typeof count === "number" && (
         <span className="tabular-nums text-xs text-zinc-500">{count}</span>
       )}
     </label>
@@ -63,48 +64,87 @@ export default function FacetedFilters({ counts }: FacetedFiltersProps) {
     resetFilters,
   } = useFiltersStore();
 
-  const [localQuery, setLocalQuery] = useState(query);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const safeSeverities = severities ?? [];
+  const safeStatuses = statuses ?? [];
+  const safeQuery = query ?? "";
+
+  const [localQuery, setLocalQuery] = useState(safeQuery);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const severityCounts = counts?.severity ?? {};
+  const statusCounts = counts?.status ?? {};
 
   const debouncedSetQuery = useCallback(
     (value: string) => {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => setQuery(value), 300);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        setQuery(value);
+      }, 300);
     },
     [setQuery],
   );
 
   useEffect(() => {
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
-    setLocalQuery(query);
-  }, [query]);
+    setLocalQuery(safeQuery);
+  }, [safeQuery]);
 
-  const toggleSeverity = (sev: number, on: boolean) => {
-    setSeverities(
-      on ? [...severities, sev] : severities.filter((s) => s !== sev),
+  const toggleSeverity = useCallback(
+    (severity: number, enabled: boolean) => {
+      const next = enabled
+        ? Array.from(new Set([...safeSeverities, severity])).sort((a, b) => b - a)
+        : safeSeverities.filter((value) => value !== severity);
+
+      setSeverities(next);
+    },
+    [safeSeverities, setSeverities],
+  );
+
+  const toggleStatus = useCallback(
+    (status: number, enabled: boolean) => {
+      const next = enabled
+        ? Array.from(new Set([...safeStatuses, status])).sort((a, b) => a - b)
+        : safeStatuses.filter((value) => value !== status);
+
+      setStatuses(next);
+    },
+    [safeStatuses, setStatuses],
+  );
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      safeSeverities.length > 0 ||
+      safeStatuses.length > 0 ||
+      safeQuery.trim().length > 0
     );
-  };
+  }, [safeSeverities, safeStatuses, safeQuery]);
 
-  const toggleStatus = (st: number, on: boolean) => {
-    setStatuses(on ? [...statuses, st] : statuses.filter((s) => s !== st));
-  };
-
-  const hasActiveFilters =
-    severities.length > 0 || statuses.length > 0 || query.length > 0;
+  const handleReset = useCallback(() => {
+    setLocalQuery("");
+    resetFilters();
+  }, [resetFilters]);
 
   return (
-    <div className="flex w-70 shrink-0 flex-col gap-4 overflow-y-auto pr-4">
+    <aside className="flex w-[280px] shrink-0 flex-col gap-4 overflow-y-auto pr-4">
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
         <Input
           placeholder="Search findings..."
           value={localQuery}
           onChange={(e) => {
-            setLocalQuery(e.target.value);
-            debouncedSetQuery(e.target.value);
+            const value = e.target.value;
+            setLocalQuery(value);
+            debouncedSetQuery(value);
           }}
           className="h-8 border-zinc-800 bg-zinc-900 pl-8 text-sm text-zinc-300 placeholder:text-zinc-600 focus-visible:ring-violet-600/40"
         />
@@ -115,14 +155,14 @@ export default function FacetedFilters({ counts }: FacetedFiltersProps) {
           Severity
         </h3>
         <div className="space-y-0.5">
-          {severityLevels.map((sev) => (
+          {severityLevels.map((severity) => (
             <CheckboxRow
-              key={sev}
-              checked={severities.includes(sev)}
-              onChange={(on) => toggleSeverity(sev, on)}
-              count={counts?.severity[sev]}
+              key={severity}
+              checked={safeSeverities.includes(severity)}
+              onChange={(enabled) => toggleSeverity(severity, enabled)}
+              count={severityCounts[severity]}
             >
-              <SeverityBadge severity={sev} />
+              <SeverityBadge severity={severity} />
             </CheckboxRow>
           ))}
         </div>
@@ -135,14 +175,14 @@ export default function FacetedFilters({ counts }: FacetedFiltersProps) {
           Status
         </h3>
         <div className="space-y-0.5">
-          {statusLevels.map((st) => (
+          {statusLevels.map((status) => (
             <CheckboxRow
-              key={st}
-              checked={statuses.includes(st)}
-              onChange={(on) => toggleStatus(st, on)}
-              count={counts?.status[st]}
+              key={status}
+              checked={safeStatuses.includes(status)}
+              onChange={(enabled) => toggleStatus(status, enabled)}
+              count={statusCounts[status]}
             >
-              <StatusBadge status={st} />
+              <StatusBadge status={status} />
             </CheckboxRow>
           ))}
         </div>
@@ -154,7 +194,7 @@ export default function FacetedFilters({ counts }: FacetedFiltersProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={resetFilters}
+            onClick={handleReset}
             className="w-full text-zinc-400 hover:text-zinc-200"
           >
             <X className="size-3.5" />
@@ -162,6 +202,6 @@ export default function FacetedFilters({ counts }: FacetedFiltersProps) {
           </Button>
         </>
       )}
-    </div>
+    </aside>
   );
 }

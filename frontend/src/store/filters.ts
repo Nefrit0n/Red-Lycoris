@@ -1,20 +1,20 @@
 import { create } from "zustand";
 
+type SortDir = "asc" | "desc";
+
 interface FiltersState {
   severities: number[];
   statuses: number[];
   query: string;
   projectId: string | null;
   sortField: string;
-  sortDir: "asc" | "desc";
-  cursor: string | null;
+  sortDir: SortDir;
 
-  setSeverities: (v: number[]) => void;
-  setStatuses: (v: number[]) => void;
-  setQuery: (v: string) => void;
-  setProject: (v: string | null) => void;
-  setSort: (field: string, dir: "asc" | "desc") => void;
-  nextPage: (cursor: string) => void;
+  setSeverities: (values: number[]) => void;
+  setStatuses: (values: number[]) => void;
+  setQuery: (value: string) => void;
+  setProjectId: (value: string | null) => void;
+  setSort: (field: string, dir: SortDir) => void;
   resetFilters: () => void;
 }
 
@@ -24,18 +24,37 @@ const initialState = {
   query: "",
   projectId: null as string | null,
   sortField: "priority_score",
-  sortDir: "desc" as const,
-  cursor: null as string | null,
+  sortDir: "desc" as SortDir,
 };
 
 export const useFiltersStore = create<FiltersState>((set) => ({
   ...initialState,
 
-  setSeverities: (severities) => set({ severities, cursor: null }),
-  setStatuses: (statuses) => set({ statuses, cursor: null }),
-  setQuery: (query) => set({ query, cursor: null }),
-  setProject: (projectId) => set({ projectId, cursor: null }),
-  setSort: (sortField, sortDir) => set({ sortField, sortDir, cursor: null }),
-  nextPage: (cursor) => set({ cursor }),
+  setSeverities: (severities) =>
+    set({
+      severities: Array.isArray(severities) ? severities : [],
+    }),
+
+  setStatuses: (statuses) =>
+    set({
+      statuses: Array.isArray(statuses) ? statuses : [],
+    }),
+
+  setQuery: (query) =>
+    set({
+      query: typeof query === "string" ? query : "",
+    }),
+
+  setProjectId: (projectId) =>
+    set({
+      projectId: projectId ?? null,
+    }),
+
+  setSort: (sortField, sortDir) =>
+    set({
+      sortField: sortField || "priority_score",
+      sortDir: sortDir === "asc" ? "asc" : "desc",
+    }),
+
   resetFilters: () => set(initialState),
 }));

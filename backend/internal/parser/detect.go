@@ -12,6 +12,7 @@ var parsers = []struct {
 	parser Parser
 }{
 	{"sarif", &SARIFParser{}},
+	{"trivy", &TrivyParser{}},
 	{"generic", &GenericParser{}},
 }
 

@@ -1,10 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/api/client";
-import type {
-  FindingEnrichment,
-  FindingScore,
-  EnrichmentStatusResponse,
-} from "@/types";
+import type { FindingEnrichment, FindingScore } from "@/types";
+
+export interface EnrichmentSyncStatus {
+  source: string;
+  last_sync_at: string | null;
+  records_count: number;
+  status: "running" | "success" | "error" | string;
+  error_message?: string;
+  duration_seconds: number;
+}
+
+export interface EnrichmentStatusResponse {
+  data: EnrichmentSyncStatus[];
+}
 
 export function useFindingEnrichments(findingId: string) {
   return useQuery({

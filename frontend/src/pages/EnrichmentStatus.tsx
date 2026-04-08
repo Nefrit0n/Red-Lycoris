@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import {
   Database,
   RefreshCw,
@@ -19,25 +20,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEnrichmentStatus, useTriggerSync } from "@/api/enrichment";
+import {
+  useEnrichmentStatus,
+  useTriggerSync,
+  type EnrichmentSyncStatus,
+} from "@/api/enrichment";
 import { cn } from "@/lib/utils";
 
 interface SourceMeta {
   key: string;
   label: string;
   description: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   color: string;
 }
 
-interface SyncStatus {
-  source: string;
-  last_sync_at: string | null;
-  records_count: number;
-  status: "running" | "success" | "error" | string;
-  error_message?: string;
-  duration_seconds: number;
-}
+type SyncStatus = EnrichmentSyncStatus;
 
 const SOURCE_META: SourceMeta[] = [
   {
@@ -137,6 +135,7 @@ function formatDurationSeconds(seconds: number): string {
 function formatCount(n: number): string {
   return new Intl.NumberFormat("ru-RU").format(n);
 }
+
 
 function SourceCard({
   meta,
@@ -244,85 +243,208 @@ function SourceCard({
   );
 }
 
-function SummaryCard({
-  statuses,
+function CompactStat({
+  icon: Icon,
+  label,
+  value,
+  tone = "zinc",
 }: {
-  statuses: SyncStatus[];
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string | number;
+  tone?: "zinc" | "emerald" | "blue" | "red";
 }) {
-  const pct = total > 0 ? (count / total) * 100 : 0;
+  const toneMap = {
+    zinc: {
+      wrap: "border-zinc-800 bg-zinc-950/60",
+      icon: "text-zinc-400",
+      label: "text-zinc-500",
+      value: "text-zinc-100",
+    },
+    emerald: {
+      wrap: "border-emerald-900/40 bg-emerald-950/20",
+      icon: "text-emerald-400",
+      label: "text-emerald-400/80",
+      value: "text-emerald-300",
+    },
+    blue: {
+      wrap: "border-blue-900/40 bg-blue-950/20",
+      icon: "text-blue-400",
+      label: "text-blue-400/80",
+      value: "text-blue-300",
+    },
+    red: {
+      wrap: "border-red-900/40 bg-red-950/20",
+      icon: "text-red-400",
+      label: "text-red-400/80",
+      value: "text-red-300",
+    },
+  };
+
+  const styles = toneMap[tone];
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-zinc-400">{label}</span>
-        <span className="font-mono text-zinc-300">
-          {pct.toFixed(1)}%{" "}
-          <span className="text-zinc-500">
-            ({formatCount(count)} / {formatCount(total)})
-          </span>
-        </span>
+    <div className={cn("rounded-lg border p-3", styles.wrap)}>
+      <div className="flex items-center gap-2">
+        <Icon className={cn("size-4", styles.icon)} />
+        <span className={cn("text-[11px]", styles.label)}>{label}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={cn("h-full rounded-full transition-all", color)}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
+      <div className={cn("mt-2 text-xl font-semibold leading-none", styles.value)}>
+        {value}
       </div>
     </div>
   );
 }
 
-function CoverageSection({ coverage }: { coverage: EnrichmentCoverageStats }) {
-  const items = [
-    { label: "NVD", count: coverage.nvd, color: "bg-blue-500" },
-    { label: "EPSS", count: coverage.epss, color: "bg-violet-500" },
-    { label: "KEV", count: coverage.kev, color: "bg-red-500" },
-    { label: "БДУ", count: coverage.bdu, color: "bg-amber-500" },
-    { label: "OSV", count: coverage.osv, color: "bg-emerald-500" },
-    { label: "CWE", count: coverage.cwe, color: "bg-cyan-500" },
-    { label: "CPE", count: coverage.cpe, color: "bg-pink-500" },
-  ];
+function SummaryCard({ statuses }: { statuses: SyncStatus[] }) {
+  const trackedStatuses = SOURCE_META.map((meta) =>
+    statuses.find((status) => status.source === meta.key),
+  ).filter((status): status is SyncStatus => Boolean(status));
+
+  const totalSources = SOURCE_META.length;
+  const totalRecords = trackedStatuses.reduce(
+    (sum, status) => sum + status.records_count,
+    0,
+  );
+  const successCount = trackedStatuses.filter(
+    (status) => status.status === "success",
+  ).length;
+  const runningCount = trackedStatuses.filter(
+    (status) => status.status === "running",
+  ).length;
+  const errorCount = trackedStatuses.filter(
+    (status) => status.status === "error",
+  ).length;
+  const pendingCount = Math.max(totalSources - trackedStatuses.length, 0);
+
+  const latestSyncAt = trackedStatuses
+    .filter((status) => Boolean(status.last_sync_at))
+    .map((status) => new Date(status.last_sync_at as string).getTime())
+    .sort((a, b) => b - a)[0];
+
+  const successPct = totalSources > 0 ? (successCount / totalSources) * 100 : 0;
+  const runningPct = totalSources > 0 ? (runningCount / totalSources) * 100 : 0;
+  const errorPct = totalSources > 0 ? (errorCount / totalSources) * 100 : 0;
+  const pendingPct = Math.max(100 - successPct - runningPct - errorPct, 0);
 
   return (
-    <Card className="border-zinc-800 bg-zinc-900/50">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-          <Database className="size-4 text-violet-400" />
-          Покрытие обогащения
-        </CardTitle>
-        <p className="text-xs text-zinc-500">
-          Текущее состояние синхронизации enrichment-источников
-        </p>
+    <Card className="border-zinc-800 bg-zinc-900/40">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
+              <Database className="size-4 text-violet-400" />
+              Сводка по enrichment
+            </CardTitle>
+            <p className="mt-1 text-xs text-zinc-500">
+              Короткий статус по источникам и синхронизации
+            </p>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2 text-xs text-zinc-500">
+            <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1">
+              Источников: {totalSources}
+            </span>
+            <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1">
+              В БД: {trackedStatuses.length}
+            </span>
+          </div>
+        </div>
       </CardHeader>
 
-      <CardContent>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
-            <div className="text-xs text-zinc-500">Всего записей</div>
-            <div className="mt-1 text-2xl font-semibold text-zinc-100">
-              {formatCount(totalRecords)}
-            </div>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <CompactStat
+            icon={Database}
+            label="Всего записей"
+            value={formatCount(totalRecords)}
+            tone="zinc"
+          />
+          <CompactStat
+            icon={CheckCircle2}
+            label="Успешно"
+            value={successCount}
+            tone="emerald"
+          />
+          <CompactStat
+            icon={Loader2}
+            label="В работе"
+            value={runningCount}
+            tone="blue"
+          />
+          <CompactStat
+            icon={XCircle}
+            label="Ошибки"
+            value={errorCount}
+            tone="red"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[11px] text-zinc-500">
+            <span>Распределение статусов</span>
+            <span>
+              pending: {pendingCount} / {totalSources}
+            </span>
           </div>
 
-          <div className="rounded-lg border border-emerald-900/40 bg-emerald-950/20 p-4">
-            <div className="text-xs text-emerald-400/80">Успешных источников</div>
-            <div className="mt-1 text-2xl font-semibold text-emerald-400">
-              {successCount}
-            </div>
+          <div className="flex h-2 overflow-hidden rounded-full bg-zinc-800">
+            {successPct > 0 && (
+              <div
+                className="bg-emerald-500"
+                style={{ width: `${successPct}%` }}
+                title={`Успешно: ${successCount}`}
+              />
+            )}
+            {runningPct > 0 && (
+              <div
+                className="bg-blue-500"
+                style={{ width: `${runningPct}%` }}
+                title={`В работе: ${runningCount}`}
+              />
+            )}
+            {errorPct > 0 && (
+              <div
+                className="bg-red-500"
+                style={{ width: `${errorPct}%` }}
+                title={`Ошибки: ${errorCount}`}
+              />
+            )}
+            {pendingPct > 0 && (
+              <div
+                className="bg-zinc-600"
+                style={{ width: `${pendingPct}%` }}
+                title={`Ожидают: ${pendingCount}`}
+              />
+            )}
           </div>
 
-          <div className="rounded-lg border border-blue-900/40 bg-blue-950/20 p-4">
-            <div className="text-xs text-blue-400/80">Сейчас синхронизируются</div>
-            <div className="mt-1 text-2xl font-semibold text-blue-400">
-              {runningCount}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-red-900/40 bg-red-950/20 p-4">
-            <div className="text-xs text-red-400/80">С ошибками</div>
-            <div className="mt-1 text-2xl font-semibold text-red-400">
-              {errorCount}
-            </div>
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-900/40 bg-emerald-950/20 px-2.5 py-1 text-emerald-300">
+              <CheckCircle2 className="size-3" />
+              Успешно: {successCount}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-blue-900/40 bg-blue-950/20 px-2.5 py-1 text-blue-300">
+              <Loader2 className="size-3" />
+              В работе: {runningCount}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-red-900/40 bg-red-950/20 px-2.5 py-1 text-red-300">
+              <XCircle className="size-3" />
+              Ошибки: {errorCount}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-zinc-400">
+              <Clock className="size-3" />
+              Ожидают: {pendingCount}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-zinc-400">
+              Последняя активность:{" "}
+              {latestSyncAt
+                ? formatDistanceToNow(new Date(latestSyncAt), {
+                    addSuffix: true,
+                    locale: ru,
+                  })
+                : "—"}
+            </span>
           </div>
         </div>
       </CardContent>
@@ -334,7 +456,7 @@ function LoadingSkeleton() {
   return (
     <div className="space-y-6">
       <Skeleton className="h-8 w-64 bg-zinc-800/50" />
-      <Skeleton className="h-40 bg-zinc-800/50" />
+      <Skeleton className="h-56 bg-zinc-800/50" />
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 7 }).map((_, i) => (
           <Skeleton key={i} className="h-56 bg-zinc-800/50" />
@@ -351,7 +473,7 @@ export default function EnrichmentStatus() {
   if (isLoading) return <LoadingSkeleton />;
 
   const sources: SyncStatus[] = data?.data ?? [];
-  const sourceMap = new Map(sources.map((s) => [s.source, s]));
+  const sourceMap = new Map(sources.map((status) => [status.source, status]));
 
   return (
     <div className="space-y-6">

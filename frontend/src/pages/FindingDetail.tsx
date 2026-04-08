@@ -1,5 +1,5 @@
-import { useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, type ComponentType, type ReactNode } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Clock,
@@ -9,8 +9,10 @@ import {
   Scan,
   ExternalLink,
   ChevronDown,
+  Loader2,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, isValid } from "date-fns";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -46,21 +48,52 @@ const statusOptions = [
   { value: 4, label: "Risk Accepted" },
 ];
 
+function formatAbsoluteDate(date: string) {
+  const parsed = new Date(date);
+  if (!isValid(parsed)) return "—";
+  return format(parsed, "PPp");
+}
+
+function formatRelativeDate(date: string) {
+  const parsed = new Date(date);
+  if (!isValid(parsed)) return "—";
+  return formatDistanceToNow(parsed, { addSuffix: true });
+}
+
+function normalizeCweId(raw: string | number) {
+  const value = String(raw).trim().toUpperCase();
+  return value.startsWith("CWE-") ? value.slice(4) : value;
+}
+
 function DetailRow({
   icon: Icon,
   label,
   children,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="flex items-start gap-3">
       <Icon className="mt-0.5 size-4 shrink-0 text-zinc-500" />
-      <div>
+      <div className="min-w-0">
         <div className="text-xs text-zinc-500">{label}</div>
         <div className="mt-0.5 text-sm text-zinc-200">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function TimelineItem({ label, date }: { label: string; date: string }) {
+  return (
+    <div className="relative flex items-start gap-3">
+      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-violet-600 bg-zinc-900" />
+      <div>
+        <div className="text-sm text-zinc-300">{label}</div>
+        <div className="mt-0.5 text-xs text-zinc-500">
+          {formatAbsoluteDate(date)} &middot; {formatRelativeDate(date)}
+        </div>
       </div>
     </div>
   );
@@ -69,7 +102,7 @@ function DetailRow({
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-8 w-96 bg-zinc-800/50" />
+      <Skeleton className="h-8 w-full max-w-3xl bg-zinc-800/50" />
       <div className="flex gap-4">
         <Skeleton className="h-6 w-20 bg-zinc-800/50" />
         <Skeleton className="h-6 w-24 bg-zinc-800/50" />
@@ -82,24 +115,51 @@ function LoadingSkeleton() {
 export default function FindingDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data, isLoading } = useFinding(id ?? "");
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+  } = useFinding(id ?? "");
+
   const { data: scoreData } = useFindingScore(id ?? "");
   const updateStatus = useUpdateStatus();
 
-  const finding = data?.data;
-  const score = scoreData?.data;
+  const finding = data?.data.finding;
+  const enrichments = data?.data.enrichments ?? [];
+  const score = scoreData?.data ?? data?.data.score;
 
-  const goBack = useCallback(() => navigate("/findings"), [navigate]);
+  const cveIds = finding?.cve_ids ?? [];
+  const cweIds = finding?.cwe_ids ?? [];
+
+  const goBack = useCallback(() => {
+    navigate("/findings");
+  }, [navigate]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") goBack();
+      if (e.key === "Escape") {
+        goBack();
+      }
     }
+
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [goBack]);
 
-  if (isLoading || !finding) {
+  const handleStatusChange = useCallback(
+    (status: number) => {
+      if (!finding || updateStatus.isPending || finding.status === status) {
+        return;
+      }
+
+      updateStatus.mutate({ id: finding.id, status });
+    },
+    [finding, updateStatus],
+  );
+
+  if (isLoading) {
     return (
       <div>
         <Button
@@ -116,13 +176,66 @@ export default function FindingDetail() {
     );
   }
 
-  const handleStatusChange = (status: number) => {
-    updateStatus.mutate({ id: finding.id, status });
-  };
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={goBack}
+          className="mb-4 text-zinc-400 hover:text-zinc-200"
+        >
+          <ArrowLeft className="size-4" />
+          Back to findings
+        </Button>
+
+        <Card className="border-zinc-800 bg-zinc-900/50">
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="text-base font-medium text-zinc-100">
+                Failed to load finding
+              </div>
+              <div className="text-sm text-zinc-400">
+                {error instanceof Error ? error.message : "Unknown error"}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!finding) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={goBack}
+          className="mb-4 text-zinc-400 hover:text-zinc-200"
+        >
+          <ArrowLeft className="size-4" />
+          Back to findings
+        </Button>
+
+        <Card className="border-zinc-800 bg-zinc-900/50">
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="text-base font-medium text-zinc-100">
+                Finding not found
+              </div>
+              <div className="text-sm text-zinc-400">
+                The requested finding does not exist or is no longer available.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl">
-      {/* Back button */}
       <Button
         variant="ghost"
         size="sm"
@@ -133,7 +246,6 @@ export default function FindingDetail() {
         Back to findings
       </Button>
 
-      {/* Header */}
       <div className="mb-6 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <SeverityBadge severity={finding.severity} />
@@ -143,20 +255,28 @@ export default function FindingDetail() {
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          {/* Status dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <button className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border-none bg-transparent p-0 text-sm">
-                  <StatusBadge status={finding.status} />
-                  <ChevronDown className="size-3.5 text-zinc-500" />
-                </button>
-              }
-            />
-            <DropdownMenuContent className="border-zinc-700 bg-zinc-900">
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={updateStatus.isPending}
+                className="h-auto px-0 py-0 text-sm hover:bg-transparent"
+              >
+                {updateStatus.isPending ? (
+                  <Loader2 className="mr-1 size-3.5 animate-spin text-zinc-500" />
+                ) : null}
+                <StatusBadge status={finding.status} />
+                <ChevronDown className="size-3.5 text-zinc-500" />
+              </Button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="start" className="border-zinc-700 bg-zinc-900">
               {statusOptions.map((opt) => (
                 <DropdownMenuItem
                   key={opt.value}
+                  disabled={updateStatus.isPending || opt.value === finding.status}
                   onClick={() => handleStatusChange(opt.value)}
                   className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
                 >
@@ -169,9 +289,8 @@ export default function FindingDetail() {
           <span className="font-mono text-xs text-zinc-600">{finding.id}</span>
         </div>
 
-        {/* Priority score */}
         {(finding.priority_score != null || score) && (
-          <div className="w-72">
+          <div className="w-full max-w-72">
             <PriorityScore
               score={finding.priority_score ?? score?.priority_score ?? 0}
               breakdown={score}
@@ -181,7 +300,6 @@ export default function FindingDetail() {
         )}
       </div>
 
-      {/* Tabs */}
       <Tabs defaultValue="overview">
         <TabsList variant="line" className="mb-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -190,7 +308,6 @@ export default function FindingDetail() {
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
-        {/* Overview */}
         <TabsContent value="overview">
           <div className="space-y-4">
             {finding.description && (
@@ -212,10 +329,13 @@ export default function FindingDetail() {
               <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
                 {finding.file_path && (
                   <DetailRow icon={FileCode} label="Location">
-                    <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs">
+                    <code className="break-all rounded bg-zinc-800 px-1.5 py-0.5 text-xs">
                       {finding.file_path}
                       {finding.line_start
-                        ? `:${finding.line_start}${finding.line_end && finding.line_end !== finding.line_start ? `-${finding.line_end}` : ""}`
+                        ? `:${finding.line_start}${finding.line_end && finding.line_end !== finding.line_start
+                          ? `-${finding.line_end}`
+                          : ""
+                        }`
                         : ""}
                     </code>
                   </DetailRow>
@@ -223,12 +343,14 @@ export default function FindingDetail() {
 
                 {finding.component && (
                   <DetailRow icon={Package} label="Component">
-                    {finding.component}
-                    {finding.component_version && (
-                      <span className="ml-1 text-zinc-500">
-                        v{finding.component_version}
-                      </span>
-                    )}
+                    <span className="break-all">
+                      {finding.component}
+                      {finding.component_version && (
+                        <span className="ml-1 text-zinc-500">
+                          v{finding.component_version}
+                        </span>
+                      )}
+                    </span>
                   </DetailRow>
                 )}
 
@@ -241,24 +363,16 @@ export default function FindingDetail() {
                 </DetailRow>
 
                 <DetailRow icon={Clock} label="First Seen">
-                  {format(new Date(finding.first_seen), "PPp")}
+                  {formatAbsoluteDate(finding.first_seen)}
                   <span className="ml-1 text-zinc-500">
-                    (
-                    {formatDistanceToNow(new Date(finding.first_seen), {
-                      addSuffix: true,
-                    })}
-                    )
+                    ({formatRelativeDate(finding.first_seen)})
                   </span>
                 </DetailRow>
 
                 <DetailRow icon={Clock} label="Last Seen">
-                  {format(new Date(finding.last_seen), "PPp")}
+                  {formatAbsoluteDate(finding.last_seen)}
                   <span className="ml-1 text-zinc-500">
-                    (
-                    {formatDistanceToNow(new Date(finding.last_seen), {
-                      addSuffix: true,
-                    })}
-                    )
+                    ({formatRelativeDate(finding.last_seen)})
                   </span>
                 </DetailRow>
               </CardContent>
@@ -266,7 +380,6 @@ export default function FindingDetail() {
           </div>
         </TabsContent>
 
-        {/* Identifiers */}
         <TabsContent value="identifiers">
           <div className="space-y-4">
             <Card className="border-zinc-800 bg-zinc-900/50">
@@ -274,9 +387,9 @@ export default function FindingDetail() {
                 <CardTitle className="text-sm text-zinc-400">CVE IDs</CardTitle>
               </CardHeader>
               <CardContent>
-                {finding.cve_ids.length > 0 ? (
+                {cveIds.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
-                    {finding.cve_ids.map((cve) => (
+                    {cveIds.map((cve) => (
                       <a
                         key={cve}
                         href={`https://nvd.nist.gov/vuln/detail/${cve}`}
@@ -300,20 +413,24 @@ export default function FindingDetail() {
                 <CardTitle className="text-sm text-zinc-400">CWE IDs</CardTitle>
               </CardHeader>
               <CardContent>
-                {finding.cwe_ids.length > 0 ? (
+                {cweIds.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
-                    {finding.cwe_ids.map((cwe) => (
-                      <a
-                        key={cwe}
-                        href={`https://cwe.mitre.org/data/definitions/${cwe}.html`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 font-mono text-xs text-blue-400 transition-colors hover:bg-zinc-700 hover:text-blue-300"
-                      >
-                        CWE-{cwe}
-                        <ExternalLink className="size-3" />
-                      </a>
-                    ))}
+                    {cweIds.map((rawCwe) => {
+                      const cwe = normalizeCweId(rawCwe);
+
+                      return (
+                        <a
+                          key={String(rawCwe)}
+                          href={`https://cwe.mitre.org/data/definitions/${cwe}.html`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-1 font-mono text-xs text-blue-400 transition-colors hover:bg-zinc-700 hover:text-blue-300"
+                        >
+                          CWE-{cwe}
+                          <ExternalLink className="size-3" />
+                        </a>
+                      );
+                    })}
                   </div>
                 ) : (
                   <span className="text-sm text-zinc-600">No CWE IDs</span>
@@ -324,12 +441,10 @@ export default function FindingDetail() {
             {finding.cpe_uri && (
               <Card className="border-zinc-800 bg-zinc-900/50">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-zinc-400">
-                    CPE URI
-                  </CardTitle>
+                  <CardTitle className="text-sm text-zinc-400">CPE URI</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <code className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
+                  <code className="block break-all rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
                     {finding.cpe_uri}
                   </code>
                 </CardContent>
@@ -338,20 +453,16 @@ export default function FindingDetail() {
           </div>
         </TabsContent>
 
-        {/* Enrichment */}
         <TabsContent value="enrichment">
           <EnrichmentTabs findingId={finding.id} />
         </TabsContent>
 
-        {/* History */}
         <TabsContent value="history">
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-6">
               <div className="relative space-y-6 pl-6 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-zinc-800">
-                <TimelineItem
-                  label="First detected"
-                  date={finding.first_seen}
-                />
+                <TimelineItem label="First detected" date={finding.first_seen} />
+
                 {finding.times_seen > 1 && (
                   <div className="relative flex items-start gap-3">
                     <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-zinc-700 bg-zinc-900" />
@@ -366,30 +477,13 @@ export default function FindingDetail() {
                     </div>
                   </div>
                 )}
-                <TimelineItem
-                  label="Last seen"
-                  date={finding.last_seen}
-                />
+
+                <TimelineItem label="Last seen" date={finding.last_seen} />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-function TimelineItem({ label, date }: { label: string; date: string }) {
-  return (
-    <div className="relative flex items-start gap-3">
-      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-violet-600 bg-zinc-900" />
-      <div>
-        <div className="text-sm text-zinc-300">{label}</div>
-        <div className="mt-0.5 text-xs text-zinc-500">
-          {format(new Date(date), "PPp")} &middot;{" "}
-          {formatDistanceToNow(new Date(date), { addSuffix: true })}
-        </div>
-      </div>
     </div>
   );
 }

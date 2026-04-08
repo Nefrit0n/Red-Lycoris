@@ -61,7 +61,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
-		// Projects
+
+		// ───────────────────── Projects ─────────────────────
 		r.Route("/projects", func(r chi.Router) {
 			r.Get("/", handleListProjects(projectsRepo))
 			r.Post("/", handleCreateProject(projectsRepo))
@@ -72,26 +73,36 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			})
 		})
 
-		// Findings
+		// ───────────────────── Findings ─────────────────────
 		r.Route("/findings", func(r chi.Router) {
 			r.Get("/", handleListFindings(findingsRepo))
-			r.Get("/{id}", handleGetFinding(findingsRepo, pool))
-			r.Patch("/{id}/status", handleUpdateStatus(findingsRepo))
-			r.Post("/{id}/enrich", handleEnrichFinding(pool, rdb))
+
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", handleGetFinding(findingsRepo, pool))
+
+				// 🔥 ВАЖНО — то, чего не хватало
+				r.Get("/enrichments", handleGetFindingEnrichments(pool))
+				r.Get("/score", handleGetFindingScore(pool))
+
+				r.Patch("/status", handleUpdateStatus(findingsRepo))
+				r.Post("/enrich", handleEnrichFinding(pool, rdb))
+				r.Delete("/", handleDeleteFinding(findingsRepo))
+			})
+
 			r.Patch("/bulk/status", handleBulkUpdateStatus(findingsRepo))
-			r.Delete("/{id}", handleDeleteFinding(findingsRepo))
 		})
 
-		// Dashboard
+		// ───────────────────── Dashboard ─────────────────────
 		r.Get("/dashboard/stats", handleDashboardStats(dashboardRepo, rdb))
 
-		// Import
+		// ───────────────────── Import ─────────────────────
 		r.Post("/import", handleImport(findingsRepo, rdb))
 
-		// Enrichment
+		// ───────────────────── Enrichment system ─────────────────────
 		r.Route("/enrichment", func(r chi.Router) {
 			r.Get("/status", handleEnrichmentStatus(pool, rdb))
 			r.Post("/enrich-all", handleEnrichAll(pool))
+
 			if cfg.scheduler != nil {
 				r.Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
 			}
