@@ -13,7 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,24 +23,22 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useFindingEnrichments, useTriggerSync } from "@/api/enrichment";
-import type { FindingEnrichment } from "@/types";
 import { cn } from "@/lib/utils";
-
-function bySource(
-  enrichments: FindingEnrichment[],
-  source: string,
-): FindingEnrichment | undefined {
-  return enrichments.find((e) => e.source === source);
-}
 
 /* ── NVD ────────────────────────────────────────────────── */
 
 interface NvdData {
+  cve_id?: string;
   cvss_v3_vector?: string;
   cvss_v3_score?: number;
+  cvss_v31_vector?: string;
+  cvss_v31_score?: number;
+  cvss_v40_vector?: string;
+  cvss_v40_score?: number;
   cvss_v2_score?: number;
   description?: string;
   published?: string;
+  published_at?: string;
   references?: { url: string; source: string }[];
 }
 
@@ -104,30 +102,34 @@ function CvssGauge({ score }: { score: number }) {
 }
 
 function NvdSection({ data }: { data: NvdData }) {
+  const cvssV3Score = data.cvss_v3_score ?? data.cvss_v31_score;
+  const cvssV3Vector = data.cvss_v3_vector ?? data.cvss_v31_vector;
+  const published = data.published ?? data.published_at;
+
   return (
     <div className="space-y-4">
-      {data.cvss_v3_score != null && (
+      {cvssV3Score != null && (
         <div className="flex items-start gap-6">
-          <CvssGauge score={data.cvss_v3_score} />
+          <CvssGauge score={cvssV3Score} />
           <div className="flex-1 space-y-2">
-            {data.cvss_v3_vector && (
+            {cvssV3Vector && (
               <div>
                 <span className="text-xs text-zinc-500">Vector String</span>
                 <code className="mt-0.5 block rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
-                  {data.cvss_v3_vector}
+                  {cvssV3Vector}
                 </code>
               </div>
             )}
-            {data.published && (
+            {published && (
               <div>
                 <span className="text-xs text-zinc-500">Опубликовано</span>
-                <p className="text-sm text-zinc-300">{data.published}</p>
+                <p className="text-sm text-zinc-300">{published}</p>
               </div>
             )}
           </div>
         </div>
       )}
-      {data.cvss_v2_score != null && !data.cvss_v3_score && (
+      {data.cvss_v2_score != null && cvssV3Score == null && (
         <div className="flex items-center gap-3">
           <span className="text-zinc-400">CVSS v2</span>
           <span className="font-mono font-bold text-yellow-400">
@@ -170,7 +172,9 @@ function NvdSection({ data }: { data: NvdData }) {
 /* ── EPSS ───────────────────────────────────────────────── */
 
 interface EpssData {
+  cve_id?: string;
   score?: number;
+  epss_score?: number;
   percentile?: number;
   date?: string;
 }
@@ -204,7 +208,8 @@ function EpssGauge({ value, label }: { value: number; label: string }) {
 }
 
 function EpssSection({ data }: { data: EpssData }) {
-  const scorePct = (data.score ?? 0) * 100;
+  const score = data.score ?? data.epss_score ?? 0;
+  const scorePct = score * 100;
   const percentile = (data.percentile ?? 0) * 100;
 
   return (
@@ -245,14 +250,19 @@ function EpssSection({ data }: { data: EpssData }) {
 /* ── KEV ────────────────────────────────────────────────── */
 
 interface KevData {
+  cve_id?: string;
   date_added?: string;
   due_date?: string;
+  known_ransomware?: boolean;
   known_ransomware_campaign_use?: string;
   notes?: string;
   vulnerability_name?: string;
 }
 
 function KevSection({ data }: { data: KevData }) {
+  const isKnownRansomware =
+    data.known_ransomware_campaign_use === "Known" || data.known_ransomware;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 rounded-lg border border-red-800/50 bg-red-950/30 px-4 py-3">
@@ -286,7 +296,7 @@ function KevSection({ data }: { data: KevData }) {
         )}
       </div>
 
-      {data.known_ransomware_campaign_use === "Known" && (
+      {isKnownRansomware && (
         <Badge variant="destructive" className="gap-1">
           <AlertTriangle className="size-3" />
           Используется в ransomware-кампаниях
@@ -308,6 +318,7 @@ function KevSection({ data }: { data: KevData }) {
 /* ── БДУ ────────────────────────────────────────────────── */
 
 interface BduData {
+  bdu_id?: string;
   identifier?: string;
   name?: string;
   description?: string;
@@ -316,6 +327,8 @@ interface BduData {
 }
 
 function BduSection({ data }: { data: BduData }) {
+  const identifier = data.identifier ?? data.bdu_id;
+
   const severityColor =
     data.severity === "Критический"
       ? "text-red-400 border-red-800 bg-red-950/30"
@@ -328,9 +341,9 @@ function BduSection({ data }: { data: BduData }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        {data.identifier && (
+        {identifier && (
           <Badge className="border-amber-800 bg-amber-950/50 font-mono text-amber-400">
-            {data.identifier}
+            {identifier}
           </Badge>
         )}
         {data.severity && (
@@ -370,7 +383,9 @@ function BduSection({ data }: { data: BduData }) {
 
 interface OsvData {
   id?: string;
+  osv_id?: string;
   summary?: string;
+  aliases?: string[];
   affected?: {
     package?: { name?: string; ecosystem?: string };
     ranges?: {
@@ -380,16 +395,18 @@ interface OsvData {
 }
 
 function OsvSection({ data }: { data: OsvData }) {
+  const osvId = data.id ?? data.osv_id;
+
   return (
     <div className="space-y-4">
-      {data.id && (
+      {osvId && (
         <a
-          href={`https://osv.dev/vulnerability/${data.id}`}
+          href={`https://osv.dev/vulnerability/${osvId}`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 font-mono text-sm text-violet-400 hover:underline"
         >
-          {data.id}
+          {osvId}
           <ExternalLink className="size-3" />
         </a>
       )}
@@ -454,6 +471,7 @@ function OsvSection({ data }: { data: OsvData }) {
 
 interface CweData {
   id?: number;
+  cwe_id?: number;
   name?: string;
   description?: string;
   extended_description?: string;
@@ -488,16 +506,18 @@ function Collapsible({
 }
 
 function CweSection({ data }: { data: CweData }) {
+  const cweId = data.id ?? data.cwe_id;
+
   return (
     <div className="space-y-4">
-      {data.id && (
+      {cweId && (
         <a
-          href={`https://cwe.mitre.org/data/definitions/${data.id}.html`}
+          href={`https://cwe.mitre.org/data/definitions/${cweId}.html`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 font-mono text-sm text-blue-400 hover:underline"
         >
-          CWE-{data.id}
+          CWE-{cweId}
           <ExternalLink className="size-3" />
         </a>
       )}
@@ -550,15 +570,33 @@ function EnrichmentSkeleton() {
   );
 }
 
+function getEnrichmentData<T extends object>(
+  raw: unknown,
+): T | undefined {
+  if (!raw) return undefined;
+  if (Array.isArray(raw)) {
+    const first = raw[0];
+    if (first && typeof first === "object") {
+      return first as T;
+    }
+    return undefined;
+  }
+
+  if (typeof raw === "object") {
+    return raw as T;
+  }
+
+  return undefined;
+}
+
 function EmptyState({
   label,
-  findingId,
+  source,
 }: {
   label: string;
-  findingId: string;
+  source: string;
 }) {
   const triggerSync = useTriggerSync();
-  const sourceKey = label.toLowerCase();
 
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-zinc-800 py-8 text-sm text-zinc-600">
@@ -566,7 +604,7 @@ function EmptyState({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => triggerSync.mutate(sourceKey)}
+        onClick={() => triggerSync.mutate(source)}
         disabled={triggerSync.isPending}
         className="border-zinc-700 text-zinc-400 hover:text-zinc-200"
       >
@@ -634,86 +672,98 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
       </TabsList>
 
       <TabsContent value="nvd">
-        {enrichmentMap.has("nvd") ? (
+        {getEnrichmentData<NvdData>(enrichmentMap.get("nvd")?.data) ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <NvdSection
-                data={enrichmentMap.get("nvd")!.data as NvdData}
+                data={
+                  getEnrichmentData<NvdData>(enrichmentMap.get("nvd")?.data)!
+                }
               />
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="NVD" findingId={findingId} />
+          <EmptyState label="NVD" source="nvd" />
         )}
       </TabsContent>
 
       <TabsContent value="epss">
-        {enrichmentMap.has("epss") ? (
+        {getEnrichmentData<EpssData>(enrichmentMap.get("epss")?.data) ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <EpssSection
-                data={enrichmentMap.get("epss")!.data as EpssData}
+                data={
+                  getEnrichmentData<EpssData>(enrichmentMap.get("epss")?.data)!
+                }
               />
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="EPSS" findingId={findingId} />
+          <EmptyState label="EPSS" source="epss" />
         )}
       </TabsContent>
 
       <TabsContent value="kev">
-        {enrichmentMap.has("kev") ? (
+        {getEnrichmentData<KevData>(enrichmentMap.get("kev")?.data) ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <KevSection
-                data={enrichmentMap.get("kev")!.data as KevData}
+                data={
+                  getEnrichmentData<KevData>(enrichmentMap.get("kev")?.data)!
+                }
               />
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="KEV" findingId={findingId} />
+          <EmptyState label="KEV" source="kev" />
         )}
       </TabsContent>
 
       <TabsContent value="bdu">
-        {enrichmentMap.has("bdu") ? (
+        {getEnrichmentData<BduData>(enrichmentMap.get("bdu")?.data) ? (
           <Card className="border-amber-800/40 bg-amber-950/10">
             <CardContent className="pt-5">
               <BduSection
-                data={enrichmentMap.get("bdu")!.data as BduData}
+                data={
+                  getEnrichmentData<BduData>(enrichmentMap.get("bdu")?.data)!
+                }
               />
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="БДУ" findingId={findingId} />
+          <EmptyState label="БДУ" source="bdu" />
         )}
       </TabsContent>
 
       <TabsContent value="osv">
-        {enrichmentMap.has("osv") ? (
+        {getEnrichmentData<OsvData>(enrichmentMap.get("osv")?.data) ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <OsvSection
-                data={enrichmentMap.get("osv")!.data as OsvData}
+                data={
+                  getEnrichmentData<OsvData>(enrichmentMap.get("osv")?.data)!
+                }
               />
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="OSV" findingId={findingId} />
+          <EmptyState label="OSV" source="osv" />
         )}
       </TabsContent>
 
       <TabsContent value="cwe">
-        {enrichmentMap.has("cwe") ? (
+        {getEnrichmentData<CweData>(enrichmentMap.get("cwe")?.data) ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <CweSection
-                data={enrichmentMap.get("cwe")!.data as CweData}
+                data={
+                  getEnrichmentData<CweData>(enrichmentMap.get("cwe")?.data)!
+                }
               />
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="CWE" findingId={findingId} />
+          <EmptyState label="CWE" source="cwe" />
         )}
       </TabsContent>
     </Tabs>
