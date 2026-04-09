@@ -7,17 +7,21 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"redlycoris/internal/api"
+	"redlycoris/internal/auth"
 	"redlycoris/internal/config"
+	"redlycoris/internal/domain"
 	"redlycoris/internal/enrichment"
 	"redlycoris/internal/enrichment/bdu"
 	"redlycoris/internal/enrichment/cpe"
@@ -88,11 +92,9 @@ func main() {
 
 	usersRepo := storage.NewUsersRepo(pool)
 	sessionsRepo := storage.NewSessionsRepo(pool)
-	count, err := usersRepo.Count(ctx)
-	if err == nil && count == 0 {
-		slog.Warn("no users found in database",
-			"hint", "create first admin: docker compose exec backend /app/admin create-user --admin --email=you@company --password=...",
-		)
+	if err := ensureBootstrapAdmin(ctx, usersRepo, cfg); err != nil {
+		slog.Error("bootstrap admin ensure failed", "error", err)
+		os.Exit(1)
 	}
 
 	go func() {
@@ -188,4 +190,61 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 	slog.Info("server stopped")
+}
+
+func ensureBootstrapAdmin(ctx context.Context, usersRepo *storage.UsersRepo, cfg *config.Config) error {
+	count, err := usersRepo.Count(ctx)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	email := strings.ToLower(strings.TrimSpace(cfg.BootstrapAdminEmail))
+	password := strings.TrimSpace(cfg.BootstrapAdminPassword)
+	fullName := strings.TrimSpace(cfg.BootstrapAdminFullName)
+	if fullName == "" {
+		fullName = "Administrator"
+	}
+
+	if email == "" || password == "" {
+		slog.Warn("bootstrap admin skipped: empty email or password with empty users table")
+		return nil
+	}
+
+	existing, err := usersRepo.GetByEmail(ctx, email)
+	if err == nil {
+		slog.Info("bootstrap admin already exists, skip create",
+			"email", email,
+			"user_id", existing.ID.String(),
+		)
+		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+
+	passwordHash, err := auth.Hash(password)
+	if err != nil {
+		return err
+	}
+
+	u := &domain.User{
+		Email:        email,
+		PasswordHash: passwordHash,
+		FullName:     fullName,
+		IsActive:     true,
+		GlobalRole:   domain.RoleAdmin,
+	}
+	if err := usersRepo.Create(ctx, u); err != nil {
+		return err
+	}
+
+	slog.Info("bootstrap admin created",
+		"email", email,
+		"user_id", u.ID.String(),
+		"force_password_change", cfg.BootstrapAdminForcePasswordChange,
+	)
+	return nil
 }
