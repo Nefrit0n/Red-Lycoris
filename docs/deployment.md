@@ -26,7 +26,16 @@ docker compose ps
 curl -s http://localhost:8080/health
 ```
 
-После запуска создайте первого администратора (будет добавлено на этапе 3).
+При первом запуске backend автоматически создаёт bootstrap-администратора, если таблица `users` пуста.
+Этот процесс не использует `seed` и не зависит от него.
+Параметры bootstrap-админа задаются через `.env`:
+
+- `BOOTSTRAP_ADMIN_EMAIL` (по умолчанию `admin@localhost`)
+- `BOOTSTRAP_ADMIN_PASSWORD` (по умолчанию `admin`)
+- `BOOTSTRAP_ADMIN_FULL_NAME` (по умолчанию `Administrator`)
+- `BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE` (по умолчанию `true`)
+
+Рекомендуется изменить email/password перед запуском в production.
 
 ## Резервное копирование (PostgreSQL)
 
