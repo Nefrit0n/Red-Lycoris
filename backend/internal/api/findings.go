@@ -10,11 +10,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"redlycoris/internal/domain"
 	"redlycoris/internal/enrichment"
 	"redlycoris/internal/storage"
 )
 
-func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
+func handleListFindings(repo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 
@@ -34,6 +35,21 @@ func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
 			}
 			filter.ProjectID = id
 		}
+		user, _ := UserFromContext(r.Context())
+		var accessible []uuid.UUID
+		if !user.IsAdmin() {
+			projectIDs, err := rolesRepo.ListProjectIDsForUser(r.Context(), user.ID)
+			if err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list findings")
+				return
+			}
+			accessible = projectIDs
+			if len(accessible) == 0 {
+				respondList(w, []domain.Finding{}, 0, "")
+				return
+			}
+		}
+		filter.AccessibleProjectIDs = accessible
 
 		if v := q.Get("severity"); v != "" {
 			for _, s := range strings.Split(v, ",") {
@@ -146,7 +162,7 @@ func handleUpdateStatus(repo *storage.FindingsRepo) http.HandlerFunc {
 	}
 }
 
-func handleBulkUpdateStatus(repo *storage.FindingsRepo) http.HandlerFunc {
+func handleBulkUpdateStatus(repo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
 	type request struct {
 		IDs    []uuid.UUID `json:"ids"`
 		Status int         `json:"status"`
@@ -165,6 +181,35 @@ func handleBulkUpdateStatus(repo *storage.FindingsRepo) http.HandlerFunc {
 		if req.Status < 0 || req.Status > 4 {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "status must be between 0 and 4")
 			return
+		}
+		user, _ := UserFromContext(r.Context())
+		if !user.IsAdmin() {
+			projectIDs, err := repo.ListDistinctProjectIDs(r.Context(), req.IDs)
+			if err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check permissions")
+				return
+			}
+
+			forbiddenProjects := make([]uuid.UUID, 0)
+			for _, projectID := range projectIDs {
+				role, has, err := rolesRepo.GetRole(r.Context(), user.ID, projectID)
+				if err != nil {
+					respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check permissions")
+					return
+				}
+				if !has || role < domain.RoleTriager {
+					forbiddenProjects = append(forbiddenProjects, projectID)
+				}
+			}
+			if len(forbiddenProjects) > 0 {
+				respondJSON(w, http.StatusForbidden, map[string]any{
+					"error": map[string]any{
+						"code": "FORBIDDEN_PROJECTS",
+						"data": map[string]any{"projects": forbiddenProjects},
+					},
+				})
+				return
+			}
 		}
 
 		if err := repo.BulkUpdateStatus(r.Context(), req.IDs, req.Status); err != nil {

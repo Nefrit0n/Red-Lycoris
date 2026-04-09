@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"redlycoris/internal/auth"
+	"redlycoris/internal/domain"
 	"redlycoris/internal/enrichment"
 	"redlycoris/internal/storage"
 )
@@ -69,80 +70,101 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	dashboardRepo := storage.NewDashboardRepo(pool)
 	usersRepo := storage.NewUsersRepo(pool)
 	sessionsRepo := storage.NewSessionsRepo(pool)
+	userProjectRolesRepo := storage.NewUserProjectRolesRepo(pool)
 	authService := auth.NewService(usersRepo, sessionsRepo, cfg.sessionDur)
 	setAuthRuntimeConfig(cfg.trustProxy, cfg.cookieSecure, cfg.sessionDur)
 
 	r := chi.NewRouter()
 
 	// Middleware
-	r.Use(RequestIDMiddleware)
-	r.Use(LoadSessionMiddleware(authService))
 	r.Use(RecoveryMiddleware)
+	r.Use(RequestIDMiddleware)
 	r.Use(RequestLoggerMiddleware)
 	r.Use(CORSMiddleware(corsOrigins))
+	r.Use(LoadSessionMiddleware(authService))
 
 	// Health check
 	r.Get("/health", healthHandler(pool, rdb, cfg.version, cfg.startTime))
 
-	r.Get("/api/docs", docsHandler(cfg.env))
-	r.Get("/api/openapi.yaml", openAPIHandler(cfg.env))
+	if cfg.env == "dev" {
+		r.Get("/api/docs", docsHandler(cfg.env))
+		r.Get("/api/openapi.yaml", openAPIHandler(cfg.env))
+	}
 
-	// API v1
-	r.Route("/api/v1", func(r chi.Router) {
+	// Auth routes
+	r.Route("/api/v1/auth", func(r chi.Router) {
+		r.With(LoginRateLimit(rdb)).Post("/login", handleLogin(authService, rdb))
+		r.Post("/logout", handleLogout(authService))
+		r.Post("/refresh", handleRefresh(authService))
+		r.With(RequireAuth).Get("/me", handleMe())
+	})
 
-		// ───────────────────── Projects ─────────────────────
-		r.Route("/projects", func(r chi.Router) {
-			r.Get("/", handleListProjects(projectsRepo))
-			r.Post("/", handleCreateProject(projectsRepo))
+	// Protected routes
+	r.Group(func(r chi.Router) {
+		r.Use(RequireAuth)
+
+		r.Route("/api/v1/findings", func(r chi.Router) {
+			r.Get("/", handleListFindings(findingsRepo, userProjectRolesRepo))
+
 			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", handleGetProject(projectsRepo))
-				r.Put("/", handleUpdateProject(projectsRepo))
-				r.Delete("/", handleDeleteProject(projectsRepo))
+				vMw := RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromFinding(findingsRepo, "id"))
+				tMw := RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromFinding(findingsRepo, "id"))
+				aMw := RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromFinding(findingsRepo, "id"))
+
+				r.With(vMw).Get("/", handleGetFinding(findingsRepo, pool))
+				r.With(vMw).Get("/enrichments", handleGetFindingEnrichments(pool))
+				r.With(vMw).Get("/score", handleGetFindingScore(pool))
+				r.With(tMw).Patch("/status", handleUpdateStatus(findingsRepo))
+				r.With(tMw).Post("/enrich", handleEnrichFinding(pool, rdb))
+				r.With(aMw).Delete("/", handleDeleteFinding(findingsRepo))
+			})
+
+			r.Patch("/bulk/status", handleBulkUpdateStatus(findingsRepo, userProjectRolesRepo))
+		})
+
+		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
+			Post("/api/v1/import", handleImport(findingsRepo, userProjectRolesRepo, rdb))
+
+		r.Route("/api/v1/projects", func(r chi.Router) {
+			r.Get("/", handleListProjects(projectsRepo, userProjectRolesRepo))
+			r.With(RequireGlobalAdmin).Post("/", handleCreateProject(pool, projectsRepo, userProjectRolesRepo))
+
+			r.Route("/{id}", func(r chi.Router) {
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
+					Get("/", handleGetProject(projectsRepo))
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
+					Put("/", handleUpdateProject(projectsRepo))
+				r.With(RequireGlobalAdmin).Delete("/", handleDeleteProject(projectsRepo))
+
+				r.Route("/members", func(r chi.Router) {
+					r.Use(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id")))
+					r.Get("/", handleListMembers(userProjectRolesRepo))
+					r.Post("/", handleAddMember(userProjectRolesRepo))
+					r.Put("/{user_id}", handleUpdateMember(userProjectRolesRepo))
+					r.Delete("/{user_id}", handleRemoveMember(userProjectRolesRepo))
+				})
 			})
 		})
 
-		// ───────────────────── Findings ─────────────────────
-		r.Route("/findings", func(r chi.Router) {
-			r.Get("/", handleListFindings(findingsRepo))
-			r.Post("/", handleImport(findingsRepo, rdb))
+		r.Get("/api/v1/dashboard/stats", handleDashboardStats(dashboardRepo, userProjectRolesRepo, rdb))
 
-			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", handleGetFinding(findingsRepo, pool))
-
-				// 🔥 ВАЖНО — то, чего не хватало
-				r.Get("/enrichments", handleGetFindingEnrichments(pool))
-				r.Get("/score", handleGetFindingScore(pool))
-
-				r.Patch("/status", handleUpdateStatus(findingsRepo))
-				r.Post("/enrich", handleEnrichFinding(pool, rdb))
-				r.Delete("/", handleDeleteFinding(findingsRepo))
-			})
-
-			r.Patch("/bulk/status", handleBulkUpdateStatus(findingsRepo))
-		})
-
-		// ───────────────────── Dashboard ─────────────────────
-		r.Get("/dashboard/stats", handleDashboardStats(dashboardRepo, rdb))
-
-		// ───────────────────── Import ─────────────────────
-		r.Post("/import", handleImport(findingsRepo, rdb))
-
-		// ───────────────────── Enrichment system ─────────────────────
-		r.Route("/enrichment", func(r chi.Router) {
+		r.Route("/api/v1/enrichment", func(r chi.Router) {
 			r.Get("/status", handleEnrichmentStatus(pool, rdb))
-			r.Post("/enrich-all", handleEnrichAll(pool))
-
+			r.With(RequireGlobalAdmin).Post("/enrich-all", handleEnrichAll(pool))
 			if cfg.scheduler != nil {
-				r.Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
+				r.With(RequireGlobalAdmin).Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
 			}
 		})
 
-		// ───────────────────── Auth ─────────────────────
-		r.Route("/auth", func(r chi.Router) {
-			r.With(LoginRateLimit(rdb)).Post("/login", handleLogin(authService, rdb))
-			r.Post("/logout", handleLogout(authService))
-			r.Post("/refresh", handleRefresh(authService))
-			r.Get("/me", handleMe())
+		r.Get("/api/v1/users/search", handleSearchUsers(usersRepo))
+
+		r.Route("/api/v1/admin", func(r chi.Router) {
+			r.Use(RequireGlobalAdmin)
+			r.Get("/users", handleListUsers(usersRepo))
+			r.Post("/users", handleCreateUser(usersRepo))
+			r.Patch("/users/{id}", handleUpdateUser(usersRepo))
+			r.Post("/users/{id}/reset-password", handleResetUserPassword(usersRepo, sessionsRepo))
+			r.Get("/users/{id}/roles", handleGetUserRoles(userProjectRolesRepo))
 		})
 	})
 

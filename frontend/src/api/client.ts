@@ -22,6 +22,7 @@ async function request<T>(
   const opts: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
   };
   if (body !== undefined) {
     opts.body = JSON.stringify(body);
@@ -37,7 +38,14 @@ async function request<T>(
     } catch {
       apiErr = { code: "UNKNOWN", message: res.statusText };
     }
-    throw new ApiClientError(res.status, apiErr);
+    const err = new ApiClientError(res.status, apiErr);
+    if (
+      res.status === 401 &&
+      !window.location.pathname.startsWith("/login")
+    ) {
+      window.location.replace("/login?expired=1");
+    }
+    throw err;
   }
 
   if (res.status === 204) {
@@ -66,6 +74,10 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
 
 export function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return request<T>("PATCH", path, body);
+}
+
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return request<T>("PUT", path, body);
 }
 
 export function apiDelete(path: string): Promise<void> {

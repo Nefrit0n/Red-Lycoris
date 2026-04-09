@@ -21,9 +21,13 @@ const navItems = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  isAdmin?: boolean;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, isAdmin }: SidebarProps) {
+  const items = isAdmin
+    ? [...navItems, { to: "/admin/users", label: "Админка", icon: Database }]
+    : navItems;
   return (
     <aside
       className={cn(
@@ -45,7 +49,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

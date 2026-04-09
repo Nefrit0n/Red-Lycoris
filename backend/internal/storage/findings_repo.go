@@ -47,23 +47,24 @@ func decodeCursor(s string) (findingsCursor, error) {
 }
 
 type FindingsFilter struct {
-	ProjectID         uuid.UUID
-	Severities        []int
-	Statuses          []int
-	Kinds             []domain.FindingKind
-	HasCVE            *bool
-	HasFix            *bool
-	PackageEcosystems []string
-	IacProviders      []string
-	SecretKinds       []string
-	Components        []string
-	Query             string // full-text search
-	CVE               string
-	CWE               int
-	Limit             int
-	Cursor            string
-	SortField         string // "first_seen", "last_seen", "severity", "priority_score"
-	SortDir           string // "asc", "desc"
+	ProjectID            uuid.UUID
+	AccessibleProjectIDs []uuid.UUID
+	Severities           []int
+	Statuses             []int
+	Kinds                []domain.FindingKind
+	HasCVE               *bool
+	HasFix               *bool
+	PackageEcosystems    []string
+	IacProviders         []string
+	SecretKinds          []string
+	Components           []string
+	Query                string // full-text search
+	CVE                  string
+	CWE                  int
+	Limit                int
+	Cursor               string
+	SortField            string // "first_seen", "last_seen", "severity", "priority_score"
+	SortDir              string // "asc", "desc"
 }
 
 var allowedSortFields = map[string]string{
@@ -196,6 +197,15 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 	var args []any
 	argN := 1
 
+	if filter.AccessibleProjectIDs != nil {
+		if len(filter.AccessibleProjectIDs) == 0 {
+			conditions = append(conditions, "1 = 0")
+		} else {
+			conditions = append(conditions, fmt.Sprintf("f.project_id = ANY($%d)", argN))
+			args = append(args, filter.AccessibleProjectIDs)
+			argN++
+		}
+	}
 	if filter.ProjectID != uuid.Nil {
 		conditions = append(conditions, fmt.Sprintf("f.project_id = $%d", argN))
 		args = append(args, filter.ProjectID)
@@ -401,6 +411,47 @@ func (r *FindingsRepo) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("storage.FindingsRepo.Delete: finding %s not found", id)
 	}
 	return nil
+}
+
+func (r *FindingsRepo) GetProjectID(ctx context.Context, id string) (uuid.UUID, error) {
+	findingID, err := uuid.Parse(id)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("storage.FindingsRepo.GetProjectID: parse finding id: %w", err)
+	}
+
+	const q = `SELECT project_id FROM findings WHERE id = $1`
+	var projectID uuid.UUID
+	if err := r.pool.QueryRow(ctx, q, findingID).Scan(&projectID); err != nil {
+		return uuid.Nil, fmt.Errorf("storage.FindingsRepo.GetProjectID: %w", err)
+	}
+	return projectID, nil
+}
+
+func (r *FindingsRepo) ListDistinctProjectIDs(ctx context.Context, findingIDs []uuid.UUID) ([]uuid.UUID, error) {
+	if len(findingIDs) == 0 {
+		return []uuid.UUID{}, nil
+	}
+
+	const q = `SELECT DISTINCT project_id FROM findings WHERE id = ANY($1)`
+	rows, err := r.pool.Query(ctx, q, findingIDs)
+	if err != nil {
+		return nil, fmt.Errorf("storage.FindingsRepo.ListDistinctProjectIDs: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var projectID uuid.UUID
+		if err := rows.Scan(&projectID); err != nil {
+			return nil, fmt.Errorf("storage.FindingsRepo.ListDistinctProjectIDs: scan: %w", err)
+		}
+		result = append(result, projectID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("storage.FindingsRepo.ListDistinctProjectIDs: rows: %w", err)
+	}
+
+	return result, nil
 }
 
 func (r *FindingsRepo) CountByProject(ctx context.Context, projectID uuid.UUID) (map[string]int, error) {

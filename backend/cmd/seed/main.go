@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,8 +19,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"redlycoris/internal/auth"
 	"redlycoris/internal/config"
 	"redlycoris/internal/domain"
+	"redlycoris/internal/storage"
 )
 
 // --- Realistic data pools ---
@@ -121,12 +124,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	usersRepo := storage.NewUsersRepo(pool)
+	rolesRepo := storage.NewUserProjectRolesRepo(pool)
+
+	adminUser, err := ensureAdminUser(ctx, usersRepo)
+	if err != nil {
+		slog.Error("failed to ensure admin user", "error", err)
+		os.Exit(1)
+	}
+
 	totalFindings := seededFindingsCount()
 	batchSize := 1000
 
 	// 1. Create projects
 	slog.Info("creating projects...")
-	projectIDs, err := seedProjects(ctx, pool)
+	projectIDs, err := seedProjects(ctx, pool, rolesRepo, adminUser.ID)
 	if err != nil {
 		slog.Error("failed to seed projects", "error", err)
 		os.Exit(1)
@@ -190,7 +202,34 @@ func main() {
 	runBenchmarks(cfg)
 }
 
-func seedProjects(ctx context.Context, pool *pgxpool.Pool) ([]uuid.UUID, error) {
+func ensureAdminUser(ctx context.Context, usersRepo *storage.UsersRepo) (*domain.User, error) {
+	user, err := usersRepo.GetByEmail(ctx, "admin@local")
+	if err == nil {
+		return user, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("ensureAdminUser: get by email: %w", err)
+	}
+
+	hash, err := auth.Hash("admin12345")
+	if err != nil {
+		return nil, fmt.Errorf("ensureAdminUser: hash: %w", err)
+	}
+
+	adminUser := &domain.User{
+		Email:        "admin@local",
+		PasswordHash: hash,
+		FullName:     "Admin",
+		IsActive:     true,
+		GlobalRole:   domain.RoleAdmin,
+	}
+	if err := usersRepo.Create(ctx, adminUser); err != nil {
+		return nil, fmt.Errorf("ensureAdminUser: create: %w", err)
+	}
+	return adminUser, nil
+}
+
+func seedProjects(ctx context.Context, pool *pgxpool.Pool, rolesRepo *storage.UserProjectRolesRepo, adminID uuid.UUID) ([]uuid.UUID, error) {
 	ids := make([]uuid.UUID, len(projectDefs))
 	for i, p := range projectDefs {
 		id := uuid.New()
@@ -207,6 +246,11 @@ func seedProjects(ctx context.Context, pool *pgxpool.Pool) ([]uuid.UUID, error) 
 		err = pool.QueryRow(ctx, `SELECT id FROM projects WHERE name = $1`, p.name).Scan(&ids[i])
 		if err != nil {
 			return nil, fmt.Errorf("seedProjects: read back %s: %w", p.name, err)
+		}
+
+		grantedBy := adminID
+		if err := rolesRepo.Grant(ctx, nil, adminID, ids[i], domain.RoleProjectAdmin, &grantedBy); err != nil {
+			return nil, fmt.Errorf("seedProjects: grant admin role %s: %w", p.name, err)
 		}
 	}
 	return ids, nil
