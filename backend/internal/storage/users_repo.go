@@ -212,3 +212,43 @@ func (r *UsersRepo) Count(ctx context.Context) (int, error) {
 	}
 	return total, nil
 }
+
+func (r *UsersRepo) SearchActive(ctx context.Context, q string, limit int) ([]domain.User, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	const query = `
+		SELECT id, email, password_hash, full_name, is_active, global_role, created_at, updated_at, last_login_at
+		FROM users
+		WHERE is_active
+		  AND (email ILIKE $1 OR full_name ILIKE $1)
+		ORDER BY email
+		LIMIT $2`
+
+	pattern := "%" + strings.TrimSpace(q) + "%"
+	rows, err := r.pool.Query(ctx, query, pattern, limit)
+	if err != nil {
+		return nil, fmt.Errorf("storage.UsersRepo.SearchActive: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]domain.User, 0)
+	for rows.Next() {
+		var u domain.User
+		var role int16
+		if err := rows.Scan(
+			&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.IsActive, &role,
+			&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
+		); err != nil {
+			return nil, fmt.Errorf("storage.UsersRepo.SearchActive: scan: %w", err)
+		}
+		u.GlobalRole = domain.GlobalRole(role)
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("storage.UsersRepo.SearchActive: rows: %w", err)
+	}
+
+	return users, nil
+}

@@ -7,12 +7,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"redlycoris/internal/domain"
 	"redlycoris/internal/storage"
 )
 
-func handleListProjects(repo *storage.ProjectsRepo) http.HandlerFunc {
+func handleListProjects(repo *storage.ProjectsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit := 50
 		offset := 0
@@ -28,7 +29,27 @@ func handleListProjects(repo *storage.ProjectsRepo) http.HandlerFunc {
 			}
 		}
 
-		projects, total, err := repo.List(r.Context(), limit, offset)
+		user, _ := UserFromContext(r.Context())
+
+		var accessible []uuid.UUID
+		if !user.IsAdmin() {
+			projectIDs, idsErr := rolesRepo.ListProjectIDsForUser(r.Context(), user.ID)
+			if idsErr != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list projects")
+				return
+			}
+			accessible = projectIDs
+			if len(accessible) == 0 {
+				respondList(w, []domain.Project{}, 0, "")
+				return
+			}
+		}
+
+		projects, total, err := repo.List(r.Context(), storage.ProjectsFilter{
+			AccessibleProjectIDs: accessible,
+			Limit:                limit,
+			Offset:               offset,
+		})
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list projects")
 			return
@@ -44,7 +65,7 @@ func handleListProjects(repo *storage.ProjectsRepo) http.HandlerFunc {
 	}
 }
 
-func handleCreateProject(repo *storage.ProjectsRepo) http.HandlerFunc {
+func handleCreateProject(pool *pgxpool.Pool, repo *storage.ProjectsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var p domain.Project
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
@@ -57,7 +78,23 @@ func handleCreateProject(repo *storage.ProjectsRepo) http.HandlerFunc {
 			return
 		}
 
-		if err := repo.Create(r.Context(), &p); err != nil {
+		tx, err := pool.Begin(r.Context())
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create project")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		if err := repo.CreateTx(r.Context(), tx, &p); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create project")
+			return
+		}
+		user, _ := UserFromContext(r.Context())
+		if err := rolesRepo.Grant(r.Context(), tx, user.ID, p.ID, domain.RoleProjectAdmin, &user.ID); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to grant project role")
+			return
+		}
+		if err := tx.Commit(r.Context()); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create project")
 			return
 		}

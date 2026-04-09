@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"redlycoris/internal/domain"
@@ -15,11 +17,29 @@ type ProjectsRepo struct {
 	pool *pgxpool.Pool
 }
 
+type ProjectsFilter struct {
+	AccessibleProjectIDs []uuid.UUID
+	Limit                int
+	Offset               int
+}
+
 func NewProjectsRepo(pool *pgxpool.Pool) *ProjectsRepo {
 	return &ProjectsRepo{pool: pool}
 }
 
 func (r *ProjectsRepo) Create(ctx context.Context, p *domain.Project) error {
+	return r.create(ctx, r.pool, p)
+}
+
+func (r *ProjectsRepo) CreateTx(ctx context.Context, tx pgx.Tx, p *domain.Project) error {
+	return r.create(ctx, tx, p)
+}
+
+type projectExecutor interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+func (r *ProjectsRepo) create(ctx context.Context, exec projectExecutor, p *domain.Project) error {
 	const q = `
 		INSERT INTO projects (id, name, description, tags, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)`
@@ -35,7 +55,7 @@ func (r *ProjectsRepo) Create(ctx context.Context, p *domain.Project) error {
 		p.UpdatedAt = now
 	}
 
-	_, err := r.pool.Exec(ctx, q,
+	_, err := exec.Exec(ctx, q,
 		p.ID, p.Name, p.Description, p.Tags, p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
@@ -63,7 +83,9 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 	return &p, nil
 }
 
-func (r *ProjectsRepo) List(ctx context.Context, limit, offset int) ([]domain.Project, int, error) {
+func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domain.Project, int, error) {
+	limit := filter.Limit
+	offset := filter.Offset
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -71,18 +93,35 @@ func (r *ProjectsRepo) List(ctx context.Context, limit, offset int) ([]domain.Pr
 		offset = 0
 	}
 
+	where := ""
+	countArgs := []any{}
+	queryArgs := []any{}
+	nextArg := 1
+	if filter.AccessibleProjectIDs != nil {
+		if len(filter.AccessibleProjectIDs) == 0 {
+			where = "WHERE 1 = 0"
+		} else {
+			where = fmt.Sprintf("WHERE id = ANY($%d)", nextArg)
+			countArgs = append(countArgs, filter.AccessibleProjectIDs)
+			queryArgs = append(queryArgs, filter.AccessibleProjectIDs)
+			nextArg++
+		}
+	}
+
+	countQ := `SELECT count(*) FROM projects ` + where
 	var total int
-	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM projects`).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, countQ, countArgs...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("storage.ProjectsRepo.List: count: %w", err)
 	}
 
-	const q = `
+	q := `
 		SELECT id, name, description, tags, created_at, updated_at
-		FROM projects
+		FROM projects ` + where + `
 		ORDER BY created_at DESC, id
-		LIMIT $1 OFFSET $2`
+		LIMIT $` + fmt.Sprintf("%d", nextArg) + ` OFFSET $` + fmt.Sprintf("%d", nextArg+1)
 
-	rows, err := r.pool.Query(ctx, q, limit, offset)
+	queryArgs = append(queryArgs, limit, offset)
+	rows, err := r.pool.Query(ctx, q, queryArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("storage.ProjectsRepo.List: query: %w", err)
 	}

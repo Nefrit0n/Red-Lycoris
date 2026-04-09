@@ -20,7 +20,7 @@ type importError struct {
 	Message string `json:"message"`
 }
 
-func handleImport(repo *storage.FindingsRepo, rdb *redis.Client) http.HandlerFunc {
+func handleImport(repo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID := r.URL.Query().Get("project_id")
 		var overrideProjectID uuid.UUID
@@ -31,6 +31,22 @@ func handleImport(repo *storage.FindingsRepo, rdb *redis.Client) http.HandlerFun
 				return
 			}
 			overrideProjectID = id
+		}
+		user, _ := UserFromContext(r.Context())
+		if !user.IsAdmin() {
+			if overrideProjectID == uuid.Nil {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "project_id query param is required")
+				return
+			}
+			role, has, err := rolesRepo.GetRole(r.Context(), user.ID, overrideProjectID)
+			if err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check permissions")
+				return
+			}
+			if !has || role < domain.RoleTriager {
+				respondError(w, r, http.StatusForbidden, "FORBIDDEN", "forbidden")
+				return
+			}
 		}
 
 		data, err := io.ReadAll(io.LimitReader(r.Body, 50<<20)) // 50MB limit

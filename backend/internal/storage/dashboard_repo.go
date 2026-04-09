@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"redlycoris/internal/domain"
@@ -11,6 +12,10 @@ import (
 
 type DashboardRepo struct {
 	pool *pgxpool.Pool
+}
+
+type DashboardFilter struct {
+	AccessibleProjectIDs []uuid.UUID
 }
 
 func NewDashboardRepo(pool *pgxpool.Pool) *DashboardRepo {
@@ -45,20 +50,30 @@ type DashboardStats struct {
 	EnrichmentCoverage EnrichmentCoverage `json:"enrichment_coverage"`
 }
 
-// GetStats читает статистику из materialized view dashboard_stats.
-func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
+func buildProjectScope(alias string, accessibleProjectIDs []uuid.UUID, argPos int) (string, []any, int) {
+	if accessibleProjectIDs == nil {
+		return "", nil, argPos
+	}
+	if len(accessibleProjectIDs) == 0 {
+		return " WHERE 1 = 0", nil, argPos
+	}
+	return fmt.Sprintf(" WHERE %s.project_id = ANY($%d)", alias, argPos), []any{accessibleProjectIDs}, argPos + 1
+}
+
+// GetStats reads aggregated dashboard stats with optional project access filter.
+func (r *DashboardRepo) GetStats(ctx context.Context, filter DashboardFilter) (*DashboardStats, error) {
 	stats := &DashboardStats{}
+	scopeWhere, scopeArgs, _ := buildProjectScope("f", filter.AccessibleProjectIDs, 1)
 
-	// Агрегируем из materialized view dashboard_stats
-	const mvQ = `
+	countQ := `
 		SELECT
-			COALESCE(SUM(count), 0),
-			COALESCE(SUM(count) FILTER (WHERE status = 0), 0),
-			COALESCE(SUM(count) FILTER (WHERE status = 0 AND severity = 4), 0),
-			COALESCE(SUM(new_this_week), 0)
-		FROM dashboard_stats`
+			COUNT(*),
+			COUNT(*) FILTER (WHERE f.status = 0),
+			COUNT(*) FILTER (WHERE f.status = 0 AND f.severity = 4),
+			COUNT(*) FILTER (WHERE f.first_seen > now() - interval '7 days')
+		FROM findings f` + scopeWhere
 
-	err := r.pool.QueryRow(ctx, mvQ).Scan(
+	err := r.pool.QueryRow(ctx, countQ, scopeArgs...).Scan(
 		&stats.TotalFindings,
 		&stats.TotalOpen,
 		&stats.TotalCriticalOpen,
@@ -68,13 +83,12 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: matview counts: %w", err)
 	}
 
-	// By severity — из materialized view
-	const sevQ = `
-		SELECT severity, COALESCE(SUM(count), 0)
-		FROM dashboard_stats
-		GROUP BY severity
-		ORDER BY severity`
-	sevRows, err := r.pool.Query(ctx, sevQ)
+	sevQ := `
+		SELECT f.severity, COUNT(*)
+		FROM findings f` + scopeWhere + `
+		GROUP BY f.severity
+		ORDER BY f.severity`
+	sevRows, err := r.pool.Query(ctx, sevQ, scopeArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: by_severity: %w", err)
 	}
@@ -94,13 +108,12 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
 		stats.BySeverity = []SeverityCount{}
 	}
 
-	// By status — из materialized view
-	const statusQ = `
-		SELECT status, COALESCE(SUM(count), 0)
-		FROM dashboard_stats
-		GROUP BY status
-		ORDER BY status`
-	statusRows, err := r.pool.Query(ctx, statusQ)
+	statusQ := `
+		SELECT f.status, COUNT(*)
+		FROM findings f` + scopeWhere + `
+		GROUP BY f.status
+		ORDER BY f.status`
+	statusRows, err := r.pool.Query(ctx, statusQ, scopeArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: by_status: %w", err)
 	}
@@ -120,38 +133,29 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
 		stats.ByStatus = []StatusCount{}
 	}
 
-	// Top-10 by priority_score (по-прежнему из findings, т.к. нужны полные данные)
 	topQ := `SELECT ` + findingColumns + `
 		FROM findings f
 		LEFT JOIN finding_scores fs ON fs.finding_id = f.id
-		WHERE fs.priority_score IS NOT NULL
+		WHERE fs.priority_score IS NOT NULL`
+	if scopeWhere != "" {
+		topQ += " AND " + scopeWhere[len(" WHERE "):]
+	}
+	topQ += `
 		ORDER BY fs.priority_score DESC, f.id
 		LIMIT 10`
 
-	topRows, err := r.pool.Query(ctx, topQ)
+	topRows, err := r.pool.Query(ctx, topQ, scopeArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: top_findings: %w", err)
 	}
 	defer topRows.Close()
 
 	for topRows.Next() {
-		var f domain.Finding
-		err := topRows.Scan(
-			&f.ID, &f.Title, &f.Description, &f.Severity, &f.Confidence, &f.Status,
-			&f.FilePath, &f.LineStart, &f.LineEnd, &f.Component, &f.ComponentVersion,
-			&f.CVEIDs, &f.CWEIDs, &f.CPEURI, &f.Fingerprint, &f.FirstSeen, &f.LastSeen,
-			&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.PriorityScore,
-		)
+		f, err := scanFinding(topRows)
 		if err != nil {
 			return nil, fmt.Errorf("storage.DashboardRepo.GetStats: top_findings scan: %w", err)
 		}
-		if f.CVEIDs == nil {
-			f.CVEIDs = []string{}
-		}
-		if f.CWEIDs == nil {
-			f.CWEIDs = []int{}
-		}
-		stats.TopFindings = append(stats.TopFindings, f)
+		stats.TopFindings = append(stats.TopFindings, *f)
 	}
 	if err := topRows.Err(); err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: top_findings rows: %w", err)
@@ -160,27 +164,26 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*DashboardStats, error) {
 		stats.TopFindings = []domain.Finding{}
 	}
 
-	// Enrichment coverage — из materialized view enrichment_coverage
-	const enrichQ = `
-		SELECT source, enriched_count, total_findings
-		FROM enrichment_coverage`
-
-	enrichRows, err := r.pool.Query(ctx, enrichQ)
+	enrichQ := `
+		SELECT fe.source, COUNT(DISTINCT fe.finding_id)
+		FROM finding_enrichments fe
+		JOIN findings f ON f.id = fe.finding_id` + scopeWhere + `
+		GROUP BY fe.source`
+	enrichRows, err := r.pool.Query(ctx, enrichQ, scopeArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: enrichment_coverage: %w", err)
 	}
 	defer enrichRows.Close()
 
-	var totalFindings int
+	totalFindings := stats.TotalFindings
 	sourceCounts := make(map[string]int)
 	for enrichRows.Next() {
 		var source string
-		var enrichedCount, tf int
-		if err := enrichRows.Scan(&source, &enrichedCount, &tf); err != nil {
+		var enrichedCount int
+		if err := enrichRows.Scan(&source, &enrichedCount); err != nil {
 			return nil, fmt.Errorf("storage.DashboardRepo.GetStats: enrichment_coverage scan: %w", err)
 		}
 		sourceCounts[source] = enrichedCount
-		totalFindings = tf
 	}
 	if err := enrichRows.Err(); err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: enrichment_coverage rows: %w", err)
