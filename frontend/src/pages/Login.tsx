@@ -34,9 +34,8 @@ export default function Login() {
 
   const loginMutation = useMutation({
     mutationFn: () => login(email, password),
-    onSuccess: async (user) => {
+    onSuccess: (user) => {
       queryClient.setQueryData(["current-user"], user);
-      await queryClient.invalidateQueries({ queryKey: ["current-user"] });
       navigate("/", { replace: true });
     },
     onError: (err: unknown) => {
