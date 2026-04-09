@@ -8,15 +8,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"redlycoris/internal/auth"
 	"redlycoris/internal/enrichment"
 	"redlycoris/internal/storage"
 )
 
 type routerConfig struct {
-	env       string
-	version   string
-	startTime time.Time
-	scheduler *enrichment.Scheduler
+	env          string
+	version      string
+	startTime    time.Time
+	scheduler    *enrichment.Scheduler
+	trustProxy   bool
+	cookieSecure bool
+	sessionDur   time.Duration
 }
 
 type RouterOption func(*routerConfig)
@@ -37,11 +41,24 @@ func WithStartTime(startTime time.Time) RouterOption {
 	return func(c *routerConfig) { c.startTime = startTime }
 }
 
+func WithTrustProxy(trustProxy bool) RouterOption {
+	return func(c *routerConfig) { c.trustProxy = trustProxy }
+}
+
+func WithCookieSecure(cookieSecure bool) RouterOption {
+	return func(c *routerConfig) { c.cookieSecure = cookieSecure }
+}
+
+func WithSessionDuration(d time.Duration) RouterOption {
+	return func(c *routerConfig) { c.sessionDur = d }
+}
+
 func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts ...RouterOption) http.Handler {
 	var cfg routerConfig
 	cfg.env = "dev"
 	cfg.version = "dev"
 	cfg.startTime = time.Now()
+	cfg.sessionDur = 7 * 24 * time.Hour
 
 	for _, opt := range opts {
 		opt(&cfg)
@@ -50,11 +67,16 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	findingsRepo := storage.NewFindingsRepo(pool)
 	projectsRepo := storage.NewProjectsRepo(pool)
 	dashboardRepo := storage.NewDashboardRepo(pool)
+	usersRepo := storage.NewUsersRepo(pool)
+	sessionsRepo := storage.NewSessionsRepo(pool)
+	authService := auth.NewService(usersRepo, sessionsRepo, cfg.sessionDur)
+	setAuthRuntimeConfig(cfg.trustProxy, cfg.cookieSecure, cfg.sessionDur)
 
 	r := chi.NewRouter()
 
 	// Middleware
 	r.Use(RequestIDMiddleware)
+	r.Use(LoadSessionMiddleware(authService))
 	r.Use(RecoveryMiddleware)
 	r.Use(RequestLoggerMiddleware)
 	r.Use(CORSMiddleware(corsOrigins))
@@ -113,6 +135,14 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			if cfg.scheduler != nil {
 				r.Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
 			}
+		})
+
+		// ───────────────────── Auth ─────────────────────
+		r.Route("/auth", func(r chi.Router) {
+			r.With(LoginRateLimit(rdb)).Post("/login", handleLogin(authService, rdb))
+			r.Post("/logout", handleLogout(authService))
+			r.Post("/refresh", handleRefresh(authService))
+			r.Get("/me", handleMe())
 		})
 	})
 

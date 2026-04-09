@@ -11,6 +11,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-s -w" -o /build/redlycoris ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -o /build/admin ./cmd/admin
 
 # ── Stage 2: Run ──
 FROM alpine:3.19
@@ -20,6 +22,7 @@ RUN apk add --no-cache ca-certificates tzdata curl
 WORKDIR /app
 
 COPY --from=builder /build/redlycoris .
+COPY --from=builder /build/admin .
 COPY --from=builder /build/migrations ./migrations
 
 EXPOSE 8080
