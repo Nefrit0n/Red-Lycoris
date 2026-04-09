@@ -47,16 +47,23 @@ func decodeCursor(s string) (findingsCursor, error) {
 }
 
 type FindingsFilter struct {
-	ProjectID  uuid.UUID
-	Severities []int
-	Statuses   []int
-	Query      string // full-text search
-	CVE        string
-	CWE        int
-	Limit      int
-	Cursor     string
-	SortField  string // "first_seen", "last_seen", "severity", "priority_score"
-	SortDir    string // "asc", "desc"
+	ProjectID         uuid.UUID
+	Severities        []int
+	Statuses          []int
+	Kinds             []domain.FindingKind
+	HasCVE            *bool
+	HasFix            *bool
+	PackageEcosystems []string
+	IacProviders      []string
+	SecretKinds       []string
+	Components        []string
+	Query             string // full-text search
+	CVE               string
+	CWE               int
+	Limit             int
+	Cursor            string
+	SortField         string // "first_seen", "last_seen", "severity", "priority_score"
+	SortDir           string // "asc", "desc"
 }
 
 var allowedSortFields = map[string]string{
@@ -74,12 +81,18 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 			id, title, description, severity, confidence, status,
 			file_path, line_start, line_end, component, component_version,
 			cve_ids, cwe_ids, cpe_uri, fingerprint, first_seen, last_seen,
-			times_seen, project_id, source_type
+			times_seen, project_id, source_type, finding_kind,
+			fixed_version, package_ecosystem, purl, code_snippet, code_flow,
+			url, http_method, http_param, http_evidence, iac_resource,
+			iac_provider, secret_kind, commit_sha, rule_id, rule_name
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11,
 			$12, $13, $14, $15, $16, $17,
-			$18, $19, $20
+			$18, $19, $20, $21,
+			$22, $23, $24, $25, $26,
+			$27, $28, $29, $30, $31,
+			$32, $33, $34, $35, $36
 		)
 		ON CONFLICT (fingerprint) DO UPDATE SET
 			last_seen  = EXCLUDED.last_seen,
@@ -104,7 +117,10 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 		f.ID, f.Title, f.Description, f.Severity, f.Confidence, f.Status,
 		f.FilePath, f.LineStart, f.LineEnd, f.Component, f.ComponentVersion,
 		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint, f.FirstSeen, f.LastSeen,
-		f.TimesSeen, f.ProjectID, f.SourceType,
+		f.TimesSeen, f.ProjectID, f.SourceType, int16(f.Kind),
+		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
+		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
+		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
 	).Scan(&inserted)
 	if err != nil {
 		return false, fmt.Errorf("storage.FindingsRepo.Create: %w", err)
@@ -113,22 +129,30 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 }
 
 var findingColumns = `
-	f.id, f.title, f.description, f.severity, f.confidence, f.status,
+	f.id, f.finding_kind, f.title, f.description, f.severity, f.confidence, f.status,
 	f.file_path, f.line_start, f.line_end, f.component, f.component_version,
 	f.cve_ids, f.cwe_ids, f.cpe_uri, f.fingerprint, f.first_seen, f.last_seen,
-	f.times_seen, f.project_id, f.source_type, fs.priority_score`
+	f.times_seen, f.project_id, f.source_type, f.fixed_version, f.package_ecosystem,
+	f.purl, f.code_snippet, f.code_flow, f.url, f.http_method, f.http_param,
+	f.http_evidence, f.iac_resource, f.iac_provider, f.secret_kind, f.commit_sha,
+	f.rule_id, f.rule_name, fs.priority_score`
 
 func scanFinding(row pgx.Row) (*domain.Finding, error) {
 	var f domain.Finding
+	var kind int16
 	err := row.Scan(
-		&f.ID, &f.Title, &f.Description, &f.Severity, &f.Confidence, &f.Status,
+		&f.ID, &kind, &f.Title, &f.Description, &f.Severity, &f.Confidence, &f.Status,
 		&f.FilePath, &f.LineStart, &f.LineEnd, &f.Component, &f.ComponentVersion,
 		&f.CVEIDs, &f.CWEIDs, &f.CPEURI, &f.Fingerprint, &f.FirstSeen, &f.LastSeen,
-		&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.PriorityScore,
+		&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
+		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
+		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
+		&f.RuleID, &f.RuleName, &f.PriorityScore,
 	)
 	if err != nil {
 		return nil, err
 	}
+	f.Kind = domain.FindingKind(kind)
 	if f.CVEIDs == nil {
 		f.CVEIDs = []string{}
 	}
@@ -185,6 +209,45 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 	if len(filter.Statuses) > 0 {
 		conditions = append(conditions, fmt.Sprintf("f.status = ANY($%d)", argN))
 		args = append(args, filter.Statuses)
+		argN++
+	}
+	if len(filter.Kinds) > 0 {
+		kinds := make([]int16, 0, len(filter.Kinds))
+		for _, k := range filter.Kinds {
+			kinds = append(kinds, int16(k))
+		}
+		conditions = append(conditions, fmt.Sprintf("f.finding_kind = ANY($%d)", argN))
+		args = append(args, kinds)
+		argN++
+	}
+	if filter.HasCVE != nil && *filter.HasCVE {
+		conditions = append(conditions, "array_length(f.cve_ids, 1) > 0")
+	}
+	if filter.HasFix != nil && *filter.HasFix {
+		conditions = append(conditions, "f.fixed_version IS NOT NULL")
+	}
+	if len(filter.PackageEcosystems) > 0 {
+		conditions = append(conditions, fmt.Sprintf("f.package_ecosystem = ANY($%d)", argN))
+		args = append(args, filter.PackageEcosystems)
+		argN++
+	}
+	if len(filter.IacProviders) > 0 {
+		conditions = append(conditions, fmt.Sprintf("f.iac_provider = ANY($%d)", argN))
+		args = append(args, filter.IacProviders)
+		argN++
+	}
+	if len(filter.SecretKinds) > 0 {
+		conditions = append(conditions, fmt.Sprintf("f.secret_kind = ANY($%d)", argN))
+		args = append(args, filter.SecretKinds)
+		argN++
+	}
+	if len(filter.Components) > 0 {
+		componentPatterns := make([]string, 0, len(filter.Components))
+		for _, component := range filter.Components {
+			componentPatterns = append(componentPatterns, "%"+component+"%")
+		}
+		conditions = append(conditions, fmt.Sprintf("f.component ILIKE ANY($%d)", argN))
+		args = append(args, componentPatterns)
 		argN++
 	}
 	if filter.Query != "" {
@@ -269,15 +332,20 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 	var findings []domain.Finding
 	for rows.Next() {
 		var f domain.Finding
+		var kind int16
 		err := rows.Scan(
-			&f.ID, &f.Title, &f.Description, &f.Severity, &f.Confidence, &f.Status,
+			&f.ID, &kind, &f.Title, &f.Description, &f.Severity, &f.Confidence, &f.Status,
 			&f.FilePath, &f.LineStart, &f.LineEnd, &f.Component, &f.ComponentVersion,
 			&f.CVEIDs, &f.CWEIDs, &f.CPEURI, &f.Fingerprint, &f.FirstSeen, &f.LastSeen,
-			&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.PriorityScore,
+			&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
+			&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
+			&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
+			&f.RuleID, &f.RuleName, &f.PriorityScore,
 		)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("storage.FindingsRepo.List: scan: %w", err)
 		}
+		f.Kind = domain.FindingKind(kind)
 		if f.CVEIDs == nil {
 			f.CVEIDs = []string{}
 		}

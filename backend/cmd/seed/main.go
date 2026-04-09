@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"redlycoris/internal/config"
+	"redlycoris/internal/domain"
 )
 
 // --- Realistic data pools ---
@@ -35,90 +36,69 @@ var projectDefs = []struct {
 	{"data-pipeline", "ETL and data processing services", []string{"python", "spark", "etl"}},
 }
 
-var topCWEs = []int{79, 89, 22, 78, 434, 502, 787, 416, 190, 476, 20, 125, 77, 798, 862, 306, 918, 611, 94, 269, 352, 400, 732, 327, 522}
-
 var filePaths = []string{
-	"src/api/auth.py", "src/api/users.py", "src/api/payments.py", "src/api/orders.py",
-	"lib/utils/parser.go", "lib/utils/crypto.go", "lib/utils/validator.go",
-	"src/controllers/UserController.java", "src/controllers/AdminController.java",
-	"src/services/AuthService.ts", "src/services/PaymentService.ts",
-	"pkg/middleware/jwt.go", "pkg/middleware/cors.go", "pkg/middleware/ratelimit.go",
-	"internal/storage/db.go", "internal/storage/cache.go",
-	"app/models/user.rb", "app/models/order.rb",
-	"src/main/java/com/app/config/SecurityConfig.java",
-	"src/main/java/com/app/util/XmlParser.java",
-	"lib/http/client.py", "lib/http/server.py",
-	"src/components/Login.tsx", "src/components/Upload.tsx",
-	"cmd/server/main.go", "cmd/worker/main.go",
-	"deploy/terraform/main.tf", "deploy/k8s/deployment.yaml",
-	"scripts/migrate.sh", "scripts/backup.sh",
+	"src/auth.py",
+	"cmd/main.go",
+	"api/users.js",
+	"internal/db/query.go",
+	"services/payment.ts",
+	"pkg/http/client.go",
+	"src/components/Login.tsx",
+	"deploy/terraform/main.tf",
+	"deploy/k8s/deployment.yaml",
 }
 
-var components = []struct {
-	name    string
-	version string
-}{
-	{"log4j-core", "2.14.1"}, {"log4j-core", "2.17.0"},
-	{"spring-core", "5.3.18"}, {"spring-core", "5.3.25"}, {"spring-core", "6.0.7"},
-	{"spring-webmvc", "5.3.20"}, {"spring-boot", "2.7.5"},
-	{"jackson-databind", "2.13.4"}, {"jackson-databind", "2.14.2"},
-	{"commons-text", "1.9"}, {"commons-io", "2.11.0"},
-	{"lodash", "4.17.20"}, {"lodash", "4.17.21"},
-	{"express", "4.17.3"}, {"express", "4.18.2"},
-	{"axios", "0.21.1"}, {"axios", "1.4.0"},
-	{"django", "3.2.15"}, {"django", "4.1.7"},
-	{"flask", "2.2.3"}, {"flask", "2.3.2"},
-	{"requests", "2.28.1"}, {"urllib3", "1.26.15"},
-	{"pillow", "9.3.0"}, {"numpy", "1.24.2"},
-	{"golang.org/x/crypto", "0.6.0"}, {"golang.org/x/net", "0.7.0"},
-	{"github.com/gin-gonic/gin", "1.9.0"},
-	{"openssl", "1.1.1t"}, {"openssl", "3.0.8"},
-	{"libxml2", "2.9.14"}, {"zlib", "1.2.13"},
-	{"netty", "4.1.89"}, {"guava", "31.1"},
-	{"postgres", "15.2"}, {"redis", "7.0.9"},
+var scaComponents = []string{
+	"log4j-core", "spring-core", "lodash", "requests", "axios",
+	"jackson-databind", "django", "flask", "urllib3", "express",
 }
 
-var sourceTypes = []string{"trivy", "sarif", "semgrep", "snyk", "grype", "bandit", "gosec", "codeql"}
+var scaEcosystems = []string{"npm", "pypi", "maven", "go", "nuget"}
 
-var titleTemplates = []string{
-	"SQL Injection in %s",
-	"Cross-Site Scripting (XSS) in %s",
-	"Path Traversal in %s",
-	"Command Injection via %s",
-	"Insecure Deserialization in %s",
-	"Server-Side Request Forgery in %s",
-	"XML External Entity (XXE) in %s",
-	"Remote Code Execution via %s",
-	"Authentication Bypass in %s",
-	"Sensitive Data Exposure in %s",
-	"Hardcoded Credentials in %s",
-	"Use of Known Vulnerable Component: %s",
-	"Improper Input Validation in %s",
-	"Missing Authorization Check in %s",
-	"Insecure Cryptographic Algorithm in %s",
-	"Open Redirect in %s",
-	"Cross-Site Request Forgery in %s",
-	"Buffer Overflow in %s",
-	"Integer Overflow in %s",
-	"NULL Pointer Dereference in %s",
-	"Use After Free in %s",
-	"Race Condition in %s",
-	"Information Disclosure via %s",
-	"Unrestricted File Upload in %s",
-	"Denial of Service via %s",
+var scaCVEPool = []string{
+	"CVE-2021-44228", "CVE-2022-22965", "CVE-2021-45046", "CVE-2023-34362",
+	"CVE-2022-22963", "CVE-2023-38545", "CVE-2024-3094", "CVE-2023-45133",
 }
 
-var descSnippets = []string{
-	"An attacker could exploit this vulnerability to execute arbitrary commands on the server.",
-	"Untrusted input is used directly in a database query without proper sanitization.",
-	"User-controlled data is rendered in HTML output without escaping, allowing script injection.",
-	"The application uses a known vulnerable version of this dependency.",
-	"Sensitive configuration data is hardcoded in the source code.",
-	"The component does not properly validate the certificate chain.",
-	"Insufficient access control allows unauthorized users to access restricted resources.",
-	"Input length is not validated before memory allocation, causing potential overflow.",
-	"The cryptographic algorithm used is considered weak and should be replaced.",
-	"Error messages expose internal implementation details to external users.",
+var sastRuleIDs = []string{
+	"semgrep.python.sqli", "semgrep.js.xss", "gosec.G101", "bandit.B608",
+	"semgrep.go.path-traversal", "semgrep.ts.open-redirect", "semgrep.java.ssti",
+}
+
+var dastURLs = []string{
+	"https://app.local/api/v1/users?id=1",
+	"https://app.local/login",
+	"https://app.local/search?q=test",
+	"https://app.local/redirect?url=https://evil.test",
+}
+
+var dastHTTPMethods = []string{"GET", "POST", "PUT"}
+var dastHTTPParams = []string{"id", "username", "search", "redirect", "url"}
+
+var iacResources = []string{
+	"aws_s3_bucket.logs",
+	"aws_iam_role.app",
+	"Deployment/nginx",
+	"azurerm_storage_account.data",
+}
+
+var iacProviders = []string{"aws", "azure", "gcp", "kubernetes"}
+
+var secretKinds = []string{"aws_access_key", "github_pat", "private_key", "slack_webhook"}
+
+var secretFilePaths = []string{".env", "config/secrets.yaml"}
+
+var sastSnippets = []string{
+	`query = "SELECT * FROM users WHERE id = " + user_input`,
+	`res.send("<div>" + req.query.name + "</div>")`,
+	`cmd := "sh -c " + os.Args[1]`,
+	`open("/var/data/" + request.args["path"], "r")`,
+	`cursor.execute(f"SELECT * FROM orders WHERE id={order_id}")`,
+	`return redirect(request.GET["url"])`,
+	`Runtime.getRuntime().exec(request.getParameter("cmd"));`,
+	`password := "hardcoded-secret-token"`,
+	`yaml.load(input_data, Loader=yaml.FullLoader)`,
+	`http.Get("http://" + host + "/admin")`,
 }
 
 func main() {
@@ -141,7 +121,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	totalFindings := 100_000
+	totalFindings := seededFindingsCount()
 	batchSize := 1000
 
 	// 1. Create projects
@@ -246,49 +226,6 @@ func generateFinding(projectIDs []uuid.UUID, weights []float64) []any {
 	}
 	projectID := projectIDs[pidx]
 
-	// Severity distribution: info=5%, low=25%, medium=40%, high=22%, critical=8%
-	severity := pickWeighted([]int{0, 1, 2, 3, 4}, []float64{0.05, 0.25, 0.40, 0.22, 0.08})
-
-	// Status distribution: open=60%, confirmed=15%, fp=10%, resolved=10%, risk_accepted=5%
-	status := pickWeighted([]int{0, 1, 2, 3, 4}, []float64{0.60, 0.15, 0.10, 0.10, 0.05})
-
-	confidence := rand.IntN(4) // 0-3
-
-	// CVE
-	cveYear := 2020 + rand.IntN(6) // 2020-2025
-	cveNum := 1000 + rand.IntN(49000)
-	cveID := fmt.Sprintf("CVE-%d-%d", cveYear, cveNum)
-
-	// CWE: pick 1-2 from top-25
-	numCWE := 1 + rand.IntN(2)
-	cweIDs := make([]int, numCWE)
-	for i := range cweIDs {
-		cweIDs[i] = topCWEs[rand.IntN(len(topCWEs))]
-	}
-
-	// File path
-	filePath := filePaths[rand.IntN(len(filePaths))]
-
-	lineStart := 10 + rand.IntN(500)
-	lineEnd := lineStart + rand.IntN(20)
-
-	// Component
-	comp := components[rand.IntN(len(components))]
-
-	sourceType := sourceTypes[rand.IntN(len(sourceTypes))]
-
-	// Title
-	titleTarget := comp.name
-	if rand.Float64() < 0.3 {
-		titleTarget = filePath
-	}
-	title := fmt.Sprintf(titleTemplates[rand.IntN(len(titleTemplates))], titleTarget)
-
-	desc := descSnippets[rand.IntN(len(descSnippets))]
-
-	// Fingerprint
-	fingerprint := calcFingerprint(cveID, filePath, cweIDs[0], comp.name, comp.version)
-
 	// Timestamps: first_seen randomly within last 180 days
 	daysAgo := rand.IntN(180)
 	firstSeen := time.Now().AddDate(0, 0, -daysAgo)
@@ -298,26 +235,41 @@ func generateFinding(projectIDs []uuid.UUID, weights []float64) []any {
 	}
 	timesSeen := 1 + rand.IntN(20)
 
-	cpeURI := fmt.Sprintf("cpe:2.3:a:*:%s:%s:*:*:*:*:*:*:*", comp.name, comp.version)
+	kindBucket := rand.Float64()
+	f := domain.Finding{
+		ID:         uuid.New(),
+		ProjectID:  projectID,
+		Status:     pickWeighted([]int{0, 1, 2, 3, 4}, []float64{0.60, 0.15, 0.10, 0.10, 0.05}),
+		Confidence: rand.IntN(4),
+		FirstSeen:  firstSeen,
+		LastSeen:   lastSeen,
+		TimesSeen:  timesSeen,
+	}
 
-	id := uuid.New()
+	switch {
+	case kindBucket < 0.40:
+		fillSCAFinding(&f)
+	case kindBucket < 0.70:
+		fillSASTFinding(&f)
+	case kindBucket < 0.80:
+		fillDASTFinding(&f)
+	case kindBucket < 0.90:
+		fillIaCFinding(&f)
+	default:
+		fillSecretsFinding(&f)
+	}
+
+	f.Fingerprint = domain.CalculateFingerprint(&f)
 
 	return []any{
-		id, title, desc, severity, confidence, status,
-		filePath, lineStart, lineEnd, comp.name, comp.version,
-		[]string{cveID}, cweIDs, cpeURI, fingerprint,
-		firstSeen, lastSeen, timesSeen, projectID, sourceType,
+		f.ID, f.Title, f.Description, f.Severity, f.Confidence, f.Status,
+		f.FilePath, f.LineStart, f.LineEnd, f.Component, f.ComponentVersion,
+		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint,
+		f.FirstSeen, f.LastSeen, f.TimesSeen, f.ProjectID, f.SourceType, int16(f.Kind),
+		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
+		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
+		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
 	}
-}
-
-func calcFingerprint(cveID, filePath string, cweID int, component, version string) string {
-	input := strings.ToLower(cveID) +
-		strings.ToLower(filePath) +
-		fmt.Sprintf("%d", cweID) +
-		strings.ToLower(component) +
-		strings.ToLower(version)
-	h := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("%x", h)
 }
 
 func pickWeighted(values []int, weights []float64) int {
@@ -332,12 +284,169 @@ func pickWeighted(values []int, weights []float64) int {
 	return values[len(values)-1]
 }
 
+func seededFindingsCount() int {
+	raw := strings.TrimSpace(os.Getenv("SEED_FINDINGS_COUNT"))
+	if raw == "" {
+		return 100_000
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 100_000
+	}
+	return n
+}
+
+func fillSCAFinding(f *domain.Finding) {
+	component := scaComponents[rand.IntN(len(scaComponents))]
+	version := randomSemVer()
+	ecosystem := scaEcosystems[rand.IntN(len(scaEcosystems))]
+	purl := fmt.Sprintf("pkg:%s/%s@%s", ecosystem, component, version)
+
+	f.Kind = domain.KindSCA
+	f.Title = fmt.Sprintf("Vulnerable dependency: %s", component)
+	f.Description = fmt.Sprintf("Known vulnerability in %s@%s", component, version)
+	f.Severity = pickWeighted([]int{1, 2, 3, 4}, []float64{0.20, 0.45, 0.25, 0.10})
+	f.Component = component
+	f.ComponentVersion = version
+	f.CVEIDs = []string{scaCVEPool[rand.IntN(len(scaCVEPool))]}
+	f.CWEIDs = []int{79, 89}
+	f.CPEURI = ""
+	f.SourceType = "trivy"
+	f.PackageEcosystem = &ecosystem
+	f.Purl = &purl
+
+	if rand.Float64() < 0.70 {
+		fixed := incVersion(version)
+		f.FixedVersion = &fixed
+	}
+}
+
+func fillSASTFinding(f *domain.Finding) {
+	ruleID := sastRuleIDs[rand.IntN(len(sastRuleIDs))]
+	snippet := sastSnippets[rand.IntN(len(sastSnippets))]
+	lineStart := 10 + rand.IntN(491)
+	lineEnd := lineStart + rand.IntN(11)
+
+	f.Kind = domain.KindSAST
+	f.Title = firstSentence(ruleID + " finding")
+	f.Description = fmt.Sprintf("Potential insecure code pattern matched by %s", ruleID)
+	f.Severity = pickWeighted([]int{1, 2, 3, 4}, []float64{0.15, 0.40, 0.35, 0.10})
+	f.FilePath = filePaths[rand.IntN(len(filePaths))]
+	f.LineStart = lineStart
+	f.LineEnd = lineEnd
+	f.RuleID = &ruleID
+	ruleName := firstSentence(ruleID)
+	f.RuleName = &ruleName
+	f.CodeSnippet = &snippet
+	f.CWEIDs = []int{79, 89, 22}
+	f.CVEIDs = []string{}
+	f.SourceType = "semgrep"
+}
+
+func fillDASTFinding(f *domain.Finding) {
+	url := dastURLs[rand.IntN(len(dastURLs))]
+	method := dastHTTPMethods[rand.IntN(len(dastHTTPMethods))]
+	param := dastHTTPParams[rand.IntN(len(dastHTTPParams))]
+
+	f.Kind = domain.KindDAST
+	f.Title = "Dynamic scan issue"
+	f.Description = "Potentially exploitable behavior detected during runtime scan"
+	f.Severity = pickWeighted([]int{1, 2, 3}, []float64{0.20, 0.50, 0.30})
+	f.URL = &url
+	f.HttpMethod = &method
+	f.HttpParam = &param
+	f.CWEIDs = []int{79, 89}
+	f.CVEIDs = []string{}
+	f.SourceType = "zap"
+}
+
+func fillIaCFinding(f *domain.Finding) {
+	resource := iacResources[rand.IntN(len(iacResources))]
+	provider := iacProviders[rand.IntN(len(iacProviders))]
+	ruleID := fmt.Sprintf("CKV_%s_%02d", strings.ToUpper(provider), 1+rand.IntN(99))
+	ruleName := "IaC misconfiguration"
+
+	f.Kind = domain.KindIaC
+	f.Title = "IaC policy violation"
+	f.Description = "Infrastructure policy check failed"
+	f.Severity = pickWeighted([]int{1, 2, 3, 4}, []float64{0.10, 0.45, 0.35, 0.10})
+	f.IacResource = &resource
+	f.IacProvider = &provider
+	f.RuleID = &ruleID
+	f.RuleName = &ruleName
+	f.CVEIDs = []string{}
+	f.CWEIDs = []int{}
+	f.SourceType = "checkov"
+}
+
+func fillSecretsFinding(f *domain.Finding) {
+	secretKind := secretKinds[rand.IntN(len(secretKinds))]
+	commitSHA := randomHex(40)
+	ruleName := "Leaked secret pattern"
+
+	f.Kind = domain.KindSecrets
+	f.Title = "Potential secret leak"
+	f.Description = "Detected credential-like pattern in repository history"
+	f.Severity = domain.SeverityHigh
+	f.FilePath = secretFilePaths[rand.IntN(len(secretFilePaths))]
+	f.SecretKind = &secretKind
+	f.CommitSHA = &commitSHA
+	f.RuleID = &secretKind
+	f.RuleName = &ruleName
+	f.CVEIDs = []string{}
+	f.CWEIDs = []int{}
+	f.SourceType = "gitleaks"
+}
+
+func randomSemVer() string {
+	major := 1 + rand.IntN(2)
+	minor := rand.IntN(10)
+	patch := rand.IntN(10)
+	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
+}
+
+func incVersion(v string) string {
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return v
+	}
+	patch, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return v
+	}
+	patch++
+	return fmt.Sprintf("%s.%s.%d", parts[0], parts[1], patch)
+}
+
+func randomHex(length int) string {
+	const hexChars = "0123456789abcdef"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = hexChars[rand.IntN(len(hexChars))]
+	}
+	return string(b)
+}
+
+func firstSentence(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		return strings.TrimSpace(s[:idx])
+	}
+	return s
+}
+
 func batchInsertFindings(ctx context.Context, pool *pgxpool.Pool, rows [][]any) (int64, error) {
 	cols := []string{
 		"id", "title", "description", "severity", "confidence", "status",
 		"file_path", "line_start", "line_end", "component", "component_version",
 		"cve_ids", "cwe_ids", "cpe_uri", "fingerprint",
-		"first_seen", "last_seen", "times_seen", "project_id", "source_type",
+		"first_seen", "last_seen", "times_seen", "project_id", "source_type", "finding_kind",
+		"fixed_version", "package_ecosystem", "purl", "code_snippet", "code_flow",
+		"url", "http_method", "http_param", "http_evidence", "iac_resource",
+		"iac_provider", "secret_kind", "commit_sha", "rule_id", "rule_name",
 	}
 
 	copyCount, err := pool.CopyFrom(

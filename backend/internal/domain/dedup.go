@@ -3,6 +3,7 @@ package domain
 import (
 	"crypto/sha256"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -19,12 +20,22 @@ func CalculateFingerprint(f *Finding) string {
 		cweID = "0"
 	}
 
-	input := strings.ToLower(cveID) +
-		strings.ToLower(f.FilePath) +
-		cweID +
-		strings.ToLower(f.Component) +
-		strings.ToLower(f.ComponentVersion)
+	var ruleID string
+	if f.RuleID != nil {
+		ruleID = *f.RuleID
+	}
 
+	parts := []string{
+		strconv.Itoa(int(f.Kind)),
+		strings.ToLower(ruleID),
+		strings.ToLower(cveID),
+		strings.ToLower(f.FilePath),
+		cweID,
+		strings.ToLower(f.Component),
+		strings.ToLower(f.ComponentVersion),
+	}
+
+	input := strings.Join(parts, "")
 	h := sha256.Sum256([]byte(input))
 	return fmt.Sprintf("%x", h)
 }

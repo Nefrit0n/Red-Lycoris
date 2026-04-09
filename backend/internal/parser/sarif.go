@@ -34,6 +34,7 @@ type sarifDriver struct {
 
 type sarifRule struct {
 	ID               string          `json:"id"`
+	Name             string          `json:"name"`
 	ShortDescription sarifMessage    `json:"shortDescription"`
 	FullDescription  sarifMessage    `json:"fullDescription"`
 	DefaultConfig    sarifRuleConfig `json:"defaultConfiguration"`
@@ -68,6 +69,7 @@ type sarifLocation struct {
 type sarifPhysicalLocation struct {
 	ArtifactLocation sarifArtifactLocation `json:"artifactLocation"`
 	Region           sarifRegion           `json:"region"`
+	ContextRegion    sarifContextRegion    `json:"contextRegion"`
 }
 
 type sarifArtifactLocation struct {
@@ -77,6 +79,14 @@ type sarifArtifactLocation struct {
 type sarifRegion struct {
 	StartLine int `json:"startLine"`
 	EndLine   int `json:"endLine"`
+}
+
+type sarifContextRegion struct {
+	Snippet sarifSnippet `json:"snippet"`
+}
+
+type sarifSnippet struct {
+	Text string `json:"text"`
 }
 
 type SARIFParser struct{}
@@ -112,6 +122,7 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 		}
 
 		sourceName := run.Tool.Driver.Name
+		kind := kindFromSARIFTool(sourceName)
 
 		for _, result := range run.Results {
 			rule, ok := ruleMap[result.RuleID]
@@ -149,6 +160,7 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 			cweIDs := extractCWEIDs(rule.Properties.Tags)
 
 			f := domain.Finding{
+				Kind:        kind,
 				Title:       title,
 				Description: description,
 				Severity:    severity,
@@ -161,6 +173,19 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 				CWEIDs:      cweIDs,
 				SourceType:  sourceName,
 			}
+
+			if ruleID := strings.TrimSpace(result.RuleID); ruleID != "" {
+				f.RuleID = &ruleID
+			}
+			if ruleName := firstNonEmpty(strings.TrimSpace(rule.Name), strings.TrimSpace(rule.ShortDescription.Text)); ruleName != "" {
+				f.RuleName = &ruleName
+			}
+			if kind == domain.KindSAST && len(result.Locations) > 0 {
+				snippet := strings.TrimSpace(result.Locations[0].PhysicalLocation.ContextRegion.Snippet.Text)
+				if snippet != "" {
+					f.CodeSnippet = &snippet
+				}
+			}
 			f.Fingerprint = domain.CalculateFingerprint(&f)
 
 			findings = append(findings, f)
@@ -168,6 +193,22 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 	}
 
 	return findings, nil
+}
+
+func kindFromSARIFTool(toolName string) domain.FindingKind {
+	name := strings.ToLower(strings.TrimSpace(toolName))
+	switch {
+	case strings.Contains(name, "semgrep"):
+		return domain.KindSAST
+	case strings.Contains(name, "zap"), strings.Contains(name, "burp"):
+		return domain.KindDAST
+	case strings.Contains(name, "tfsec"), strings.Contains(name, "checkov"), strings.Contains(name, "trivy-config"), strings.Contains(name, "kics"):
+		return domain.KindIaC
+	case strings.Contains(name, "gitleaks"), strings.Contains(name, "trufflehog"):
+		return domain.KindSecrets
+	default:
+		return domain.KindOther
+	}
 }
 
 func mapSARIFSeverity(level string) int {
