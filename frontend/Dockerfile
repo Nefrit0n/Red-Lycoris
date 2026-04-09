@@ -4,7 +4,8 @@ FROM node:20-alpine AS development
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+ENV NPM_CONFIG_INCLUDE=optional
+RUN npm ci --include=optional
 
 COPY . .
 
@@ -18,7 +19,8 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+ENV NPM_CONFIG_INCLUDE=optional
+RUN npm ci --include=optional
 
 COPY . .
 RUN npm run build
