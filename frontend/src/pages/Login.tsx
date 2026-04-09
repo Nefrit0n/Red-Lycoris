@@ -35,6 +35,7 @@ export default function Login() {
   const loginMutation = useMutation({
     mutationFn: () => login(email, password),
     onSuccess: (user) => {
+      queryClient.cancelQueries({ queryKey: ["current-user"] });
       queryClient.setQueryData(["current-user"], user);
       navigate("/", { replace: true });
     },

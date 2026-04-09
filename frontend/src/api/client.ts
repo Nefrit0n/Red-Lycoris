@@ -19,6 +19,7 @@ async function request<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
+  const originPath = window.location.pathname;
   const opts: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
@@ -39,7 +40,7 @@ async function request<T>(
       apiErr = { code: "UNKNOWN", message: res.statusText };
     }
     const err = new ApiClientError(res.status, apiErr);
-    if (res.status === 401 && !window.location.pathname.startsWith("/login")) {
+    if (res.status === 401 && !originPath.startsWith("/login")) {
       if (err.code === "SESSION_EXPIRED") {
         window.location.replace("/login?expired=1");
       } else if (err.code === "AUTHENTICATION_REQUIRED") {
