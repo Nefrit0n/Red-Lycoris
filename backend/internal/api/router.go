@@ -1,18 +1,21 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"vulnscope/internal/enrichment"
-	"vulnscope/internal/storage"
+	"redlycoris/internal/enrichment"
+	"redlycoris/internal/storage"
 )
 
 type routerConfig struct {
+	env       string
+	version   string
+	startTime time.Time
 	scheduler *enrichment.Scheduler
 }
 
@@ -22,8 +25,24 @@ func WithScheduler(s *enrichment.Scheduler) RouterOption {
 	return func(c *routerConfig) { c.scheduler = s }
 }
 
+func WithEnv(env string) RouterOption {
+	return func(c *routerConfig) { c.env = env }
+}
+
+func WithVersion(version string) RouterOption {
+	return func(c *routerConfig) { c.version = version }
+}
+
+func WithStartTime(startTime time.Time) RouterOption {
+	return func(c *routerConfig) { c.startTime = startTime }
+}
+
 func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts ...RouterOption) http.Handler {
 	var cfg routerConfig
+	cfg.env = "dev"
+	cfg.version = "dev"
+	cfg.startTime = time.Now()
+
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -35,29 +54,16 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	r := chi.NewRouter()
 
 	// Middleware
+	r.Use(RequestIDMiddleware)
 	r.Use(RecoveryMiddleware)
 	r.Use(RequestLoggerMiddleware)
 	r.Use(CORSMiddleware(corsOrigins))
 
 	// Health check
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		dbStatus := "connected"
-		if err := pool.Ping(r.Context()); err != nil {
-			dbStatus = "disconnected"
-		}
+	r.Get("/health", healthHandler(pool, rdb, cfg.version, cfg.startTime))
 
-		redisStatus := "connected"
-		if err := rdb.Ping(r.Context()).Err(); err != nil {
-			redisStatus = "disconnected"
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"status": "ok",
-			"db":     dbStatus,
-			"redis":  redisStatus,
-		})
-	})
+	r.Get("/api/docs", docsHandler(cfg.env))
+	r.Get("/api/openapi.yaml", openAPIHandler(cfg.env))
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
@@ -76,6 +82,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		// ───────────────────── Findings ─────────────────────
 		r.Route("/findings", func(r chi.Router) {
 			r.Get("/", handleListFindings(findingsRepo))
+			r.Post("/", handleImport(findingsRepo, rdb))
 
 			r.Route("/{id}", func(r chi.Router) {
 				r.Get("/", handleGetFinding(findingsRepo, pool))

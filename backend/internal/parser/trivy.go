@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"vulnscope/internal/domain"
+	"redlycoris/internal/domain"
 )
 
 type trivyReport struct {

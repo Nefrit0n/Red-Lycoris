@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"vulnscope/internal/domain"
+	"redlycoris/internal/domain"
 )
 
 // SARIF 2.1.0 structures (only fields we need)

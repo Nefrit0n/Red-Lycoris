@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"vulnscope/internal/domain"
+	"redlycoris/internal/domain"
 )
 
 type DashboardRepo struct {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"vulnscope/internal/domain"
+	"redlycoris/internal/domain"
 )
 
 // genericReport is our universal JSON import format.

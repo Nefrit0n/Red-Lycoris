@@ -65,6 +65,10 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.8.3 h1:RP3t2pwF7cMEbC1dqtB6poj3niw/9gnV4Cjg5oW5gtY=
 github.com/stretchr/testify v1.8.3/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
+github.com/swaggest/swgui v1.8.5 h1:nceK5OJcpXpkfjmPNH6wtubbd8ZYwxy043xmx0SK18g=
+github.com/swaggest/swgui v1.8.5/go.mod h1:kvSzLC7+wK4l9n/YcQlb2AMeQtkno9i3C6imADv/fLQ=
+github.com/vearutop/statigz v1.4.0 h1:RQL0KG3j/uyA/PFpHeZ/L6l2ta920/MxlOAIGEOuwmU=
+github.com/vearutop/statigz v1.4.0/go.mod h1:LYTolBLiz9oJISwiVKnOQoIwhO1LWX1A7OECawGS8XE=
 go.uber.org/atomic v1.7.0 h1:ADUqmZGgLDDfbSL9ZmPxKTybcoEYHgpYfELNoN+7hsw=
 go.uber.org/atomic v1.7.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 golang.org/x/crypto v0.17.0 h1:r8bRNjWL3GshPW3gkd+RpvzWrZAwPS49OmTGZ/uhM4k=

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"vulnscope/internal/domain"
+	"redlycoris/internal/domain"
 )
 
 // EnrichFinding обогащает один finding из локальных справочных таблиц.

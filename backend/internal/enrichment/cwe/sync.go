@@ -104,7 +104,7 @@ func (s *CWESyncer) downloadOnce(ctx context.Context, url string) ([]byte, bool,
 	}
 
 	req.Header.Set("Accept", "application/zip, application/octet-stream, */*")
-	req.Header.Set("User-Agent", "vulnscope/1.0")
+	req.Header.Set("User-Agent", "redlycoris/1.0")
 
 	resp, err := s.client.Do(req)
 	if err != nil {

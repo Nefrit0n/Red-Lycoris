@@ -258,7 +258,7 @@ func (s *CPESyncer) doRequest(ctx context.Context, startIndex int, params *timeP
 		req.Header.Set("apiKey", s.apiKey)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "vulnscope/1.0")
+	req.Header.Set("User-Agent", "redlycoris/1.0")
 
 	resp, err := s.client.Do(req)
 	if err != nil {

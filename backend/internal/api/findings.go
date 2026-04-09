@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"vulnscope/internal/enrichment"
-	"vulnscope/internal/storage"
+	"redlycoris/internal/enrichment"
+	"redlycoris/internal/storage"
 )
 
 func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
@@ -29,7 +29,7 @@ func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
 		if v := q.Get("project_id"); v != "" {
 			id, err := uuid.Parse(v)
 			if err != nil {
-				respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project_id")
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project_id")
 				return
 			}
 			filter.ProjectID = id
@@ -39,7 +39,7 @@ func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
 			for _, s := range strings.Split(v, ",") {
 				n, err := strconv.Atoi(s)
 				if err != nil {
-					respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid severity value")
+					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid severity value")
 					return
 				}
 				filter.Severities = append(filter.Severities, n)
@@ -50,7 +50,7 @@ func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
 			for _, s := range strings.Split(v, ",") {
 				n, err := strconv.Atoi(s)
 				if err != nil {
-					respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid status value")
+					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid status value")
 					return
 				}
 				filter.Statuses = append(filter.Statuses, n)
@@ -60,7 +60,7 @@ func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
 		if v := q.Get("cwe"); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil {
-				respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid cwe value")
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid cwe value")
 				return
 			}
 			filter.CWE = n
@@ -69,7 +69,7 @@ func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
 		if v := q.Get("limit"); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil {
-				respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid limit value")
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid limit value")
 				return
 			}
 			filter.Limit = n
@@ -77,7 +77,7 @@ func handleListFindings(repo *storage.FindingsRepo) http.HandlerFunc {
 
 		findings, nextCursor, total, err := repo.List(r.Context(), filter)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list findings")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list findings")
 			return
 		}
 
@@ -89,13 +89,13 @@ func handleGetFinding(repo *storage.FindingsRepo, pool *pgxpool.Pool) http.Handl
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
 			return
 		}
 
 		finding, err := repo.GetByID(r.Context(), id)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "finding not found")
+			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "finding not found")
 			return
 		}
 
@@ -122,23 +122,23 @@ func handleUpdateStatus(repo *storage.FindingsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
 			return
 		}
 
 		var req request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
 			return
 		}
 
 		if req.Status < 0 || req.Status > 4 {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "status must be between 0 and 4")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "status must be between 0 and 4")
 			return
 		}
 
 		if err := repo.UpdateStatus(r.Context(), id, req.Status); err != nil {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "finding not found")
+			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "finding not found")
 			return
 		}
 
@@ -154,21 +154,21 @@ func handleBulkUpdateStatus(repo *storage.FindingsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
 			return
 		}
 
 		if len(req.IDs) == 0 {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "ids must not be empty")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "ids must not be empty")
 			return
 		}
 		if req.Status < 0 || req.Status > 4 {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "status must be between 0 and 4")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "status must be between 0 and 4")
 			return
 		}
 
 		if err := repo.BulkUpdateStatus(r.Context(), req.IDs, req.Status); err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update statuses")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update statuses")
 			return
 		}
 
@@ -183,12 +183,12 @@ func handleDeleteFinding(repo *storage.FindingsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
 			return
 		}
 
 		if err := repo.Delete(r.Context(), id); err != nil {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "finding not found")
+			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "finding not found")
 			return
 		}
 

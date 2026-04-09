@@ -11,11 +11,12 @@ func respondJSON(w http.ResponseWriter, status int, data any) {
 	json.NewEncoder(w).Encode(data)
 }
 
-func respondError(w http.ResponseWriter, status int, code, message string) {
+func respondError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	respondJSON(w, status, map[string]any{
 		"error": map[string]string{
-			"code":    code,
-			"message": message,
+			"code":       code,
+			"message":    message,
+			"request_id": GetRequestID(r.Context()),
 		},
 	})
 }

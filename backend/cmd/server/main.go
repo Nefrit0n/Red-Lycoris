@@ -16,20 +16,24 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"vulnscope/internal/api"
-	"vulnscope/internal/config"
-	"vulnscope/internal/enrichment"
-	"vulnscope/internal/enrichment/bdu"
-	"vulnscope/internal/enrichment/cpe"
-	"vulnscope/internal/enrichment/cwe"
-	"vulnscope/internal/enrichment/epss"
-	"vulnscope/internal/enrichment/kev"
-	"vulnscope/internal/enrichment/nvd"
-	"vulnscope/internal/enrichment/osv"
-	"vulnscope/internal/storage"
+	"redlycoris/internal/api"
+	"redlycoris/internal/config"
+	"redlycoris/internal/enrichment"
+	"redlycoris/internal/enrichment/bdu"
+	"redlycoris/internal/enrichment/cpe"
+	"redlycoris/internal/enrichment/cwe"
+	"redlycoris/internal/enrichment/epss"
+	"redlycoris/internal/enrichment/kev"
+	"redlycoris/internal/enrichment/nvd"
+	"redlycoris/internal/enrichment/osv"
+	"redlycoris/internal/storage"
 )
 
+var version = "dev"
+
 func main() {
+	startTime := time.Now()
+
 	cfg := config.Load()
 
 	var logLevel slog.Level
@@ -101,7 +105,11 @@ func main() {
 	enrichment.StartWorkers(ctx, pool, rdb, 3)
 
 	// Enrichment scheduler
-	var routerOpts []api.RouterOption
+	routerOpts := []api.RouterOption{
+		api.WithEnv(cfg.Env),
+		api.WithVersion(version),
+		api.WithStartTime(startTime),
+	}
 	if cfg.EnrichmentEnabled {
 		scheduler := enrichment.NewScheduler(pool)
 		scheduler.Register(nvd.NewSyncer(pool, cfg.NVDAPIKey), 2*time.Hour)

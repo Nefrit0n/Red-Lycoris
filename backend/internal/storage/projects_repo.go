@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"vulnscope/internal/domain"
+	"redlycoris/internal/domain"
 )
 
 type ProjectsRepo struct {

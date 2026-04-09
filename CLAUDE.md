@@ -21,7 +21,7 @@
 ## Структура проекта
 
 ```
-vulnscope/
+RedLycoris/
 ├── CLAUDE.md
 ├── docker-compose.yml
 ├── .env.example
@@ -168,6 +168,10 @@ vulnscope/
 - **React Router v6** — маршрутизация.
 - **Форматы:** даты через `date-fns`, числа — `Intl.NumberFormat`.
 - **TypeScript strict mode** — никаких `any`.
+
+### Cookie соглашение
+
+- На этапе 3 имя cookie для сессии фиксируется как `rl_session`.
 
 ### API Контракт
 

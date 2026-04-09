@@ -8,8 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"vulnscope/internal/domain"
-	"vulnscope/internal/storage"
+	"redlycoris/internal/domain"
+	"redlycoris/internal/storage"
 )
 
 func handleListProjects(repo *storage.ProjectsRepo) http.HandlerFunc {
@@ -30,7 +30,7 @@ func handleListProjects(repo *storage.ProjectsRepo) http.HandlerFunc {
 
 		projects, total, err := repo.List(r.Context(), limit, offset)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list projects")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list projects")
 			return
 		}
 
@@ -48,17 +48,17 @@ func handleCreateProject(repo *storage.ProjectsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var p domain.Project
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
 			return
 		}
 
 		if err := p.Validate(); err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 			return
 		}
 
 		if err := repo.Create(r.Context(), &p); err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create project")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create project")
 			return
 		}
 
@@ -70,13 +70,13 @@ func handleGetProject(repo *storage.ProjectsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project id")
 			return
 		}
 
 		p, err := repo.GetByID(r.Context(), id)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "project not found")
+			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "project not found")
 			return
 		}
 
@@ -88,24 +88,24 @@ func handleUpdateProject(repo *storage.ProjectsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project id")
 			return
 		}
 
 		var p domain.Project
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
 			return
 		}
 		p.ID = id
 
 		if err := p.Validate(); err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 			return
 		}
 
 		if err := repo.Update(r.Context(), &p); err != nil {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "project not found")
+			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "project not found")
 			return
 		}
 
@@ -117,12 +117,12 @@ func handleDeleteProject(repo *storage.ProjectsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project id")
 			return
 		}
 
 		if err := repo.Delete(r.Context(), id); err != nil {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "project not found")
+			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "project not found")
 			return
 		}
 

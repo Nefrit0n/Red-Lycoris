@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"vulnscope/internal/domain"
+	"redlycoris/internal/domain"
 )
 
 var parsers = []struct {

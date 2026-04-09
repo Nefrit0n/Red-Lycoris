@@ -5,7 +5,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"vulnscope/internal/storage"
+	"redlycoris/internal/storage"
 )
 
 func handleDashboardStats(repo *storage.DashboardRepo, rdb *redis.Client) http.HandlerFunc {
@@ -21,7 +21,7 @@ func handleDashboardStats(repo *storage.DashboardRepo, rdb *redis.Client) http.H
 
 		stats, err := repo.GetStats(ctx)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch dashboard stats")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch dashboard stats")
 			return
 		}
 

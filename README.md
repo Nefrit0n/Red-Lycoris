@@ -18,6 +18,23 @@ make dev
 make seed
 ```
 
+## Развёртывание
+
+Быстрый старт (Docker Compose):
+
+```bash
+git clone https://github.com/Nefrit0n/Red-Lycoris.git
+cd Red-Lycoris
+cp env.example .env
+docker compose up -d
+```
+
+Подробные инструкции:
+
+- [docs/deployment.md](docs/deployment.md)
+- [docs/configuration.md](docs/configuration.md)
+- [docs/network_requirements.md](docs/network_requirements.md)
+
 ## Архитектура
 
 ```
@@ -133,13 +150,14 @@ GET /api/v1/findings?limit=50&cursor=...&sort=-priority_score
 
 | Переменная | По умолчанию | Описание |
 |-----------|-------------|----------|
-| `POSTGRES_DB` | `vulnscope` | Имя базы данных |
-| `POSTGRES_USER` | `vulnscope` | Пользователь БД |
-| `POSTGRES_PASSWORD` | `vulnscope_secret` | Пароль БД |
+| `POSTGRES_DB` | `RedLycoris` | Имя базы данных |
+| `POSTGRES_USER` | `RedLycoris` | Пользователь БД |
+| `POSTGRES_PASSWORD` | `RedLycoris_secret` | Пароль БД |
 | `POSTGRES_PORT` | `5432` | Порт PostgreSQL (host) |
 | `REDIS_PORT` | `6379` | Порт Redis (host) |
 | `API_PORT` | `8080` | Порт backend API (host) |
 | `LOG_LEVEL` | `info` | Уровень логирования: debug, info, warn, error |
+| `ENV` | `dev` | Окружение приложения (`dev` включает `/api/docs` и `/api/openapi.yaml`) |
 | `FRONTEND_PORT` | `3000` | Порт frontend (host) |
 | `FRONTEND_TARGET` | `development` | Docker build target: development / production |
 | `ENRICHMENT_ENABLED` | `true` | Включить автоматическое обогащение |
