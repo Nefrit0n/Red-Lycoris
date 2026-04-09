@@ -102,7 +102,7 @@ func handleLogin(svc *authsvc.Service, rdb *redis.Client) http.HandlerFunc {
 			Name:     "rl_session",
 			Value:    rawToken,
 			HttpOnly: true,
-			Secure:   authCookieSecure,
+			Secure:   shouldUseSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
 			Path:     "/",
 			MaxAge:   int(authSessionMaxAge.Seconds()),
@@ -131,7 +131,7 @@ func handleLogout(svc *authsvc.Service) http.HandlerFunc {
 			Name:     "rl_session",
 			Value:    "",
 			HttpOnly: true,
-			Secure:   authCookieSecure,
+			Secure:   shouldUseSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
 			Path:     "/",
 			MaxAge:   -1,
@@ -141,6 +141,33 @@ func handleLogout(svc *authsvc.Service) http.HandlerFunc {
 			"data": map[string]any{"status": "logged out"},
 		})
 	}
+}
+
+func shouldUseSecureCookie(r *http.Request) bool {
+	if !authCookieSecure {
+		return false
+	}
+
+	// Preserve local HTTP development flows even if ENV/COOKIE_SECURE is misconfigured.
+	host := r.Host
+	if parsedHost, _, err := net.SplitHostPort(r.Host); err == nil {
+		host = parsedHost
+	}
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1" {
+		return false
+	}
+
+	if r.TLS != nil {
+		return true
+	}
+	if authTrustProxy {
+		xfp := strings.TrimSpace(strings.ToLower(r.Header.Get("X-Forwarded-Proto")))
+		if xfp == "https" {
+			return true
+		}
+	}
+	return false
 }
 
 func handleRefresh(svc *authsvc.Service) http.HandlerFunc {
