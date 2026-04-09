@@ -4,17 +4,17 @@ services:
   # ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: redlycoris-db
+    container_name: redlycoris-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-vulnscope}
-      POSTGRES_USER: ${POSTGRES_USER:-vulnscope}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vulnscope_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-redlycoris}
+      POSTGRES_USER: ${POSTGRES_USER:-redlycoris}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-redlycoris_secret}
       POSTGRES_INITDB_ARGS: "--data-checksums"
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - redlycoris-pgdata:/var/lib/postgresql/data
       - ./backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
     command: >
       postgres
@@ -31,8 +31,8 @@ services:
         -c default_statistics_target=100
         -c log_min_duration_statement=200
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vulnscope}"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-redlycoris}"]
+      interval: 10s
       timeout: 3s
       retries: 10
     deploy:
@@ -58,7 +58,7 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - redlycoris-redisdata:/data
     command: >
       redis-server
         --maxmemory 256mb
@@ -67,7 +67,7 @@ services:
         --appendfsync everysec
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 3s
       retries: 10
     deploy:
@@ -90,15 +90,16 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: redlycoris-api
+    container_name: redlycoris-backend
     restart: unless-stopped
+    stop_grace_period: 30s
     ports:
       - "${API_PORT:-8080}:8080"
     environment:
       SERVER_HOST: "0.0.0.0"
       SERVER_PORT: "8080"
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      DATABASE_URL: "postgres://${POSTGRES_USER:-vulnscope}:${POSTGRES_PASSWORD:-vulnscope_secret}@postgres:5432/${POSTGRES_DB:-vulnscope}?sslmode=disable"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-redlycoris}:${POSTGRES_PASSWORD:-redlycoris_secret}@postgres:5432/${POSTGRES_DB:-redlycoris}?sslmode=disable"
       DATABASE_MAX_CONNS: "25"
       DATABASE_MIN_CONNS: "5"
       REDIS_URL: "redis://redis:6379/0"
@@ -137,7 +138,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: ${FRONTEND_TARGET:-development}
-    container_name: redlycoris-ui
+    container_name: redlycoris-frontend
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
@@ -164,7 +165,7 @@ services:
         max-file: "3"
 
 volumes:
-  postgres_data:
+  redlycoris-pgdata:
     driver: local
-  redis_data:
+  redlycoris-redisdata:
     driver: local

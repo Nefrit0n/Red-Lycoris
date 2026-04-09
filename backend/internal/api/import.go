@@ -9,10 +9,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
-	"vulnscope/internal/domain"
-	"vulnscope/internal/enrichment"
-	"vulnscope/internal/parser"
-	"vulnscope/internal/storage"
+	"redlycoris/internal/domain"
+	"redlycoris/internal/enrichment"
+	"redlycoris/internal/parser"
+	"redlycoris/internal/storage"
 )
 
 type importError struct {
@@ -27,7 +27,7 @@ func handleImport(repo *storage.FindingsRepo, rdb *redis.Client) http.HandlerFun
 		if projectID != "" {
 			id, err := uuid.Parse(projectID)
 			if err != nil {
-				respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project_id query param")
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project_id query param")
 				return
 			}
 			overrideProjectID = id
@@ -35,18 +35,18 @@ func handleImport(repo *storage.FindingsRepo, rdb *redis.Client) http.HandlerFun
 
 		data, err := io.ReadAll(io.LimitReader(r.Body, 50<<20)) // 50MB limit
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "failed to read request body")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "failed to read request body")
 			return
 		}
 
 		format, findings, err := parser.DetectAndParse(r.Context(), data)
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "PARSE_ERROR", err.Error())
+			respondError(w, r, http.StatusBadRequest, "PARSE_ERROR", err.Error())
 			return
 		}
 
 		if len(findings) == 0 {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "no findings found in input")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "no findings found in input")
 			return
 		}
 

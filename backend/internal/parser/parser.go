@@ -3,7 +3,7 @@ package parser
 import (
 	"context"
 
-	"vulnscope/internal/domain"
+	"redlycoris/internal/domain"
 )
 
 type Parser interface {

@@ -3,6 +3,7 @@ package config
 import "os"
 
 type Config struct {
+	Env               string
 	DatabaseURL       string
 	RedisURL          string
 	ServerHost        string
@@ -15,7 +16,8 @@ type Config struct {
 
 func Load() *Config {
 	return &Config{
-		DatabaseURL:       getEnv("DATABASE_URL", "postgres://vulnscope:vulnscope@localhost:5432/vulnscope?sslmode=disable"),
+		Env:               getEnv("ENV", "dev"),
+		DatabaseURL:       getEnv("DATABASE_URL", "postgres://redlycoris:redlycoris@localhost:5432/redlycoris?sslmode=disable"),
 		RedisURL:          getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		ServerHost:        getEnv("SERVER_HOST", "0.0.0.0"),
 		ServerPort:        getEnv("SERVER_PORT", "8080"),

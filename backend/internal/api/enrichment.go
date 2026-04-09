@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"vulnscope/internal/domain"
-	"vulnscope/internal/enrichment"
-	"vulnscope/internal/storage"
+	"redlycoris/internal/domain"
+	"redlycoris/internal/enrichment"
+	"redlycoris/internal/storage"
 )
 
 func handleEnrichmentStatus(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc {
@@ -21,7 +21,7 @@ func handleEnrichmentStatus(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerF
 
 		statuses, err := enrichment.GetAllSyncStatuses(ctx, pool)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get sync statuses")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get sync statuses")
 			return
 		}
 		if statuses == nil {
@@ -36,13 +36,13 @@ func handleGetFindingEnrichments(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
 			return
 		}
 
 		enrichmentsData, err := enrichment.GetFindingEnrichments(r.Context(), pool, id)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get finding enrichments")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get finding enrichments")
 			return
 		}
 		if enrichmentsData == nil {
@@ -57,13 +57,13 @@ func handleGetFindingScore(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
 			return
 		}
 
 		score, err := enrichment.GetFindingScore(r.Context(), pool, id)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get finding score")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get finding score")
 			return
 		}
 		if score == nil {
@@ -79,13 +79,13 @@ func handleManualSync(pool *pgxpool.Pool, scheduler *enrichment.Scheduler) http.
 	return func(w http.ResponseWriter, r *http.Request) {
 		source := chi.URLParam(r, "source")
 		if source == "" {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "source is required")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "source is required")
 			return
 		}
 
 		syncer := scheduler.GetSyncer(source)
 		if syncer == nil {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "unknown source: "+source)
+			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "unknown source: "+source)
 			return
 		}
 
@@ -109,7 +109,7 @@ func handleEnrichFinding(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
 			return
 		}
 
@@ -122,7 +122,7 @@ func handleEnrichFinding(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc
 
 			// Fallback: обогащаем синхронно
 			if err := enrichment.EnrichFinding(r.Context(), pool, id); err != nil {
-				respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "enrichment failed")
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "enrichment failed")
 				return
 			}
 

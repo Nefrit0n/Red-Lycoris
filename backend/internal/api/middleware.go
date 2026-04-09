@@ -53,7 +53,9 @@ func RequestLoggerMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(sw, r)
 
-		slog.Info("request",
+		logger := slog.Default().With("request_id", GetRequestID(r.Context()))
+
+		logger.Info("request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", sw.status,
@@ -66,11 +68,12 @@ func RecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				slog.Error("panic recovered",
+				logger := slog.Default().With("request_id", GetRequestID(r.Context()))
+				logger.Error("panic recovered",
 					"error", fmt.Sprintf("%v", rec),
 					"stack", string(debug.Stack()),
 				)
-				respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 			}
 		}()
 		next.ServeHTTP(w, r)

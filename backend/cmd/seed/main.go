@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"vulnscope/internal/config"
+	"redlycoris/internal/config"
 )
 
 // --- Realistic data pools ---
