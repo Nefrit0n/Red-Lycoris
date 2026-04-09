@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +31,8 @@ func NewService(users *storage.UsersRepo, sessions *storage.SessionsRepo, sessio
 }
 
 func (s *Service) Login(ctx context.Context, email, password, userAgent, ip string) (*User, string, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+
 	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

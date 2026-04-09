@@ -37,6 +37,10 @@ export default function Login() {
         setError("Неверный email или пароль");
         return;
       }
+      if (err instanceof ApiClientError && err.status === 429) {
+        setError("Слишком много попыток входа. Подождите 15 минут и попробуйте снова");
+        return;
+      }
       setError("Не удалось выполнить вход");
     },
   });
