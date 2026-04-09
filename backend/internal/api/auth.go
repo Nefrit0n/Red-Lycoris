@@ -85,7 +85,7 @@ func handleLogin(svc *authsvc.Service, rdb *redis.Client) http.HandlerFunc {
 			return
 		}
 
-		email := strings.TrimSpace(req.Email)
+		email := strings.ToLower(strings.TrimSpace(req.Email))
 		ip := extractIP(r)
 
 		user, rawToken, err := svc.Login(r.Context(), email, req.Password, r.UserAgent(), ip)
