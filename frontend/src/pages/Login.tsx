@@ -11,15 +11,19 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [searchParams] = useSearchParams();
+  const [expiredNotice, setExpiredNotice] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   useEffect(() => {
     if (searchParams.get("expired") === "1") {
-      window.alert("Сессия истекла, войдите снова");
+      setExpiredNotice("Сессия истекла, войдите снова");
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("expired");
+      setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
 
   const loginMutation = useMutation({
     mutationFn: () => login(email, password),
@@ -68,6 +72,14 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+            {expiredNotice && (
+              <p
+                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
+                role="alert"
+              >
+                {expiredNotice}
+              </p>
+            )}
             {error && <p className="text-sm text-red-400">{error}</p>}
             <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
               {loginMutation.isPending ? "Вход..." : "Войти"}
