@@ -33,12 +33,7 @@ async function request<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const token = readAuthToken();
-  const headers: HeadersInit = { "Content-Type": "application/json" };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
+  const originPath = window.location.pathname;
   const opts: RequestInit = {
     method,
     headers,
@@ -59,8 +54,7 @@ async function request<T>(
       apiErr = { code: "UNKNOWN", message: res.statusText };
     }
     const err = new ApiClientError(res.status, apiErr);
-    if (res.status === 401 && !window.location.pathname.startsWith("/login")) {
-      setAuthToken(null);
+    if (res.status === 401 && !originPath.startsWith("/login")) {
       if (err.code === "SESSION_EXPIRED") {
         window.location.replace("/login?expired=1");
       } else if (err.code === "AUTHENTICATION_REQUIRED") {
