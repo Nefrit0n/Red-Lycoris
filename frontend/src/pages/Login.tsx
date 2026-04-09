@@ -37,6 +37,10 @@ export default function Login() {
         setError("Неверный email или пароль");
         return;
       }
+      if (err instanceof ApiClientError && err.status === 429) {
+        setError("Слишком много попыток входа. Подождите 15 минут и попробуйте снова");
+        return;
+      }
       setError("Не удалось выполнить вход");
     },
   });
@@ -60,7 +64,9 @@ export default function Login() {
             }}
           >
             <Input
-              type="email"
+              type="text"
+              inputMode="email"
+              autoComplete="username"
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
