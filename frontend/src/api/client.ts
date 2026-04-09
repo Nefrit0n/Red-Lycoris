@@ -39,11 +39,12 @@ async function request<T>(
       apiErr = { code: "UNKNOWN", message: res.statusText };
     }
     const err = new ApiClientError(res.status, apiErr);
-    if (
-      res.status === 401 &&
-      !window.location.pathname.startsWith("/login")
-    ) {
-      window.location.replace("/login?expired=1");
+    if (res.status === 401 && !window.location.pathname.startsWith("/login")) {
+      if (err.code === "SESSION_EXPIRED") {
+        window.location.replace("/login?expired=1");
+      } else if (err.code === "AUTHENTICATION_REQUIRED") {
+        window.location.replace("/login");
+      }
     }
     throw err;
   }
