@@ -707,7 +707,10 @@ components:
           properties:
             user:
               $ref: '#/components/schemas/User'
-          required: [user]
+            token:
+              type: string
+              description: Токен сессии для Bearer-аутентификации (fallback помимо cookie).
+          required: [user, token]
       required: [data]
 
     Finding:

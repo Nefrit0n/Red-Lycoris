@@ -1,5 +1,7 @@
 import type { ApiError } from "@/types";
 
+const AUTH_TOKEN_KEY = "rl_auth_token";
+
 class ApiClientError extends Error {
   code: string;
   status: number;
@@ -14,14 +16,32 @@ class ApiClientError extends Error {
   }
 }
 
+function readAuthToken(): string | null {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string | null) {
+  if (token) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    return;
+  }
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
+  const token = readAuthToken();
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const opts: RequestInit = {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
     credentials: "include",
   };
   if (body !== undefined) {
@@ -40,6 +60,7 @@ async function request<T>(
     }
     const err = new ApiClientError(res.status, apiErr);
     if (res.status === 401 && !window.location.pathname.startsWith("/login")) {
+      setAuthToken(null);
       if (err.code === "SESSION_EXPIRED") {
         window.location.replace("/login?expired=1");
       } else if (err.code === "AUTHENTICATION_REQUIRED") {
