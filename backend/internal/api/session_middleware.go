@@ -11,6 +11,7 @@ import (
 
 var userCtxKey = &struct{}{}
 var sessionCtxKey = &struct{}{}
+var authTokenInvalidCtxKey = &struct{}{}
 
 func LoadSessionMiddleware(svc *authsvc.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -23,6 +24,10 @@ func LoadSessionMiddleware(svc *authsvc.Service) func(http.Handler) http.Handler
 
 			user, session, err := svc.ValidateToken(r.Context(), rawToken)
 			if err != nil {
+				if errors.Is(err, authsvc.ErrInvalidCredentials) {
+					ctx := context.WithValue(r.Context(), authTokenInvalidCtxKey, true)
+					r = r.WithContext(ctx)
+				}
 				if !errors.Is(err, authsvc.ErrInvalidCredentials) {
 					slog.Warn("session validate failed",
 						"request_id", GetRequestID(r.Context()),
@@ -42,6 +47,14 @@ func LoadSessionMiddleware(svc *authsvc.Service) func(http.Handler) http.Handler
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func AuthTokenInvalidFromContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	invalid, ok := ctx.Value(authTokenInvalidCtxKey).(bool)
+	return ok && invalid
 }
 
 func UserFromContext(ctx context.Context) (*authsvc.User, bool) {

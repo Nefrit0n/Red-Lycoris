@@ -171,7 +171,11 @@ func handleMe() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, ok := UserFromContext(r.Context())
 		if !ok {
-			respondError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+			if AuthTokenInvalidFromContext(r.Context()) {
+				respondError(w, r, http.StatusUnauthorized, "SESSION_EXPIRED", "session expired")
+				return
+			}
+			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
 			return
 		}
 
