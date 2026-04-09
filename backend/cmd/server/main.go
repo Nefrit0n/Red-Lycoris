@@ -86,6 +86,31 @@ func main() {
 	}
 	slog.Info("migrations applied")
 
+	usersRepo := storage.NewUsersRepo(pool)
+	sessionsRepo := storage.NewSessionsRepo(pool)
+	count, err := usersRepo.Count(ctx)
+	if err == nil && count == 0 {
+		slog.Warn("no users found in database",
+			"hint", "create first admin: docker compose exec backend /app/admin create-user --admin --email=you@company --password=...",
+		)
+	}
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				n, err := sessionsRepo.DeleteExpired(ctx)
+				if err == nil && n > 0 {
+					slog.Info("expired sessions cleaned", "count", n)
+				}
+			}
+		}
+	}()
+
 	// Redis
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -109,6 +134,9 @@ func main() {
 		api.WithEnv(cfg.Env),
 		api.WithVersion(version),
 		api.WithStartTime(startTime),
+		api.WithTrustProxy(cfg.TrustProxy),
+		api.WithCookieSecure(cfg.CookieSecure),
+		api.WithSessionDuration(cfg.SessionDuration),
 	}
 	if cfg.EnrichmentEnabled {
 		scheduler := enrichment.NewScheduler(pool)
