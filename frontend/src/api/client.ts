@@ -1,5 +1,7 @@
 import type { ApiError } from "@/types";
 
+const AUTH_TOKEN_KEY = "rl_auth_token";
+
 class ApiClientError extends Error {
   code: string;
   status: number;
@@ -14,6 +16,18 @@ class ApiClientError extends Error {
   }
 }
 
+function readAuthToken(): string | null {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string | null) {
+  if (token) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    return;
+  }
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -22,7 +36,7 @@ async function request<T>(
   const originPath = window.location.pathname;
   const opts: RequestInit = {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
     credentials: "include",
   };
   if (body !== undefined) {

@@ -112,7 +112,8 @@ func handleLogin(svc *authsvc.Service, rdb *redis.Client) http.HandlerFunc {
 
 		respondJSON(w, http.StatusOK, map[string]any{
 			"data": map[string]any{
-				"user": user,
+				"user":  user,
+				"token": rawToken,
 			},
 		})
 	}
