@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { login } from "@/api/auth";
+import { login, useCurrentUser } from "@/api/auth";
 import { ApiClientError } from "@/api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,13 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: currentUser } = useCurrentUser();
+
+  useEffect(() => {
+    if (currentUser) {
+      navigate("/", { replace: true });
+    }
+  }, [currentUser, navigate]);
 
   useEffect(() => {
     if (searchParams.get("expired") === "1") {
@@ -23,9 +30,10 @@ export default function Login() {
 
   const loginMutation = useMutation({
     mutationFn: () => login(email, password),
-    onSuccess: async () => {
+    onSuccess: async (user) => {
+      queryClient.setQueryData(["current-user"], user);
       await queryClient.invalidateQueries({ queryKey: ["current-user"] });
-      navigate("/");
+      navigate("/", { replace: true });
     },
     onError: (err: unknown) => {
       if (err instanceof ApiClientError && err.status === 401) {
