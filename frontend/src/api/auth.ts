@@ -11,7 +11,7 @@ export interface CurrentUser {
 }
 
 export async function login(email: string, password: string) {
-  const res = await apiPost<{ data: { user: CurrentUser; token?: string } }>("/api/v1/auth/login", {
+  const res = await apiPost<{ data: { user: CurrentUser } }>("/api/v1/auth/login", {
     email,
     password,
   });
