@@ -15,139 +15,168 @@ import (
 	"redlycoris/internal/storage"
 )
 
+// parseFindingsFilter reads the shared query params for the findings endpoints
+// (list, facets, groups). On validation errors it writes the error response
+// and returns ok=false so callers can bail out. The second return distinguishes
+// the "user has zero accessible projects" short-circuit case.
+func parseFindingsFilter(w http.ResponseWriter, r *http.Request, rolesRepo *storage.UserProjectRolesRepo) (storage.FindingsFilter, bool, bool) {
+	q := r.URL.Query()
+
+	filter := storage.FindingsFilter{
+		Query:     q.Get("q"),
+		CVE:       q.Get("cve"),
+		Cursor:    q.Get("cursor"),
+		SortField: q.Get("sort"),
+		SortDir:   q.Get("dir"),
+		GroupBy:   q.Get("group_by"),
+	}
+
+	if v := q.Get("project_id"); v != "" {
+		id, err := uuid.Parse(v)
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project_id")
+			return filter, false, false
+		}
+		filter.ProjectID = id
+	}
+
+	user, _ := UserFromContext(r.Context())
+	if !user.IsAdmin() {
+		projectIDs, err := rolesRepo.ListProjectIDsForUser(r.Context(), user.ID)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to resolve accessible projects")
+			return filter, false, false
+		}
+		if len(projectIDs) == 0 {
+			return filter, true, true // ok, but empty result
+		}
+		filter.AccessibleProjectIDs = projectIDs
+	}
+
+	if v := q.Get("severity"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			n, err := strconv.Atoi(s)
+			if err != nil {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid severity value")
+				return filter, false, false
+			}
+			filter.Severities = append(filter.Severities, n)
+		}
+	}
+
+	if v := q.Get("status"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			n, err := strconv.Atoi(s)
+			if err != nil {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid status value")
+				return filter, false, false
+			}
+			filter.Statuses = append(filter.Statuses, n)
+		}
+	}
+
+	if v := q.Get("cwe"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid cwe value")
+			return filter, false, false
+		}
+		filter.CWE = n
+	}
+
+	if v := q.Get("kinds"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			kind, ok := domain.ParseFindingKind(s)
+			if !ok {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid kind value")
+				return filter, false, false
+			}
+			filter.Kinds = append(filter.Kinds, kind)
+		}
+	}
+
+	if v := q.Get("has_cve"); v == "true" {
+		t := true
+		filter.HasCVE = &t
+	}
+	if v := q.Get("has_fix"); v == "true" {
+		t := true
+		filter.HasFix = &t
+	}
+	if v := q.Get("in_kev"); v == "true" {
+		t := true
+		filter.InKEV = &t
+	}
+	if v := q.Get("in_bdu"); v == "true" {
+		t := true
+		filter.InBDU = &t
+	}
+
+	if v := q.Get("epss_min"); v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || f < 0 || f > 1 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid epss_min value")
+			return filter, false, false
+		}
+		filter.EPSSMin = &f
+	}
+
+	if v := q.Get("cvss_min"); v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || f < 0 || f > 10 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid cvss_min value")
+			return filter, false, false
+		}
+		filter.CVSSMin = &f
+	}
+
+	if v := q.Get("age_max_days"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid age_max_days value")
+			return filter, false, false
+		}
+		filter.AgeMaxDays = &n
+	}
+
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid limit value")
+			return filter, false, false
+		}
+		filter.Limit = n
+	}
+
+	return filter, true, false
+}
+
 func handleListFindings(repo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-
-		filter := storage.FindingsFilter{
-			Query:     q.Get("q"),
-			CVE:       q.Get("cve"),
-			Cursor:    q.Get("cursor"),
-			SortField: q.Get("sort"),
-			SortDir:   q.Get("dir"),
+		filter, ok, empty := parseFindingsFilter(w, r, rolesRepo)
+		if !ok {
+			return
+		}
+		if empty {
+			respondList(w, []domain.Finding{}, 0, "")
+			return
 		}
 
-		if v := q.Get("project_id"); v != "" {
-			id, err := uuid.Parse(v)
+		// Grouped listing: return aggregated buckets instead of flat findings.
+		if filter.GroupBy != "" {
+			switch filter.GroupBy {
+			case "cve", "component", "rule":
+			default:
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group_by value")
+				return
+			}
+			groups, total, err := repo.ListGroups(r.Context(), filter, filter.GroupBy)
 			if err != nil {
-				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project_id")
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list finding groups")
 				return
 			}
-			filter.ProjectID = id
-		}
-		user, _ := UserFromContext(r.Context())
-		var accessible []uuid.UUID
-		if !user.IsAdmin() {
-			projectIDs, err := rolesRepo.ListProjectIDsForUser(r.Context(), user.ID)
-			if err != nil {
-				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list findings")
-				return
-			}
-			accessible = projectIDs
-			if len(accessible) == 0 {
-				respondList(w, []domain.Finding{}, 0, "")
-				return
-			}
-		}
-		filter.AccessibleProjectIDs = accessible
-
-		if v := q.Get("severity"); v != "" {
-			for _, s := range strings.Split(v, ",") {
-				n, err := strconv.Atoi(s)
-				if err != nil {
-					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid severity value")
-					return
-				}
-				filter.Severities = append(filter.Severities, n)
-			}
-		}
-
-		if v := q.Get("status"); v != "" {
-			for _, s := range strings.Split(v, ",") {
-				n, err := strconv.Atoi(s)
-				if err != nil {
-					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid status value")
-					return
-				}
-				filter.Statuses = append(filter.Statuses, n)
-			}
-		}
-
-		if v := q.Get("cwe"); v != "" {
-			n, err := strconv.Atoi(v)
-			if err != nil {
-				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid cwe value")
-				return
-			}
-			filter.CWE = n
-		}
-
-		if v := q.Get("kinds"); v != "" {
-			for _, s := range strings.Split(v, ",") {
-				kind, ok := domain.ParseFindingKind(s)
-				if !ok {
-					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid kind value")
-					return
-				}
-				filter.Kinds = append(filter.Kinds, kind)
-			}
-		}
-
-		if v := q.Get("has_cve"); v == "true" {
-			t := true
-			filter.HasCVE = &t
-		}
-		if v := q.Get("has_fix"); v == "true" {
-			t := true
-			filter.HasFix = &t
-		}
-		if v := q.Get("in_kev"); v == "true" {
-			t := true
-			filter.InKEV = &t
-		}
-		if v := q.Get("in_bdu"); v == "true" {
-			t := true
-			filter.InBDU = &t
-		}
-
-		if v := q.Get("epss_min"); v != "" {
-			f, err := strconv.ParseFloat(v, 64)
-			if err != nil || f < 0 || f > 1 {
-				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid epss_min value")
-				return
-			}
-			filter.EPSSMin = &f
-		}
-
-		if v := q.Get("cvss_min"); v != "" {
-			f, err := strconv.ParseFloat(v, 64)
-			if err != nil || f < 0 || f > 10 {
-				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid cvss_min value")
-				return
-			}
-			filter.CVSSMin = &f
-		}
-
-		if v := q.Get("age_max_days"); v != "" {
-			n, err := strconv.Atoi(v)
-			if err != nil || n <= 0 {
-				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid age_max_days value")
-				return
-			}
-			filter.AgeMaxDays = &n
-		}
-
-		if v := q.Get("group_by"); v != "" {
-			filter.GroupBy = v
-		}
-
-		if v := q.Get("limit"); v != "" {
-			n, err := strconv.Atoi(v)
-			if err != nil {
-				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid limit value")
-				return
-			}
-			filter.Limit = n
+			respondList(w, groups, total, "")
+			return
 		}
 
 		findings, nextCursor, total, err := repo.List(r.Context(), filter)

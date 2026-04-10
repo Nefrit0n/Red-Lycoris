@@ -10,6 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/swaggest/swgui v1.8.5
+	golang.org/x/sync v0.5.0
 	golang.org/x/text v0.14.0
 )
 
@@ -25,6 +26,5 @@ require (
 	github.com/vearutop/statigz v1.4.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
-	golang.org/x/sync v0.5.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 )

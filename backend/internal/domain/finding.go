@@ -96,6 +96,21 @@ func (f *Finding) Validate() error {
 	return nil
 }
 
+// FindingGroup is an aggregate bucket produced by grouped list queries
+// (group_by = cve | component | rule).
+type FindingGroup struct {
+	GroupKey      string      `json:"group_key"`
+	FindingsCount int         `json:"findings_count"`
+	ProjectsCount int         `json:"projects_count"`
+	MaxSeverity   int         `json:"max_severity"`
+	FirstSeen     time.Time   `json:"first_seen"`
+	ProjectIDs    []uuid.UUID `json:"project_ids"`
+	SampleIDs     []uuid.UUID `json:"sample_ids"`
+	InKEV         bool        `json:"in_kev"`
+	MaxEPSS       *float64    `json:"max_epss,omitempty"`
+	MaxCVSS       *float64    `json:"max_cvss,omitempty"`
+}
+
 type FindingEnrichment struct {
 	FindingID  uuid.UUID       `json:"finding_id"`
 	Source     string          `json:"source"`

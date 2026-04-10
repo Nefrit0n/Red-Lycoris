@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/sync/errgroup"
 
 	"redlycoris/internal/domain"
 )
@@ -235,26 +236,30 @@ func (r *FindingsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Findi
 	return f, nil
 }
 
-func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domain.Finding, string, int, error) {
-	// Resolve sort column; default to first_seen DESC
-	sortCol := "f.first_seen"
-	if col, ok := allowedSortFields[filter.SortField]; ok {
-		sortCol = col
-	}
-	sortDir := "DESC"
-	if strings.EqualFold(filter.SortDir, "asc") {
-		sortDir = "ASC"
-	}
+// Facet axis names understood by buildBaseWhere. Passing one as excludeField
+// drops the corresponding filter clause so a facet count is not biased by its
+// own filter.
+const (
+	FacetSeverity     = "severity"
+	FacetStatus       = "status"
+	FacetKind         = "kind"
+	FacetProject      = "project"
+	FacetEcosystem    = "ecosystem"
+	FacetIacProvider  = "iac_provider"
+	FacetSecretKind   = "secret_kind"
+	FacetHasCVE       = "has_cve"
+	FacetHasFix       = "has_fix"
+	FacetInKEV        = "in_kev"
+	FacetInBDU        = "in_bdu"
+)
 
-	limit := filter.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	// Build WHERE clauses and args dynamically
+// buildBaseWhere compiles the non-cursor conditions for a findings query, with
+// the option to exclude a single dimension so facet counts stay honest for
+// that axis. Cursor and pagination clauses are the caller's job.
+func buildBaseWhere(filter *FindingsFilter, excludeField string, startArg int) ([]string, []any, int) {
 	var conditions []string
 	var args []any
-	argN := 1
+	argN := startArg
 
 	if filter.AccessibleProjectIDs != nil {
 		if len(filter.AccessibleProjectIDs) == 0 {
@@ -265,22 +270,22 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 			argN++
 		}
 	}
-	if filter.ProjectID != uuid.Nil {
+	if filter.ProjectID != uuid.Nil && excludeField != FacetProject {
 		conditions = append(conditions, fmt.Sprintf("f.project_id = $%d", argN))
 		args = append(args, filter.ProjectID)
 		argN++
 	}
-	if len(filter.Severities) > 0 {
+	if len(filter.Severities) > 0 && excludeField != FacetSeverity {
 		conditions = append(conditions, fmt.Sprintf("f.severity = ANY($%d)", argN))
 		args = append(args, filter.Severities)
 		argN++
 	}
-	if len(filter.Statuses) > 0 {
+	if len(filter.Statuses) > 0 && excludeField != FacetStatus {
 		conditions = append(conditions, fmt.Sprintf("f.status = ANY($%d)", argN))
 		args = append(args, filter.Statuses)
 		argN++
 	}
-	if len(filter.Kinds) > 0 {
+	if len(filter.Kinds) > 0 && excludeField != FacetKind {
 		kinds := make([]int16, 0, len(filter.Kinds))
 		for _, k := range filter.Kinds {
 			kinds = append(kinds, int16(k))
@@ -289,17 +294,17 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 		args = append(args, kinds)
 		argN++
 	}
-	if filter.HasCVE != nil && *filter.HasCVE {
+	if filter.HasCVE != nil && *filter.HasCVE && excludeField != FacetHasCVE {
 		conditions = append(conditions, "array_length(f.cve_ids, 1) > 0")
 	}
-	if filter.HasFix != nil && *filter.HasFix {
+	if filter.HasFix != nil && *filter.HasFix && excludeField != FacetHasFix {
 		conditions = append(conditions, "f.fixed_version IS NOT NULL")
 	}
-	if filter.InKEV != nil && *filter.InKEV {
+	if filter.InKEV != nil && *filter.InKEV && excludeField != FacetInKEV {
 		conditions = append(conditions,
 			"EXISTS (SELECT 1 FROM kev_catalog k WHERE f.cve_ids IS NOT NULL AND k.cve_id = ANY(f.cve_ids))")
 	}
-	if filter.InBDU != nil && *filter.InBDU {
+	if filter.InBDU != nil && *filter.InBDU && excludeField != FacetInBDU {
 		conditions = append(conditions,
 			"EXISTS (SELECT 1 FROM bdu_fstec b WHERE f.cve_ids IS NOT NULL AND b.cve_ids && f.cve_ids)")
 	}
@@ -323,17 +328,17 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 		args = append(args, *filter.AgeMaxDays)
 		argN++
 	}
-	if len(filter.PackageEcosystems) > 0 {
+	if len(filter.PackageEcosystems) > 0 && excludeField != FacetEcosystem {
 		conditions = append(conditions, fmt.Sprintf("f.package_ecosystem = ANY($%d)", argN))
 		args = append(args, filter.PackageEcosystems)
 		argN++
 	}
-	if len(filter.IacProviders) > 0 {
+	if len(filter.IacProviders) > 0 && excludeField != FacetIacProvider {
 		conditions = append(conditions, fmt.Sprintf("f.iac_provider = ANY($%d)", argN))
 		args = append(args, filter.IacProviders)
 		argN++
 	}
-	if len(filter.SecretKinds) > 0 {
+	if len(filter.SecretKinds) > 0 && excludeField != FacetSecretKind {
 		conditions = append(conditions, fmt.Sprintf("f.secret_kind = ANY($%d)", argN))
 		args = append(args, filter.SecretKinds)
 		argN++
@@ -363,6 +368,35 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 		argN++
 	}
 
+	return conditions, args, argN
+}
+
+// whereClause joins conditions into a "WHERE a AND b" fragment or returns "".
+func whereClause(conditions []string) string {
+	if len(conditions) == 0 {
+		return ""
+	}
+	return "WHERE " + strings.Join(conditions, " AND ")
+}
+
+func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domain.Finding, string, int, error) {
+	// Resolve sort column; default to first_seen DESC
+	sortCol := "f.first_seen"
+	if col, ok := allowedSortFields[filter.SortField]; ok {
+		sortCol = col
+	}
+	sortDir := "DESC"
+	if strings.EqualFold(filter.SortDir, "asc") {
+		sortDir = "ASC"
+	}
+
+	limit := filter.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	conditions, args, argN := buildBaseWhere(&filter, "", 1)
+
 	// Cursor-based keyset pagination
 	if filter.Cursor != "" {
 		cur, err := decodeCursor(filter.Cursor)
@@ -380,22 +414,14 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 		argN += 2
 	}
 
-	where := ""
-	if len(conditions) > 0 {
-		where = "WHERE " + strings.Join(conditions, " AND ")
-	}
+	where := whereClause(conditions)
 
 	// Count total matching (without cursor/limit). When cursor is set, strip
 	// the trailing cursor condition so count reflects the full filtered set.
 	countWhere := where
 	countArgs := args
 	if filter.Cursor != "" {
-		countConds := conditions[:len(conditions)-1]
-		if len(countConds) == 0 {
-			countWhere = ""
-		} else {
-			countWhere = "WHERE " + strings.Join(countConds, " AND ")
-		}
+		countWhere = whereClause(conditions[:len(conditions)-1])
 		countArgs = args[:len(args)-2]
 	}
 
@@ -441,6 +467,379 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 	}
 
 	return findings, nextCursor, total, nil
+}
+
+// SeverityFacet, StatusFacet, etc are the typed facet buckets returned by
+// Facets. Each bucket carries just the axis value + count so the frontend can
+// render chips without another enrichment round trip.
+type SeverityFacet struct {
+	Severity int `json:"severity"`
+	Count    int `json:"count"`
+}
+
+type StatusFacet struct {
+	Status int `json:"status"`
+	Count  int `json:"count"`
+}
+
+type KindFacet struct {
+	Kind  string `json:"kind"`
+	Count int    `json:"count"`
+}
+
+type StringFacet struct {
+	Value string `json:"value"`
+	Count int    `json:"count"`
+}
+
+type ProjectFacet struct {
+	ID    uuid.UUID `json:"id"`
+	Name  string    `json:"name"`
+	Count int       `json:"count"`
+}
+
+type EnrichmentFacets struct {
+	InKEV  int `json:"in_kev"`
+	HasCVE int `json:"has_cve"`
+	HasFix int `json:"has_fix"`
+	InBDU  int `json:"in_bdu"`
+}
+
+type FindingsFacets struct {
+	BySeverity    []SeverityFacet  `json:"by_severity"`
+	ByStatus      []StatusFacet    `json:"by_status"`
+	ByKind        []KindFacet      `json:"by_kind"`
+	BySource      []StringFacet    `json:"by_source"`
+	ByProject     []ProjectFacet   `json:"by_project"`
+	ByEcosystem   []StringFacet    `json:"by_ecosystem"`
+	ByIacProvider []StringFacet    `json:"by_iac_provider"`
+	BySecretKind  []StringFacet    `json:"by_secret_kind"`
+	Enrichment    EnrichmentFacets `json:"enrichment"`
+}
+
+// Facets runs all facet sub-queries in parallel and returns the bucketed
+// counts. Each dimension drops its own filter so the chips stay clickable.
+func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*FindingsFacets, error) {
+	out := &FindingsFacets{
+		BySeverity:    []SeverityFacet{},
+		ByStatus:      []StatusFacet{},
+		ByKind:        []KindFacet{},
+		BySource:      []StringFacet{},
+		ByProject:     []ProjectFacet{},
+		ByEcosystem:   []StringFacet{},
+		ByIacProvider: []StringFacet{},
+		BySecretKind:  []StringFacet{},
+	}
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetSeverity, 1)
+		q := `SELECT f.severity, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.severity`
+		rows, err := r.pool.Query(gctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("facets.by_severity: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b SeverityFacet
+			if err := rows.Scan(&b.Severity, &b.Count); err != nil {
+				return fmt.Errorf("facets.by_severity scan: %w", err)
+			}
+			out.BySeverity = append(out.BySeverity, b)
+		}
+		return rows.Err()
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetStatus, 1)
+		q := `SELECT f.status, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.status`
+		rows, err := r.pool.Query(gctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("facets.by_status: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b StatusFacet
+			if err := rows.Scan(&b.Status, &b.Count); err != nil {
+				return fmt.Errorf("facets.by_status scan: %w", err)
+			}
+			out.ByStatus = append(out.ByStatus, b)
+		}
+		return rows.Err()
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetKind, 1)
+		q := `SELECT f.finding_kind, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.finding_kind`
+		rows, err := r.pool.Query(gctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("facets.by_kind: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var kind int16
+			var cnt int
+			if err := rows.Scan(&kind, &cnt); err != nil {
+				return fmt.Errorf("facets.by_kind scan: %w", err)
+			}
+			out.ByKind = append(out.ByKind, KindFacet{
+				Kind:  domain.FindingKind(kind).String(),
+				Count: cnt,
+			})
+		}
+		return rows.Err()
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, "", 1)
+		q := `SELECT f.source_type, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.source_type ORDER BY count(*) DESC`
+		rows, err := r.pool.Query(gctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("facets.by_source: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b StringFacet
+			if err := rows.Scan(&b.Value, &b.Count); err != nil {
+				return fmt.Errorf("facets.by_source scan: %w", err)
+			}
+			out.BySource = append(out.BySource, b)
+		}
+		return rows.Err()
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetProject, 1)
+		q := `SELECT p.id, p.name, count(*)
+			FROM findings f
+			JOIN projects p ON p.id = f.project_id
+			` + whereClause(conds) + `
+			GROUP BY p.id, p.name
+			ORDER BY count(*) DESC
+			LIMIT 20`
+		rows, err := r.pool.Query(gctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("facets.by_project: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b ProjectFacet
+			if err := rows.Scan(&b.ID, &b.Name, &b.Count); err != nil {
+				return fmt.Errorf("facets.by_project scan: %w", err)
+			}
+			out.ByProject = append(out.ByProject, b)
+		}
+		return rows.Err()
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetEcosystem, 1)
+		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindSCA)))
+		conds = append(conds, "f.package_ecosystem IS NOT NULL")
+		q := `SELECT f.package_ecosystem, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.package_ecosystem ORDER BY count(*) DESC`
+		rows, err := r.pool.Query(gctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("facets.by_ecosystem: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b StringFacet
+			if err := rows.Scan(&b.Value, &b.Count); err != nil {
+				return fmt.Errorf("facets.by_ecosystem scan: %w", err)
+			}
+			out.ByEcosystem = append(out.ByEcosystem, b)
+		}
+		return rows.Err()
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetIacProvider, 1)
+		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindIaC)))
+		conds = append(conds, "f.iac_provider IS NOT NULL")
+		q := `SELECT f.iac_provider, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.iac_provider ORDER BY count(*) DESC`
+		rows, err := r.pool.Query(gctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("facets.by_iac_provider: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b StringFacet
+			if err := rows.Scan(&b.Value, &b.Count); err != nil {
+				return fmt.Errorf("facets.by_iac_provider scan: %w", err)
+			}
+			out.ByIacProvider = append(out.ByIacProvider, b)
+		}
+		return rows.Err()
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetSecretKind, 1)
+		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindSecrets)))
+		conds = append(conds, "f.secret_kind IS NOT NULL")
+		q := `SELECT f.secret_kind, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.secret_kind ORDER BY count(*) DESC`
+		rows, err := r.pool.Query(gctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("facets.by_secret_kind: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b StringFacet
+			if err := rows.Scan(&b.Value, &b.Count); err != nil {
+				return fmt.Errorf("facets.by_secret_kind scan: %w", err)
+			}
+			out.BySecretKind = append(out.BySecretKind, b)
+		}
+		return rows.Err()
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetInKEV, 1)
+		conds = append(conds, "EXISTS (SELECT 1 FROM kev_catalog k WHERE f.cve_ids IS NOT NULL AND k.cve_id = ANY(f.cve_ids))")
+		return r.pool.QueryRow(gctx,
+			`SELECT count(*) FROM findings f `+whereClause(conds), args...,
+		).Scan(&out.Enrichment.InKEV)
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetHasCVE, 1)
+		conds = append(conds, "array_length(f.cve_ids, 1) > 0")
+		return r.pool.QueryRow(gctx,
+			`SELECT count(*) FROM findings f `+whereClause(conds), args...,
+		).Scan(&out.Enrichment.HasCVE)
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetHasFix, 1)
+		conds = append(conds, "f.fixed_version IS NOT NULL")
+		return r.pool.QueryRow(gctx,
+			`SELECT count(*) FROM findings f `+whereClause(conds), args...,
+		).Scan(&out.Enrichment.HasFix)
+	})
+
+	g.Go(func() error {
+		conds, args, _ := buildBaseWhere(&filter, FacetInBDU, 1)
+		conds = append(conds, "EXISTS (SELECT 1 FROM bdu_fstec b WHERE f.cve_ids IS NOT NULL AND b.cve_ids && f.cve_ids)")
+		return r.pool.QueryRow(gctx,
+			`SELECT count(*) FROM findings f `+whereClause(conds), args...,
+		).Scan(&out.Enrichment.InBDU)
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("storage.FindingsRepo.Facets: %w", err)
+	}
+	return out, nil
+}
+
+// ListGroups aggregates findings by a grouping axis (cve|component|rule) and
+// returns up to 200 groups ordered by max severity + findings count. Cursor
+// pagination is not supported — groups are bounded and cheap compared to the
+// flat list.
+func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, groupBy string) ([]domain.FindingGroup, int, error) {
+	const groupLimit = 200
+
+	var groupKeyExpr, fromExpr string
+	var extraConds []string
+
+	switch groupBy {
+	case "cve":
+		// Unnest CVE arrays so each (finding, cve) pair contributes once. Only
+		// findings that actually carry a CVE participate.
+		groupKeyExpr = "cve_key"
+		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cve_ids) AS c(cve_key)"
+		extraConds = []string{"f.cve_ids IS NOT NULL", "array_length(f.cve_ids, 1) > 0"}
+	case "component":
+		groupKeyExpr = "f.component || '@' || COALESCE(f.component_version, '')"
+		fromExpr = "findings f"
+		extraConds = []string{"f.component IS NOT NULL"}
+	case "rule":
+		// Unit separator (E'\x1f') is the join byte — safe because rule_id /
+		// rule_name are human-readable strings that never contain control
+		// characters.
+		groupKeyExpr = `COALESCE(f.rule_id, '') || E'\x1f' || COALESCE(f.rule_name, '')`
+		fromExpr = "findings f"
+		extraConds = []string{"f.rule_id IS NOT NULL"}
+	default:
+		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: unknown group_by %q", groupBy)
+	}
+
+	conds, args, _ := buildBaseWhere(&filter, "", 1)
+	conds = append(conds, extraConds...)
+
+	// KEV/EPSS/CVSS per-group aggregates. For CVE grouping we can look them up
+	// directly by cve_key. For component/rule grouping we reduce across each
+	// finding's CVE set with bool_or / MAX of the per-row max.
+	var kevExpr, epssExpr, cvssExpr string
+	if groupBy == "cve" {
+		kevExpr = "bool_or(EXISTS (SELECT 1 FROM kev_catalog k WHERE k.cve_id = cve_key))"
+		epssExpr = "MAX((SELECT e.epss_score FROM epss_scores e WHERE e.cve_id = cve_key))"
+		cvssExpr = "MAX((SELECT n.cvss_v31_score FROM nvd_cves n WHERE n.cve_id = cve_key))"
+	} else {
+		kevExpr = "bool_or(EXISTS (SELECT 1 FROM kev_catalog k WHERE f.cve_ids IS NOT NULL AND k.cve_id = ANY(f.cve_ids)))"
+		epssExpr = "MAX((SELECT MAX(e.epss_score) FROM epss_scores e WHERE f.cve_ids IS NOT NULL AND e.cve_id = ANY(f.cve_ids)))"
+		cvssExpr = "MAX((SELECT MAX(n.cvss_v31_score) FROM nvd_cves n WHERE f.cve_ids IS NOT NULL AND n.cve_id = ANY(f.cve_ids)))"
+	}
+
+	q := fmt.Sprintf(`
+		SELECT
+			%s AS group_key,
+			count(*) AS findings_count,
+			count(DISTINCT f.project_id) AS projects_count,
+			max(f.severity) AS max_severity,
+			min(f.first_seen) AS first_seen,
+			array_agg(DISTINCT f.project_id) AS project_ids,
+			(array_agg(f.id ORDER BY f.first_seen DESC))[1:3] AS sample_ids,
+			%s AS in_kev,
+			%s AS max_epss,
+			%s AS max_cvss
+		FROM %s
+		%s
+		GROUP BY %s
+		ORDER BY max_severity DESC, findings_count DESC
+		LIMIT %d`,
+		groupKeyExpr, kevExpr, epssExpr, cvssExpr, fromExpr,
+		whereClause(conds), groupKeyExpr, groupLimit)
+
+	rows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: query: %w", err)
+	}
+	defer rows.Close()
+
+	groups := make([]domain.FindingGroup, 0)
+	for rows.Next() {
+		var g domain.FindingGroup
+		if err := rows.Scan(
+			&g.GroupKey, &g.FindingsCount, &g.ProjectsCount,
+			&g.MaxSeverity, &g.FirstSeen, &g.ProjectIDs, &g.SampleIDs,
+			&g.InKEV, &g.MaxEPSS, &g.MaxCVSS,
+		); err != nil {
+			return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: scan: %w", err)
+		}
+		if groupBy == "rule" {
+			// Unit-separator (\x1f) splits rule_id from rule_name; present as
+			// "rule_id — rule_name" for display.
+			if idx := strings.Index(g.GroupKey, "\x1f"); idx >= 0 {
+				id, name := g.GroupKey[:idx], g.GroupKey[idx+1:]
+				if name == "" {
+					g.GroupKey = id
+				} else {
+					g.GroupKey = id + " — " + name
+				}
+			}
+		}
+		if g.ProjectIDs == nil {
+			g.ProjectIDs = []uuid.UUID{}
+		}
+		if g.SampleIDs == nil {
+			g.SampleIDs = []uuid.UUID{}
+		}
+		groups = append(groups, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: rows: %w", err)
+	}
+	return groups, len(groups), nil
 }
 
 func (r *FindingsRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status int) error {
