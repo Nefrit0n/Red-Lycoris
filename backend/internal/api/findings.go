@@ -82,6 +82,65 @@ func handleListFindings(repo *storage.FindingsRepo, rolesRepo *storage.UserProje
 			filter.CWE = n
 		}
 
+		if v := q.Get("kinds"); v != "" {
+			for _, s := range strings.Split(v, ",") {
+				kind, ok := domain.ParseFindingKind(s)
+				if !ok {
+					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid kind value")
+					return
+				}
+				filter.Kinds = append(filter.Kinds, kind)
+			}
+		}
+
+		if v := q.Get("has_cve"); v == "true" {
+			t := true
+			filter.HasCVE = &t
+		}
+		if v := q.Get("has_fix"); v == "true" {
+			t := true
+			filter.HasFix = &t
+		}
+		if v := q.Get("in_kev"); v == "true" {
+			t := true
+			filter.InKEV = &t
+		}
+		if v := q.Get("in_bdu"); v == "true" {
+			t := true
+			filter.InBDU = &t
+		}
+
+		if v := q.Get("epss_min"); v != "" {
+			f, err := strconv.ParseFloat(v, 64)
+			if err != nil || f < 0 || f > 1 {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid epss_min value")
+				return
+			}
+			filter.EPSSMin = &f
+		}
+
+		if v := q.Get("cvss_min"); v != "" {
+			f, err := strconv.ParseFloat(v, 64)
+			if err != nil || f < 0 || f > 10 {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid cvss_min value")
+				return
+			}
+			filter.CVSSMin = &f
+		}
+
+		if v := q.Get("age_max_days"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n <= 0 {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid age_max_days value")
+				return
+			}
+			filter.AgeMaxDays = &n
+		}
+
+		if v := q.Get("group_by"); v != "" {
+			filter.GroupBy = v
+		}
+
 		if v := q.Get("limit"); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil {

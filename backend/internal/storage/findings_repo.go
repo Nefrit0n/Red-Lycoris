@@ -54,6 +54,12 @@ type FindingsFilter struct {
 	Kinds                []domain.FindingKind
 	HasCVE               *bool
 	HasFix               *bool
+	InKEV                *bool
+	InBDU                *bool
+	EPSSMin              *float64
+	CVSSMin              *float64
+	AgeMaxDays           *int
+	GroupBy              string
 	PackageEcosystems    []string
 	IacProviders         []string
 	SecretKinds          []string
@@ -138,6 +144,29 @@ var findingColumns = `
 	f.http_evidence, f.iac_resource, f.iac_provider, f.secret_kind, f.commit_sha,
 	f.rule_id, f.rule_name, fs.priority_score`
 
+// Extra columns joined only for list queries (KEV/BDU flags, max EPSS/CVSS
+// across linked CVEs, and project name). Subqueries are correlated per row but
+// hit PK indexes on enrichment tables (kev_catalog, epss_scores, nvd_cves) and
+// a GIN index on bdu_fstec.cve_ids.
+var findingListColumns = findingColumns + `,
+	EXISTS(
+		SELECT 1 FROM kev_catalog k
+		WHERE f.cve_ids IS NOT NULL AND k.cve_id = ANY(f.cve_ids)
+	) AS in_kev,
+	(
+		SELECT MAX(e.epss_score) FROM epss_scores e
+		WHERE f.cve_ids IS NOT NULL AND e.cve_id = ANY(f.cve_ids)
+	) AS max_epss,
+	(
+		SELECT MAX(n.cvss_v31_score) FROM nvd_cves n
+		WHERE f.cve_ids IS NOT NULL AND n.cve_id = ANY(f.cve_ids)
+	) AS max_cvss,
+	EXISTS(
+		SELECT 1 FROM bdu_fstec b
+		WHERE f.cve_ids IS NOT NULL AND b.cve_ids && f.cve_ids
+	) AS in_bdu,
+	p.name AS project_name`
+
 func scanFinding(row pgx.Row) (*domain.Finding, error) {
 	var f domain.Finding
 	var kind int16
@@ -159,6 +188,36 @@ func scanFinding(row pgx.Row) (*domain.Finding, error) {
 	}
 	if f.CWEIDs == nil {
 		f.CWEIDs = []int{}
+	}
+	return &f, nil
+}
+
+func scanFindingListItem(row pgx.Row) (*domain.Finding, error) {
+	var f domain.Finding
+	var kind int16
+	var projectName *string
+	err := row.Scan(
+		&f.ID, &kind, &f.Title, &f.Description, &f.Severity, &f.Confidence, &f.Status,
+		&f.FilePath, &f.LineStart, &f.LineEnd, &f.Component, &f.ComponentVersion,
+		&f.CVEIDs, &f.CWEIDs, &f.CPEURI, &f.Fingerprint, &f.FirstSeen, &f.LastSeen,
+		&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
+		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
+		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
+		&f.RuleID, &f.RuleName, &f.PriorityScore,
+		&f.InKEV, &f.MaxEPSS, &f.MaxCVSS, &f.InBDU, &projectName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	f.Kind = domain.FindingKind(kind)
+	if f.CVEIDs == nil {
+		f.CVEIDs = []string{}
+	}
+	if f.CWEIDs == nil {
+		f.CWEIDs = []int{}
+	}
+	if projectName != nil {
+		f.ProjectName = *projectName
 	}
 	return &f, nil
 }
@@ -236,6 +295,34 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 	if filter.HasFix != nil && *filter.HasFix {
 		conditions = append(conditions, "f.fixed_version IS NOT NULL")
 	}
+	if filter.InKEV != nil && *filter.InKEV {
+		conditions = append(conditions,
+			"EXISTS (SELECT 1 FROM kev_catalog k WHERE f.cve_ids IS NOT NULL AND k.cve_id = ANY(f.cve_ids))")
+	}
+	if filter.InBDU != nil && *filter.InBDU {
+		conditions = append(conditions,
+			"EXISTS (SELECT 1 FROM bdu_fstec b WHERE f.cve_ids IS NOT NULL AND b.cve_ids && f.cve_ids)")
+	}
+	if filter.EPSSMin != nil {
+		conditions = append(conditions, fmt.Sprintf(
+			"COALESCE((SELECT MAX(e.epss_score) FROM epss_scores e WHERE f.cve_ids IS NOT NULL AND e.cve_id = ANY(f.cve_ids)), 0) >= $%d",
+			argN))
+		args = append(args, *filter.EPSSMin)
+		argN++
+	}
+	if filter.CVSSMin != nil {
+		conditions = append(conditions, fmt.Sprintf(
+			"COALESCE((SELECT MAX(n.cvss_v31_score) FROM nvd_cves n WHERE f.cve_ids IS NOT NULL AND n.cve_id = ANY(f.cve_ids)), 0) >= $%d",
+			argN))
+		args = append(args, *filter.CVSSMin)
+		argN++
+	}
+	if filter.AgeMaxDays != nil && *filter.AgeMaxDays > 0 {
+		conditions = append(conditions, fmt.Sprintf(
+			"f.first_seen >= now() - ($%d::int * interval '1 day')", argN))
+		args = append(args, *filter.AgeMaxDays)
+		argN++
+	}
 	if len(filter.PackageEcosystems) > 0 {
 		conditions = append(conditions, fmt.Sprintf("f.package_ecosystem = ANY($%d)", argN))
 		args = append(args, filter.PackageEcosystems)
@@ -298,22 +385,17 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	// Count total matching (without cursor/limit)
-	countWhere := ""
-	if filter.Cursor != "" && len(conditions) > 2 {
-		// Count query uses all conditions except the cursor condition
-		countConds := conditions[:len(conditions)-1]
-		countWhere = "WHERE " + strings.Join(countConds, " AND ")
-	} else if filter.Cursor != "" && len(conditions) == 1 {
-		// Only cursor condition — no other filters
-		countWhere = ""
-	} else {
-		countWhere = where
-	}
-
-	// For count query, we don't need the cursor args
+	// Count total matching (without cursor/limit). When cursor is set, strip
+	// the trailing cursor condition so count reflects the full filtered set.
+	countWhere := where
 	countArgs := args
 	if filter.Cursor != "" {
+		countConds := conditions[:len(conditions)-1]
+		if len(countConds) == 0 {
+			countWhere = ""
+		} else {
+			countWhere = "WHERE " + strings.Join(countConds, " AND ")
+		}
 		countArgs = args[:len(args)-2]
 	}
 
@@ -323,15 +405,13 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 		return nil, "", 0, fmt.Errorf("storage.FindingsRepo.List: count: %w", err)
 	}
 
-	// Main query with join for priority_score
-	needsScoreJoin := sortCol == "fs.priority_score"
-	joinClause := "LEFT JOIN finding_scores fs ON fs.finding_id = f.id"
+	// Main query with joins for priority_score + project name.
+	joinClause := `LEFT JOIN finding_scores fs ON fs.finding_id = f.id
+		LEFT JOIN projects p ON p.id = f.project_id`
 
 	q := fmt.Sprintf(`SELECT %s FROM findings f %s %s ORDER BY %s %s, f.id %s LIMIT $%d`,
-		findingColumns, joinClause, where, sortCol, sortDir, sortDir, argN)
+		findingListColumns, joinClause, where, sortCol, sortDir, sortDir, argN)
 	args = append(args, limit)
-
-	_ = needsScoreJoin // join is always present for priority_score column
 
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -341,28 +421,11 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 
 	var findings []domain.Finding
 	for rows.Next() {
-		var f domain.Finding
-		var kind int16
-		err := rows.Scan(
-			&f.ID, &kind, &f.Title, &f.Description, &f.Severity, &f.Confidence, &f.Status,
-			&f.FilePath, &f.LineStart, &f.LineEnd, &f.Component, &f.ComponentVersion,
-			&f.CVEIDs, &f.CWEIDs, &f.CPEURI, &f.Fingerprint, &f.FirstSeen, &f.LastSeen,
-			&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
-			&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
-			&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
-			&f.RuleID, &f.RuleName, &f.PriorityScore,
-		)
+		f, err := scanFindingListItem(rows)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("storage.FindingsRepo.List: scan: %w", err)
 		}
-		f.Kind = domain.FindingKind(kind)
-		if f.CVEIDs == nil {
-			f.CVEIDs = []string{}
-		}
-		if f.CWEIDs == nil {
-			f.CWEIDs = []int{}
-		}
-		findings = append(findings, f)
+		findings = append(findings, *f)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, "", 0, fmt.Errorf("storage.FindingsRepo.List: rows: %w", err)

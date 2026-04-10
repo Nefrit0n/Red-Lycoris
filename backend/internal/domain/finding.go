@@ -62,6 +62,13 @@ type Finding struct {
 	RuleID           *string         `json:"rule_id,omitempty"`
 	RuleName         *string         `json:"rule_name,omitempty"`
 	PriorityScore    *float64        `json:"priority_score,omitempty"`
+
+	// Joined badge fields — populated only by list queries.
+	InKEV       bool     `json:"in_kev,omitempty"`
+	InBDU       bool     `json:"in_bdu,omitempty"`
+	MaxEPSS     *float64 `json:"max_epss,omitempty"`
+	MaxCVSS     *float64 `json:"max_cvss,omitempty"`
+	ProjectName string   `json:"project_name,omitempty"`
 }
 
 func (f *Finding) Validate() error {
