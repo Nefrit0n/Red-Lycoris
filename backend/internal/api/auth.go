@@ -29,6 +29,15 @@ func setAuthRuntimeConfig(trustProxy, cookieSecure bool, sessionDuration time.Du
 }
 
 func readAuthToken(r *http.Request) (token string, ok bool) {
+	// Prefer cookie for browser requests to avoid stale Authorization headers
+	// from legacy SPA localStorage storage overriding a fresh cookie session.
+	// Bearer auth remains supported for API/CLI clients when cookie is absent.
+	if c, err := r.Cookie("rl_session"); err == nil {
+		if token = strings.TrimSpace(c.Value); token != "" {
+			return token, true
+		}
+	}
+
 	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 	if authHeader != "" {
 		parts := strings.SplitN(authHeader, " ", 2)
@@ -36,12 +45,6 @@ func readAuthToken(r *http.Request) (token string, ok bool) {
 			if token = strings.TrimSpace(parts[1]); token != "" {
 				return token, true
 			}
-		}
-	}
-
-	if c, err := r.Cookie("rl_session"); err == nil {
-		if token = strings.TrimSpace(c.Value); token != "" {
-			return token, true
 		}
 	}
 
