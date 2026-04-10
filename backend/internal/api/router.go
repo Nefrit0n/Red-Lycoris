@@ -96,7 +96,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		r.With(LoginRateLimit(rdb)).Post("/login", handleLogin(authService, rdb))
 		r.Post("/logout", handleLogout(authService))
 		r.Post("/refresh", handleRefresh(authService))
-		r.With(RequireAuth).Get("/me", handleMe())
+		r.Get("/me", handleMe())
 	})
 
 	// Protected routes
