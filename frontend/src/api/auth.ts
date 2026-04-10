@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiGet, apiPost, clearLegacyAuthToken } from "@/api/client";
+import { apiGet, apiPost } from "@/api/client";
 
 export interface CurrentUser {
   id: string;
@@ -15,13 +15,11 @@ export async function login(email: string, password: string) {
     email,
     password,
   });
-  clearLegacyAuthToken();
   return res.data.user;
 }
 
 export async function logout() {
   await apiPost<{ data: { status: string } }>("/api/v1/auth/logout", {});
-  clearLegacyAuthToken();
 }
 
 export async function me() {

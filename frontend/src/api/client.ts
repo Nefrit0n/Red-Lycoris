@@ -1,7 +1,5 @@
 import type { ApiError } from "@/types";
 
-const AUTH_TOKEN_KEY = "rl_auth_token";
-
 class ApiClientError extends Error {
   code: string;
   status: number;
@@ -15,17 +13,6 @@ class ApiClientError extends Error {
     this.details = err.details;
   }
 }
-
-export function clearLegacyAuthToken() {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
-}
-
-// Browser SPA auth is cookie-based. Remove legacy token storage that may send
-// stale Bearer tokens and override valid cookie sessions.
-clearLegacyAuthToken();
 
 async function request<T>(
   method: string,
@@ -56,7 +43,6 @@ async function request<T>(
     }
     const err = new ApiClientError(res.status, apiErr);
     if (res.status === 401 && !originPath.startsWith("/login")) {
-      clearLegacyAuthToken();
       if (err.code === "SESSION_EXPIRED") {
         window.location.replace("/login?expired=1");
       } else if (err.code === "AUTHENTICATION_REQUIRED") {
