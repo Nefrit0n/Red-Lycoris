@@ -25,11 +25,12 @@ func LoadSessionMiddleware(svc *authsvc.Service) func(http.Handler) http.Handler
 
 			rawToken, ok := readAuthToken(r)
 			if !ok {
-				slog.Debug("session token missing",
+				slog.Info("session validation result",
 					"request_id", GetRequestID(r.Context()),
 					"path", r.URL.Path,
 					"has_auth_header", hasAuthHeader,
 					"has_session_cookie", hasSessionCookie,
+					"validate_result", "missing_token",
 				)
 				next.ServeHTTP(w, r)
 				return
@@ -46,17 +47,19 @@ func LoadSessionMiddleware(svc *authsvc.Service) func(http.Handler) http.Handler
 					"path", r.URL.Path,
 					"has_auth_header", hasAuthHeader,
 					"has_session_cookie", hasSessionCookie,
+					"validate_result", "invalid",
 					"error_type", classifySessionError(err),
 				)
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			slog.Debug("session validated",
+			slog.Info("session validation result",
 				"request_id", GetRequestID(r.Context()),
 				"path", r.URL.Path,
 				"has_auth_header", hasAuthHeader,
 				"has_session_cookie", hasSessionCookie,
+				"validate_result", "valid",
 				"user_id", user.ID,
 				"session_id", session.ID,
 			)
