@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -10,9 +11,17 @@ import (
 	authsvc "redlycoris/internal/auth"
 )
 
-var userCtxKey = &struct{}{}
-var sessionCtxKey = &struct{}{}
-var authTokenInvalidCtxKey = &struct{}{}
+type (
+	userCtxKeyType             struct{}
+	sessionCtxKeyType          struct{}
+	authTokenInvalidCtxKeyType struct{}
+)
+
+var (
+	userCtxKey             = userCtxKeyType{}
+	sessionCtxKey          = sessionCtxKeyType{}
+	authTokenInvalidCtxKey = authTokenInvalidCtxKeyType{}
+)
 
 func LoadSessionMiddleware(svc *authsvc.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -66,6 +75,14 @@ func LoadSessionMiddleware(svc *authsvc.Service) func(http.Handler) http.Handler
 
 			ctx := context.WithValue(r.Context(), userCtxKey, user)
 			ctx = context.WithValue(ctx, sessionCtxKey, session)
+
+			slog.Info("LoadSession storing user",
+				"request_id", GetRequestID(r.Context()),
+				"path", r.URL.Path,
+				"user_type", fmt.Sprintf("%T", user),
+				"userCtxKey_addr", fmt.Sprintf("%p", userCtxKey),
+			)
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
