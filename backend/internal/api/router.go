@@ -71,6 +71,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	usersRepo := storage.NewUsersRepo(pool)
 	sessionsRepo := storage.NewSessionsRepo(pool)
 	userProjectRolesRepo := storage.NewUserProjectRolesRepo(pool)
+	savedViewsRepo := storage.NewSavedViewsRepo(pool)
 	authService := auth.NewService(usersRepo, sessionsRepo, cfg.sessionDur)
 	setAuthRuntimeConfig(cfg.trustProxy, cfg.cookieSecure, cfg.sessionDur)
 
@@ -105,6 +106,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 		r.Route("/api/v1/findings", func(r chi.Router) {
 			r.Get("/", handleListFindings(findingsRepo, userProjectRolesRepo))
+			r.Get("/facets", handleFindingsFacets(findingsRepo, userProjectRolesRepo))
 
 			r.Route("/{id}", func(r chi.Router) {
 				vMw := RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromFinding(findingsRepo, "id"))
@@ -154,6 +156,13 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			if cfg.scheduler != nil {
 				r.With(RequireGlobalAdmin).Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
 			}
+		})
+
+		r.Route("/api/v1/saved-views", func(r chi.Router) {
+			r.Get("/", handleListSavedViews(savedViewsRepo))
+			r.Post("/", handleCreateSavedView(savedViewsRepo))
+			r.Patch("/{id}", handleUpdateSavedView(savedViewsRepo))
+			r.Delete("/{id}", handleDeleteSavedView(savedViewsRepo))
 		})
 
 		r.Get("/api/v1/users/search", handleSearchUsers(usersRepo))

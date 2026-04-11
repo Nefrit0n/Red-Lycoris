@@ -62,6 +62,13 @@ type Finding struct {
 	RuleID           *string         `json:"rule_id,omitempty"`
 	RuleName         *string         `json:"rule_name,omitempty"`
 	PriorityScore    *float64        `json:"priority_score,omitempty"`
+
+	// Joined badge fields — populated only by list queries.
+	InKEV       bool     `json:"in_kev,omitempty"`
+	InBDU       bool     `json:"in_bdu,omitempty"`
+	MaxEPSS     *float64 `json:"max_epss,omitempty"`
+	MaxCVSS     *float64 `json:"max_cvss,omitempty"`
+	ProjectName string   `json:"project_name,omitempty"`
 }
 
 func (f *Finding) Validate() error {
@@ -87,6 +94,21 @@ func (f *Finding) Validate() error {
 		return errors.New("fingerprint is required")
 	}
 	return nil
+}
+
+// FindingGroup is an aggregate bucket produced by grouped list queries
+// (group_by = cve | component | rule).
+type FindingGroup struct {
+	GroupKey      string      `json:"group_key"`
+	FindingsCount int         `json:"findings_count"`
+	ProjectsCount int         `json:"projects_count"`
+	MaxSeverity   int         `json:"max_severity"`
+	FirstSeen     time.Time   `json:"first_seen"`
+	ProjectIDs    []uuid.UUID `json:"project_ids"`
+	SampleIDs     []uuid.UUID `json:"sample_ids"`
+	InKEV         bool        `json:"in_kev"`
+	MaxEPSS       *float64    `json:"max_epss,omitempty"`
+	MaxCVSS       *float64    `json:"max_cvss,omitempty"`
 }
 
 type FindingEnrichment struct {

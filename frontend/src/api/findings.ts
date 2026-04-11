@@ -7,7 +7,17 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { apiGet, apiPatch } from "@/api/client";
-import type { Finding, PaginatedResponse } from "@/types";
+import {
+  buildQueryString,
+  filterCacheKey,
+  type FindingsFilter as FindingsFilterV2,
+} from "@/lib/findings-filter";
+import type {
+  Finding,
+  FindingGroup,
+  FindingsFacets,
+  PaginatedResponse,
+} from "@/types";
 
 type SortDir = "asc" | "desc";
 
@@ -193,6 +203,72 @@ export function useFindings(filters: FindingsFilters) {
 
       return lastPage.meta.next_cursor ?? null;
     },
+    staleTime: 30_000,
+  });
+}
+
+// ---------- v2 hooks backed by FindingsFilter from lib/findings-filter.ts ---
+//
+// useFindings (above) is the legacy hook tied to the zustand store. The v2
+// hooks take a URL-driven FindingsFilter and are what the redesigned
+// FindingsList page consumes.
+
+const LIST_PAGE_LIMIT = 50;
+
+type FindingsListPage = PaginatedResponse<Finding[]>;
+type FindingsGroupsPage = PaginatedResponse<FindingGroup[]>;
+type FindingsFacetsResponse = { data: FindingsFacets };
+
+export const findingsListKeys = {
+  all: ["findings", "v2"] as const,
+  list: (filter: FindingsFilterV2) =>
+    [...findingsListKeys.all, "list", filterCacheKey(filter)] as const,
+  groups: (filter: FindingsFilterV2) =>
+    [...findingsListKeys.all, "groups", filterCacheKey(filter)] as const,
+  facets: (filter: FindingsFilterV2) =>
+    [...findingsListKeys.all, "facets", filterCacheKey(filter)] as const,
+};
+
+export function useFindingsList(filter: FindingsFilterV2) {
+  return useInfiniteQuery({
+    queryKey: findingsListKeys.list(filter),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      apiGet<FindingsListPage>(
+        "/api/v1/findings",
+        buildQueryString(filter, {
+          cursor: pageParam,
+          limit: LIST_PAGE_LIMIT,
+        }),
+      ),
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.has_more ? (lastPage.meta.next_cursor ?? null) : null,
+    staleTime: 30_000,
+    enabled: filter.groupBy === "",
+  });
+}
+
+export function useFindingsGroups(filter: FindingsFilterV2) {
+  return useQuery({
+    queryKey: findingsListKeys.groups(filter),
+    queryFn: () =>
+      apiGet<FindingsGroupsPage>(
+        "/api/v1/findings",
+        buildQueryString(filter, { limit: LIST_PAGE_LIMIT }),
+      ),
+    staleTime: 30_000,
+    enabled: filter.groupBy !== "",
+  });
+}
+
+export function useFindingsFacets(filter: FindingsFilterV2) {
+  return useQuery({
+    queryKey: findingsListKeys.facets(filter),
+    queryFn: () =>
+      apiGet<FindingsFacetsResponse>(
+        "/api/v1/findings/facets",
+        buildQueryString(filter),
+      ),
     staleTime: 30_000,
   });
 }
