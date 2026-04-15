@@ -17,7 +17,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { useBulkUpdateStatus, useFindingsFacets } from "@/api/findings";
+import { useCurrentUser } from "@/api/auth";
+import { useBulkTriageAction, useBulkUpdateStatus, useFindingsFacets } from "@/api/findings";
 import {
   DEFAULT_FINDINGS_FILTER,
   filterFromSearchParams,
@@ -71,8 +72,10 @@ export default function FindingsList() {
 
   const { data: facetsData, refetch: refetchFacets } = useFindingsFacets(filter);
   const facets = facetsData?.data;
+  const { data: currentUser } = useCurrentUser();
 
   const bulkUpdate = useBulkUpdateStatus();
+  const bulkTriage = useBulkTriageAction();
 
   const handleCountChange = useCallback((total: number, fetching: boolean) => {
     setListMeta((prev) =>
@@ -226,6 +229,39 @@ export default function FindingsList() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!currentUser || bulkTriage.isPending}
+              onClick={() =>
+                currentUser &&
+                bulkTriage.mutate({
+                  ids: Array.from(selectedIds),
+                  request: {
+                    action: "assign",
+                    to_user_id: currentUser.id,
+                    to_email: currentUser.email,
+                  },
+                })
+              }
+              className="text-zinc-500 hover:text-zinc-300"
+            >
+              Назначить мне
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={bulkTriage.isPending}
+              onClick={() =>
+                bulkTriage.mutate({
+                  ids: Array.from(selectedIds),
+                  request: { action: "unassign" },
+                })
+              }
+              className="text-zinc-500 hover:text-zinc-300"
+            >
+              Снять назначение
+            </Button>
             <Button
               variant="ghost"
               size="sm"

@@ -38,7 +38,8 @@ import SeverityBadge from "@/components/SeverityBadge";
 import StatusBadge from "@/components/StatusBadge";
 import PriorityScore from "@/components/PriorityScore";
 import EnrichmentTabs from "@/components/EnrichmentTabs";
-import { useFinding, useUpdateStatus } from "@/api/findings";
+import { useCurrentUser } from "@/api/auth";
+import { useFinding, useFindingHistory, useTriageAction, useUpdateStatus } from "@/api/findings";
 import { useFindingScore } from "@/api/enrichment";
 
 const statusOptions = [
@@ -125,14 +126,17 @@ export default function FindingDetail() {
   } = useFinding(id ?? "");
 
   const { data: scoreData } = useFindingScore(id ?? "");
+  const { data: historyData } = useFindingHistory(id ?? "");
+  const { data: currentUser } = useCurrentUser();
   const updateStatus = useUpdateStatus();
+  const triageAction = useTriageAction();
 
   const finding = data?.data.finding;
-  const enrichments = data?.data.enrichments ?? [];
   const score = scoreData?.data ?? data?.data.score;
 
   const cveIds = finding?.cve_ids ?? [];
   const cweIds = finding?.cwe_ids ?? [];
+  const historyEvents = historyData?.data ?? [];
 
   const goBack = useCallback(() => {
     navigate("/findings");
@@ -257,21 +261,23 @@ export default function FindingDetail() {
 
         <div className="flex flex-wrap items-center gap-4">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={updateStatus.isPending}
-                className="h-auto px-0 py-0 text-sm hover:bg-transparent"
-              >
-                {updateStatus.isPending ? (
-                  <Loader2 className="mr-1 size-3.5 animate-spin text-zinc-500" />
-                ) : null}
-                <StatusBadge status={finding.status} />
-                <ChevronDown className="size-3.5 text-zinc-500" />
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={updateStatus.isPending}
+                  className="h-auto px-0 py-0 text-sm hover:bg-transparent"
+                >
+                  {updateStatus.isPending ? (
+                    <Loader2 className="mr-1 size-3.5 animate-spin text-zinc-500" />
+                  ) : null}
+                  <StatusBadge status={finding.status} />
+                  <ChevronDown className="size-3.5 text-zinc-500" />
+                </Button>
+              }
+            />
 
             <DropdownMenuContent align="start" className="border-zinc-700 bg-zinc-900">
               {statusOptions.map((opt) => (
@@ -288,6 +294,34 @@ export default function FindingDetail() {
           </DropdownMenu>
 
           <span className="font-mono text-xs text-zinc-600">{finding.id}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!currentUser || triageAction.isPending}
+            onClick={() => {
+              if (!currentUser) return;
+              triageAction.mutate({
+                id: finding.id,
+                request: {
+                  action: "assign",
+                  to_user_id: currentUser.id,
+                  to_email: currentUser.email,
+                },
+              });
+            }}
+            className="border-zinc-700 bg-zinc-900 text-zinc-300"
+          >
+            Назначить мне
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={triageAction.isPending}
+            onClick={() => triageAction.mutate({ id: finding.id, request: { action: "unassign" } })}
+            className="text-zinc-400 hover:text-zinc-200"
+          >
+            Снять назначение
+          </Button>
         </div>
 
         {(finding.priority_score != null || score) && (
@@ -479,6 +513,13 @@ export default function FindingDetail() {
                 )}
 
                 <TimelineItem label="Последнее обнаружение" date={finding.last_seen} />
+                {historyEvents.map((event) => (
+                  <TimelineItem
+                    key={event.id}
+                    label={`Событие: ${event.event_type}`}
+                    date={event.created_at}
+                  />
+                ))}
               </div>
             </CardContent>
           </Card>

@@ -66,6 +66,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	}
 
 	findingsRepo := storage.NewFindingsRepo(pool)
+	closureReasonsRepo := storage.NewClosureReasonsRepo(pool)
+	findingEventsRepo := storage.NewFindingEventsRepo(pool)
 	projectsRepo := storage.NewProjectsRepo(pool)
 	dashboardRepo := storage.NewDashboardRepo(pool)
 	usersRepo := storage.NewUsersRepo(pool)
@@ -116,12 +118,21 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 				r.With(vMw).Get("/", handleGetFinding(findingsRepo, pool))
 				r.With(vMw).Get("/enrichments", handleGetFindingEnrichments(pool))
 				r.With(vMw).Get("/score", handleGetFindingScore(pool))
+				r.With(vMw).Get("/events", handleListFindingEvents(findingEventsRepo))
 				r.With(tMw).Patch("/status", handleUpdateStatus(findingsRepo))
+				r.With(tMw).Post("/close", handleCloseFinding(findingsRepo))
+				r.With(tMw).Post("/reopen", handleReopenFinding(findingsRepo))
+				r.With(tMw).Post("/assign", handleAssignFinding(findingsRepo, usersRepo, userProjectRolesRepo))
+				r.With(tMw).Post("/unassign", handleUnassignFinding(findingsRepo))
 				r.With(tMw).Post("/enrich", handleEnrichFinding(pool, rdb))
 				r.With(aMw).Delete("/", handleDeleteFinding(findingsRepo))
 			})
 
+			r.Get("/closure-reasons", handleListClosureReasons(closureReasonsRepo))
 			r.Patch("/bulk/status", handleBulkUpdateStatus(findingsRepo, userProjectRolesRepo))
+			r.Post("/bulk/close", handleBulkClose(findingsRepo, userProjectRolesRepo))
+			r.Post("/bulk/assign", handleBulkAssign(findingsRepo, usersRepo, userProjectRolesRepo))
+			r.Post("/bulk/unassign", handleBulkUnassign(findingsRepo, userProjectRolesRepo))
 		})
 
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
@@ -145,6 +156,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 					r.Put("/{user_id}", handleUpdateMember(userProjectRolesRepo))
 					r.Delete("/{user_id}", handleRemoveMember(userProjectRolesRepo))
 				})
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromURL("id"))).
+					Get("/assignable-users", handleAssignableUsers(pool))
 			})
 		})
 

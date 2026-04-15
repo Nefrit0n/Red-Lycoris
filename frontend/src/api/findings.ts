@@ -6,7 +6,7 @@ import {
   type InfiniteData,
   type QueryClient,
 } from "@tanstack/react-query";
-import { apiGet, apiPatch } from "@/api/client";
+import { apiGet, apiPatch, apiPost } from "@/api/client";
 import {
   buildQueryString,
   filterCacheKey,
@@ -14,7 +14,9 @@ import {
 } from "@/lib/findings-filter";
 import type {
   Finding,
+  FindingEvent,
   FindingGroup,
+  FindingScore,
   FindingsFacets,
   PaginatedResponse,
 } from "@/types";
@@ -36,11 +38,20 @@ type FindingsPage = PaginatedResponse<Finding[]>;
 export interface FindingDetailPayload {
   finding: Finding;
   enrichments?: unknown[];
-  score?: unknown;
+  score?: FindingScore;
 }
 
 export interface FindingDetailResponse {
   data: FindingDetailPayload;
+}
+
+export interface TriageRequest {
+  action: "change_status" | "close" | "reopen" | "assign" | "unassign";
+  status?: number;
+  reason_code?: string;
+  note?: string;
+  to_user_id?: string;
+  to_email?: string;
 }
 
 interface NormalizedFindingsFilters {
@@ -286,7 +297,9 @@ export function useUpdateStatus() {
 
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: number }) =>
-      apiPatch<{ status: string }>(`/api/v1/findings/${id}/status`, { status }),
+      apiPatch<{ data: { status: string } }>(`/api/v1/findings/${id}/status`, {
+        status,
+      }),
 
     onSuccess: async (_result, variables) => {
       patchFindingStatusesInListCache(qc, [variables.id], variables.status);
@@ -305,7 +318,7 @@ export function useBulkUpdateStatus() {
 
   return useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: number }) =>
-      apiPatch<{ status: string; updated: number }>("/api/v1/findings/bulk/status", {
+      apiPatch<{ data: { succeeded: string[]; failed: Record<string, string> } }>("/api/v1/findings/bulk/status", {
         ids,
         status,
       }),
@@ -316,5 +329,79 @@ export function useBulkUpdateStatus() {
 
       await qc.invalidateQueries({ queryKey: findingsKeys.all });
     },
+  });
+}
+
+export function useBulkTriageAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, request }: { ids: string[]; request: TriageRequest }) => {
+      if (request.action === "assign") {
+        return apiPatch<{ data: { succeeded: string[]; failed: Record<string, string> } }>(
+          "/api/v1/findings/bulk/assign",
+          { ids, user_id: request.to_user_id },
+        );
+      }
+      if (request.action === "change_status") {
+        return apiPatch<{ data: { succeeded: string[]; failed: Record<string, string> } }>(
+          "/api/v1/findings/bulk/status",
+          { ids, status: request.status },
+        );
+      }
+      if (request.action === "unassign") {
+        return apiPost<{ data: { succeeded: string[]; failed: Record<string, string> } }>(
+          "/api/v1/findings/bulk/unassign",
+          { ids },
+        );
+      }
+      throw new Error("unsupported bulk action");
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useTriageAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, request }: { id: string; request: TriageRequest }) => {
+      if (request.action === "assign") {
+        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/assign`, {
+          user_id: request.to_user_id,
+        });
+      }
+      if (request.action === "unassign") {
+        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/unassign`, {});
+      }
+      if (request.action === "reopen") {
+        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/reopen`, {
+          note: request.note ?? "",
+        });
+      }
+      if (request.action === "close") {
+        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/close`, {
+          reason_code: request.reason_code,
+          note: request.note ?? "",
+        });
+      }
+      return apiPatch<{ data: { status: string } }>(`/api/v1/findings/${id}/status`, {
+        status: request.status,
+      });
+    },
+    onSuccess: async (_result, vars) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: findingKeys.detail(vars.id) }),
+        qc.invalidateQueries({ queryKey: findingsKeys.all }),
+      ]);
+    },
+  });
+}
+
+export function useFindingHistory(id: string) {
+  return useQuery({
+    queryKey: [...findingKeys.detail(id), "history"] as const,
+    queryFn: () => apiGet<PaginatedResponse<FindingEvent[]>>(`/api/v1/findings/${id}/events`),
+    enabled: Boolean(id),
   });
 }

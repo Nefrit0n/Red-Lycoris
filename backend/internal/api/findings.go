@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -216,99 +215,6 @@ func handleGetFinding(repo *storage.FindingsRepo, pool *pgxpool.Pool) http.Handl
 		}
 
 		respondJSON(w, http.StatusOK, map[string]any{"data": result})
-	}
-}
-
-func handleUpdateStatus(repo *storage.FindingsRepo) http.HandlerFunc {
-	type request struct {
-		Status int `json:"status"`
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := uuid.Parse(chi.URLParam(r, "id"))
-		if err != nil {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid finding id")
-			return
-		}
-
-		var req request
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
-			return
-		}
-
-		if req.Status < 0 || req.Status > 4 {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "status must be between 0 and 4")
-			return
-		}
-
-		if err := repo.UpdateStatus(r.Context(), id, req.Status); err != nil {
-			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "finding not found")
-			return
-		}
-
-		respondJSON(w, http.StatusOK, map[string]string{"status": "updated"})
-	}
-}
-
-func handleBulkUpdateStatus(repo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
-	type request struct {
-		IDs    []uuid.UUID `json:"ids"`
-		Status int         `json:"status"`
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		var req request
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
-			return
-		}
-
-		if len(req.IDs) == 0 {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "ids must not be empty")
-			return
-		}
-		if req.Status < 0 || req.Status > 4 {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "status must be between 0 and 4")
-			return
-		}
-		user, _ := UserFromContext(r.Context())
-		if !user.IsAdmin() {
-			projectIDs, err := repo.ListDistinctProjectIDs(r.Context(), req.IDs)
-			if err != nil {
-				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check permissions")
-				return
-			}
-
-			forbiddenProjects := make([]uuid.UUID, 0)
-			for _, projectID := range projectIDs {
-				role, has, err := rolesRepo.GetRole(r.Context(), user.ID, projectID)
-				if err != nil {
-					respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check permissions")
-					return
-				}
-				if !has || role < domain.RoleTriager {
-					forbiddenProjects = append(forbiddenProjects, projectID)
-				}
-			}
-			if len(forbiddenProjects) > 0 {
-				respondJSON(w, http.StatusForbidden, map[string]any{
-					"error": map[string]any{
-						"code": "FORBIDDEN_PROJECTS",
-						"data": map[string]any{"projects": forbiddenProjects},
-					},
-				})
-				return
-			}
-		}
-
-		if err := repo.BulkUpdateStatus(r.Context(), req.IDs, req.Status); err != nil {
-			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update statuses")
-			return
-		}
-
-		respondJSON(w, http.StatusOK, map[string]any{
-			"status":  "updated",
-			"updated": len(req.IDs),
-		})
 	}
 }
 
