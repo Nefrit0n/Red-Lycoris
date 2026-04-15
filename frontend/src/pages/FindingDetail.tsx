@@ -44,8 +44,13 @@ import PriorityScore from "@/components/PriorityScore";
 import EnrichmentTabs from "@/components/EnrichmentTabs";
 import CodeSnippet from "@/components/CodeSnippet";
 import { useHotkey } from "@/hooks/use-hotkey";
-import { useFinding, useUpdateStatus } from "@/api/findings";
+import { useCurrentUser } from "@/api/auth";
+import { useCreateComment } from "@/api/comments";
+import { useFinding, useTriageAction, useUpdateStatus } from "@/api/findings";
 import { useFindingScore } from "@/api/enrichment";
+import CommentForm from "@/components/findings/CommentForm";
+import CommentList from "@/components/findings/CommentList";
+import FindingHistory from "@/components/findings/FindingHistory";
 import type { Finding } from "@/types";
 
 const statusOptions = [
