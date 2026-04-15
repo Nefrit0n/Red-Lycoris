@@ -15,5 +15,5 @@ CREATE INDEX idx_finding_events_user_created_desc
     WHERE user_id IS NOT NULL;
 
 CREATE UNIQUE INDEX idx_finding_events_seen_again_unique_per_day
-    ON finding_events (finding_id, (created_at::date))
+    ON finding_events (finding_id, ((created_at AT TIME ZONE 'UTC')::date))
     WHERE event_type = 'seen_again';
