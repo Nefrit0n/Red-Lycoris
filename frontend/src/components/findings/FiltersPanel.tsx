@@ -20,6 +20,7 @@ import {
 } from "@/lib/findings-filter";
 import type { FindingsFacets, FindingKind } from "@/types";
 import { cn } from "@/lib/utils";
+import { apiGet } from "@/api/client";
 
 interface FiltersPanelProps {
   filter: FindingsFilter;
@@ -204,7 +205,34 @@ export function FiltersPanel({
     filter.inBDU ||
     filter.epssMin !== null ||
     filter.cvssMin !== null ||
-    filter.ageMaxDays !== null;
+    filter.ageMaxDays !== null ||
+    filter.assigneeMe ||
+    filter.unassigned ||
+    filter.assignees.length > 0;
+
+  useEffect(() => {
+    if (assigneeQuery.trim().length < 2) {
+      setAssigneeOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void apiGet<{ data: Array<{ id: string; email: string; full_name: string }> }>("/api/v1/users/search", { q: assigneeQuery.trim() })
+      .then((res) => {
+        if (!cancelled) setAssigneeOptions(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setAssigneeOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assigneeQuery]);
+
+  const assigneeMode = useMemo<"all" | "me" | "unassigned">(() => {
+    if (filter.assigneeMe) return "me";
+    if (filter.unassigned) return "unassigned";
+    return "all";
+  }, [filter.assigneeMe, filter.unassigned]);
 
   return (
     <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-r border-zinc-800">

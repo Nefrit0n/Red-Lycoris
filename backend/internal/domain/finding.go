@@ -62,6 +62,11 @@ type Finding struct {
 	RuleID           *string         `json:"rule_id,omitempty"`
 	RuleName         *string         `json:"rule_name,omitempty"`
 	PriorityScore    *float64        `json:"priority_score,omitempty"`
+	ClosureReasonID  *int16          `json:"closure_reason_id,omitempty"`
+	ClosureNote      *string         `json:"closure_note,omitempty"`
+	ClosedAt         *time.Time      `json:"closed_at,omitempty"`
+	ClosedBy         *uuid.UUID      `json:"closed_by,omitempty"`
+	AssignedTo       *uuid.UUID      `json:"assigned_to,omitempty"`
 
 	// Joined badge fields — populated only by list queries.
 	InKEV       bool     `json:"in_kev,omitempty"`

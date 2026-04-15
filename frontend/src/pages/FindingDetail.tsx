@@ -374,14 +374,16 @@ export default function FindingDetail() {
   } = useFinding(id ?? "");
 
   const { data: scoreData } = useFindingScore(id ?? "");
+  const { data: currentUser } = useCurrentUser();
   const updateStatus = useUpdateStatus();
+  const triageAction = useTriageAction();
+  const createComment = useCreateComment(id ?? "");
 
   const finding = data?.data.finding;
   const score = scoreData?.data ?? data?.data.score;
 
   const cveIds = finding?.cve_ids ?? [];
   const cweIds = finding?.cwe_ids ?? [];
-
   const goBack = useCallback(() => {
     navigate("/findings");
   }, [navigate]);
@@ -531,6 +533,34 @@ export default function FindingDetail() {
           </DropdownMenu>
 
           <span className="font-mono text-xs text-zinc-600">{finding.id}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!currentUser || triageAction.isPending}
+            onClick={() => {
+              if (!currentUser) return;
+              triageAction.mutate({
+                id: finding.id,
+                request: {
+                  action: "assign",
+                  to_user_id: currentUser.id,
+                  to_email: currentUser.email,
+                },
+              });
+            }}
+            className="border-zinc-700 bg-zinc-900 text-zinc-300"
+          >
+            Назначить мне
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={triageAction.isPending}
+            onClick={() => triageAction.mutate({ id: finding.id, request: { action: "unassign" } })}
+            className="text-zinc-400 hover:text-zinc-200"
+          >
+            Снять назначение
+          </Button>
         </div>
 
         {(finding.priority_score != null || score) && (
@@ -549,6 +579,7 @@ export default function FindingDetail() {
           <TabsTrigger value="overview">Обзор</TabsTrigger>
           <TabsTrigger value="identifiers">Идентификаторы</TabsTrigger>
           <TabsTrigger value="enrichment">Обогащение</TabsTrigger>
+          <TabsTrigger value="comments">Комментарии</TabsTrigger>
           <TabsTrigger value="history">История</TabsTrigger>
         </TabsList>
 
@@ -683,30 +714,20 @@ export default function FindingDetail() {
           <EnrichmentTabs findingId={finding.id} />
         </TabsContent>
 
+        <TabsContent value="comments">
+          <div className="space-y-4">
+            <CommentForm
+              submitting={createComment.isPending}
+              onSubmit={async (text) => {
+                await createComment.mutateAsync(text);
+              }}
+            />
+            <CommentList findingId={finding.id} />
+          </div>
+        </TabsContent>
+
         <TabsContent value="history">
-          <Card className="border-zinc-800 bg-zinc-900/50">
-            <CardContent className="pt-6">
-              <div className="relative space-y-6 pl-6 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-zinc-800">
-                <TimelineItem label="Впервые обнаружено" date={finding.first_seen} />
-
-                {finding.times_seen > 1 && (
-                  <div className="relative flex items-start gap-3">
-                    <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-zinc-700 bg-zinc-900" />
-                    <div>
-                      <div className="text-sm text-zinc-300">
-                        Обнаружено{" "}
-                        <span className="font-medium text-zinc-100">
-                          {finding.times_seen} раз
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <TimelineItem label="Последнее обнаружение" date={finding.last_seen} />
-              </div>
-            </CardContent>
-          </Card>
+          <FindingHistory findingId={finding.id} />
         </TabsContent>
       </Tabs>
     </div>

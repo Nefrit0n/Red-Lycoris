@@ -10,6 +10,7 @@ import type { FindingsFilter } from "@/lib/findings-filter";
 import type { Finding, FindingKind } from "@/types";
 import { cn } from "@/lib/utils";
 import type { Density } from "@/components/findings/FindingsToolbar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface FlatFindingsTableProps {
   filter: FindingsFilter;

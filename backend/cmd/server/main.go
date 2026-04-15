@@ -19,6 +19,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"redlycoris/internal/api"
+	"redlycoris/internal/audit"
 	"redlycoris/internal/auth"
 	"redlycoris/internal/config"
 	"redlycoris/internal/domain"
@@ -70,6 +71,32 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("connected to PostgreSQL")
+
+	auditRepo := storage.NewAuditLogRepo(pool)
+	auditWriter := audit.NewWriter(auditRepo)
+
+	ensurePartitions := func() {
+		now := time.Now().UTC()
+		for _, m := range []time.Time{now, now.AddDate(0, 1, 0)} {
+			if err := auditRepo.EnsurePartition(ctx, m); err != nil {
+				slog.Error("audit: ensure partition", "error", err, "month", m)
+			}
+		}
+	}
+	ensurePartitions()
+
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				ensurePartitions()
+			}
+		}
+	}()
 
 	// Migrations
 	m, err := migrate.New("file://migrations", cfg.DatabaseURL)
@@ -136,6 +163,8 @@ func main() {
 		api.WithEnv(cfg.Env),
 		api.WithVersion(version),
 		api.WithStartTime(startTime),
+		api.WithAuditRepo(auditRepo),
+		api.WithAuditWriter(auditWriter),
 		api.WithTrustProxy(cfg.TrustProxy),
 		api.WithCookieSecure(cfg.CookieSecure),
 		api.WithSessionDuration(cfg.SessionDuration),
@@ -188,6 +217,11 @@ func main() {
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown error", "error", err)
+	}
+	writerCloseCtx, writerCloseCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer writerCloseCancel()
+	if err := auditWriter.Close(writerCloseCtx); err != nil {
+		slog.Error("audit writer close", "error", err)
 	}
 	slog.Info("server stopped")
 }

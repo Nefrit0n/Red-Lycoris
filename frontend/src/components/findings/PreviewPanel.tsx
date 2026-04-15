@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { format, formatDistanceToNow, isValid } from "date-fns";
 import { ru } from "date-fns/locale";
 import {
@@ -412,6 +412,10 @@ export function PreviewPanel({
   onPickProject,
 }: PreviewPanelProps) {
   const { data, isLoading, isError, error } = useFinding(findingId ?? "");
+  const navigate = useNavigate();
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const updateStatus = useUpdateStatus();
+  const reopenFinding = useReopenFinding();
   const finding = data?.data.finding;
 
   const updateStatus = useUpdateStatus();

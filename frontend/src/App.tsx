@@ -10,6 +10,7 @@ import Import from "@/pages/Import";
 import EnrichmentStatus from "@/pages/EnrichmentStatus";
 import Login from "@/pages/Login";
 import AdminUsers from "@/pages/AdminUsers";
+import AdminAudit from "@/pages/AdminAudit";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="/import" element={<Import />} />
             <Route path="/enrichment" element={<EnrichmentStatus />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/audit" element={<AdminAudit />} />
           </Route>
         </Route>
       </Routes>

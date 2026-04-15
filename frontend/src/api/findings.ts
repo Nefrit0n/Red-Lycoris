@@ -6,7 +6,7 @@ import {
   type InfiniteData,
   type QueryClient,
 } from "@tanstack/react-query";
-import { apiGet, apiPatch } from "@/api/client";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/api/client";
 import {
   buildQueryString,
   filterCacheKey,
@@ -43,6 +43,30 @@ export interface FindingDetailPayload {
 
 export interface FindingDetailResponse {
   data: FindingDetailPayload;
+}
+
+export interface TriageRequest {
+  action: "change_status" | "close" | "reopen" | "assign" | "unassign";
+  status?: number;
+  reason_code?: string;
+  note?: string;
+  to_user_id?: string;
+  to_email?: string;
+}
+
+export interface ClosureReason {
+  id: number;
+  code: string;
+  label: string;
+  target_status: number;
+  requires_note: boolean;
+  is_active: boolean;
+}
+
+export interface AssignableUser {
+  id: string;
+  email: string;
+  full_name: string;
 }
 
 interface NormalizedFindingsFilters {
@@ -288,7 +312,9 @@ export function useUpdateStatus() {
 
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: number }) =>
-      apiPatch<{ status: string }>(`/api/v1/findings/${id}/status`, { status }),
+      apiPatch<{ data: { status: string } }>(`/api/v1/findings/${id}/status`, {
+        status,
+      }),
 
     onSuccess: async (_result, variables) => {
       patchFindingStatusesInListCache(qc, [variables.id], variables.status);
@@ -307,7 +333,7 @@ export function useBulkUpdateStatus() {
 
   return useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: number }) =>
-      apiPatch<{ status: string; updated: number }>("/api/v1/findings/bulk/status", {
+      apiPatch<{ data: { succeeded: string[]; failed: Record<string, string> } }>("/api/v1/findings/bulk/status", {
         ids,
         status,
       }),
@@ -316,6 +342,191 @@ export function useBulkUpdateStatus() {
       patchFindingStatusesInListCache(qc, variables.ids, variables.status);
       patchFindingStatusesInDetailCache(qc, variables.ids, variables.status);
 
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useBulkTriageAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, request }: { ids: string[]; request: TriageRequest }) => {
+      if (request.action === "assign") {
+        return apiPatch<{ data: { succeeded: string[]; failed: Record<string, string> } }>(
+          "/api/v1/findings/bulk/assign",
+          { ids, user_id: request.to_user_id },
+        );
+      }
+      if (request.action === "change_status") {
+        return apiPatch<{ data: { succeeded: string[]; failed: Record<string, string> } }>(
+          "/api/v1/findings/bulk/status",
+          { ids, status: request.status },
+        );
+      }
+      if (request.action === "unassign") {
+        return apiPost<{ data: { succeeded: string[]; failed: Record<string, string> } }>(
+          "/api/v1/findings/bulk/unassign",
+          { ids },
+        );
+      }
+      throw new Error("unsupported bulk action");
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useTriageAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, request }: { id: string; request: TriageRequest }) => {
+      if (request.action === "assign") {
+        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/assign`, {
+          user_id: request.to_user_id,
+        });
+      }
+      if (request.action === "unassign") {
+        return apiDelete(`/api/v1/findings/${id}/assign`);
+      }
+      if (request.action === "reopen") {
+        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/reopen`, {
+          note: request.note ?? "",
+        });
+      }
+      if (request.action === "close") {
+        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/close`, {
+          reason_code: request.reason_code,
+          note: request.note ?? "",
+        });
+      }
+      return apiPatch<{ data: { status: string } }>(`/api/v1/findings/${id}/status`, {
+        status: request.status,
+      });
+    },
+    onSuccess: async (_result, vars) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: findingKeys.detail(vars.id) }),
+        qc.invalidateQueries({ queryKey: findingsKeys.all }),
+      ]);
+    },
+  });
+}
+
+export function useFindingHistory(id: string) {
+  return useQuery({
+    queryKey: [...findingKeys.detail(id), "history"] as const,
+    queryFn: () => apiGet<PaginatedResponse<FindingEvent[]>>(`/api/v1/findings/${id}/events`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCloseFinding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reasonCode, note }: { id: string; reasonCode: string; note: string }) =>
+      apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/close`, {
+        reason_code: reasonCode,
+        note,
+      }),
+    onSuccess: async (_r, v) => {
+      await qc.invalidateQueries({ queryKey: findingKeys.detail(v.id) });
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useReopenFinding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) =>
+      apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/reopen`, { note: note ?? "" }),
+    onSuccess: async (_r, v) => {
+      await qc.invalidateQueries({ queryKey: findingKeys.detail(v.id) });
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useAssignFinding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: string }) =>
+      apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/assign`, { user_id: userId }),
+    onSuccess: async (_r, v) => {
+      await qc.invalidateQueries({ queryKey: findingKeys.detail(v.id) });
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useUnassignFinding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => apiDelete(`/api/v1/findings/${id}/assign`),
+    onSuccess: async (_r, v) => {
+      await qc.invalidateQueries({ queryKey: findingKeys.detail(v.id) });
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useFindingEvents(id: string, limit = 50) {
+  return useInfiniteQuery({
+    queryKey: [...findingKeys.detail(id), "events", limit] as const,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      apiGet<PaginatedResponse<FindingEvent[]>>(
+        `/api/v1/findings/${id}/events`,
+        pageParam ? { cursor: pageParam, limit: String(limit) } : { limit: String(limit) },
+      ),
+    getNextPageParam: (lastPage) => (lastPage.meta.has_more ? (lastPage.meta.next_cursor ?? null) : null),
+    enabled: Boolean(id),
+    staleTime: 30_000,
+  });
+}
+
+export function useClosureReasons() {
+  return useQuery({
+    queryKey: ["closure-reasons"] as const,
+    queryFn: () => apiGet<{ data: ClosureReason[] }>("/api/v1/closure-reasons"),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function useAssignableUsers(projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["assignable-users", projectId] as const,
+    queryFn: () => apiGet<{ data: AssignableUser[] }>(`/api/v1/projects/${projectId}/assignable-users`),
+    enabled: Boolean(projectId),
+    staleTime: 30_000,
+  });
+}
+
+export function useBulkClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, reasonCode, note }: { ids: string[]; reasonCode: string; note: string }) =>
+      apiPost<{ data: { succeeded: string[]; failed: Record<string, string> } }>("/api/v1/findings/bulk/close", {
+        ids,
+        reason_code: reasonCode,
+        note,
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useBulkAssign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, userId }: { ids: string[]; userId: string }) =>
+      apiPost<{ data: { succeeded: string[]; failed: Record<string, string> } }>("/api/v1/findings/bulk/assign", {
+        ids,
+        user_id: userId,
+      }),
+    onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: findingsKeys.all });
     },
   });

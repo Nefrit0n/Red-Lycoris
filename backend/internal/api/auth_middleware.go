@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -18,7 +20,20 @@ type ProjectIDExtractor func(*http.Request) (uuid.UUID, error)
 
 func RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := UserFromContext(r.Context()); !ok {
+		raw := r.Context().Value(userCtxKey)
+		u, ok := UserFromContext(r.Context())
+
+		slog.Info("RequireAuth check",
+			"request_id", GetRequestID(r.Context()),
+			"path", r.URL.Path,
+			"user_in_ctx", ok,
+			"user_nil", u == nil,
+			"raw_value_type", fmt.Sprintf("%T", raw),
+			"raw_value_nil", raw == nil,
+			"userCtxKey_addr", fmt.Sprintf("%p", userCtxKey),
+		)
+
+		if !ok {
 			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
 			return
 		}
