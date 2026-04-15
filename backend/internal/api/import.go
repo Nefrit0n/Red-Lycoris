@@ -1,12 +1,15 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 
 	"redlycoris/internal/domain"
@@ -20,7 +23,7 @@ type importError struct {
 	Message string `json:"message"`
 }
 
-func handleImport(repo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client) http.HandlerFunc {
+func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID := r.URL.Query().Get("project_id")
 		var overrideProjectID uuid.UUID
@@ -112,8 +115,35 @@ func handleImport(repo *storage.FindingsRepo, rolesRepo *storage.UserProjectRole
 			if isNew {
 				imported++
 				importedIDs = append(importedIDs, f.ID)
+				payload, _ := json.Marshal(domain.CreatedPayload{
+					SourceType: f.SourceType,
+					SourceID:   f.Fingerprint,
+				})
+				evt := domain.FindingEvent{
+					ID:        uuid.New(),
+					FindingID: f.ID,
+					UserID:    &user.ID,
+					EventType: domain.FindingEventCreated,
+					Payload:   payload,
+					CreatedAt: time.Now(),
+				}
+				_ = eventsRepo.Create(r.Context(), repo.DB(), evt)
 			} else {
 				updated++
+				evt := domain.FindingEvent{
+					ID:        uuid.New(),
+					FindingID: f.ID,
+					UserID:    nil,
+					EventType: domain.FindingEventType("seen_again"),
+					Payload:   []byte("{}"),
+					CreatedAt: time.Now(),
+				}
+				if err := eventsRepo.Create(r.Context(), repo.DB(), evt); err != nil {
+					var pgErr *pgconn.PgError
+					if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+						slog.Error("seen_again insert failed", "error", err)
+					}
+				}
 			}
 		}
 

@@ -44,6 +44,11 @@ export interface Finding {
   rule_id?: string;
   rule_name?: string;
   priority_score?: number;
+  closure_reason_id?: number;
+  closure_note?: string;
+  closed_at?: string;
+  closed_by?: string;
+  assigned_to?: string;
 
   // Joined badge fields — populated only by list queries.
   in_kev?: boolean;
@@ -64,6 +69,21 @@ export interface FindingGroup {
   in_kev: boolean;
   max_epss?: number;
   max_cvss?: number;
+}
+
+export interface FindingEvent {
+  id: string;
+  finding_id: string;
+  user_id?: string;
+  event_type:
+    | "status_changed"
+    | "closed"
+    | "reopened"
+    | "assigned"
+    | "unassigned"
+    | "created";
+  payload: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface SeverityFacet {

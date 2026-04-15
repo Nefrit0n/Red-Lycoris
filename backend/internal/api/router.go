@@ -66,6 +66,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	}
 
 	findingsRepo := storage.NewFindingsRepo(pool)
+	closureReasonsRepo := storage.NewClosureReasonsRepo(pool)
+	findingEventsRepo := storage.NewFindingEventsRepo(pool)
 	projectsRepo := storage.NewProjectsRepo(pool)
 	dashboardRepo := storage.NewDashboardRepo(pool)
 	usersRepo := storage.NewUsersRepo(pool)
@@ -110,22 +112,32 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 			r.Route("/{id}", func(r chi.Router) {
 				vMw := RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromFinding(findingsRepo, "id"))
-				tMw := RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromFinding(findingsRepo, "id"))
 				aMw := RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromFinding(findingsRepo, "id"))
 
 				r.With(vMw).Get("/", handleGetFinding(findingsRepo, pool))
 				r.With(vMw).Get("/enrichments", handleGetFindingEnrichments(pool))
 				r.With(vMw).Get("/score", handleGetFindingScore(pool))
-				r.With(tMw).Patch("/status", handleUpdateStatus(findingsRepo))
-				r.With(tMw).Post("/enrich", handleEnrichFinding(pool, rdb))
+				r.With(vMw).Get("/events", handleListFindingEvents(findingEventsRepo))
+				r.Group(func(r chi.Router) {
+					r.Use(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromFinding(findingsRepo, "id")))
+					r.Patch("/status", handleUpdateStatus(findingsRepo))
+					r.Post("/close", handleCloseFinding(findingsRepo))
+					r.Post("/reopen", handleReopenFinding(findingsRepo))
+					r.Post("/assign", handleAssignFinding(findingsRepo, usersRepo, userProjectRolesRepo))
+					r.Delete("/assign", handleUnassignFinding(findingsRepo))
+					r.Post("/enrich", handleEnrichFinding(pool, rdb))
+				})
 				r.With(aMw).Delete("/", handleDeleteFinding(findingsRepo))
 			})
 
 			r.Patch("/bulk/status", handleBulkUpdateStatus(findingsRepo, userProjectRolesRepo))
+			r.Post("/bulk/close", handleBulkClose(findingsRepo, userProjectRolesRepo))
+			r.Post("/bulk/assign", handleBulkAssign(findingsRepo, usersRepo, userProjectRolesRepo))
+			r.Post("/bulk/unassign", handleBulkUnassign(findingsRepo, userProjectRolesRepo))
 		})
 
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
-			Post("/api/v1/import", handleImport(findingsRepo, userProjectRolesRepo, rdb))
+			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb))
 
 		r.Route("/api/v1/projects", func(r chi.Router) {
 			r.Get("/", handleListProjects(projectsRepo, userProjectRolesRepo))
@@ -145,8 +157,12 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 					r.Put("/{user_id}", handleUpdateMember(userProjectRolesRepo))
 					r.Delete("/{user_id}", handleRemoveMember(userProjectRolesRepo))
 				})
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
+					Get("/assignable-users", handleAssignableUsers(pool))
 			})
 		})
+
+		r.Get("/api/v1/closure-reasons", handleListClosureReasons(closureReasonsRepo))
 
 		r.Get("/api/v1/dashboard/stats", handleDashboardStats(dashboardRepo, userProjectRolesRepo, rdb))
 
