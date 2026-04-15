@@ -96,7 +96,7 @@ export default function FindingsList() {
         return;
       }
       if (selectedIds.size > 0) {
-        setSelectedIds(new Set());
+        clearSelection();
       }
     },
     { allowInEditable: true },
