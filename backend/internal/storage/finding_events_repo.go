@@ -31,12 +31,21 @@ type FindingEventListItem struct {
 	UserFullName *string `json:"user_full_name,omitempty"`
 }
 
+type FindingEventWithAuthor struct {
+	domain.FindingEvent
+	Author *domain.User `json:"author,omitempty"`
+}
+
 type FindingEventsRepo struct {
 	pool *pgxpool.Pool
 }
 
 func NewFindingEventsRepo(pool *pgxpool.Pool) *FindingEventsRepo {
 	return &FindingEventsRepo{pool: pool}
+}
+
+func (r *FindingEventsRepo) Pool() *pgxpool.Pool {
+	return r.pool
 }
 
 func encodeEventCursor(c findingEventCursor) string {
@@ -123,4 +132,71 @@ func (r *FindingEventsRepo) ListForFinding(
 		items = items[:limit]
 	}
 	return items, next, nil
+}
+
+func (r *FindingEventsRepo) GetByID(ctx context.Context, id uuid.UUID) (*FindingEventWithAuthor, error) {
+	const q = `
+		SELECT e.id, e.finding_id, e.user_id, e.event_type, e.payload, e.created_at,
+		       u.id, u.email, u.full_name, u.is_active, u.global_role, u.created_at, u.updated_at, u.last_login_at
+		FROM finding_events e
+		LEFT JOIN users u ON u.id = e.user_id
+		WHERE e.id = $1`
+
+	var event FindingEventWithAuthor
+	var author domain.User
+	var authorGlobalRole int16
+	var authorID *uuid.UUID
+	if err := r.pool.QueryRow(ctx, q, id).Scan(
+		&event.ID, &event.FindingID, &event.UserID, &event.EventType, &event.Payload, &event.CreatedAt,
+		&authorID, &author.Email, &author.FullName, &author.IsActive, &authorGlobalRole, &author.CreatedAt, &author.UpdatedAt, &author.LastLoginAt,
+	); err != nil {
+		return nil, fmt.Errorf("storage.FindingEventsRepo.GetByID: %w", err)
+	}
+	if authorID != nil {
+		author.ID = *authorID
+		author.GlobalRole = domain.GlobalRole(authorGlobalRole)
+		event.Author = &author
+	}
+	return &event, nil
+}
+
+func (r *FindingEventsRepo) ListCommentsForFinding(ctx context.Context, findingID uuid.UUID) ([]FindingEventWithAuthor, error) {
+	const q = `
+		SELECT e.id, e.finding_id, e.user_id, e.event_type, e.payload, e.created_at,
+		       u.id, u.email, u.full_name, u.is_active, u.global_role, u.created_at, u.updated_at, u.last_login_at
+		FROM finding_events e
+		LEFT JOIN users u ON u.id = e.user_id
+		WHERE e.finding_id = $1
+		  AND e.event_type IN ('comment_added', 'comment_edited', 'comment_deleted')
+		ORDER BY e.created_at ASC, e.id ASC`
+
+	rows, err := r.pool.Query(ctx, q, findingID)
+	if err != nil {
+		return nil, fmt.Errorf("storage.FindingEventsRepo.ListCommentsForFinding: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]FindingEventWithAuthor, 0)
+	for rows.Next() {
+		var item FindingEventWithAuthor
+		var author domain.User
+		var authorGlobalRole int16
+		var authorID *uuid.UUID
+		if err := rows.Scan(
+			&item.ID, &item.FindingID, &item.UserID, &item.EventType, &item.Payload, &item.CreatedAt,
+			&authorID, &author.Email, &author.FullName, &author.IsActive, &authorGlobalRole, &author.CreatedAt, &author.UpdatedAt, &author.LastLoginAt,
+		); err != nil {
+			return nil, fmt.Errorf("storage.FindingEventsRepo.ListCommentsForFinding: scan: %w", err)
+		}
+		if authorID != nil {
+			author.ID = *authorID
+			author.GlobalRole = domain.GlobalRole(authorGlobalRole)
+			item.Author = &author
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("storage.FindingEventsRepo.ListCommentsForFinding: rows: %w", err)
+	}
+	return out, nil
 }

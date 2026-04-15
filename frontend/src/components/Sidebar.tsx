@@ -4,6 +4,7 @@ import {
   Folder,
   Upload,
   Database,
+  Shield,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
@@ -26,7 +27,11 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle, isAdmin }: SidebarProps) {
   const items = isAdmin
-    ? [...navItems, { to: "/admin/users", label: "Админка", icon: Database }]
+    ? [
+        ...navItems,
+        { to: "/admin/users", label: "Админка", icon: Shield },
+        { to: "/admin/audit", label: "Аудит", icon: Database },
+      ]
     : navItems;
   return (
     <aside

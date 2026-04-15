@@ -99,9 +99,14 @@ export default function Layout() {
                   Выйти
                 </DropdownMenuItem>
                 {user?.global_role === 1 && (
-                  <DropdownMenuItem>
-                    <Link to="/admin/users">Админка</Link>
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem>
+                      <Link to="/admin/users">Админка</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Link to="/admin/audit">Аудит</Link>
+                    </DropdownMenuItem>
+                  </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
