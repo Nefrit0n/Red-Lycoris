@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/findings-filter";
 import type { FindingsFacets } from "@/types";
 import { cn } from "@/lib/utils";
+import { apiGet } from "@/api/client";
 
 interface FiltersPanelProps {
   filter: FindingsFilter;
@@ -99,6 +100,8 @@ export function FiltersPanel({
 }: FiltersPanelProps) {
   const [localQuery, setLocalQuery] = useState(filter.query);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [assigneeQuery, setAssigneeQuery] = useState("");
+  const [assigneeOptions, setAssigneeOptions] = useState<Array<{ id: string; email: string; full_name: string }>>([]);
 
   // Keep the local input in sync when the URL drives a new filter (e.g.
   // saved view applied).
@@ -151,7 +154,34 @@ export function FiltersPanel({
     filter.inBDU ||
     filter.epssMin !== null ||
     filter.cvssMin !== null ||
-    filter.ageMaxDays !== null;
+    filter.ageMaxDays !== null ||
+    filter.assigneeMe ||
+    filter.unassigned ||
+    filter.assignees.length > 0;
+
+  useEffect(() => {
+    if (assigneeQuery.trim().length < 2) {
+      setAssigneeOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void apiGet<{ data: Array<{ id: string; email: string; full_name: string }> }>("/api/v1/users/search", { q: assigneeQuery.trim() })
+      .then((res) => {
+        if (!cancelled) setAssigneeOptions(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setAssigneeOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assigneeQuery]);
+
+  const assigneeMode = useMemo<"all" | "me" | "unassigned">(() => {
+    if (filter.assigneeMe) return "me";
+    if (filter.unassigned) return "unassigned";
+    return "all";
+  }, [filter.assigneeMe, filter.unassigned]);
 
   return (
     <aside className="flex w-[280px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-zinc-800 px-4 py-4">
@@ -192,6 +222,71 @@ export function FiltersPanel({
       </div>
 
       <Separator className="bg-zinc-800" />
+
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          Назначение
+        </h3>
+        <div className="space-y-1 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={assigneeMode === "all"}
+              onChange={() => onChange({ assigneeMe: false, unassigned: false })}
+            />
+            Все
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={assigneeMode === "me"}
+              onChange={() => onChange({ assigneeMe: true, unassigned: false })}
+            />
+            Назначено мне
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={assigneeMode === "unassigned"}
+              onChange={() => onChange({ assigneeMe: false, unassigned: true })}
+            />
+            Без назначения
+          </label>
+        </div>
+
+        <details className="mt-3 rounded border border-zinc-800 p-2">
+          <summary className="cursor-pointer text-xs text-zinc-400">Конкретные пользователи</summary>
+          <div className="mt-2 space-y-2">
+            <Input
+              value={assigneeQuery}
+              onChange={(e) => setAssigneeQuery(e.target.value)}
+              placeholder="Поиск пользователя"
+              className="h-7 border-zinc-800 bg-zinc-900 text-sm"
+            />
+            <div className="max-h-32 overflow-auto">
+              {assigneeOptions.map((u) => {
+                const checked = filter.assignees.includes(u.id);
+                return (
+                  <label key={u.id} className="flex items-center gap-2 py-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) =>
+                        onChange({
+                          assignees: e.target.checked
+                            ? [...filter.assignees, u.id]
+                            : filter.assignees.filter((x) => x !== u.id),
+                        })
+                      }
+                    />
+                    <span className="truncate">{u.full_name || u.email}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </details>
+      </div>
 
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">

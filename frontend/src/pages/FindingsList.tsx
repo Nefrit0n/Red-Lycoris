@@ -10,14 +10,8 @@ import FindingsToolbar, {
 import FlatFindingsTable from "@/components/findings/FlatFindingsTable";
 import GroupedFindingsTable from "@/components/findings/GroupedFindingsTable";
 import PreviewPanel from "@/components/findings/PreviewPanel";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { useBulkUpdateStatus, useFindingsFacets } from "@/api/findings";
+import BulkActionsBar from "@/components/findings/BulkActionsBar";
+import { useFindingsFacets } from "@/api/findings";
 import {
   DEFAULT_FINDINGS_FILTER,
   filterFromSearchParams,
@@ -25,14 +19,7 @@ import {
   type FindingsFilter,
 } from "@/lib/findings-filter";
 import { useLocalStorage } from "@/hooks/use-local-storage";
-
-const STATUS_OPTIONS = [
-  { value: 0, label: "Открыта" },
-  { value: 1, label: "Подтверждена" },
-  { value: 2, label: "Ложное срабатывание" },
-  { value: 3, label: "Устранена" },
-  { value: 4, label: "Риск принят" },
-];
+import { useFindingsSelection } from "@/store/findings-selection";
 
 // FindingsList is the page shell for the redesigned list — every piece of
 // user state lives either in the URL (filter/sort/group), the preview
@@ -60,8 +47,9 @@ export default function FindingsList() {
   );
 
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkOpen, setBulkOpen] = useState(false);
+  const selectedIds = useFindingsSelection((s) => s.selected);
+  const toggleSelect = useFindingsSelection((s) => s.toggle);
+  const clearSelection = useFindingsSelection((s) => s.clear);
 
   // Shared count/fetching state driven from the active table so the toolbar
   // can show a "15 342 находок" chip without owning the query itself.
@@ -72,8 +60,6 @@ export default function FindingsList() {
   const { data: facetsData, refetch: refetchFacets } = useFindingsFacets(filter);
   const facets = facetsData?.data;
 
-  const bulkUpdate = useBulkUpdateStatus();
-
   const handleCountChange = useCallback((total: number, fetching: boolean) => {
     setListMeta((prev) =>
       prev.total === total && prev.fetching === fetching
@@ -82,34 +68,9 @@ export default function FindingsList() {
     );
   }, []);
 
-  const toggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
   const handleRefresh = useCallback(() => {
     void refetchFacets();
   }, [refetchFacets]);
-
-  const handleBulkStatus = useCallback(
-    (status: number) => {
-      if (selectedIds.size === 0 || bulkUpdate.isPending) return;
-      bulkUpdate.mutate(
-        { ids: Array.from(selectedIds), status },
-        {
-          onSuccess: () => {
-            setSelectedIds(new Set());
-            setBulkOpen(false);
-          },
-        },
-      );
-    },
-    [selectedIds, bulkUpdate],
-  );
 
   // Keep preview + filter in sync: if the user closes a preview we also
   // drop any current bulk selection they might have started there.
@@ -143,14 +104,14 @@ export default function FindingsList() {
           return;
         }
         if (selectedIds.size > 0) {
-          setSelectedIds(new Set());
+          clearSelection();
         }
       }
     }
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [previewId, selectedIds.size, closePreview]);
+  }, [previewId, selectedIds.size, closePreview, clearSelection]);
 
   const isGrouped = filter.groupBy !== "";
 
@@ -189,53 +150,8 @@ export default function FindingsList() {
           isFetching={listMeta.fetching}
           onRefresh={handleRefresh}
           selectedCount={selectedIds.size}
-          onBulkStatusClick={() => setBulkOpen((v) => !v)}
+          onBulkStatusClick={() => undefined}
         />
-
-        {bulkOpen && selectedIds.size > 0 && (
-          <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/40 px-4 py-2">
-            <span className="text-xs text-zinc-500">
-              Сменить статус {selectedIds.size} находок на:
-            </span>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={bulkUpdate.isPending}
-                    className="border-zinc-700 bg-zinc-900 text-zinc-300"
-                  >
-                    Выбрать статус
-                  </Button>
-                }
-              />
-              <DropdownMenuContent
-                align="start"
-                className="border-zinc-700 bg-zinc-900"
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <DropdownMenuItem
-                    key={opt.value}
-                    disabled={bulkUpdate.isPending}
-                    onClick={() => handleBulkStatus(opt.value)}
-                    className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
-                  >
-                    {opt.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedIds(new Set())}
-              className="ml-auto text-zinc-500 hover:text-zinc-300"
-            >
-              Снять выбор
-            </Button>
-          </div>
-        )}
 
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
@@ -269,6 +185,11 @@ export default function FindingsList() {
           )}
         </div>
       </div>
+      <BulkActionsBar
+        selected={selectedIds}
+        onClear={clearSelection}
+        projectId={filter.projectIds[0]}
+      />
     </div>
   );
 }

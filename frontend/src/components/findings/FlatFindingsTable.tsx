@@ -14,6 +14,7 @@ import type { FindingsFilter } from "@/lib/findings-filter";
 import type { Finding } from "@/types";
 import { cn } from "@/lib/utils";
 import type { Density } from "@/components/findings/FindingsToolbar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface FlatFindingsTableProps {
   filter: FindingsFilter;
@@ -129,6 +130,9 @@ export function FlatFindingsTable({
           const sev = severityMeta(finding.severity);
           const isActive = finding.id === activeRowId;
           const isSelected = selectedIds?.has(finding.id) ?? false;
+          const assigneeInitials = finding.assigned_to
+            ? finding.assigned_to.slice(0, 2).toUpperCase()
+            : "—";
 
           return (
             <div
@@ -149,7 +153,7 @@ export function FlatFindingsTable({
             >
               {onToggleSelect && (
                 <div
-                  className="mr-2 flex items-center"
+                  className="sticky left-0 mr-2 flex items-center bg-zinc-950/90 pr-1"
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggleSelect(finding.id);
@@ -207,6 +211,12 @@ export function FlatFindingsTable({
                   id={finding.project_id}
                   name={finding.project_name}
                 />
+              </div>
+
+              <div className="hidden w-[60px] shrink-0 items-center justify-center lg:flex">
+                <Avatar className="h-6 w-6">
+                  <AvatarFallback>{assigneeInitials}</AvatarFallback>
+                </Avatar>
               </div>
 
               <div className="w-[110px] shrink-0 text-right text-xs text-zinc-500">

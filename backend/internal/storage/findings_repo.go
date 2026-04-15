@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,11 +18,21 @@ import (
 )
 
 type FindingsRepo struct {
-	pool *pgxpool.Pool
+	pool               *pgxpool.Pool
+	closureReasonsRepo *ClosureReasonsRepo
+	findingEventsRepo  *FindingEventsRepo
 }
 
 func NewFindingsRepo(pool *pgxpool.Pool) *FindingsRepo {
-	return &FindingsRepo{pool: pool}
+	return &FindingsRepo{
+		pool:               pool,
+		closureReasonsRepo: NewClosureReasonsRepo(pool),
+		findingEventsRepo:  NewFindingEventsRepo(pool),
+	}
+}
+
+func (r *FindingsRepo) DB() *pgxpool.Pool {
+	return r.pool
 }
 
 // findingsCursor is the opaque cursor payload for keyset pagination.
@@ -65,6 +76,9 @@ type FindingsFilter struct {
 	IacProviders         []string
 	SecretKinds          []string
 	Components           []string
+	AssigneeUserIDs      []uuid.UUID
+	AssigneeMeUserID     *uuid.UUID
+	Unassigned           bool
 	Query                string // full-text search
 	CVE                  string
 	CWE                  int
@@ -143,7 +157,8 @@ var findingColumns = `
 	f.times_seen, f.project_id, f.source_type, f.fixed_version, f.package_ecosystem,
 	f.purl, f.code_snippet, f.code_flow, f.url, f.http_method, f.http_param,
 	f.http_evidence, f.iac_resource, f.iac_provider, f.secret_kind, f.commit_sha,
-	f.rule_id, f.rule_name, fs.priority_score`
+	f.rule_id, f.rule_name, fs.priority_score,
+	f.closure_reason_id, f.closure_note, f.closed_at, f.closed_by, f.assigned_to`
 
 // Extra columns joined only for list queries (KEV/BDU flags, max EPSS/CVSS
 // across linked CVEs, and project name). Subqueries are correlated per row but
@@ -179,6 +194,7 @@ func scanFinding(row pgx.Row) (*domain.Finding, error) {
 		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
 		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
 		&f.RuleID, &f.RuleName, &f.PriorityScore,
+		&f.ClosureReasonID, &f.ClosureNote, &f.ClosedAt, &f.ClosedBy, &f.AssignedTo,
 	)
 	if err != nil {
 		return nil, err
@@ -205,6 +221,7 @@ func scanFindingListItem(row pgx.Row) (*domain.Finding, error) {
 		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
 		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
 		&f.RuleID, &f.RuleName, &f.PriorityScore,
+		&f.ClosureReasonID, &f.ClosureNote, &f.ClosedAt, &f.ClosedBy, &f.AssignedTo,
 		&f.InKEV, &f.MaxEPSS, &f.MaxCVSS, &f.InBDU, &projectName,
 	)
 	if err != nil {
@@ -240,17 +257,17 @@ func (r *FindingsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Findi
 // drops the corresponding filter clause so a facet count is not biased by its
 // own filter.
 const (
-	FacetSeverity     = "severity"
-	FacetStatus       = "status"
-	FacetKind         = "kind"
-	FacetProject      = "project"
-	FacetEcosystem    = "ecosystem"
-	FacetIacProvider  = "iac_provider"
-	FacetSecretKind   = "secret_kind"
-	FacetHasCVE       = "has_cve"
-	FacetHasFix       = "has_fix"
-	FacetInKEV        = "in_kev"
-	FacetInBDU        = "in_bdu"
+	FacetSeverity    = "severity"
+	FacetStatus      = "status"
+	FacetKind        = "kind"
+	FacetProject     = "project"
+	FacetEcosystem   = "ecosystem"
+	FacetIacProvider = "iac_provider"
+	FacetSecretKind  = "secret_kind"
+	FacetHasCVE      = "has_cve"
+	FacetHasFix      = "has_fix"
+	FacetInKEV       = "in_kev"
+	FacetInBDU       = "in_bdu"
 )
 
 // buildBaseWhere compiles the non-cursor conditions for a findings query, with
@@ -320,6 +337,19 @@ func buildBaseWhere(filter *FindingsFilter, excludeField string, startArg int) (
 			"COALESCE((SELECT MAX(n.cvss_v31_score) FROM nvd_cves n WHERE f.cve_ids IS NOT NULL AND n.cve_id = ANY(f.cve_ids)), 0) >= $%d",
 			argN))
 		args = append(args, *filter.CVSSMin)
+		argN++
+	}
+	if filter.AssigneeMeUserID != nil {
+		conditions = append(conditions, fmt.Sprintf("f.assigned_to = $%d", argN))
+		args = append(args, *filter.AssigneeMeUserID)
+		argN++
+	}
+	if filter.Unassigned {
+		conditions = append(conditions, "f.assigned_to IS NULL")
+	}
+	if len(filter.AssigneeUserIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("f.assigned_to = ANY($%d)", argN))
+		args = append(args, filter.AssigneeUserIDs)
 		argN++
 	}
 	if filter.AgeMaxDays != nil && *filter.AgeMaxDays > 0 {
@@ -842,25 +872,110 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 	return groups, len(groups), nil
 }
 
-func (r *FindingsRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status int) error {
-	const q = `UPDATE findings SET status = $1 WHERE id = $2`
-	tag, err := r.pool.Exec(ctx, q, status, id)
+func (r *FindingsRepo) getForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*domain.Finding, error) {
+	finding, err := scanFinding(tx.QueryRow(ctx, `
+		SELECT `+findingColumns+`
+		FROM findings f
+		LEFT JOIN finding_scores fs ON fs.finding_id = f.id
+		WHERE f.id = $1
+		FOR UPDATE`, id))
 	if err != nil {
-		return fmt.Errorf("storage.FindingsRepo.UpdateStatus: %w", err)
+		return nil, fmt.Errorf("storage.FindingsRepo.getForUpdate: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("storage.FindingsRepo.UpdateStatus: finding %s not found", id)
+	return finding, nil
+}
+
+func (r *FindingsRepo) ApplyTriageAction(
+	ctx context.Context,
+	userID uuid.UUID,
+	findingID uuid.UUID,
+	action domain.TriageAction,
+) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("storage.FindingsRepo.ApplyTriageAction: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	finding, err := r.getForUpdate(ctx, tx, findingID)
+	if err != nil {
+		return err
+	}
+
+	if err := r.closureReasonsRepo.EnsureLoaded(ctx); err != nil {
+		return fmt.Errorf("storage.FindingsRepo.ApplyTriageAction: load closure reasons: %w", err)
+	}
+	if err := action.ApplyTo(finding, r.closureReasonsRepo); err != nil {
+		return err
+	}
+
+	const uq = `
+		UPDATE findings
+		SET status = $1,
+			closure_reason_id = $2,
+			closure_note = $3,
+			closed_at = $4,
+			closed_by = $5,
+			assigned_to = $6
+		WHERE id = $7`
+	if _, err := tx.Exec(ctx, uq,
+		finding.Status, finding.ClosureReasonID, finding.ClosureNote, finding.ClosedAt, finding.ClosedBy, finding.AssignedTo, finding.ID,
+	); err != nil {
+		return fmt.Errorf("storage.FindingsRepo.ApplyTriageAction: update finding: %w", err)
+	}
+
+	event, err := action.BuildEvent(userID, finding)
+	if err != nil {
+		return fmt.Errorf("storage.FindingsRepo.ApplyTriageAction: build event: %w", err)
+	}
+	if err := r.findingEventsRepo.Create(ctx, tx, event); err != nil {
+		return fmt.Errorf("storage.FindingsRepo.ApplyTriageAction: insert event: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("storage.FindingsRepo.ApplyTriageAction: commit: %w", err)
 	}
 	return nil
 }
 
-func (r *FindingsRepo) BulkUpdateStatus(ctx context.Context, ids []uuid.UUID, status int) error {
-	const q = `UPDATE findings SET status = $1 WHERE id = ANY($2)`
-	_, err := r.pool.Exec(ctx, q, status, ids)
-	if err != nil {
-		return fmt.Errorf("storage.FindingsRepo.BulkUpdateStatus: %w", err)
+type BulkResult struct {
+	Succeeded []uuid.UUID          `json:"succeeded"`
+	Failed    map[uuid.UUID]string `json:"failed"`
+}
+
+func (r *FindingsRepo) ApplyBulkTriageAction(
+	ctx context.Context,
+	userID uuid.UUID,
+	ids []uuid.UUID,
+	builder func(id uuid.UUID) domain.TriageAction,
+) (BulkResult, error) {
+	result := BulkResult{
+		Succeeded: make([]uuid.UUID, 0, len(ids)),
+		Failed:    make(map[uuid.UUID]string),
 	}
-	return nil
+	var mu sync.Mutex
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(10)
+
+	for _, findingID := range ids {
+		id := findingID
+		eg.Go(func() error {
+			action := builder(id)
+			err := r.ApplyTriageAction(egCtx, userID, id, action)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				result.Failed[id] = err.Error()
+				return nil
+			}
+			result.Succeeded = append(result.Succeeded, id)
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return result, fmt.Errorf("storage.FindingsRepo.ApplyBulkTriageAction: %w", err)
+	}
+	return result, nil
 }
 
 func (r *FindingsRepo) Delete(ctx context.Context, id uuid.UUID) error {

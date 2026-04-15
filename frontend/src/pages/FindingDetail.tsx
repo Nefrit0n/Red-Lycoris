@@ -38,7 +38,9 @@ import SeverityBadge from "@/components/SeverityBadge";
 import StatusBadge from "@/components/StatusBadge";
 import PriorityScore from "@/components/PriorityScore";
 import EnrichmentTabs from "@/components/EnrichmentTabs";
-import { useFinding, useUpdateStatus } from "@/api/findings";
+import FindingHistory from "@/components/findings/FindingHistory";
+import { useCurrentUser } from "@/api/auth";
+import { useFinding, useTriageAction, useUpdateStatus } from "@/api/findings";
 import { useFindingScore } from "@/api/enrichment";
 
 const statusOptions = [
@@ -86,20 +88,6 @@ function DetailRow({
   );
 }
 
-function TimelineItem({ label, date }: { label: string; date: string }) {
-  return (
-    <div className="relative flex items-start gap-3">
-      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-red-700 bg-zinc-900" />
-      <div>
-        <div className="text-sm text-zinc-300">{label}</div>
-        <div className="mt-0.5 text-xs text-zinc-500">
-          {formatAbsoluteDate(date)} &middot; {formatRelativeDate(date)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
@@ -125,15 +113,15 @@ export default function FindingDetail() {
   } = useFinding(id ?? "");
 
   const { data: scoreData } = useFindingScore(id ?? "");
+  const { data: currentUser } = useCurrentUser();
   const updateStatus = useUpdateStatus();
+  const triageAction = useTriageAction();
 
   const finding = data?.data.finding;
-  const enrichments = data?.data.enrichments ?? [];
   const score = scoreData?.data ?? data?.data.score;
 
   const cveIds = finding?.cve_ids ?? [];
   const cweIds = finding?.cwe_ids ?? [];
-
   const goBack = useCallback(() => {
     navigate("/findings");
   }, [navigate]);
@@ -257,21 +245,23 @@ export default function FindingDetail() {
 
         <div className="flex flex-wrap items-center gap-4">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={updateStatus.isPending}
-                className="h-auto px-0 py-0 text-sm hover:bg-transparent"
-              >
-                {updateStatus.isPending ? (
-                  <Loader2 className="mr-1 size-3.5 animate-spin text-zinc-500" />
-                ) : null}
-                <StatusBadge status={finding.status} />
-                <ChevronDown className="size-3.5 text-zinc-500" />
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={updateStatus.isPending}
+                  className="h-auto px-0 py-0 text-sm hover:bg-transparent"
+                >
+                  {updateStatus.isPending ? (
+                    <Loader2 className="mr-1 size-3.5 animate-spin text-zinc-500" />
+                  ) : null}
+                  <StatusBadge status={finding.status} />
+                  <ChevronDown className="size-3.5 text-zinc-500" />
+                </Button>
+              }
+            />
 
             <DropdownMenuContent align="start" className="border-zinc-700 bg-zinc-900">
               {statusOptions.map((opt) => (
@@ -288,6 +278,34 @@ export default function FindingDetail() {
           </DropdownMenu>
 
           <span className="font-mono text-xs text-zinc-600">{finding.id}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!currentUser || triageAction.isPending}
+            onClick={() => {
+              if (!currentUser) return;
+              triageAction.mutate({
+                id: finding.id,
+                request: {
+                  action: "assign",
+                  to_user_id: currentUser.id,
+                  to_email: currentUser.email,
+                },
+              });
+            }}
+            className="border-zinc-700 bg-zinc-900 text-zinc-300"
+          >
+            Назначить мне
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={triageAction.isPending}
+            onClick={() => triageAction.mutate({ id: finding.id, request: { action: "unassign" } })}
+            className="text-zinc-400 hover:text-zinc-200"
+          >
+            Снять назначение
+          </Button>
         </div>
 
         {(finding.priority_score != null || score) && (
@@ -459,29 +477,7 @@ export default function FindingDetail() {
         </TabsContent>
 
         <TabsContent value="history">
-          <Card className="border-zinc-800 bg-zinc-900/50">
-            <CardContent className="pt-6">
-              <div className="relative space-y-6 pl-6 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-zinc-800">
-                <TimelineItem label="Впервые обнаружено" date={finding.first_seen} />
-
-                {finding.times_seen > 1 && (
-                  <div className="relative flex items-start gap-3">
-                    <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-zinc-700 bg-zinc-900" />
-                    <div>
-                      <div className="text-sm text-zinc-300">
-                        Обнаружено{" "}
-                        <span className="font-medium text-zinc-100">
-                          {finding.times_seen} раз
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <TimelineItem label="Последнее обнаружение" date={finding.last_seen} />
-              </div>
-            </CardContent>
-          </Card>
+          <FindingHistory findingId={finding.id} />
         </TabsContent>
       </Tabs>
     </div>
