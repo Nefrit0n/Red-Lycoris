@@ -418,7 +418,6 @@ export function PreviewPanel({
   const reopenFinding = useReopenFinding();
   const finding = data?.data.finding;
 
-  const updateStatus = useUpdateStatus();
 
   // Focus management: when opening, pull focus into the panel so keyboard
   // shortcuts land there and the ring stays visible. Using a ref + effect
