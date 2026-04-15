@@ -38,8 +38,9 @@ import SeverityBadge from "@/components/SeverityBadge";
 import StatusBadge from "@/components/StatusBadge";
 import PriorityScore from "@/components/PriorityScore";
 import EnrichmentTabs from "@/components/EnrichmentTabs";
+import FindingHistory from "@/components/findings/FindingHistory";
 import { useCurrentUser } from "@/api/auth";
-import { useFinding, useFindingHistory, useTriageAction, useUpdateStatus } from "@/api/findings";
+import { useFinding, useTriageAction, useUpdateStatus } from "@/api/findings";
 import { useFindingScore } from "@/api/enrichment";
 
 const statusOptions = [
@@ -87,20 +88,6 @@ function DetailRow({
   );
 }
 
-function TimelineItem({ label, date }: { label: string; date: string }) {
-  return (
-    <div className="relative flex items-start gap-3">
-      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-red-700 bg-zinc-900" />
-      <div>
-        <div className="text-sm text-zinc-300">{label}</div>
-        <div className="mt-0.5 text-xs text-zinc-500">
-          {formatAbsoluteDate(date)} &middot; {formatRelativeDate(date)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
@@ -126,7 +113,6 @@ export default function FindingDetail() {
   } = useFinding(id ?? "");
 
   const { data: scoreData } = useFindingScore(id ?? "");
-  const { data: historyData } = useFindingHistory(id ?? "");
   const { data: currentUser } = useCurrentUser();
   const updateStatus = useUpdateStatus();
   const triageAction = useTriageAction();
@@ -136,8 +122,6 @@ export default function FindingDetail() {
 
   const cveIds = finding?.cve_ids ?? [];
   const cweIds = finding?.cwe_ids ?? [];
-  const historyEvents = historyData?.data ?? [];
-
   const goBack = useCallback(() => {
     navigate("/findings");
   }, [navigate]);
@@ -493,36 +477,7 @@ export default function FindingDetail() {
         </TabsContent>
 
         <TabsContent value="history">
-          <Card className="border-zinc-800 bg-zinc-900/50">
-            <CardContent className="pt-6">
-              <div className="relative space-y-6 pl-6 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-zinc-800">
-                <TimelineItem label="Впервые обнаружено" date={finding.first_seen} />
-
-                {finding.times_seen > 1 && (
-                  <div className="relative flex items-start gap-3">
-                    <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-zinc-700 bg-zinc-900" />
-                    <div>
-                      <div className="text-sm text-zinc-300">
-                        Обнаружено{" "}
-                        <span className="font-medium text-zinc-100">
-                          {finding.times_seen} раз
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <TimelineItem label="Последнее обнаружение" date={finding.last_seen} />
-                {historyEvents.map((event) => (
-                  <TimelineItem
-                    key={event.id}
-                    label={`Событие: ${event.event_type}`}
-                    date={event.created_at}
-                  />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <FindingHistory findingId={finding.id} />
         </TabsContent>
       </Tabs>
     </div>
