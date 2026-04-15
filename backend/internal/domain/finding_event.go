@@ -50,5 +50,6 @@ type AssignedPayload struct {
 }
 
 type CreatedPayload struct {
-	Source string `json:"source,omitempty"`
+	SourceType string `json:"source_type,omitempty"`
+	SourceID   string `json:"source_id,omitempty"`
 }

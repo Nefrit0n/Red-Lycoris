@@ -31,6 +31,10 @@ func NewFindingsRepo(pool *pgxpool.Pool) *FindingsRepo {
 	}
 }
 
+func (r *FindingsRepo) DB() *pgxpool.Pool {
+	return r.pool
+}
+
 // findingsCursor is the opaque cursor payload for keyset pagination.
 type findingsCursor struct {
 	FirstSeen time.Time `json:"first_seen"`
