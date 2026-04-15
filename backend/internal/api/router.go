@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"redlycoris/internal/audit"
 	"redlycoris/internal/auth"
 	"redlycoris/internal/domain"
 	"redlycoris/internal/enrichment"
@@ -19,6 +20,8 @@ type routerConfig struct {
 	version      string
 	startTime    time.Time
 	scheduler    *enrichment.Scheduler
+	auditRepo    *storage.AuditLogRepo
+	auditWriter  *audit.Writer
 	trustProxy   bool
 	cookieSecure bool
 	sessionDur   time.Duration
@@ -28,6 +31,14 @@ type RouterOption func(*routerConfig)
 
 func WithScheduler(s *enrichment.Scheduler) RouterOption {
 	return func(c *routerConfig) { c.scheduler = s }
+}
+
+func WithAuditRepo(repo *storage.AuditLogRepo) RouterOption {
+	return func(c *routerConfig) { c.auditRepo = repo }
+}
+
+func WithAuditWriter(writer *audit.Writer) RouterOption {
+	return func(c *routerConfig) { c.auditWriter = writer }
 }
 
 func WithEnv(env string) RouterOption {
@@ -74,6 +85,14 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	sessionsRepo := storage.NewSessionsRepo(pool)
 	userProjectRolesRepo := storage.NewUserProjectRolesRepo(pool)
 	savedViewsRepo := storage.NewSavedViewsRepo(pool)
+	auditLogRepo := cfg.auditRepo
+	if auditLogRepo == nil {
+		auditLogRepo = storage.NewAuditLogRepo(pool)
+	}
+	auditWriter := cfg.auditWriter
+	if auditWriter == nil {
+		auditWriter = audit.NewWriter(auditLogRepo)
+	}
 	authService := auth.NewService(usersRepo, sessionsRepo, cfg.sessionDur)
 	setAuthRuntimeConfig(cfg.trustProxy, cfg.cookieSecure, cfg.sessionDur)
 
@@ -85,6 +104,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	r.Use(RequestLoggerMiddleware)
 	r.Use(CORSMiddleware(corsOrigins))
 	r.Use(LoadSessionMiddleware(authService))
+	r.Use(AuditMiddleware(auditWriter))
 
 	// Health check
 	r.Get("/health", healthHandler(pool, rdb, cfg.version, cfg.startTime))
@@ -118,6 +138,12 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 				r.With(vMw).Get("/enrichments", handleGetFindingEnrichments(pool))
 				r.With(vMw).Get("/score", handleGetFindingScore(pool))
 				r.With(vMw).Get("/events", handleListFindingEvents(findingEventsRepo))
+				r.Route("/comments", func(r chi.Router) {
+					r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromFinding(findingsRepo, "id"))).
+						Get("/", handleListComments(findingEventsRepo))
+					r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromFinding(findingsRepo, "id"))).
+						Post("/", handleCreateComment(findingEventsRepo))
+				})
 				r.Group(func(r chi.Router) {
 					r.Use(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromFinding(findingsRepo, "id")))
 					r.Patch("/status", handleUpdateStatus(findingsRepo))
@@ -134,6 +160,11 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Post("/bulk/close", handleBulkClose(findingsRepo, userProjectRolesRepo))
 			r.Post("/bulk/assign", handleBulkAssign(findingsRepo, usersRepo, userProjectRolesRepo))
 			r.Post("/bulk/unassign", handleBulkUnassign(findingsRepo, userProjectRolesRepo))
+		})
+		r.Route("/api/v1/finding-comments/{event_id}", func(r chi.Router) {
+			r.Use(RequireAuth)
+			r.Patch("/", handleEditComment(findingEventsRepo))
+			r.Delete("/", handleDeleteComment(findingEventsRepo, findingsRepo, userProjectRolesRepo))
 		})
 
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
@@ -190,6 +221,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Patch("/users/{id}", handleUpdateUser(usersRepo))
 			r.Post("/users/{id}/reset-password", handleResetUserPassword(usersRepo, sessionsRepo))
 			r.Get("/users/{id}/roles", handleGetUserRoles(userProjectRolesRepo))
+			r.Get("/audit", handleListAuditLog(auditLogRepo))
 		})
 	})
 

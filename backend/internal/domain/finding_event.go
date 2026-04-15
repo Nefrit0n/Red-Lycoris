@@ -16,6 +16,9 @@ const (
 	FindingEventAssigned      FindingEventType = "assigned"
 	FindingEventUnassigned    FindingEventType = "unassigned"
 	FindingEventCreated       FindingEventType = "created"
+	EventCommentAdded         FindingEventType = "comment_added"
+	EventCommentEdited        FindingEventType = "comment_edited"
+	EventCommentDeleted       FindingEventType = "comment_deleted"
 )
 
 type FindingEvent struct {
@@ -52,4 +55,17 @@ type AssignedPayload struct {
 type CreatedPayload struct {
 	SourceType string `json:"source_type,omitempty"`
 	SourceID   string `json:"source_id,omitempty"`
+}
+
+type CommentAddedPayload struct {
+	Text string `json:"text"`
+}
+
+type CommentEditedPayload struct {
+	OriginalEventID uuid.UUID `json:"original_event_id"`
+	NewText         string    `json:"new_text"`
+}
+
+type CommentDeletedPayload struct {
+	OriginalEventID uuid.UUID `json:"original_event_id"`
 }

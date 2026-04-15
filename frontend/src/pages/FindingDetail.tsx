@@ -39,7 +39,10 @@ import StatusBadge from "@/components/StatusBadge";
 import PriorityScore from "@/components/PriorityScore";
 import EnrichmentTabs from "@/components/EnrichmentTabs";
 import FindingHistory from "@/components/findings/FindingHistory";
+import CommentList from "@/components/findings/CommentList";
+import CommentForm from "@/components/findings/CommentForm";
 import { useCurrentUser } from "@/api/auth";
+import { useCreateComment } from "@/api/comments";
 import { useFinding, useTriageAction, useUpdateStatus } from "@/api/findings";
 import { useFindingScore } from "@/api/enrichment";
 
@@ -116,6 +119,7 @@ export default function FindingDetail() {
   const { data: currentUser } = useCurrentUser();
   const updateStatus = useUpdateStatus();
   const triageAction = useTriageAction();
+  const createComment = useCreateComment(id ?? "");
 
   const finding = data?.data.finding;
   const score = scoreData?.data ?? data?.data.score;
@@ -324,6 +328,7 @@ export default function FindingDetail() {
           <TabsTrigger value="overview">Обзор</TabsTrigger>
           <TabsTrigger value="identifiers">Идентификаторы</TabsTrigger>
           <TabsTrigger value="enrichment">Обогащение</TabsTrigger>
+          <TabsTrigger value="comments">Комментарии</TabsTrigger>
           <TabsTrigger value="history">История</TabsTrigger>
         </TabsList>
 
@@ -474,6 +479,18 @@ export default function FindingDetail() {
 
         <TabsContent value="enrichment">
           <EnrichmentTabs findingId={finding.id} />
+        </TabsContent>
+
+        <TabsContent value="comments">
+          <div className="space-y-4">
+            <CommentForm
+              submitting={createComment.isPending}
+              onSubmit={async (text) => {
+                await createComment.mutateAsync(text);
+              }}
+            />
+            <CommentList findingId={finding.id} />
+          </div>
         </TabsContent>
 
         <TabsContent value="history">
