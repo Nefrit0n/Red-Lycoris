@@ -41,6 +41,9 @@ export interface FindingsFilter {
   ecosystems: string[];
   iacProviders: string[];
   secretKinds: string[];
+  assigneeMe: boolean;
+  unassigned: boolean;
+  assignees: string[];
 
   // Single-field filters.
   cve: string;
@@ -73,6 +76,9 @@ export const DEFAULT_FINDINGS_FILTER: FindingsFilter = {
   ecosystems: [],
   iacProviders: [],
   secretKinds: [],
+  assigneeMe: false,
+  unassigned: false,
+  assignees: [],
   cve: "",
   cwe: null,
   hasCVE: false,
@@ -162,6 +168,9 @@ export function filterFromSearchParams(
     ecosystems: parseCsv(params.get("ecosystems")),
     iacProviders: parseCsv(params.get("iac_providers")),
     secretKinds: parseCsv(params.get("secret_kinds")),
+    assigneeMe: params.get("assignee") === "me",
+    unassigned: parseBool(params.get("unassigned")),
+    assignees: parseCsv(params.get("assignees")),
     cve: params.get("cve") ?? "",
     cwe: parseIntOrNull(params.get("cwe")),
     hasCVE: parseBool(params.get("has_cve")),
@@ -208,6 +217,9 @@ export function filterToSearchParams(filter: FindingsFilter): URLSearchParams {
   if (filter.secretKinds.length > 0) {
     p.set("secret_kinds", [...filter.secretKinds].sort().join(","));
   }
+  if (filter.assigneeMe) p.set("assignee", "me");
+  if (filter.unassigned) p.set("unassigned", "true");
+  if (filter.assignees.length > 0) p.set("assignees", [...filter.assignees].sort().join(","));
   if (filter.cve.trim()) p.set("cve", filter.cve.trim());
   if (filter.cwe !== null) p.set("cwe", String(filter.cwe));
   if (filter.hasCVE) p.set("has_cve", "true");

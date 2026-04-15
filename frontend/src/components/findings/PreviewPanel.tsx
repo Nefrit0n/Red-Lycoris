@@ -1,17 +1,26 @@
-import { useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { format, formatDistanceToNow, isValid } from "date-fns";
 import { ru } from "date-fns/locale";
-import { ExternalLink, Loader2, X } from "lucide-react";
+import { ChevronDown, ExternalLink, Loader2, User, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import CodeSnippet from "@/components/CodeSnippet";
 import EnrichmentBadges from "@/components/findings/EnrichmentBadges";
 import KindBadge from "@/components/findings/KindBadge";
 import ProjectPill from "@/components/findings/ProjectPill";
 import SeverityBadge from "@/components/findings/SeverityBadge";
-import { useFinding } from "@/api/findings";
+import { useFinding, useReopenFinding, useUpdateStatus } from "@/api/findings";
+import AssignFindingPopover from "@/components/findings/AssignFindingPopover";
+import CloseFindingDialog from "@/components/findings/CloseFindingDialog";
 import { statusMeta } from "@/lib/severity";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +71,10 @@ export function PreviewPanel({
   onPickProject,
 }: PreviewPanelProps) {
   const { data, isLoading, isError, error } = useFinding(findingId ?? "");
+  const navigate = useNavigate();
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const updateStatus = useUpdateStatus();
+  const reopenFinding = useReopenFinding();
   const finding = data?.data.finding;
 
   // Focus management: when opening, pull focus into the panel so keyboard
@@ -75,6 +88,16 @@ export function PreviewPanel({
 
   if (!findingId) {
     return null;
+  }
+
+  function changeStatus(status: number) {
+    if (!finding) return;
+    updateStatus.mutate({ id: finding.id, status });
+  }
+
+  function reopen() {
+    if (!finding) return;
+    reopenFinding.mutate({ id: finding.id });
   }
 
   return (
@@ -253,6 +276,47 @@ export function PreviewPanel({
                 />
               </div>
             )}
+
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="outline" size="sm" className="border-zinc-700 bg-zinc-900 text-zinc-300">
+                      Статус <ChevronDown className="ml-1 size-3.5" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent className="border-zinc-700 bg-zinc-900">
+                  <DropdownMenuItem onClick={() => changeStatus(0)}>Открыта</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => changeStatus(1)}>Подтверждена</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setCloseDialogOpen(true)}>Закрыть...</DropdownMenuItem>
+                  {finding.closed_at ? (
+                    <DropdownMenuItem onClick={reopen}>Переоткрыть</DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <AssignFindingPopover
+                findingIds={[finding.id]}
+                projectId={finding.project_id}
+                currentAssigneeId={finding.assigned_to}
+              >
+                <Button variant="outline" size="sm" className="border-zinc-700 bg-zinc-900 text-zinc-300">
+                  <User className="mr-1 size-3.5" />
+                  {finding.assigned_to ? "Переназначить" : "Назначить"}
+                </Button>
+              </AssignFindingPopover>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-zinc-700 bg-zinc-900 text-zinc-300"
+                onClick={() => navigate(`/findings/${finding.id}`)}
+              >
+                Открыть детали
+              </Button>
+            </div>
           </div>
         )}
 
@@ -263,6 +327,14 @@ export function PreviewPanel({
           </div>
         )}
       </div>
+
+      {finding && closeDialogOpen ? (
+        <CloseFindingDialog
+          findingIds={[finding.id]}
+          isOpen={closeDialogOpen}
+          onClose={() => setCloseDialogOpen(false)}
+        />
+      ) : null}
     </aside>
   );
 }
