@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+
+import { useHotkey } from "@/hooks/use-hotkey";
 
 import FiltersPanel from "@/components/findings/FiltersPanel";
 import KindTabs from "@/components/findings/KindTabs";
@@ -81,37 +83,24 @@ export default function FindingsList() {
   // the FiltersPanel via onSearchRef.
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      // Ignore "/" when the user is already typing in a field.
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      const editable =
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        target?.isContentEditable;
+  useHotkey("/", (event) => {
+    event.preventDefault();
+    searchInputRef.current?.focus();
+  });
 
-      if (e.key === "/" && !editable) {
-        e.preventDefault();
-        searchInputRef.current?.focus();
+  useHotkey(
+    "Escape",
+    () => {
+      if (previewId) {
+        closePreview();
         return;
       }
-
-      if (e.key === "Escape") {
-        if (previewId) {
-          closePreview();
-          return;
-        }
-        if (selectedIds.size > 0) {
-          clearSelection();
-        }
+      if (selectedIds.size > 0) {
+        setSelectedIds(new Set());
       }
-    }
-
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [previewId, selectedIds.size, closePreview, clearSelection]);
+    },
+    { allowInEditable: true },
+  );
 
   const isGrouped = filter.groupBy !== "";
 
@@ -132,10 +121,11 @@ export default function FindingsList() {
         <SavedViewsBar
           filter={filter}
           onChange={(update) => {
-            // SavedViewsBar replaces the whole filter when applying a view;
-            // it passes a complete patch already merged with DEFAULT.
+            // SavedViewsBar hands us a complete FindingsFilter when applying
+            // a view — the spread with DEFAULT is a belt-and-braces guard for
+            // forward-compat fields the view payload might not carry yet.
             setSearchParams(
-              filterToSearchParams({ ...DEFAULT_FINDINGS_FILTER, ...filter, ...update }),
+              filterToSearchParams({ ...DEFAULT_FINDINGS_FILTER, ...update }),
               { replace: true },
             );
           }}

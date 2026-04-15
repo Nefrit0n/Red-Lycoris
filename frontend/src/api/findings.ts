@@ -14,7 +14,7 @@ import {
 } from "@/lib/findings-filter";
 import type {
   Finding,
-  FindingEvent,
+  FindingEnrichment,
   FindingGroup,
   FindingScore,
   FindingsFacets,
@@ -37,7 +37,7 @@ type FindingsPage = PaginatedResponse<Finding[]>;
 
 export interface FindingDetailPayload {
   finding: Finding;
-  enrichments?: unknown[];
+  enrichments?: FindingEnrichment[];
   score?: FindingScore;
 }
 
