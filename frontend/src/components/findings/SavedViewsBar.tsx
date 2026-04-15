@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Bookmark, BookmarkPlus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Bookmark, BookmarkPlus, Flame, Star, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import {
   DEFAULT_FINDINGS_FILTER,
   filterFromSearchParams,
   filterToSearchParams,
+  filterCacheKey,
   isFilterEmpty,
   type FindingsFilter,
 } from "@/lib/findings-filter";
@@ -52,6 +53,67 @@ function recordToParams(rec: Record<string, unknown>): URLSearchParams {
   return p;
 }
 
+// Built-in views are read-only shortcuts for common triage intents. They
+// live as static FindingsFilter patches so they always round-trip through
+// the same URL serializer the user-saved views use. Each has a stable `key`
+// used for active-state highlighting.
+interface BuiltInView {
+  key: string;
+  name: string;
+  icon: typeof Star;
+  filter: FindingsFilter;
+}
+
+const BUILT_IN_VIEWS: BuiltInView[] = [
+  {
+    key: "kev-crit",
+    name: "KEV + Критические",
+    icon: Flame,
+    filter: {
+      ...DEFAULT_FINDINGS_FILTER,
+      severities: [4],
+      inKEV: true,
+      sortField: "priority_score",
+      sortDir: "desc",
+    },
+  },
+  {
+    key: "high-epss",
+    name: "Высокий EPSS",
+    icon: Star,
+    filter: {
+      ...DEFAULT_FINDINGS_FILTER,
+      epssMin: 0.7,
+      sortField: "priority_score",
+      sortDir: "desc",
+    },
+  },
+  {
+    key: "new-open",
+    name: "Новые за неделю",
+    icon: Star,
+    filter: {
+      ...DEFAULT_FINDINGS_FILTER,
+      statuses: [0],
+      ageMaxDays: 7,
+      sortField: "first_seen",
+      sortDir: "desc",
+    },
+  },
+  {
+    key: "has-fix",
+    name: "Есть фикс",
+    icon: Star,
+    filter: {
+      ...DEFAULT_FINDINGS_FILTER,
+      hasFix: true,
+      severities: [3, 4],
+      sortField: "priority_score",
+      sortDir: "desc",
+    },
+  },
+];
+
 export function SavedViewsBar({ filter, onChange }: SavedViewsBarProps) {
   const { data, isLoading } = useSavedViews();
   const createView = useCreateSavedView();
@@ -61,11 +123,19 @@ export function SavedViewsBar({ filter, onChange }: SavedViewsBarProps) {
   const [saveOpen, setSaveOpen] = useState(false);
 
   const views = data?.data ?? [];
+  const activeKey = useMemo(() => filterCacheKey(filter), [filter]);
 
-  const applyView = (view: SavedView) => {
+  const applyFilter = (next: FindingsFilter) => {
+    // SavedViewsBar treats a view application as a full filter replacement
+    // so we pass the whole patch to the parent, which is expected to merge
+    // with DEFAULT_FINDINGS_FILTER on its end.
+    onChange(next);
+  };
+
+  const applySavedView = (view: SavedView) => {
     const params = recordToParams(view.query);
     const next = filterFromSearchParams(params);
-    onChange({ ...DEFAULT_FINDINGS_FILTER, ...next });
+    applyFilter({ ...DEFAULT_FINDINGS_FILTER, ...next });
   };
 
   const saveCurrent = () => {
@@ -87,25 +157,48 @@ export function SavedViewsBar({ filter, onChange }: SavedViewsBarProps) {
 
   return (
     <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/20 px-4 py-2">
-      <Bookmark className="size-4 text-zinc-500" />
-      <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-        Сохранённые виды
+      <Bookmark className="size-4 shrink-0 text-zinc-500" />
+      <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        Виды
       </span>
 
-      <div className="flex flex-1 flex-wrap items-center gap-1.5">
+      <div className="scrollbar-thin flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+        {BUILT_IN_VIEWS.map((view) => {
+          const Icon = view.icon;
+          const isActive = filterCacheKey(view.filter) === activeKey;
+          return (
+            <button
+              key={view.key}
+              type="button"
+              onClick={() => applyFilter(view.filter)}
+              className={cn(
+                "flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                isActive
+                  ? "border-red-700/60 bg-red-950/40 text-red-200"
+                  : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+              )}
+            >
+              <Icon className="size-3" />
+              {view.name}
+            </button>
+          );
+        })}
+
+        {BUILT_IN_VIEWS.length > 0 && (views.length > 0 || isLoading) && (
+          <div className="h-4 shrink-0 border-l border-zinc-800" />
+        )}
+
         {isLoading ? (
-          <span className="text-xs text-zinc-600">Загрузка…</span>
-        ) : views.length === 0 ? (
-          <span className="text-xs text-zinc-600">Ещё нет сохранённых видов</span>
+          <span className="shrink-0 text-xs text-zinc-600">Загрузка…</span>
         ) : (
           views.map((view) => (
             <div
               key={view.id}
-              className="group flex items-center gap-1 rounded-full border border-zinc-800 bg-zinc-900/60 pl-2.5 pr-1 text-xs text-zinc-300 hover:border-zinc-700"
+              className="group flex shrink-0 items-center gap-1 rounded-full border border-zinc-800 bg-zinc-900/60 pl-2.5 pr-1 text-xs text-zinc-300 hover:border-zinc-700"
             >
               <button
                 type="button"
-                onClick={() => applyView(view)}
+                onClick={() => applySavedView(view)}
                 className="max-w-[180px] truncate py-1 hover:text-zinc-100"
               >
                 {view.name}
@@ -135,7 +228,7 @@ export function SavedViewsBar({ filter, onChange }: SavedViewsBarProps) {
               variant="ghost"
               size="sm"
               disabled={!canSave || createView.isPending}
-              className="text-zinc-400 hover:text-zinc-200"
+              className="shrink-0 text-zinc-400 hover:text-zinc-200"
             >
               <BookmarkPlus className="size-3.5" />
               Сохранить
@@ -146,9 +239,7 @@ export function SavedViewsBar({ filter, onChange }: SavedViewsBarProps) {
           align="end"
           className="w-64 border-zinc-700 bg-zinc-900 p-2"
         >
-          <div className="mb-1 px-1 text-xs text-zinc-500">
-            Название вида
-          </div>
+          <div className="mb-1 px-1 text-xs text-zinc-500">Название вида</div>
           <Input
             autoFocus
             value={draftName}
