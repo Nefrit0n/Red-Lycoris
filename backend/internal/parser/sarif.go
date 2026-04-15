@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"redlycoris/internal/domain"
 )
-
-// SARIF 2.1.0 structures (only fields we need)
 
 type sarifReport struct {
 	Schema  string     `json:"$schema"`
@@ -19,8 +19,9 @@ type sarifReport struct {
 }
 
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Tool       sarifTool       `json:"tool"`
+	Results    []sarifResult   `json:"results"`
+	Taxonomies []sarifTaxonomy `json:"taxonomies"`
 }
 
 type sarifTool struct {
@@ -28,18 +29,24 @@ type sarifTool struct {
 }
 
 type sarifDriver struct {
-	Name  string      `json:"name"`
-	Rules []sarifRule `json:"rules"`
+	Name                string                  `json:"name"`
+	Version             string                  `json:"version"`
+	SemanticVersion     string                  `json:"semanticVersion"`
+	InformationURI      string                  `json:"informationUri"`
+	Rules               []sarifRule             `json:"rules"`
+	SupportedTaxonomies []sarifToolComponentRef `json:"supportedTaxonomies"`
 }
 
 type sarifRule struct {
-	ID               string          `json:"id"`
-	Name             string          `json:"name"`
-	ShortDescription sarifMessage    `json:"shortDescription"`
-	FullDescription  sarifMessage    `json:"fullDescription"`
-	DefaultConfig    sarifRuleConfig `json:"defaultConfiguration"`
-	Properties       sarifProperties `json:"properties"`
-	HelpURI          string          `json:"helpUri"`
+	ID               string              `json:"id"`
+	Name             string              `json:"name"`
+	ShortDescription sarifMessage        `json:"shortDescription"`
+	FullDescription  sarifMessage        `json:"fullDescription"`
+	Help             sarifMessage        `json:"help"`
+	DefaultConfig    sarifRuleConfig     `json:"defaultConfiguration"`
+	Properties       sarifProperties     `json:"properties"`
+	Relationships    []sarifRelationship `json:"relationships"`
+	HelpURI          string              `json:"helpUri"`
 }
 
 type sarifRuleConfig struct {
@@ -47,23 +54,51 @@ type sarifRuleConfig struct {
 }
 
 type sarifProperties struct {
-	Tags []string `json:"tags"`
+	Tags             []string            `json:"tags"`
+	SecuritySeverity any                 `json:"security-severity"`
+	References       []string            `json:"references"`
+	Solution         sarifMessage        `json:"solution"`
+	Confidence       string              `json:"confidence"`
+	Precision        string              `json:"precision"`
+	Problem          sarifProblemDetails `json:"problem"`
+}
+
+type sarifProblemDetails struct {
+	Severity string `json:"severity"`
 }
 
 type sarifMessage struct {
-	Text string `json:"text"`
+	Text     string `json:"text"`
+	Markdown string `json:"markdown"`
 }
 
 type sarifResult struct {
-	RuleID    string          `json:"ruleId"`
-	RuleIndex int             `json:"ruleIndex"`
-	Level     string          `json:"level"`
-	Message   sarifMessage    `json:"message"`
-	Locations []sarifLocation `json:"locations"`
+	RuleID              string                       `json:"ruleId"`
+	RuleIndex           int                          `json:"ruleIndex"`
+	Rule                *sarifReportingDescriptorRef `json:"rule"`
+	Level               string                       `json:"level"`
+	Message             sarifMessage                 `json:"message"`
+	Locations           []sarifLocation              `json:"locations"`
+	PartialFingerprints map[string]string            `json:"partialFingerprints"`
+	WebRequest          *sarifWebRequest             `json:"webRequest"`
+	WebResponse         *sarifWebResponse            `json:"webResponse"`
+}
+
+type sarifReportingDescriptorRef struct {
+	ID    string `json:"id"`
+	Index int    `json:"index"`
 }
 
 type sarifLocation struct {
 	PhysicalLocation sarifPhysicalLocation `json:"physicalLocation"`
+	Message          sarifMessage          `json:"message"`
+	Properties       sarifLocationProps    `json:"properties"`
+}
+
+type sarifLocationProps struct {
+	Attack    string `json:"attack"`
+	Evidence  string `json:"evidence"`
+	Parameter string `json:"parameter"`
 }
 
 type sarifPhysicalLocation struct {
@@ -73,12 +108,16 @@ type sarifPhysicalLocation struct {
 }
 
 type sarifArtifactLocation struct {
-	URI string `json:"uri"`
+	URI       string `json:"uri"`
+	URIBaseID string `json:"uriBaseId"`
 }
 
 type sarifRegion struct {
-	StartLine int `json:"startLine"`
-	EndLine   int `json:"endLine"`
+	StartLine   int          `json:"startLine"`
+	EndLine     int          `json:"endLine"`
+	StartColumn int          `json:"startColumn"`
+	EndColumn   int          `json:"endColumn"`
+	Snippet     sarifSnippet `json:"snippet"`
 }
 
 type sarifContextRegion struct {
@@ -87,6 +126,46 @@ type sarifContextRegion struct {
 
 type sarifSnippet struct {
 	Text string `json:"text"`
+}
+
+type sarifRelationship struct {
+	Kinds  []string            `json:"kinds"`
+	Target sarifRelationTarget `json:"target"`
+}
+
+type sarifRelationTarget struct {
+	ID            string                `json:"id"`
+	GUID          string                `json:"guid"`
+	ToolComponent sarifToolComponentRef `json:"toolComponent"`
+}
+
+type sarifToolComponentRef struct {
+	GUID string `json:"guid"`
+	Name string `json:"name"`
+}
+
+type sarifTaxonomy struct {
+	GUID string       `json:"guid"`
+	Name string       `json:"name"`
+	Taxa []sarifTaxon `json:"taxa"`
+}
+
+type sarifTaxon struct {
+	GUID    string `json:"guid"`
+	ID      string `json:"id"`
+	HelpURI string `json:"helpUri"`
+}
+
+type sarifWebRequest struct {
+	Method  string            `json:"method"`
+	Target  string            `json:"target"`
+	Headers map[string]string `json:"headers"`
+}
+
+type sarifWebResponse struct {
+	StatusCode         int               `json:"statusCode"`
+	Headers            map[string]string `json:"headers"`
+	NoResponseReceived bool              `json:"noResponseReceived"`
 }
 
 type SARIFParser struct{}
@@ -99,65 +178,64 @@ func (p *SARIFParser) CanParse(data []byte) bool {
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return false
 	}
-	if strings.Contains(probe.Schema, "sarif") {
-		return true
-	}
-	return probe.Version == "2.1.0" && probe.Schema != ""
+
+	schema := strings.ToLower(strings.TrimSpace(probe.Schema))
+	version := strings.TrimSpace(probe.Version)
+	return strings.Contains(schema, "sarif") || version == "2.1.0"
 }
 
 func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding, error) {
+	_ = ctx
+
 	var report sarifReport
 	if err := json.Unmarshal(data, &report); err != nil {
 		return nil, fmt.Errorf("parser.SARIFParser.Parse: unmarshal: %w", err)
 	}
 
-	var findings []domain.Finding
+	findings := make([]domain.Finding, 0, 128)
 
 	for _, run := range report.Runs {
-		ruleMap := make(map[string]sarifRule, len(run.Tool.Driver.Rules))
+		ruleByID := make(map[string]sarifRule, len(run.Tool.Driver.Rules))
 		ruleByIndex := make(map[int]sarifRule, len(run.Tool.Driver.Rules))
 		for i, rule := range run.Tool.Driver.Rules {
-			ruleMap[rule.ID] = rule
+			ruleByID[rule.ID] = rule
 			ruleByIndex[i] = rule
 		}
 
-		sourceName := run.Tool.Driver.Name
+		cweTaxonomyGUIDs := buildCWETaxonomyGUIDSet(run)
+		sourceName := strings.TrimSpace(run.Tool.Driver.Name)
 		kind := kindFromSARIFTool(sourceName)
 
 		for _, result := range run.Results {
-			rule, ok := ruleMap[result.RuleID]
-			if !ok {
-				rule = ruleByIndex[result.RuleIndex]
-			}
+			rule := resolveSARIFRule(result, ruleByID, ruleByIndex)
+			loc := firstSARIFLocation(result)
 
-			title := result.Message.Text
-			if title == "" {
-				title = rule.ShortDescription.Text
-			}
-			if title == "" {
-				title = result.RuleID
-			}
+			title := firstNonEmpty(
+				strings.TrimSpace(rule.Name),
+				strings.TrimSpace(rule.ShortDescription.Text),
+				strings.TrimSpace(result.Message.Text),
+				strings.TrimSpace(result.RuleID),
+			)
 
-			description := rule.FullDescription.Text
+			level := firstNonEmpty(
+				strings.TrimSpace(result.Level),
+				strings.TrimSpace(rule.DefaultConfig.Level),
+				strings.TrimSpace(rule.Properties.Problem.Severity),
+			)
 
-			level := result.Level
-			if level == "" {
-				level = rule.DefaultConfig.Level
-			}
+			securitySeverity := parseSARIFSecuritySeverity(rule.Properties.SecuritySeverity)
+			severity := mapSARIFSeverity(level, securitySeverity)
+			confidence := mapSARIFConfidence(
+				firstNonEmpty(
+					strings.TrimSpace(rule.Properties.Confidence),
+					strings.TrimSpace(rule.Properties.Precision),
+				),
+				level,
+			)
 
-			severity := mapSARIFSeverity(level)
-			confidence := mapSARIFConfidence(level)
-
-			var filePath string
-			var lineStart, lineEnd int
-			if len(result.Locations) > 0 {
-				loc := result.Locations[0]
-				filePath = loc.PhysicalLocation.ArtifactLocation.URI
-				lineStart = loc.PhysicalLocation.Region.StartLine
-				lineEnd = loc.PhysicalLocation.Region.EndLine
-			}
-
-			cweIDs := extractCWEIDs(rule.Properties.Tags)
+			filePath, lineStart, lineEnd := extractPrimaryLocation(loc, result)
+			cweIDs := extractAllCWEIDs(rule, cweTaxonomyGUIDs)
+			description := buildSARIFDescription(rule, result, loc, title)
 
 			f := domain.Finding{
 				Kind:        kind,
@@ -174,25 +252,155 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 				SourceType:  sourceName,
 			}
 
-			if ruleID := strings.TrimSpace(result.RuleID); ruleID != "" {
+			if ruleID := strings.TrimSpace(firstNonEmpty(result.RuleID, rule.ID)); ruleID != "" {
 				f.RuleID = &ruleID
 			}
-			if ruleName := firstNonEmpty(strings.TrimSpace(rule.Name), strings.TrimSpace(rule.ShortDescription.Text)); ruleName != "" {
+			if ruleName := strings.TrimSpace(firstNonEmpty(rule.Name, rule.ShortDescription.Text)); ruleName != "" {
 				f.RuleName = &ruleName
 			}
-			if kind == domain.KindSAST && len(result.Locations) > 0 {
-				snippet := strings.TrimSpace(result.Locations[0].PhysicalLocation.ContextRegion.Snippet.Text)
-				if snippet != "" {
-					f.CodeSnippet = &snippet
-				}
+			if snippet := extractBestSnippet(loc); snippet != "" {
+				f.CodeSnippet = &snippet
 			}
-			f.Fingerprint = domain.CalculateFingerprint(&f)
 
+			f.Fingerprint = domain.CalculateFingerprint(&f)
 			findings = append(findings, f)
 		}
 	}
 
 	return findings, nil
+}
+
+func resolveSARIFRule(result sarifResult, byID map[string]sarifRule, byIndex map[int]sarifRule) sarifRule {
+	if id := strings.TrimSpace(result.RuleID); id != "" {
+		if rule, ok := byID[id]; ok {
+			return rule
+		}
+	}
+	if result.Rule != nil {
+		if id := strings.TrimSpace(result.Rule.ID); id != "" {
+			if rule, ok := byID[id]; ok {
+				return rule
+			}
+		}
+		if rule, ok := byIndex[result.Rule.Index]; ok {
+			return rule
+		}
+	}
+	if rule, ok := byIndex[result.RuleIndex]; ok {
+		return rule
+	}
+	return sarifRule{}
+}
+
+func firstSARIFLocation(result sarifResult) *sarifLocation {
+	if len(result.Locations) == 0 {
+		return nil
+	}
+	return &result.Locations[0]
+}
+
+func extractPrimaryLocation(loc *sarifLocation, result sarifResult) (string, int, int) {
+	if loc == nil {
+		if result.WebRequest != nil {
+			return strings.TrimSpace(result.WebRequest.Target), 0, 0
+		}
+		return "", 0, 0
+	}
+
+	filePath := strings.TrimSpace(loc.PhysicalLocation.ArtifactLocation.URI)
+	if filePath == "" && result.WebRequest != nil {
+		filePath = strings.TrimSpace(result.WebRequest.Target)
+	}
+
+	lineStart := loc.PhysicalLocation.Region.StartLine
+	lineEnd := loc.PhysicalLocation.Region.EndLine
+	if lineEnd == 0 {
+		lineEnd = lineStart
+	}
+
+	return filePath, lineStart, lineEnd
+}
+
+func extractBestSnippet(loc *sarifLocation) string {
+	if loc == nil {
+		return ""
+	}
+	return strings.TrimSpace(firstNonEmpty(
+		loc.PhysicalLocation.Region.Snippet.Text,
+		loc.PhysicalLocation.ContextRegion.Snippet.Text,
+		loc.Properties.Attack,
+		loc.Message.Text,
+	))
+}
+
+func buildSARIFDescription(rule sarifRule, result sarifResult, loc *sarifLocation, title string) string {
+	parts := make([]string, 0, 8)
+
+	appendUniqueText(&parts, strings.TrimSpace(rule.FullDescription.Text))
+	appendUniqueText(&parts, strings.TrimSpace(rule.Help.Markdown))
+	appendUniqueText(&parts, strings.TrimSpace(rule.Help.Text))
+
+	if msg := strings.TrimSpace(result.Message.Text); msg != "" && !sameText(msg, title) {
+		appendUniqueText(&parts, "Instance details: "+msg)
+	}
+
+	if loc != nil {
+		if attack := strings.TrimSpace(loc.Properties.Attack); attack != "" {
+			appendUniqueText(&parts, "Attack: "+attack)
+		}
+		if evidence := strings.TrimSpace(loc.Properties.Evidence); evidence != "" {
+			appendUniqueText(&parts, "Evidence: "+evidence)
+		}
+		if param := strings.TrimSpace(loc.Properties.Parameter); param != "" {
+			appendUniqueText(&parts, "Parameter: "+param)
+		}
+	}
+
+	if result.WebRequest != nil {
+		req := strings.TrimSpace(strings.Join([]string{result.WebRequest.Method, result.WebRequest.Target}, " "))
+		if req != "" {
+			appendUniqueText(&parts, "Request: "+req)
+		}
+	}
+
+	if result.WebResponse != nil {
+		if result.WebResponse.NoResponseReceived {
+			appendUniqueText(&parts, "Response: no response received")
+		} else if result.WebResponse.StatusCode > 0 {
+			appendUniqueText(&parts, fmt.Sprintf("Response status: %d", result.WebResponse.StatusCode))
+		}
+	}
+
+	if solution := strings.TrimSpace(firstNonEmpty(rule.Properties.Solution.Markdown, rule.Properties.Solution.Text)); solution != "" {
+		appendUniqueText(&parts, "Remediation: "+solution)
+	}
+
+	if len(rule.Properties.References) > 0 {
+		appendUniqueText(&parts, "References:\n- "+strings.Join(rule.Properties.References, "\n- "))
+	}
+
+	if helpURI := strings.TrimSpace(rule.HelpURI); helpURI != "" {
+		appendUniqueText(&parts, "Help URI: "+helpURI)
+	}
+
+	return strings.Join(parts, "\n\n")
+}
+
+func appendUniqueText(dst *[]string, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	for _, existing := range *dst {
+		if sameText(existing, value) {
+			return
+		}
+	}
+	*dst = append(*dst, value)
+}
+
+func sameText(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
 func kindFromSARIFTool(toolName string) domain.FindingKind {
@@ -211,45 +419,154 @@ func kindFromSARIFTool(toolName string) domain.FindingKind {
 	}
 }
 
-func mapSARIFSeverity(level string) int {
-	switch strings.ToLower(level) {
+func mapSARIFSeverity(level string, securitySeverity *float64) int {
+	if securitySeverity != nil {
+		score := *securitySeverity
+		switch {
+		case score >= 7.0:
+			return domain.SeverityHigh
+		case score >= 4.0:
+			return domain.SeverityMedium
+		case score > 0:
+			return domain.SeverityLow
+		}
+	}
+
+	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "error":
 		return domain.SeverityHigh
 	case "warning":
 		return domain.SeverityMedium
 	case "note":
 		return domain.SeverityLow
-	case "none", "":
+	case "recommendation", "none", "":
 		return domain.SeverityInfo
 	default:
 		return domain.SeverityInfo
 	}
 }
 
-func mapSARIFConfidence(level string) int {
-	switch strings.ToLower(level) {
-	case "error":
-		return 2 // high
-	case "warning":
-		return 1 // medium
-	default:
-		return 0 // low
+func mapSARIFConfidence(explicit, level string) int {
+	switch strings.ToLower(strings.TrimSpace(explicit)) {
+	case "very-high", "high", "confirmed":
+		return 2
+	case "medium":
+		return 1
+	case "low", "false positive":
+		return 0
 	}
+
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "error":
+		return 2
+	case "warning":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func parseSARIFSecuritySeverity(v any) *float64 {
+	switch x := v.(type) {
+	case float64:
+		return &x
+	case string:
+		x = strings.TrimSpace(x)
+		if x == "" {
+			return nil
+		}
+		n, err := strconv.ParseFloat(x, 64)
+		if err != nil {
+			return nil
+		}
+		return &n
+	case json.Number:
+		n, err := x.Float64()
+		if err != nil {
+			return nil
+		}
+		return &n
+	default:
+		return nil
+	}
+}
+
+func buildCWETaxonomyGUIDSet(run sarifRun) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, tax := range run.Taxonomies {
+		if strings.EqualFold(strings.TrimSpace(tax.Name), "CWE") && strings.TrimSpace(tax.GUID) != "" {
+			out[strings.TrimSpace(tax.GUID)] = struct{}{}
+		}
+	}
+	for _, ref := range run.Tool.Driver.SupportedTaxonomies {
+		if strings.EqualFold(strings.TrimSpace(ref.Name), "CWE") && strings.TrimSpace(ref.GUID) != "" {
+			out[strings.TrimSpace(ref.GUID)] = struct{}{}
+		}
+	}
+	return out
+}
+
+func extractAllCWEIDs(rule sarifRule, cweTaxonomyGUIDs map[string]struct{}) []int {
+	set := make(map[int]struct{})
+
+	for _, id := range extractCWEIDs(rule.Properties.Tags) {
+		set[id] = struct{}{}
+	}
+	for _, id := range extractCWEIDsFromReferences(rule.Properties.References) {
+		set[id] = struct{}{}
+	}
+	for _, rel := range rule.Relationships {
+		targetID := strings.TrimSpace(rel.Target.ID)
+		if targetID == "" {
+			continue
+		}
+		_, guidMatch := cweTaxonomyGUIDs[strings.TrimSpace(rel.Target.ToolComponent.GUID)]
+		nameMatch := strings.EqualFold(strings.TrimSpace(rel.Target.ToolComponent.Name), "CWE")
+		if !guidMatch && !nameMatch {
+			continue
+		}
+		if n, err := strconv.Atoi(targetID); err == nil {
+			set[n] = struct{}{}
+		}
+	}
+
+	if len(set) == 0 {
+		return []int{}
+	}
+
+	ids := make([]int, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	return ids
 }
 
 func extractCWEIDs(tags []string) []int {
-	var ids []int
+	ids := make([]int, 0, len(tags))
 	for _, tag := range tags {
-		lower := strings.ToLower(tag)
+		lower := strings.ToLower(strings.TrimSpace(tag))
 		if strings.HasPrefix(lower, "cwe-") {
-			numStr := tag[4:]
-			if n, err := strconv.Atoi(numStr); err == nil {
+			if n, err := strconv.Atoi(strings.TrimSpace(tag[4:])); err == nil {
 				ids = append(ids, n)
 			}
 		}
 	}
-	if ids == nil {
-		ids = []int{}
+	return ids
+}
+
+var cweRefRegexp = regexp.MustCompile(`(?i)(?:cwe[-_/ ]?|/definitions/)(\d+)`)
+
+func extractCWEIDsFromReferences(refs []string) []int {
+	ids := make([]int, 0, len(refs))
+	for _, ref := range refs {
+		match := cweRefRegexp.FindStringSubmatch(ref)
+		if len(match) != 2 {
+			continue
+		}
+		if n, err := strconv.Atoi(match[1]); err == nil {
+			ids = append(ids, n)
+		}
 	}
 	return ids
 }
