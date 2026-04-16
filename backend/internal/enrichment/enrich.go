@@ -15,6 +15,7 @@ import (
 
 	"redlycoris/internal/domain"
 	"redlycoris/internal/domain/cvss"
+	cwedom "redlycoris/internal/domain/cwe"
 	"redlycoris/internal/domain/epss"
 	kevdom "redlycoris/internal/domain/kev"
 	osvdom "redlycoris/internal/domain/osv"
@@ -503,26 +504,101 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 		}
 	}
 
-	// f) CWE — по CWE IDs
+	// f) CWE — по CWE IDs с parent chain, OWASP и mitigations
 	if len(f.CWEIDs) > 0 {
 		rows, err := pool.Query(ctx, `
-			SELECT cwe_id, name, description, likelihood, impact
+			SELECT cwe_id, name, description, extended_desc,
+			       parent_ids, category, likelihood, impact, mitigations
 			FROM cwe_catalog WHERE cwe_id = ANY($1)
 		`, f.CWEIDs)
 		if err == nil {
+			// lookup-функция для ResolveParentChain — ходит в БД за
+			// каждым parent. На практике это 3-5 запросов на CWE,
+			// а CWE у находки обычно 1-2. Итого 5-10 запросов — ок.
+			lookupCWE := func(cweID int) (string, []int, string, bool) {
+				var name, category string
+				var parentIDs []int32
+				err := pool.QueryRow(ctx, `
+					SELECT name, parent_ids, category
+					FROM cwe_catalog WHERE cwe_id = $1
+				`, cweID).Scan(&name, &parentIDs, &category)
+				if err != nil {
+					return "", nil, "", false
+				}
+				ints := make([]int, len(parentIDs))
+				for i, p := range parentIDs {
+					ints[i] = int(p)
+				}
+				return name, ints, category, true
+			}
+
 			var cweEntries []map[string]any
 			for rows.Next() {
-				var cweID int
-				var name, desc, likelihood, impact string
-				if err := rows.Scan(&cweID, &name, &desc, &likelihood, &impact); err != nil {
+				var (
+					cweID                    int
+					name, desc               string
+					extDesc, category        *string
+					likelihood, impact       *string
+					parentIDs                []int32
+					mitigationsRaw           []byte
+				)
+				if err := rows.Scan(
+					&cweID, &name, &desc, &extDesc,
+					&parentIDs, &category, &likelihood, &impact, &mitigationsRaw,
+				); err != nil {
 					continue
 				}
-				cweEntries = append(cweEntries, map[string]any{
-					"cwe_id": cweID, "name": name, "description": desc,
-					"likelihood": likelihood, "impact": impact,
-				})
+
+				entry := map[string]any{
+					"cwe_id":      cweID,
+					"name":        name,
+					"description": desc,
+				}
+
+				if extDesc != nil && *extDesc != "" {
+					entry["extended_description"] = *extDesc
+				}
+				if category != nil && *category != "" {
+					entry["category"] = *category // Base/Variant/Class/Compound
+				}
+				if likelihood != nil && *likelihood != "" {
+					entry["likelihood"] = *likelihood
+				}
+				if impact != nil && *impact != "" {
+					entry["impact"] = *impact
+				}
+
+				// Mitigations — массив {phases, description}
+				if len(mitigationsRaw) > 0 {
+					entry["mitigations"] = json.RawMessage(mitigationsRaw)
+				}
+
+				// Parent chain (иерархия CWE вверх до корня)
+				intParents := make([]int, len(parentIDs))
+				for i, p := range parentIDs {
+					intParents[i] = int(p)
+				}
+				if chain := cwedom.ResolveParentChain(intParents, 5, lookupCWE); len(chain) > 0 {
+					entry["parent_chain"] = chain
+				}
+
+				// OWASP Top 10 — проверяем сам CWE
+				if owasp := cwedom.LookupOWASP(cweID); owasp != nil {
+					entry["owasp_top10"] = map[string]string{
+						"id":   owasp.ID,
+						"name": owasp.Name,
+					}
+				}
+
+				// CWE Top 25
+				if top25 := cwedom.LookupTop25(cweID); top25 != nil {
+					entry["cwe_top25_rank"] = top25.Rank
+				}
+
+				cweEntries = append(cweEntries, entry)
 			}
 			rows.Close()
+
 			if len(cweEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "cwe", cweEntries)
 			}
