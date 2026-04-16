@@ -1,14 +1,11 @@
 import { useState } from "react";
 import {
   AlertTriangle,
-  ExternalLink,
   Shield,
   TrendingUp,
   Bug,
   Package,
   BookOpen,
-  ChevronDown,
-  ChevronUp,
   RefreshCw,
   Loader2,
 } from "lucide-react";
@@ -28,98 +25,7 @@ import EpssSection, { type EpssEntry } from "@/components/enrichment/EpssSection
 import KevSection, { type KevEntry } from "@/components/enrichment/KevSection";
 import OsvSection, { type OsvEntry } from "@/components/enrichment/OsvSection";
 import BduSection, { type BduEntry } from "@/components/enrichment/BduSection";
-
-/* ── CWE ────────────────────────────────────────────────── */
-
-interface CweData {
-  id?: number;
-  cwe_id?: number;
-  name?: string;
-  description?: string;
-  extended_description?: string;
-  mitigations?: { phase?: string; description?: string }[];
-}
-
-function Collapsible({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="rounded-md border border-zinc-800">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-zinc-400 hover:text-zinc-200"
-      >
-        {title}
-        {open ? (
-          <ChevronUp className="size-3.5" />
-        ) : (
-          <ChevronDown className="size-3.5" />
-        )}
-      </button>
-      {open && <div className="border-t border-zinc-800 px-3 py-2">{children}</div>}
-    </div>
-  );
-}
-
-function CweSection({ data }: { data: CweData }) {
-  const cweId = data.id ?? data.cwe_id;
-
-  return (
-    <div className="space-y-4">
-      {cweId && (
-        <a
-          href={`https://cwe.mitre.org/data/definitions/${cweId}.html`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 font-mono text-sm text-blue-400 hover:underline"
-        >
-          CWE-{cweId}
-          <ExternalLink className="size-3" />
-        </a>
-      )}
-
-      {data.name && (
-        <div>
-          <span className="text-xs text-zinc-500">Наименование</span>
-          <p className="mt-0.5 text-sm font-medium text-zinc-200">
-            {data.name}
-          </p>
-        </div>
-      )}
-
-      {data.description && (
-        <div>
-          <span className="text-xs text-zinc-500">Описание</span>
-          <p className="mt-0.5 text-sm leading-relaxed text-zinc-400">
-            {data.description}
-          </p>
-        </div>
-      )}
-
-      {data.mitigations && data.mitigations.length > 0 && (
-        <div className="space-y-2">
-          <span className="text-xs text-zinc-500">Меры по устранению</span>
-          {data.mitigations.map((m, i) => (
-            <Collapsible
-              key={i}
-              title={m.phase ?? `Мера ${i + 1}`}
-            >
-              <p className="text-xs leading-relaxed text-zinc-400">
-                {m.description}
-              </p>
-            </Collapsible>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+import CweSection, { type CweEntry } from "@/components/enrichment/CweSection";
 
 /* ── Shared ─────────────────────────────────────────────── */
 
@@ -132,24 +38,6 @@ function EnrichmentSkeleton() {
   );
 }
 
-function getEnrichmentData<T extends object>(
-  raw: unknown,
-): T | undefined {
-  if (!raw) return undefined;
-  if (Array.isArray(raw)) {
-    const first = raw[0];
-    if (first && typeof first === "object") {
-      return first as T;
-    }
-    return undefined;
-  }
-
-  if (typeof raw === "object") {
-    return raw as T;
-  }
-
-  return undefined;
-}
 
 function EmptyState({
   label,
@@ -311,16 +199,10 @@ export default function EnrichmentTabs({ findingId, findingComponent }: Enrichme
       </TabsContent>
 
       <TabsContent value="cwe">
-        {getEnrichmentData<CweData>(enrichmentMap.get("cwe")?.data) ? (
-          <Card className="border-zinc-800 bg-zinc-900/50">
-            <CardContent className="pt-5">
-              <CweSection
-                data={
-                  getEnrichmentData<CweData>(enrichmentMap.get("cwe")?.data)!
-                }
-              />
-            </CardContent>
-          </Card>
+        {enrichmentMap.get("cwe")?.data ? (
+          <CweSection
+            entries={(enrichmentMap.get("cwe")?.data as CweEntry[] | undefined) ?? []}
+          />
         ) : (
           <EmptyState label="CWE" findingId={findingId} />
         )}
