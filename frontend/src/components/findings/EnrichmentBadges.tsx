@@ -80,7 +80,7 @@ export function EnrichmentBadges({
               color: textOn(maxEpss),
             }}
           >
-            EPSS {maxEpss.toFixed(2)}
+            EPSS {formatPercent(maxEpss)}
           </Badge>
         </Tooltip>
       )}
