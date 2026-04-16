@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"redlycoris/internal/domain"
+	"redlycoris/internal/domain/cvss"
+	nvdrefs "redlycoris/internal/enrichment/nvd"
 )
 
 // EnrichFinding обогащает один finding из локальных справочных таблиц.
@@ -41,39 +43,95 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 	// a) NVD — по CVE IDs
 	if len(f.CVEIDs) > 0 {
 		rows, err := pool.Query(ctx, `
-			SELECT cve_id, description, cvss_v31_score, cvss_v31_vector,
-			       cvss_v40_score, cvss_v40_vector, cwe_ids, published_at
+			SELECT cve_id, description,
+			       cvss_v31_score, cvss_v31_vector,
+			       cvss_v40_score, cvss_v40_vector,
+			       cvss_v2_score, cvss_v2_vector,
+			       cwe_ids, cpe_matches, "references",
+			       published_at, modified_at
 			FROM nvd_cves WHERE cve_id = ANY($1)
 		`, f.CVEIDs)
 		if err == nil {
 			var nvdEntries []map[string]any
 			for rows.Next() {
 				var cveID, desc string
-				var v31Score, v40Score *float32
-				var v31Vec, v40Vec *string
+				var v31Score, v40Score, v2Score *float32
+				var v31Vec, v40Vec, v2Vec *string
 				var cweIDs []int32
-				var publishedAt *time.Time
-				if err := rows.Scan(&cveID, &desc, &v31Score, &v31Vec, &v40Score, &v40Vec, &cweIDs, &publishedAt); err != nil {
+				var cpeMatchesRaw, referencesRaw []byte
+				var publishedAt, modifiedAt *time.Time
+				if err := rows.Scan(
+					&cveID, &desc,
+					&v31Score, &v31Vec,
+					&v40Score, &v40Vec,
+					&v2Score, &v2Vec,
+					&cweIDs, &cpeMatchesRaw, &referencesRaw,
+					&publishedAt, &modifiedAt,
+				); err != nil {
 					continue
 				}
 				entry := map[string]any{
 					"cve_id":      cveID,
 					"description": desc,
 				}
-				if v31Score != nil {
-					entry["cvss_v31_score"] = *v31Score
-					entry["cvss_v31_vector"] = safeStr(v31Vec)
-					if float64(*v31Score) > baseScore {
-						baseScore = float64(*v31Score)
-					}
-				}
+
 				if v40Score != nil {
-					entry["cvss_v40_score"] = *v40Score
-					entry["cvss_v40_vector"] = safeStr(v40Vec)
+					item := map[string]any{"score": *v40Score, "vector": safeStr(v40Vec)}
+					if v40Vec != nil {
+						if metrics, err := cvss.ParseV40(*v40Vec); err == nil {
+							item["metrics"] = metrics
+						}
+					}
+					entry["cvss_v40"] = item
 				}
+
+				if v31Score != nil {
+					item := map[string]any{"score": *v31Score, "vector": safeStr(v31Vec)}
+					if v31Vec != nil {
+						if metrics, err := cvss.ParseV31(*v31Vec); err == nil {
+							item["metrics"] = metrics
+						}
+					}
+					entry["cvss_v31"] = item
+				}
+
+				if v2Score != nil {
+					item := map[string]any{"score": *v2Score, "vector": safeStr(v2Vec)}
+					if v2Vec != nil {
+						if metrics, err := cvss.ParseV2(*v2Vec); err == nil {
+							item["metrics"] = metrics
+						}
+					}
+					entry["cvss_v2"] = item
+				}
+
 				if len(cweIDs) > 0 {
 					entry["cwe_ids"] = cweIDs
 				}
+				if len(cpeMatchesRaw) > 0 {
+					entry["cpe_matches"] = json.RawMessage(cpeMatchesRaw)
+				}
+				entry["cpe_match"] = nvdrefs.MatchCPE(f.Component, f.ComponentVersion, cpeMatchesRaw)
+				if len(referencesRaw) > 0 {
+					if refs := nvdrefs.ClassifyReferences(referencesRaw); refs != nil {
+						entry["references"] = refs
+					}
+				}
+				if publishedAt != nil {
+					entry["published_at"] = publishedAt
+				}
+				if modifiedAt != nil {
+					entry["modified_at"] = modifiedAt
+				}
+
+				if v40Score != nil {
+					baseScore = float64(*v40Score)
+				} else if v31Score != nil {
+					baseScore = float64(*v31Score)
+				} else if v2Score != nil {
+					baseScore = float64(*v2Score)
+				}
+
 				nvdEntries = append(nvdEntries, entry)
 			}
 			rows.Close()
