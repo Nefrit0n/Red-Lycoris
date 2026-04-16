@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,6 +38,7 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 	if err != nil {
 		return fmt.Errorf("enrichment.EnrichFinding: load finding: %w", err)
 	}
+	f.CVEIDs = normalizeCVEIDs(f.CVEIDs)
 
 	var baseScore float64
 	var epssScore, epssPercentile float64
@@ -296,26 +298,47 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 		}
 
 		// d) BDU — по CVE IDs (cve_ids @> ARRAY[cve])
+		var bduEntries []map[string]any
 		for _, cveID := range f.CVEIDs {
 			rows, err = pool.Query(ctx, `
-				SELECT bdu_id, name, severity, cvss_v3_score
+				SELECT bdu_id, name, description, remediation, severity, cvss_v3_score
 				FROM bdu_fstec WHERE cve_ids @> ARRAY[$1]::text[]
 			`, cveID)
-			if err == nil {
-				for rows.Next() {
-					var bduID, name, severity string
-					var cvssScore *float32
-					if err := rows.Scan(&bduID, &name, &severity, &cvssScore); err != nil {
-						continue
-					}
-					saveEnrichment(ctx, pool, findingID, "bdu", map[string]any{
-						"bdu_id": bduID, "name": name, "severity": severity,
-						"cve_id": cveID,
-					})
-					isBDU = true
-				}
-				rows.Close()
+			if err != nil {
+				continue
 			}
+			for rows.Next() {
+				var (
+					bduID, name, severity    string
+					description, remediation *string
+					cvssScore                *float32
+				)
+				if err := rows.Scan(&bduID, &name, &description, &remediation, &severity, &cvssScore); err != nil {
+					continue
+				}
+
+				entry := map[string]any{
+					"bdu_id":   bduID,
+					"name":     name,
+					"severity": severity,
+					"cve_id":   cveID,
+				}
+				if description != nil && *description != "" {
+					entry["description"] = *description
+				}
+				if remediation != nil && *remediation != "" {
+					entry["remediation"] = *remediation
+				}
+				if cvssScore != nil {
+					entry["cvss_v3_score"] = *cvssScore
+				}
+				bduEntries = append(bduEntries, entry)
+				isBDU = true
+			}
+			rows.Close()
+		}
+		if len(bduEntries) > 0 {
+			saveEnrichment(ctx, pool, findingID, "bdu", bduEntries)
 		}
 	}
 
@@ -446,6 +469,26 @@ func safeStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func normalizeCVEIDs(cveIDs []string) []string {
+	if len(cveIDs) == 0 {
+		return cveIDs
+	}
+	normalized := make([]string, 0, len(cveIDs))
+	seen := make(map[string]struct{}, len(cveIDs))
+	for _, id := range cveIDs {
+		v := strings.ToUpper(strings.TrimSpace(id))
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		normalized = append(normalized, v)
+	}
+	return normalized
 }
 
 // guessEcosystem пытается определить экосистему по имени компонента.
