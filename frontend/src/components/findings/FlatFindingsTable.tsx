@@ -10,7 +10,6 @@ import type { FindingsFilter } from "@/lib/findings-filter";
 import type { Finding, FindingKind } from "@/types";
 import { cn } from "@/lib/utils";
 import type { Density } from "@/components/findings/FindingsToolbar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface FlatFindingsTableProps {
   filter: FindingsFilter;
@@ -19,6 +18,7 @@ interface FlatFindingsTableProps {
   activeRowId?: string | null;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  onSelectRange?: (ids: string[]) => void;
   onPickProject?: (id: string) => void;
   onCountChange?: (total: number, fetching: boolean) => void;
 }
@@ -30,10 +30,12 @@ export function FlatFindingsTable({
   activeRowId,
   selectedIds,
   onToggleSelect,
+  onSelectRange,
   onPickProject,
   onCountChange,
 }: FlatFindingsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const lastSelectedIndexRef = useRef<number | null>(null);
 
   const {
     data,
@@ -74,17 +76,17 @@ export function FlatFindingsTable({
     estimateSize: () => rowHeight,
     overscan: 12,
   });
+  const virtualItems = virtualizer.getVirtualItems();
 
   // Infinite scroll: when the last virtual row is within the overscan window
   // we pull the next page.
   useEffect(() => {
-    const items = virtualizer.getVirtualItems();
-    const last = items[items.length - 1];
+    const last = virtualItems[virtualItems.length - 1];
     if (!last) return;
     if (last.index >= findings.length - 5 && hasNextPage && !isFetchingNextPage) {
       void fetchNextPage();
     }
-  }, [virtualizer, findings.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [virtualItems, findings.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   if (isError) {
     return (
@@ -141,7 +143,7 @@ export function FlatFindingsTable({
             position: "relative",
           }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
+          {virtualItems.map((virtualRow) => {
             const finding = findings[virtualRow.index];
             if (!finding) return null;
 
@@ -171,6 +173,17 @@ export function FlatFindingsTable({
                     className="flex w-4 shrink-0 items-center"
                     onClick={(e) => {
                       e.stopPropagation();
+                      const index = findings.findIndex((f) => f.id === finding.id);
+                      if (e.shiftKey && onSelectRange && lastSelectedIndexRef.current != null && index >= 0) {
+                        const start = Math.min(lastSelectedIndexRef.current, index);
+                        const end = Math.max(lastSelectedIndexRef.current, index);
+                        onSelectRange(findings.slice(start, end + 1).map((f) => f.id));
+                        lastSelectedIndexRef.current = index;
+                        return;
+                      }
+                      if (index >= 0) {
+                        lastSelectedIndexRef.current = index;
+                      }
                       onToggleSelect(finding.id);
                     }}
                   >

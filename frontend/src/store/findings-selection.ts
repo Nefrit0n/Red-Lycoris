@@ -5,6 +5,7 @@ interface FindingsSelectionState {
   toggle: (id: string) => void;
   clear: () => void;
   setMany: (ids: string[]) => void;
+  addMany: (ids: string[]) => void;
 }
 
 export const useFindingsSelection = create<FindingsSelectionState>((set) => ({
@@ -18,4 +19,10 @@ export const useFindingsSelection = create<FindingsSelectionState>((set) => ({
     }),
   clear: () => set({ selected: new Set<string>() }),
   setMany: (ids) => set({ selected: new Set(ids) }),
+  addMany: (ids) =>
+    set((state) => {
+      const next = new Set(state.selected);
+      for (const id of ids) next.add(id);
+      return { selected: next };
+    }),
 }));

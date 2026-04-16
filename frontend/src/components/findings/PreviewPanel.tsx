@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, formatDistanceToNow, isValid } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -37,9 +37,6 @@ interface PreviewPanelProps {
 const STATUS_OPTIONS = [
   { value: 0, label: "Открыта" },
   { value: 1, label: "Подтверждена" },
-  { value: 2, label: "Ложное срабатывание" },
-  { value: 3, label: "Устранена" },
-  { value: 4, label: "Риск принят" },
 ];
 
 function formatAbsolute(value: string | null | undefined): string {
@@ -414,6 +411,7 @@ export function PreviewPanel({
   const { data, isLoading, isError, error } = useFinding(findingId ?? "");
   const updateStatus = useUpdateStatus();
   const finding = data?.data.finding;
+  const [statusError, setStatusError] = useState<string | null>(null);
 
 
   // Focus management: when opening, pull focus into the panel so keyboard
@@ -433,7 +431,17 @@ export function PreviewPanel({
     if (!finding || updateStatus.isPending || finding.status === status) {
       return;
     }
-    updateStatus.mutate({ id: finding.id, status });
+    setStatusError(null);
+    updateStatus.mutate(
+      { id: finding.id, status },
+      {
+        onError: (e) => {
+          setStatusError(
+            e instanceof Error ? e.message : "Не удалось изменить статус",
+          );
+        },
+      },
+    );
   };
 
   return (
@@ -587,6 +595,11 @@ export function PreviewPanel({
             Назначить
             <ChevronDown className="size-3.5" />
           </Button>
+          {statusError ? (
+            <div className="ml-2 max-w-[220px] text-xs text-red-300">
+              {statusError}
+            </div>
+          ) : null}
         </div>
       )}
     </aside>

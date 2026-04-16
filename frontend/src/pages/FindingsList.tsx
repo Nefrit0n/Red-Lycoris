@@ -51,6 +51,7 @@ export default function FindingsList() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const selectedIds = useFindingsSelection((s) => s.selected);
   const toggleSelect = useFindingsSelection((s) => s.toggle);
+  const addManyToSelection = useFindingsSelection((s) => s.addMany);
   const clearSelection = useFindingsSelection((s) => s.clear);
 
   // Shared count/fetching state driven from the active table so the toolbar
@@ -159,6 +160,7 @@ export default function FindingsList() {
                 activeRowId={previewId}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
+                onSelectRange={addManyToSelection}
                 onCountChange={handleCountChange}
               />
             )}
