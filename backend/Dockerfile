@@ -1,6 +1,7 @@
 # ── Stage 1: Build ──
 FROM golang:1.22-alpine AS builder
 
+RUN sed -i 's#https://dl-cdn.alpinelinux.org#http://dl-cdn.alpinelinux.org#g' /etc/apk/repositories
 RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /build
@@ -17,6 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 # ── Stage 2: Run ──
 FROM alpine:3.19
 
+RUN sed -i 's#https://dl-cdn.alpinelinux.org#http://dl-cdn.alpinelinux.org#g' /etc/apk/repositories
 RUN apk add --no-cache ca-certificates tzdata curl
 
 WORKDIR /app
