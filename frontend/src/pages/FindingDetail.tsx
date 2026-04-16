@@ -716,7 +716,14 @@ export default function FindingDetail() {
         </TabsContent>
 
         <TabsContent value="enrichment">
-          <EnrichmentTabs findingId={finding.id} />
+          <EnrichmentTabs
+            findingId={finding.id}
+            findingComponent={
+              finding.component_version
+                ? `${finding.component}@${finding.component_version}`
+                : finding.component
+            }
+          />
         </TabsContent>
 
         <TabsContent value="comments">
