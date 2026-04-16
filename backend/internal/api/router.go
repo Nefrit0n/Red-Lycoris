@@ -199,6 +199,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 		r.Route("/api/v1/enrichment", func(r chi.Router) {
 			r.Get("/status", handleEnrichmentStatus(pool, rdb))
+			r.Get("/epss/history", handleGetEPSSHistory(pool))
 			r.With(RequireGlobalAdmin).Post("/enrich-all", handleEnrichAll(pool))
 			if cfg.scheduler != nil {
 				r.With(RequireGlobalAdmin).Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))

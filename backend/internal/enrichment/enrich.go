@@ -14,6 +14,7 @@ import (
 
 	"redlycoris/internal/domain"
 	"redlycoris/internal/domain/cvss"
+	"redlycoris/internal/domain/epss"
 	nvdrefs "redlycoris/internal/enrichment/nvd"
 )
 
@@ -38,6 +39,7 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 
 	var baseScore float64
 	var epssScore, epssPercentile float64
+	var epssTrend7d float64
 	var isKEV, isBDU bool
 
 	// a) NVD — по CVE IDs
@@ -140,30 +142,82 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 			}
 		}
 
-		// b) EPSS — по CVE IDs
-		rows, err = pool.Query(ctx, `
-			SELECT cve_id, epss_score, percentile FROM epss_scores WHERE cve_id = ANY($1)
+		// b) EPSS — по CVE IDs, с историей
+		currentRows, err := pool.Query(ctx, `
+			SELECT cve_id, epss_score, percentile, score_date
+			FROM epss_scores WHERE cve_id = ANY($1)
 		`, f.CVEIDs)
 		if err == nil {
 			var epssEntries []map[string]any
-			for rows.Next() {
+			var maxCurrentScore float64
+
+			for currentRows.Next() {
 				var cveID string
-				var score, pct float32
-				if err := rows.Scan(&cveID, &score, &pct); err != nil {
+				var scoreF, pctF float32
+				var scoreDate time.Time
+				if err := currentRows.Scan(&cveID, &scoreF, &pctF, &scoreDate); err != nil {
 					continue
 				}
-				epssEntries = append(epssEntries, map[string]any{
-					"cve_id": cveID, "epss_score": score, "percentile": pct,
-				})
-				if float64(score) > epssScore {
-					epssScore = float64(score)
-					epssPercentile = float64(pct)
+				score := float64(scoreF)
+				pct := float64(pctF)
+
+				histRows, herr := pool.Query(ctx, `
+					SELECT score_date, epss_score, percentile
+					FROM epss_history
+					WHERE cve_id = $1
+					  AND score_date >= CURRENT_DATE - INTERVAL '90 days'
+					ORDER BY score_date ASC
+				`, cveID)
+
+				var history []epss.HistoryPoint
+				if herr == nil {
+					for histRows.Next() {
+						var d time.Time
+						var s, p float32
+						if err := histRows.Scan(&d, &s, &p); err == nil {
+							history = append(history, epss.HistoryPoint{
+								Date:       d,
+								Score:      float64(s),
+								Percentile: float64(p),
+							})
+						}
+					}
+					histRows.Close()
+				}
+
+				trend := epss.ComputeTrend(history)
+				tier := epss.ScoreTier(score)
+
+				entry := map[string]any{
+					"cve_id":     cveID,
+					"epss_score": score,
+					"percentile": pct,
+					"score_date": scoreDate,
+					"tier":       string(tier),
+					"trend_7d":   trend.Trend7d,
+					"trend_30d":  trend.Trend30d,
+					"peak_90d":   trend.Peak90d,
+					"is_rising":  trend.IsRising,
+				}
+				if len(history) > 0 {
+					entry["history"] = history
+				}
+
+				epssEntries = append(epssEntries, entry)
+
+				if score > maxCurrentScore {
+					maxCurrentScore = score
+					epssScore = score
+					epssPercentile = pct
+					epssTrend7d = trend.Trend7d
 				}
 			}
-			rows.Close()
+			currentRows.Close()
 			if len(epssEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "epss", epssEntries)
 			}
+
+			_ = maxCurrentScore
 		}
 
 		// c) KEV — по CVE IDs
@@ -275,7 +329,7 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 
 	// g) Вычисляем priority_score
 	daysOld := math.Max(0, time.Since(f.FirstSeen).Hours()/24)
-	priorityScore := domain.CalculatePriorityScore(baseScore, epssScore, isKEV, isBDU, daysOld)
+	priorityScore := domain.CalculatePriorityScore(baseScore, epssScore, epssTrend7d, isKEV, isBDU, daysOld)
 
 	_, err = pool.Exec(ctx, `
 		INSERT INTO finding_scores (finding_id, base_score, epss_score, epss_percentile,

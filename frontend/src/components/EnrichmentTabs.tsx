@@ -23,86 +23,8 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useFindingEnrichments, useTriggerSync } from "@/api/enrichment";
-import { cn } from "@/lib/utils";
 import NvdSection, { type NvdEntry } from "@/components/enrichment/NvdSection";
-
-/* ── EPSS ───────────────────────────────────────────────── */
-
-interface EpssData {
-  cve_id?: string;
-  score?: number;
-  epss_score?: number;
-  percentile?: number;
-  date?: string;
-}
-
-function EpssGauge({ value, label }: { value: number; label: string }) {
-  const color =
-    value >= 80
-      ? "bg-red-500"
-      : value >= 50
-        ? "bg-orange-500"
-        : value >= 20
-          ? "bg-yellow-500"
-          : "bg-emerald-500";
-
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-zinc-500">{label}</span>
-        <span className="font-mono text-sm font-bold text-zinc-200">
-          {value.toFixed(2)}%
-        </span>
-      </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={cn("h-full rounded-full transition-all", color)}
-          style={{ width: `${Math.min(value, 100)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function EpssSection({ data }: { data: EpssData }) {
-  const score = data.score ?? data.epss_score ?? 0;
-  const scorePct = score * 100;
-  const percentile = (data.percentile ?? 0) * 100;
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="border-zinc-800 bg-zinc-800/30">
-          <CardContent className="pt-4">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-zinc-100">
-                {scorePct.toFixed(2)}%
-              </div>
-              <div className="mt-1 text-xs text-zinc-500">
-                Вероятность эксплуатации
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-zinc-800 bg-zinc-800/30">
-          <CardContent className="pt-4">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-zinc-100">
-                {percentile.toFixed(1)}%
-              </div>
-              <div className="mt-1 text-xs text-zinc-500">Перцентиль</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      <EpssGauge value={scorePct} label="Вероятность эксплуатации (EPSS)" />
-      <EpssGauge value={percentile} label="Перцентиль" />
-      {data.date && (
-        <p className="text-xs text-zinc-500">Данные от {data.date}</p>
-      )}
-    </div>
-  );
-}
+import EpssSection, { type EpssEntry } from "@/components/enrichment/EpssSection";
 
 /* ── KEV ────────────────────────────────────────────────── */
 
@@ -543,12 +465,13 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
       </TabsContent>
 
       <TabsContent value="epss">
-        {getEnrichmentData<EpssData>(enrichmentMap.get("epss")?.data) ? (
+        {enrichmentMap.get("epss")?.data ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <EpssSection
-                data={
-                  getEnrichmentData<EpssData>(enrichmentMap.get("epss")?.data)!
+                entries={
+                  ((enrichmentMap.get("epss")?.data as EpssEntry[] | undefined) ??
+                    [])
                 }
               />
             </CardContent>

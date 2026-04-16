@@ -4,6 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -14,6 +18,8 @@ import (
 	"redlycoris/internal/enrichment"
 	"redlycoris/internal/storage"
 )
+
+var cveRegex = regexp.MustCompile(`^CVE-\d{4}-\d{4,}$`)
 
 func handleEnrichmentStatus(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +205,61 @@ func handleEnrichAll(pool *pgxpool.Pool) http.HandlerFunc {
 		respondJSON(w, http.StatusAccepted, map[string]any{
 			"data": map[string]string{
 				"status": "enrich-all started",
+			},
+		})
+	}
+}
+
+func handleGetEPSSHistory(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cveID := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("cve")))
+		if !cveRegex.MatchString(cveID) {
+			respondError(w, r, http.StatusBadRequest, "INVALID_CVE", "invalid CVE identifier")
+			return
+		}
+
+		days := 90
+		if d := r.URL.Query().Get("days"); d != "" {
+			if parsed, err := strconv.Atoi(d); err == nil && parsed > 0 && parsed <= 365 {
+				days = parsed
+			}
+		}
+
+		rows, err := pool.Query(r.Context(), `
+			SELECT score_date, epss_score, percentile
+			FROM epss_history
+			WHERE cve_id = $1
+			  AND score_date >= CURRENT_DATE - ($2 * INTERVAL '1 day')
+			ORDER BY score_date ASC
+		`, cveID, days)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		defer rows.Close()
+
+		type point struct {
+			Date       time.Time `json:"date"`
+			Score      float64   `json:"score"`
+			Percentile float64   `json:"percentile"`
+		}
+
+		var points []point
+		for rows.Next() {
+			var p point
+			var score, pct float32
+			if err := rows.Scan(&p.Date, &score, &pct); err == nil {
+				p.Score = float64(score)
+				p.Percentile = float64(pct)
+				points = append(points, p)
+			}
+		}
+
+		respondJSON(w, http.StatusOK, map[string]any{
+			"data": map[string]any{
+				"cve_id": cveID,
+				"days":   days,
+				"points": points,
 			},
 		})
 	}

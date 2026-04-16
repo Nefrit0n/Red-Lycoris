@@ -15,6 +15,18 @@ export interface EnrichmentStatusResponse {
   data: EnrichmentSyncStatus[];
 }
 
+export interface EPSSHistoryPoint {
+  date: string;
+  score: number;
+  percentile: number;
+}
+
+export interface EPSSHistoryResponse {
+  cve_id: string;
+  days: number;
+  points: EPSSHistoryPoint[];
+}
+
 export function useFindingEnrichments(findingId: string) {
   return useQuery({
     queryKey: ["finding-enrichments", findingId],
@@ -53,5 +65,18 @@ export function useTriggerSync() {
       await queryClient.invalidateQueries({ queryKey: ["enrichment-status"] });
       await queryClient.refetchQueries({ queryKey: ["enrichment-status"] });
     },
+  });
+}
+
+export function useEPSSHistory(cveId: string | undefined, days: number = 90) {
+  return useQuery({
+    queryKey: ["epss-history", cveId, days],
+    queryFn: () =>
+      apiGet<{ data: EPSSHistoryResponse }>(
+        "/api/v1/enrichment/epss/history",
+        { cve: cveId!, days: String(days) },
+      ).then((r) => r.data),
+    enabled: !!cveId,
+    staleTime: 5 * 60 * 1000,
   });
 }

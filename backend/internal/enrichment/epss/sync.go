@@ -302,7 +302,20 @@ func (s *EPSSSyncer) upsert(ctx context.Context, records []epssRecord, scoreDate
 		return fmt.Errorf("upsert from staging: %w", err)
 	}
 
+	_, err = tx.Exec(ctx, `
+		INSERT INTO epss_history (cve_id, score_date, epss_score, percentile)
+		SELECT cve_id, $1, epss_score, percentile
+		FROM epss_staging
+		ON CONFLICT (cve_id, score_date) DO UPDATE
+		SET epss_score = EXCLUDED.epss_score,
+		    percentile = EXCLUDED.percentile
+	`, scoreDate)
+	if err != nil {
+		return fmt.Errorf("insert history: %w", err)
+	}
+
 	slog.Debug("EPSS upsert completed", "rows_affected", tag.RowsAffected())
+	slog.Info("EPSS history recorded", "score_date", scoreDate.Format("2006-01-02"))
 
 	return tx.Commit(ctx)
 }
