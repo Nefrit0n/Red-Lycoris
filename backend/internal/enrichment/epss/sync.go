@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const urlTemplate = "https://epss.cyentia.com/epss_scores-%s.csv.gz"
+const urlTemplate = "https://epss.empiricalsecurity.com/epss_scores-%s.csv.gz"
 
 type EPSSSyncer struct {
 	pool   *pgxpool.Pool
