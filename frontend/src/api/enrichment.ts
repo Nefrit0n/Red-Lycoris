@@ -68,6 +68,31 @@ export function useTriggerSync() {
   });
 }
 
+export function useEnrichFinding() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (findingId: string) =>
+      apiPost<void>(`/api/v1/findings/${findingId}/enrich`, {}),
+    onSuccess: async (_data: void, findingId: string) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["finding-enrichments", findingId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["finding-score", findingId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["finding", findingId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["findings", "v2"],
+        }),
+      ]);
+    },
+  });
+}
+
 export function useEPSSHistory(cveId: string | undefined, days: number = 90) {
   return useQuery({
     queryKey: ["epss-history", cveId, days],

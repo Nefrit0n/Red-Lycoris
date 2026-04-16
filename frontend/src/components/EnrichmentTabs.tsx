@@ -22,7 +22,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { useFindingEnrichments, useTriggerSync } from "@/api/enrichment";
+import { useEnrichFinding, useFindingEnrichments } from "@/api/enrichment";
+import type { FindingEnrichment } from "@/types";
 import NvdSection, { type NvdEntry } from "@/components/enrichment/NvdSection";
 import EpssSection, { type EpssEntry } from "@/components/enrichment/EpssSection";
 import KevSection, { type KevEntry } from "@/components/enrichment/KevSection";
@@ -303,12 +304,12 @@ function getEnrichmentData<T extends object>(
 
 function EmptyState({
   label,
-  source,
+  findingId,
 }: {
   label: string;
-  source: string;
+  findingId: string;
 }) {
-  const triggerSync = useTriggerSync();
+  const enrichFinding = useEnrichFinding();
 
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-zinc-800 py-8 text-sm text-zinc-600">
@@ -316,11 +317,11 @@ function EmptyState({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => triggerSync.mutate(source)}
-        disabled={triggerSync.isPending}
+        onClick={() => enrichFinding.mutate(findingId)}
+        disabled={enrichFinding.isPending}
         className="border-zinc-700 text-zinc-400 hover:text-zinc-200"
       >
-        {triggerSync.isPending ? (
+        {enrichFinding.isPending ? (
           <Loader2 className="size-3.5 animate-spin" />
         ) : (
           <RefreshCw className="size-3.5" />
@@ -360,7 +361,9 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
 
   if (isLoading) return <EnrichmentSkeleton />;
 
-  const enrichmentMap = new Map(enrichments.map((e) => [e.source, e]));
+  const enrichmentMap = new Map<string, FindingEnrichment>(
+    enrichments.map((e) => [e.source.toLowerCase(), e] as const),
+  );
 
   // Determine default tab: first available enrichment, or "nvd"
   const firstAvailable = TABS.find((t) => enrichmentMap.has(t.key));
@@ -393,7 +396,7 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="NVD" source="nvd" />
+          <EmptyState label="NVD" findingId={findingId} />
         )}
       </TabsContent>
 
@@ -410,7 +413,7 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="EPSS" source="epss" />
+          <EmptyState label="EPSS" findingId={findingId} />
         )}
       </TabsContent>
 
@@ -424,7 +427,7 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="KEV" source="kev" />
+          <EmptyState label="KEV" findingId={findingId} />
         )}
       </TabsContent>
 
@@ -440,7 +443,7 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="БДУ" source="bdu" />
+          <EmptyState label="БДУ" findingId={findingId} />
         )}
       </TabsContent>
 
@@ -456,7 +459,7 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="OSV" source="osv" />
+          <EmptyState label="OSV" findingId={findingId} />
         )}
       </TabsContent>
 
@@ -472,7 +475,7 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
             </CardContent>
           </Card>
         ) : (
-          <EmptyState label="CWE" source="cwe" />
+          <EmptyState label="CWE" findingId={findingId} />
         )}
       </TabsContent>
     </Tabs>
