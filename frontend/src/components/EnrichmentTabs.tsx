@@ -24,150 +24,7 @@ import {
 } from "@/components/ui/tabs";
 import { useFindingEnrichments, useTriggerSync } from "@/api/enrichment";
 import { cn } from "@/lib/utils";
-
-/* ── NVD ────────────────────────────────────────────────── */
-
-interface NvdData {
-  cve_id?: string;
-  cvss_v3_vector?: string;
-  cvss_v3_score?: number;
-  cvss_v31_vector?: string;
-  cvss_v31_score?: number;
-  cvss_v40_vector?: string;
-  cvss_v40_score?: number;
-  cvss_v2_score?: number;
-  description?: string;
-  published?: string;
-  published_at?: string;
-  references?: { url: string; source: string }[];
-}
-
-function CvssGauge({ score }: { score: number }) {
-  const pct = (score / 10) * 100;
-  const radius = 40;
-  const circumference = Math.PI * radius;
-  const offset = circumference - (pct / 100) * circumference;
-
-  const color =
-    score >= 9
-      ? "text-red-500"
-      : score >= 7
-        ? "text-orange-500"
-        : score >= 4
-          ? "text-yellow-500"
-          : "text-emerald-500";
-
-  const label =
-    score >= 9
-      ? "Критический"
-      : score >= 7
-        ? "Высокий"
-        : score >= 4
-          ? "Средний"
-          : "Низкий";
-
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <svg width="100" height="60" viewBox="0 0 100 60">
-        <path
-          d="M 10 55 A 40 40 0 0 1 90 55"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="6"
-          className="text-zinc-800"
-        />
-        <path
-          d="M 10 55 A 40 40 0 0 1 90 55"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="6"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          className={color}
-        />
-        <text
-          x="50"
-          y="48"
-          textAnchor="middle"
-          className={cn("fill-current text-lg font-bold", color)}
-          fontSize="18"
-        >
-          {score.toFixed(1)}
-        </text>
-      </svg>
-      <span className={cn("text-xs font-medium", color)}>{label}</span>
-    </div>
-  );
-}
-
-function NvdSection({ data }: { data: NvdData }) {
-  const cvssV3Score = data.cvss_v3_score ?? data.cvss_v31_score;
-  const cvssV3Vector = data.cvss_v3_vector ?? data.cvss_v31_vector;
-  const published = data.published ?? data.published_at;
-
-  return (
-    <div className="space-y-4">
-      {cvssV3Score != null && (
-        <div className="flex items-start gap-6">
-          <CvssGauge score={cvssV3Score} />
-          <div className="flex-1 space-y-2">
-            {cvssV3Vector && (
-              <div>
-                <span className="text-xs text-zinc-500">Vector String</span>
-                <code className="mt-0.5 block rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
-                  {cvssV3Vector}
-                </code>
-              </div>
-            )}
-            {published && (
-              <div>
-                <span className="text-xs text-zinc-500">Опубликовано</span>
-                <p className="text-sm text-zinc-300">{published}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      {data.cvss_v2_score != null && cvssV3Score == null && (
-        <div className="flex items-center gap-3">
-          <span className="text-zinc-400">CVSS v2</span>
-          <span className="font-mono font-bold text-yellow-400">
-            {data.cvss_v2_score.toFixed(1)}
-          </span>
-        </div>
-      )}
-      {data.description && (
-        <div>
-          <span className="text-xs text-zinc-500">Описание</span>
-          <p className="mt-1 leading-relaxed text-zinc-400">
-            {data.description}
-          </p>
-        </div>
-      )}
-      {data.references && data.references.length > 0 && (
-        <div>
-          <span className="text-xs text-zinc-500">Ссылки</span>
-          <ul className="mt-1 space-y-1">
-            {data.references.map((ref, i) => (
-              <li key={i}>
-                <a
-                  href={ref.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-red-400 hover:underline"
-                >
-                  {ref.source || ref.url}
-                  <ExternalLink className="size-3" />
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
+import NvdSection, { type NvdEntry } from "@/components/enrichment/NvdSection";
 
 /* ── EPSS ───────────────────────────────────────────────── */
 
@@ -672,13 +529,11 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
       </TabsList>
 
       <TabsContent value="nvd">
-        {getEnrichmentData<NvdData>(enrichmentMap.get("nvd")?.data) ? (
+        {enrichmentMap.get("nvd")?.data ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <NvdSection
-                data={
-                  getEnrichmentData<NvdData>(enrichmentMap.get("nvd")?.data)!
-                }
+                entries={((enrichmentMap.get("nvd")?.data as NvdEntry[] | undefined) ?? [])}
               />
             </CardContent>
           </Card>

@@ -586,6 +586,7 @@ type langString struct {
 type metrics struct {
 	CvssMetricV31 []cvssMetric `json:"cvssMetricV31"`
 	CvssMetricV40 []cvssMetric `json:"cvssMetricV40"`
+	CvssMetricV2  []cvssMetric `json:"cvssMetricV2"`
 }
 
 type cvssMetric struct {
@@ -610,6 +611,8 @@ type nvdRecord struct {
 	V31Vector   *string
 	V40Score    *float32
 	V40Vector   *string
+	V2Score     *float32
+	V2Vector    *string
 	CWEIDs      []int32
 	CPEMatches  []byte
 	References  []byte
@@ -644,6 +647,13 @@ func parseResponse(resp *nvdResponse) []nvdRecord {
 			vec := cve.Metrics.CvssMetricV40[0].CvssData.VectorString
 			rec.V40Score = &score
 			rec.V40Vector = &vec
+		}
+
+		if len(cve.Metrics.CvssMetricV2) > 0 {
+			score := float32(cve.Metrics.CvssMetricV2[0].CvssData.BaseScore)
+			vec := cve.Metrics.CvssMetricV2[0].CvssData.VectorString
+			rec.V2Score = &score
+			rec.V2Vector = &vec
 		}
 
 		for _, w := range cve.Weaknesses {
@@ -743,6 +753,8 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 			cvss_v31_vector TEXT,
 			cvss_v40_score  REAL,
 			cvss_v40_vector TEXT,
+			cvss_v2_score   REAL,
+			cvss_v2_vector  TEXT,
 			cwe_ids         INT[],
 			cpe_matches     JSONB,
 			refs            JSONB,
@@ -764,6 +776,8 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 			rec.V31Vector,
 			rec.V40Score,
 			rec.V40Vector,
+			rec.V2Score,
+			rec.V2Vector,
 			rec.CWEIDs,
 			jsonbOrNull(rec.CPEMatches),
 			jsonbOrNull(rec.References),
@@ -783,6 +797,8 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 			"cvss_v31_vector",
 			"cvss_v40_score",
 			"cvss_v40_vector",
+			"cvss_v2_score",
+			"cvss_v2_vector",
 			"cwe_ids",
 			"cpe_matches",
 			"refs",
@@ -804,6 +820,8 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 			cvss_v31_vector,
 			cvss_v40_score,
 			cvss_v40_vector,
+			cvss_v2_score,
+			cvss_v2_vector,
 			cwe_ids,
 			cpe_matches,
 			"references",
@@ -819,6 +837,8 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 			cvss_v31_vector,
 			cvss_v40_score,
 			cvss_v40_vector,
+			cvss_v2_score,
+			cvss_v2_vector,
 			cwe_ids,
 			cpe_matches,
 			refs,
@@ -833,6 +853,8 @@ func (s *NVDSyncer) upsertBatch(ctx context.Context, records []nvdRecord) error 
 		    cvss_v31_vector = EXCLUDED.cvss_v31_vector,
 		    cvss_v40_score  = EXCLUDED.cvss_v40_score,
 		    cvss_v40_vector = EXCLUDED.cvss_v40_vector,
+		    cvss_v2_score   = EXCLUDED.cvss_v2_score,
+		    cvss_v2_vector  = EXCLUDED.cvss_v2_vector,
 		    cwe_ids         = EXCLUDED.cwe_ids,
 		    cpe_matches     = EXCLUDED.cpe_matches,
 		    "references"    = EXCLUDED."references",
