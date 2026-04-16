@@ -1,0 +1,14 @@
+DROP INDEX IF EXISTS idx_bdu_fstec_software_gin;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS sources;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS environment;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS software;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS cvss_v4_vector;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS cvss_v4_score;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS cvss_v2_vector;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS cvss_v2_score;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS mitigation_way;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS exploitation_way;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS vul_class;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS fix_status;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS exploit_status;
+ALTER TABLE bdu_fstec DROP COLUMN IF EXISTS vul_status;

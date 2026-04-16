@@ -13,16 +13,15 @@ import { ru } from "date-fns/locale";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   CVSS31_METRICS,
   CVSS40_METRICS,
   CVSS_V2_METRICS,
-  type MetricMeta,
   SEVERITY_CLASSES,
   severityFromScore,
 } from "./cvss-metrics";
+import CvssBreakdown from "./CvssBreakdown";
 
 interface CvssMetricsV31 {
   AV?: string; AC?: string; PR?: string; UI?: string; S?: string; C?: string; I?: string; A?: string;
@@ -102,76 +101,6 @@ const REF_META: Record<
   report: { title: "Отчёты", icon: Info, className: "border-zinc-800 bg-zinc-900/50 text-zinc-200" },
   other: { title: "Прочее", icon: FileText, className: "border-zinc-800 bg-zinc-900/50 text-zinc-200" },
 };
-
-function ScoreBadge({ score }: { score: number | null }) {
-  if (score == null) return null;
-  const severity = severityFromScore(score);
-  return (
-    <Badge className={cn("text-base font-semibold", SEVERITY_CLASSES[severity])}>
-      {score.toFixed(1)}
-    </Badge>
-  );
-}
-
-function MetricBadge({ metricKey, value, dictionary }: { metricKey: string; value: string; dictionary: Record<string, MetricMeta> }) {
-  const metric = dictionary[metricKey];
-  const meta = metric?.values[value];
-  const severity = meta?.severity ?? "neutral";
-
-  return (
-    <Tooltip
-      content={
-        <div className="max-w-xs space-y-1 text-xs">
-          <p className="font-medium text-zinc-100">{metric?.label ?? metricKey}</p>
-          <p>{metric?.description ?? ""}</p>
-          <p className="text-zinc-400">{meta?.hint ?? `Значение: ${value}`}</p>
-        </div>
-      }
-    >
-      <div className={cn("rounded-md border px-2 py-1 text-xs", SEVERITY_CLASSES[severity])}>
-        <div className="text-zinc-200">{metric?.label ?? metricKey}</div>
-        <div className="font-mono text-[11px]">{meta?.label ?? value}</div>
-      </div>
-    </Tooltip>
-  );
-}
-
-function CvssBreakdown({
-  label,
-  block,
-  dictionary,
-  order,
-}: {
-  label: string;
-  block: { vector?: string; metrics?: Record<string, string> | undefined };
-  dictionary: Record<string, MetricMeta>;
-  order: string[];
-}) {
-  return (
-    <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-medium text-zinc-100">{label}</h4>
-        {block.vector && <code className="text-xs text-zinc-500">{block.vector}</code>}
-      </div>
-      {block.metrics && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {order.map((key) => {
-            const value = block.metrics?.[key];
-            if (!value) return null;
-            return (
-              <MetricBadge
-                key={key}
-                metricKey={key}
-                value={value}
-                dictionary={dictionary}
-              />
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function formatVersionRange(m: CPEMatchInfo): string {
   const start = m.version_start_including ?? m.version_start_excluding ?? "−∞";
@@ -301,6 +230,7 @@ function NvdEntryCard({ entry }: { entry: NvdEntry }) {
           <CvssBreakdown
             label="CVSS 4.0"
             block={{
+              score: entry.cvss_v40.score,
               vector: entry.cvss_v40.vector,
               metrics: entry.cvss_v40.metrics as Record<string, string> | undefined,
             }}
@@ -313,6 +243,7 @@ function NvdEntryCard({ entry }: { entry: NvdEntry }) {
           <CvssBreakdown
             label="CVSS 3.1"
             block={{
+              score: entry.cvss_v31.score,
               vector: entry.cvss_v31.vector,
               metrics: entry.cvss_v31.metrics as Record<string, string> | undefined,
             }}
@@ -325,6 +256,7 @@ function NvdEntryCard({ entry }: { entry: NvdEntry }) {
           <CvssBreakdown
             label="CVSS 2.0"
             block={{
+              score: entry.cvss_v2.score,
               vector: entry.cvss_v2.vector,
               metrics: entry.cvss_v2.metrics as Record<string, string> | undefined,
             }}
@@ -364,5 +296,14 @@ export default function NvdSection({ entries }: { entries: NvdEntry[] }) {
         <NvdEntryCard key={entry.cve_id} entry={entry} />
       ))}
     </div>
+  );
+}
+function ScoreBadge({ score }: { score: number | null }) {
+  if (score == null) return null;
+  const severity = severityFromScore(score);
+  return (
+    <Badge className={cn("text-base font-semibold", SEVERITY_CLASSES[severity])}>
+      {score.toFixed(1)}
+    </Badge>
   );
 }

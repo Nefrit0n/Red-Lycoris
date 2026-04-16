@@ -236,7 +236,7 @@ func (s *BDUSyncer) parseAndUpsert(ctx context.Context, r io.Reader) (imported i
 		}
 
 		start, ok := tok.(xml.StartElement)
-		if !ok || start.Name.Local != "vul" {
+		if !ok || !strings.EqualFold(strings.TrimSpace(start.Name.Local), "vul") {
 			continue
 		}
 
@@ -284,16 +284,28 @@ func xmlCharsetReader(charset string, input io.Reader) (io.Reader, error) {
 // --- XML structures for BDU vulxml.xml ---
 
 type xmlVul struct {
-	Identifier         string               `xml:"identifier"`
-	Name               string               `xml:"name"`
-	Description        string               `xml:"description"`
-	Severity           string               `xml:"severity"`
-	CVSS               xmlCVSSBlock         `xml:"cvss"`
-	CVSS3              xmlCVSSBlock         `xml:"cvss3"`
+	Identifier  string `xml:"identifier"`
+	Name        string `xml:"name"`
+	Description string `xml:"description"`
+	Severity    string `xml:"severity"`
+
+	VulStatus       string `xml:"vul_status"`
+	ExploitStatus   string `xml:"exploit_status"`
+	FixStatus       string `xml:"fix_status"`
+	VulClass        string `xml:"vul_class"`
+	ExploitationWay string `xml:"exploitation_way"`
+	MitigationWay   string `xml:"mitigation_way"`
+
+	CVSS  xmlCVSSBlock `xml:"cvss"`
+	CVSS3 xmlCVSSBlock `xml:"cvss3"`
+	CVSS4 xmlCVSSBlock `xml:"cvss4"`
+
 	Identifiers        []xmlIdentifierEntry `xml:"identifiers>identifier"`
 	VulnerableSoftware []xmlSoftItem        `xml:"vulnerable_software>soft"`
+	Environment        []xmlEnvItem         `xml:"environment>platform"`
 	CWEs               []xmlCWEEntry        `xml:"cwes>cwe"`
 	Solution           string               `xml:"solution"`
+	Sources            []string             `xml:"sources>source"`
 	PublicationDate    string               `xml:"publication_date"`
 	LastUpdDate        string               `xml:"last_upd_date"`
 }
@@ -313,9 +325,16 @@ type xmlIdentifierEntry struct {
 }
 
 type xmlSoftItem struct {
-	Vendor  string `xml:"vendor"`
-	Name    string `xml:"name"`
-	Version string `xml:"version"`
+	Vendor    string   `xml:"vendor"`
+	Name      string   `xml:"name"`
+	Version   string   `xml:"version"`
+	Types     []string `xml:"types>type"`
+	Platforms []string `xml:"platforms>platform"`
+}
+
+type xmlEnvItem struct {
+	Vendor string `xml:"vendor"`
+	Name   string `xml:"name"`
 }
 
 type xmlCWEEntry struct {
@@ -330,17 +349,43 @@ type bduRecord struct {
 	Name             string
 	Description      string
 	Severity         string
+	VulStatus        string
+	ExploitStatus    string
+	FixStatus        string
+	VulClass         string
+	ExploitationWay  string
+	MitigationWay    string
+	CVSSV2Score      *float32
+	CVSSV2Vector     string
 	CVSSV3Score      *float32
 	CVSSV3Vector     string
+	CVSSV4Score      *float32
+	CVSSV4Vector     string
 	CVEIDs           []string
 	CWEIDs           []int32
 	Vendor           string
 	Product          string
 	AffectedVersions string
+	Software         []byte
+	Environment      []byte
+	Sources          []string
 	Remediation      string
 	PublishedAt      *time.Time
 	ModifiedAt       *time.Time
 	RawData          []byte
+}
+
+type SoftwareEntry struct {
+	Vendor    string   `json:"vendor,omitempty"`
+	Name      string   `json:"name,omitempty"`
+	Version   string   `json:"version,omitempty"`
+	Types     []string `json:"types,omitempty"`
+	Platforms []string `json:"platforms,omitempty"`
+}
+
+type EnvironmentEntry struct {
+	Vendor string `json:"vendor,omitempty"`
+	Name   string `json:"name,omitempty"`
 }
 
 func parseVul(v *xmlVul) (bduRecord, error) {
@@ -350,23 +395,28 @@ func parseVul(v *xmlVul) (bduRecord, error) {
 	}
 
 	rec := bduRecord{
-		BDUID:       bduID,
-		Name:        strings.TrimSpace(v.Name),
-		Description: strings.TrimSpace(v.Description),
-		Severity:    strings.TrimSpace(v.Severity),
-		Remediation: strings.TrimSpace(v.Solution),
+		BDUID:           bduID,
+		Name:            strings.TrimSpace(v.Name),
+		Description:     strings.TrimSpace(v.Description),
+		Severity:        strings.TrimSpace(v.Severity),
+		VulStatus:       strings.TrimSpace(v.VulStatus),
+		ExploitStatus:   strings.TrimSpace(v.ExploitStatus),
+		FixStatus:       strings.TrimSpace(v.FixStatus),
+		VulClass:        strings.TrimSpace(v.VulClass),
+		ExploitationWay: strings.TrimSpace(v.ExploitationWay),
+		MitigationWay:   strings.TrimSpace(v.MitigationWay),
+		Remediation:     strings.TrimSpace(v.Solution),
 	}
 
-	score, vector := parseCVSS(v.CVSS3)
-	if score == nil && strings.TrimSpace(vector) == "" {
-		score, vector = parseCVSS(v.CVSS)
-	}
-	rec.CVSSV3Score = score
-	rec.CVSSV3Vector = vector
+	rec.CVSSV2Score, rec.CVSSV2Vector = parseCVSS(v.CVSS)
+	rec.CVSSV3Score, rec.CVSSV3Vector = parseCVSS(v.CVSS3)
+	rec.CVSSV4Score, rec.CVSSV4Vector = parseCVSS(v.CVSS4)
 
 	rec.CVEIDs = extractCVEIDs(v.Identifiers)
 	rec.CWEIDs = extractCWEIDs(v.CWEs)
-	rec.Vendor, rec.Product, rec.AffectedVersions = extractSoftware(v.VulnerableSoftware)
+	rec.Software, rec.Vendor, rec.Product, rec.AffectedVersions = buildSoftware(v.VulnerableSoftware)
+	rec.Environment = buildEnvironment(v.Environment)
+	rec.Sources = dedupNonEmpty(v.Sources)
 	rec.PublishedAt = parseBDUDate(v.PublicationDate)
 	rec.ModifiedAt = parseBDUDate(v.LastUpdDate)
 
@@ -455,41 +505,100 @@ func extractCWEIDs(entries []xmlCWEEntry) []int32 {
 	return out
 }
 
-func extractSoftware(items []xmlSoftItem) (vendor string, product string, versions string) {
+func buildSoftware(items []xmlSoftItem) (jsonData []byte, vendor string, product string, versions string) {
 	if len(items) == 0 {
-		return "", "", ""
+		return nil, "", "", ""
 	}
 
-	versionSeen := make(map[string]struct{}, len(items))
-	versionList := make([]string, 0, len(items))
+	entries := make([]SoftwareEntry, 0, len(items))
+	versionSeen := make(map[string]struct{})
+	versionList := make([]string, 0)
 
 	for _, item := range items {
-		v := strings.TrimSpace(item.Vendor)
-		n := strings.TrimSpace(item.Name)
-		ver := strings.TrimSpace(item.Version)
-
-		if vendor == "" && v != "" {
-			vendor = v
+		entry := SoftwareEntry{
+			Vendor:    strings.TrimSpace(item.Vendor),
+			Name:      strings.TrimSpace(item.Name),
+			Version:   strings.TrimSpace(item.Version),
+			Types:     dedupNonEmpty(item.Types),
+			Platforms: dedupNonEmpty(item.Platforms),
 		}
-		if product == "" && n != "" {
-			product = n
+		entries = append(entries, entry)
+
+		if vendor == "" && entry.Vendor != "" {
+			vendor = entry.Vendor
+		}
+		if product == "" && entry.Name != "" {
+			product = entry.Name
 		}
 
-		if ver == "" {
+		if entry.Version == "" {
 			continue
 		}
-		if _, exists := versionSeen[ver]; exists {
+		if _, exists := versionSeen[entry.Version]; exists {
 			continue
 		}
-		versionSeen[ver] = struct{}{}
-		versionList = append(versionList, ver)
+		versionSeen[entry.Version] = struct{}{}
+		versionList = append(versionList, entry.Version)
 	}
 
 	if len(versionList) > 0 {
 		versions = strings.Join(versionList, ", ")
 	}
 
-	return vendor, product, versions
+	data, err := json.Marshal(entries)
+	if err != nil {
+		data = nil
+	}
+
+	return data, vendor, product, versions
+}
+
+func buildEnvironment(items []xmlEnvItem) []byte {
+	if len(items) == 0 {
+		return nil
+	}
+
+	entries := make([]EnvironmentEntry, 0, len(items))
+	for _, it := range items {
+		vendor := strings.TrimSpace(it.Vendor)
+		name := strings.TrimSpace(it.Name)
+		if vendor == "" && name == "" {
+			continue
+		}
+		entries = append(entries, EnvironmentEntry{Vendor: vendor, Name: name})
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+func dedupNonEmpty(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func parseCWEID(s string) int {
@@ -545,13 +654,26 @@ func (s *BDUSyncer) upsertBatch(ctx context.Context, records []bduRecord) error 
 			name              TEXT,
 			description       TEXT,
 			severity          TEXT,
+			vul_status        TEXT,
+			exploit_status    TEXT,
+			fix_status        TEXT,
+			vul_class         TEXT,
+			exploitation_way  TEXT,
+			mitigation_way    TEXT,
+			cvss_v2_score     REAL,
+			cvss_v2_vector    TEXT,
 			cvss_v3_score     REAL,
 			cvss_v3_vector    TEXT,
+			cvss_v4_score     REAL,
+			cvss_v4_vector    TEXT,
 			cve_ids           TEXT[],
 			cwe_ids           INT[],
 			vendor            TEXT,
 			product           TEXT,
 			affected_versions TEXT,
+			software          JSONB,
+			environment       JSONB,
+			sources           TEXT[],
 			remediation       TEXT,
 			published_at      DATE,
 			modified_at       DATE,
@@ -570,13 +692,26 @@ func (s *BDUSyncer) upsertBatch(ctx context.Context, records []bduRecord) error 
 			"name",
 			"description",
 			"severity",
+			"vul_status",
+			"exploit_status",
+			"fix_status",
+			"vul_class",
+			"exploitation_way",
+			"mitigation_way",
+			"cvss_v2_score",
+			"cvss_v2_vector",
 			"cvss_v3_score",
 			"cvss_v3_vector",
+			"cvss_v4_score",
+			"cvss_v4_vector",
 			"cve_ids",
 			"cwe_ids",
 			"vendor",
 			"product",
 			"affected_versions",
+			"software",
+			"environment",
+			"sources",
 			"remediation",
 			"published_at",
 			"modified_at",
@@ -589,13 +724,26 @@ func (s *BDUSyncer) upsertBatch(ctx context.Context, records []bduRecord) error 
 				rec.Name,
 				rec.Description,
 				rec.Severity,
+				rec.VulStatus,
+				rec.ExploitStatus,
+				rec.FixStatus,
+				rec.VulClass,
+				rec.ExploitationWay,
+				rec.MitigationWay,
+				rec.CVSSV2Score,
+				rec.CVSSV2Vector,
 				rec.CVSSV3Score,
 				rec.CVSSV3Vector,
+				rec.CVSSV4Score,
+				rec.CVSSV4Vector,
 				rec.CVEIDs,
 				rec.CWEIDs,
 				rec.Vendor,
 				rec.Product,
 				rec.AffectedVersions,
+				jsonbOrNull(rec.Software),
+				jsonbOrNull(rec.Environment),
+				rec.Sources,
 				rec.Remediation,
 				dateOnlyOrNil(rec.PublishedAt),
 				dateOnlyOrNil(rec.ModifiedAt),
@@ -613,13 +761,26 @@ func (s *BDUSyncer) upsertBatch(ctx context.Context, records []bduRecord) error 
 			name,
 			description,
 			severity,
+			vul_status,
+			exploit_status,
+			fix_status,
+			vul_class,
+			exploitation_way,
+			mitigation_way,
+			cvss_v2_score,
+			cvss_v2_vector,
 			cvss_v3_score,
 			cvss_v3_vector,
+			cvss_v4_score,
+			cvss_v4_vector,
 			cve_ids,
 			cwe_ids,
 			vendor,
 			product,
 			affected_versions,
+			software,
+			environment,
+			sources,
 			remediation,
 			published_at,
 			modified_at,
@@ -631,13 +792,26 @@ func (s *BDUSyncer) upsertBatch(ctx context.Context, records []bduRecord) error 
 			name,
 			description,
 			severity,
+			vul_status,
+			exploit_status,
+			fix_status,
+			vul_class,
+			exploitation_way,
+			mitigation_way,
+			cvss_v2_score,
+			cvss_v2_vector,
 			cvss_v3_score,
 			cvss_v3_vector,
+			cvss_v4_score,
+			cvss_v4_vector,
 			cve_ids,
 			cwe_ids,
 			vendor,
 			product,
 			affected_versions,
+			software,
+			environment,
+			sources,
 			remediation,
 			published_at,
 			modified_at,
@@ -649,13 +823,26 @@ func (s *BDUSyncer) upsertBatch(ctx context.Context, records []bduRecord) error 
 			name              = EXCLUDED.name,
 			description       = EXCLUDED.description,
 			severity          = EXCLUDED.severity,
+			vul_status        = EXCLUDED.vul_status,
+			exploit_status    = EXCLUDED.exploit_status,
+			fix_status        = EXCLUDED.fix_status,
+			vul_class         = EXCLUDED.vul_class,
+			exploitation_way  = EXCLUDED.exploitation_way,
+			mitigation_way    = EXCLUDED.mitigation_way,
+			cvss_v2_score     = EXCLUDED.cvss_v2_score,
+			cvss_v2_vector    = EXCLUDED.cvss_v2_vector,
 			cvss_v3_score     = EXCLUDED.cvss_v3_score,
 			cvss_v3_vector    = EXCLUDED.cvss_v3_vector,
+			cvss_v4_score     = EXCLUDED.cvss_v4_score,
+			cvss_v4_vector    = EXCLUDED.cvss_v4_vector,
 			cve_ids           = EXCLUDED.cve_ids,
 			cwe_ids           = EXCLUDED.cwe_ids,
 			vendor            = EXCLUDED.vendor,
 			product           = EXCLUDED.product,
 			affected_versions = EXCLUDED.affected_versions,
+			software          = EXCLUDED.software,
+			environment       = EXCLUDED.environment,
+			sources           = EXCLUDED.sources,
 			remediation       = EXCLUDED.remediation,
 			published_at      = EXCLUDED.published_at,
 			modified_at       = EXCLUDED.modified_at,
