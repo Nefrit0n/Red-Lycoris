@@ -50,7 +50,22 @@ func (s *KEVSyncer) Sync(ctx context.Context) error {
 		return fmt.Errorf("kev.Sync: upsert: %w", err)
 	}
 
-	slog.Info("KEV sync: imported records", "count", len(vulns))
+	var ransomwareCount, withDueDate int
+	for _, v := range vulns {
+		if parseDate(v.DueDate) != nil {
+			withDueDate++
+		}
+		switch strings.ToLower(strings.TrimSpace(v.KnownRansomwareCampaignUse)) {
+		case "known", "yes", "true":
+			ransomwareCount++
+		}
+	}
+
+	slog.Info("KEV sync: imported records",
+		"count", len(vulns),
+		"ransomware", ransomwareCount,
+		"with_due_date", withDueDate,
+	)
 	return nil
 }
 
@@ -238,7 +253,9 @@ func (s *KEVSyncer) upsert(ctx context.Context, vulns []kevEntry) error {
 			date_added        DATE,
 			due_date          DATE,
 			known_ransomware  BOOLEAN,
-			notes             TEXT
+			notes             TEXT,
+			short_description TEXT,
+			required_action   TEXT
 		) ON COMMIT DROP
 	`)
 	if err != nil {
@@ -256,11 +273,6 @@ func (s *KEVSyncer) upsert(ctx context.Context, vulns []kevEntry) error {
 			knownRansomware = true
 		}
 
-		notes := strings.TrimSpace(v.Notes)
-		if notes == "" && v.RequiredAction != "" {
-			notes = v.RequiredAction
-		}
-
 		rows[i] = []any{
 			v.CVEID,
 			v.VendorProject,
@@ -269,7 +281,9 @@ func (s *KEVSyncer) upsert(ctx context.Context, vulns []kevEntry) error {
 			dateAdded,
 			dueDate,
 			knownRansomware,
-			notes,
+			v.Notes,
+			v.ShortDescription,
+			v.RequiredAction,
 		}
 	}
 
@@ -285,6 +299,8 @@ func (s *KEVSyncer) upsert(ctx context.Context, vulns []kevEntry) error {
 			"due_date",
 			"known_ransomware",
 			"notes",
+			"short_description",
+			"required_action",
 		},
 		pgx.CopyFromRows(rows),
 	)
@@ -302,6 +318,8 @@ func (s *KEVSyncer) upsert(ctx context.Context, vulns []kevEntry) error {
 			due_date,
 			known_ransomware,
 			notes,
+			short_description,
+			required_action,
 			synced_at
 		)
 		SELECT
@@ -313,6 +331,8 @@ func (s *KEVSyncer) upsert(ctx context.Context, vulns []kevEntry) error {
 			due_date,
 			known_ransomware,
 			notes,
+			short_description,
+			required_action,
 			now()
 		FROM kev_staging
 		ON CONFLICT (cve_id) DO UPDATE
@@ -323,6 +343,8 @@ func (s *KEVSyncer) upsert(ctx context.Context, vulns []kevEntry) error {
 		    due_date           = EXCLUDED.due_date,
 		    known_ransomware   = EXCLUDED.known_ransomware,
 		    notes              = EXCLUDED.notes,
+		    short_description  = EXCLUDED.short_description,
+		    required_action    = EXCLUDED.required_action,
 		    synced_at          = now()
 	`)
 	if err != nil {

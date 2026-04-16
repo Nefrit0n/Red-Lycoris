@@ -170,6 +170,10 @@ type sarifWebResponse struct {
 
 type SARIFParser struct{}
 
+// cveRegex матчит CVE-идентификаторы в любой части SARIF.
+// Формат CVE: CVE-YYYY-NNNN+ (минимум 4 цифры, но может быть больше).
+var cveRegex = regexp.MustCompile(`(?i)CVE-\d{4}-\d{4,}`)
+
 func (p *SARIFParser) CanParse(data []byte) bool {
 	var probe struct {
 		Schema  string `json:"$schema"`
@@ -247,7 +251,7 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 				FilePath:    filePath,
 				LineStart:   lineStart,
 				LineEnd:     lineEnd,
-				CVEIDs:      []string{},
+				CVEIDs:      extractCVEs(result, rule),
 				CWEIDs:      cweIDs,
 				SourceType:  sourceName,
 			}
@@ -268,6 +272,44 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 	}
 
 	return findings, nil
+}
+
+// extractCVEs собирает CVE-идентификаторы из всех вероятных мест
+// SARIF-результата. Возвращает нормализованный (UPPER CASE)
+// дедуплицированный список.
+func extractCVEs(result sarifResult, rule sarifRule) []string {
+	seen := make(map[string]struct{})
+
+	add := func(s string) {
+		for _, m := range cveRegex.FindAllString(s, -1) {
+			seen[strings.ToUpper(m)] = struct{}{}
+		}
+	}
+
+	add(result.RuleID)
+	if result.Message.Text != "" {
+		add(result.Message.Text)
+	}
+	add(rule.ID)
+	add(rule.Name)
+	add(rule.ShortDescription.Text)
+	add(rule.FullDescription.Text)
+	add(rule.Help.Text)
+	for _, tag := range rule.Properties.Tags {
+		add(tag)
+	}
+	for key, val := range result.PartialFingerprints {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(key)), "cve") {
+			add(val)
+		}
+	}
+
+	out := make([]string, 0, len(seen))
+	for cve := range seen {
+		out = append(out, cve)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func resolveSARIFRule(result sarifResult, byID map[string]sarifRule, byIndex map[int]sarifRule) sarifRule {

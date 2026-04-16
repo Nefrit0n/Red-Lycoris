@@ -25,74 +25,7 @@ import {
 import { useFindingEnrichments, useTriggerSync } from "@/api/enrichment";
 import NvdSection, { type NvdEntry } from "@/components/enrichment/NvdSection";
 import EpssSection, { type EpssEntry } from "@/components/enrichment/EpssSection";
-
-/* ── KEV ────────────────────────────────────────────────── */
-
-interface KevData {
-  cve_id?: string;
-  date_added?: string;
-  due_date?: string;
-  known_ransomware?: boolean;
-  known_ransomware_campaign_use?: string;
-  notes?: string;
-  vulnerability_name?: string;
-}
-
-function KevSection({ data }: { data: KevData }) {
-  const isKnownRansomware =
-    data.known_ransomware_campaign_use === "Known" || data.known_ransomware;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 rounded-lg border border-red-800/50 bg-red-950/30 px-4 py-3">
-        <AlertTriangle className="size-5 shrink-0 text-red-400" />
-        <div>
-          <p className="font-semibold text-red-400">
-            ⚠️ Активно эксплуатируемая уязвимость
-          </p>
-          <p className="text-xs text-red-400/70">
-            Включена в каталог CISA Known Exploited Vulnerabilities
-          </p>
-        </div>
-      </div>
-
-      {data.vulnerability_name && (
-        <p className="text-sm text-zinc-300">{data.vulnerability_name}</p>
-      )}
-
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-        {data.date_added && (
-          <div>
-            <span className="text-xs text-zinc-500">Дата добавления</span>
-            <p className="text-zinc-300">{data.date_added}</p>
-          </div>
-        )}
-        {data.due_date && (
-          <div>
-            <span className="text-xs text-zinc-500">Срок устранения</span>
-            <p className="font-medium text-red-400">{data.due_date}</p>
-          </div>
-        )}
-      </div>
-
-      {isKnownRansomware && (
-        <Badge variant="destructive" className="gap-1">
-          <AlertTriangle className="size-3" />
-          Используется в ransomware-кампаниях
-        </Badge>
-      )}
-
-      {data.notes && (
-        <div>
-          <span className="text-xs text-zinc-500">Примечания</span>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-            {data.notes}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
+import KevSection, { type KevEntry } from "@/components/enrichment/KevSection";
 
 /* ── БДУ ────────────────────────────────────────────────── */
 
@@ -482,13 +415,11 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
       </TabsContent>
 
       <TabsContent value="kev">
-        {getEnrichmentData<KevData>(enrichmentMap.get("kev")?.data) ? (
+        {enrichmentMap.get("kev")?.data ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <KevSection
-                data={
-                  getEnrichmentData<KevData>(enrichmentMap.get("kev")?.data)!
-                }
+                entries={((enrichmentMap.get("kev")?.data as KevEntry[] | undefined) ?? [])}
               />
             </CardContent>
           </Card>

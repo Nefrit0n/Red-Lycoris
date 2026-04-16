@@ -75,29 +75,6 @@ func main() {
 	auditRepo := storage.NewAuditLogRepo(pool)
 	auditWriter := audit.NewWriter(auditRepo)
 
-	ensurePartitions := func() {
-		now := time.Now().UTC()
-		for _, m := range []time.Time{now, now.AddDate(0, 1, 0)} {
-			if err := auditRepo.EnsurePartition(ctx, m); err != nil {
-				slog.Error("audit: ensure partition", "error", err, "month", m)
-			}
-		}
-	}
-	ensurePartitions()
-
-	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				ensurePartitions()
-			}
-		}
-	}()
-
 	// Migrations
 	m, err := migrate.New("file://migrations", cfg.DatabaseURL)
 	if err != nil {
@@ -116,6 +93,30 @@ func main() {
 		slog.Error("failed to close migration db", "error", dbErr)
 	}
 	slog.Info("migrations applied")
+
+	ensurePartitions := func() {
+		now := time.Now().UTC()
+		for _, m := range []time.Time{now, now.AddDate(0, 1, 0)} {
+			if err := auditRepo.EnsurePartition(ctx, m); err != nil {
+				slog.Error("audit: ensure partition failed", "error", err, "month", m)
+				os.Exit(1)
+			}
+		}
+	}
+	ensurePartitions()
+
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				ensurePartitions()
+			}
+		}
+	}()
 
 	usersRepo := storage.NewUsersRepo(pool)
 	sessionsRepo := storage.NewSessionsRepo(pool)

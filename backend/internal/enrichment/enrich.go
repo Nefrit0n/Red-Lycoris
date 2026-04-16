@@ -15,6 +15,7 @@ import (
 	"redlycoris/internal/domain"
 	"redlycoris/internal/domain/cvss"
 	"redlycoris/internal/domain/epss"
+	kevdom "redlycoris/internal/domain/kev"
 	nvdrefs "redlycoris/internal/enrichment/nvd"
 )
 
@@ -41,6 +42,8 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 	var epssScore, epssPercentile float64
 	var epssTrend7d float64
 	var isKEV, isBDU bool
+	var hasRansomware bool
+	minDaysUntilDue := 999999
 
 	// a) NVD — по CVE IDs
 	if len(f.CVEIDs) > 0 {
@@ -220,30 +223,76 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 			_ = maxCurrentScore
 		}
 
-		// c) KEV — по CVE IDs
+		// c) KEV — по CVE IDs с расширенными полями и urgency
 		rows, err = pool.Query(ctx, `
-			SELECT cve_id, vendor, product, vulnerability_name, date_added, known_ransomware
+			SELECT cve_id, vendor, product, vulnerability_name,
+			       short_description, required_action, notes,
+			       date_added, due_date, known_ransomware
 			FROM kev_catalog WHERE cve_id = ANY($1)
 		`, f.CVEIDs)
 		if err == nil {
 			var kevEntries []map[string]any
+			mostUrgentTier := kevdom.UrgencyNoDeadline
+			now := time.Now()
 			for rows.Next() {
-				var cveID, vendor, product, vulnName string
-				var dateAdded *time.Time
-				var ransomware bool
-				if err := rows.Scan(&cveID, &vendor, &product, &vulnName, &dateAdded, &ransomware); err != nil {
+				var (
+					cveID, vendor, product, vulnName string
+					shortDesc, reqAction, notes      *string
+					dateAdded, dueDate               *time.Time
+					ransomware                       bool
+				)
+				if err := rows.Scan(
+					&cveID, &vendor, &product, &vulnName,
+					&shortDesc, &reqAction, &notes,
+					&dateAdded, &dueDate, &ransomware,
+				); err != nil {
 					continue
 				}
-				kevEntries = append(kevEntries, map[string]any{
-					"cve_id": cveID, "vendor": vendor, "product": product,
-					"vulnerability_name": vulnName, "known_ransomware": ransomware,
-				})
+
+				tier, daysUntil := kevdom.ComputeUrgency(dueDate, now)
+				entry := map[string]any{
+					"cve_id":             cveID,
+					"vendor":             vendor,
+					"product":            product,
+					"vulnerability_name": vulnName,
+					"known_ransomware":   ransomware,
+					"urgency_tier":       string(tier),
+				}
+				if dateAdded != nil {
+					entry["date_added"] = *dateAdded
+				}
+				if dueDate != nil {
+					entry["due_date"] = *dueDate
+					entry["days_until_due"] = daysUntil
+				}
+				if shortDesc != nil && *shortDesc != "" {
+					entry["short_description"] = *shortDesc
+				}
+				if reqAction != nil && *reqAction != "" {
+					entry["required_action"] = *reqAction
+				}
+				if notes != nil && *notes != "" {
+					entry["notes"] = *notes
+				}
+
+				kevEntries = append(kevEntries, entry)
 				isKEV = true
+
+				if ransomware {
+					hasRansomware = true
+				}
+
+				if dueDate != nil && daysUntil < minDaysUntilDue {
+					minDaysUntilDue = daysUntil
+					mostUrgentTier = tier
+				}
 			}
 			rows.Close()
 			if len(kevEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "kev", kevEntries)
 			}
+
+			_ = mostUrgentTier
 		}
 
 		// d) BDU — по CVE IDs (cve_ids @> ARRAY[cve])
@@ -329,7 +378,16 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 
 	// g) Вычисляем priority_score
 	daysOld := math.Max(0, time.Since(f.FirstSeen).Hours()/24)
-	priorityScore := domain.CalculatePriorityScore(baseScore, epssScore, epssTrend7d, isKEV, isBDU, daysOld)
+	priorityScore := domain.CalculatePriorityScore(
+		baseScore,
+		epssScore,
+		epssTrend7d,
+		isKEV,
+		hasRansomware,
+		minDaysUntilDue,
+		isBDU,
+		daysOld,
+	)
 
 	_, err = pool.Exec(ctx, `
 		INSERT INTO finding_scores (finding_id, base_score, epss_score, epss_percentile,

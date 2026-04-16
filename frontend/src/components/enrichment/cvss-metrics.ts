@@ -28,6 +28,15 @@ export function severityFromScore(score: number): Severity {
   return "neutral";
 }
 
+export const URGENCY_TO_SEVERITY: Record<string, Severity> = {
+  overdue: "critical",
+  imminent: "critical",
+  high: "high",
+  normal: "medium",
+  low: "low",
+  no_deadline: "neutral",
+};
+
 export const CVSS31_METRICS: Record<string, MetricMeta> = {
   AV: {
     label: "Вектор атаки",
