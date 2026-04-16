@@ -487,6 +487,62 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorResponse'
 
+  /api/v1/enrichment/epss/history:
+    get:
+      tags: [Enrichment]
+      summary: Получить историю EPSS по CVE
+      parameters:
+        - in: query
+          name: cve
+          required: true
+          schema:
+            type: string
+            pattern: '^CVE-\d{4}-\d{4,}$'
+          description: Идентификатор CVE (например, CVE-2021-44228).
+        - in: query
+          name: days
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 90
+          description: Глубина истории в днях.
+      responses:
+        '200':
+          description: История EPSS для указанного CVE.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      cve_id:
+                        type: string
+                      days:
+                        type: integer
+                      points:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date:
+                              type: string
+                              format: date-time
+                            score:
+                              type: number
+                            percentile:
+                              type: number
+                          required: [date, score, percentile]
+                    required: [cve_id, days, points]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
   /api/v1/enrichment/enrich-all:
     post:
       tags: [Enrichment]
