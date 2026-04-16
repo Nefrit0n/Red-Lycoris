@@ -18,6 +18,7 @@ func CalculatePriorityScore(
 	kevRansomware bool,
 	daysUntilKevDue int,
 	isBDU bool,
+	osvHasFix bool,
 	daysOld float64,
 ) float64 {
 	const exposure = 5.0
@@ -53,6 +54,10 @@ func CalculatePriorityScore(
 	if epssTrend7d > 0.10 {
 		trendBonus = 5.0
 	}
+	fixBonus := 0.0
+	if osvHasFix {
+		fixBonus = 2.0
+	}
 
 	raw := baseScore*0.30 +
 		epssScore*100.0*0.25 +
@@ -60,7 +65,8 @@ func CalculatePriorityScore(
 		bduVal*0.10 +
 		recency*0.10 +
 		exposure*0.05 +
-		trendBonus*0.05
+		trendBonus*0.05 +
+		fixBonus*0.03
 
 	score := (raw / maxRaw) * 10.0
 

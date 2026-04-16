@@ -27,6 +27,7 @@ import type { FindingEnrichment } from "@/types";
 import NvdSection, { type NvdEntry } from "@/components/enrichment/NvdSection";
 import EpssSection, { type EpssEntry } from "@/components/enrichment/EpssSection";
 import KevSection, { type KevEntry } from "@/components/enrichment/KevSection";
+import OsvSection, { type OsvEntry } from "@/components/enrichment/OsvSection";
 
 /* ── БДУ ────────────────────────────────────────────────── */
 
@@ -86,94 +87,6 @@ function BduSection({ data }: { data: BduData }) {
           <p className="mt-0.5 leading-relaxed text-zinc-400">
             {data.remediation}
           </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── OSV ────────────────────────────────────────────────── */
-
-interface OsvData {
-  id?: string;
-  osv_id?: string;
-  summary?: string;
-  aliases?: string[];
-  affected?: {
-    package?: { name?: string; ecosystem?: string };
-    ranges?: {
-      events?: { fixed?: string; introduced?: string }[];
-    }[];
-  }[];
-}
-
-function OsvSection({ data }: { data: OsvData }) {
-  const osvId = data.id ?? data.osv_id;
-
-  return (
-    <div className="space-y-4">
-      {osvId && (
-        <a
-          href={`https://osv.dev/vulnerability/${osvId}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 font-mono text-sm text-red-400 hover:underline"
-        >
-          {osvId}
-          <ExternalLink className="size-3" />
-        </a>
-      )}
-
-      {data.summary && (
-        <p className="text-sm leading-relaxed text-zinc-400">{data.summary}</p>
-      )}
-
-      {data.affected && data.affected.length > 0 && (
-        <div className="space-y-2">
-          <span className="text-xs text-zinc-500">Затронутые пакеты</span>
-          {data.affected.map((a, i) => {
-            const introduced = a.ranges
-              ?.flatMap((r) => r.events ?? [])
-              .filter((e) => e.introduced)
-              .map((e) => e.introduced);
-            const fixed = a.ranges
-              ?.flatMap((r) => r.events ?? [])
-              .filter((e) => e.fixed)
-              .map((e) => e.fixed);
-
-            return (
-              <div key={i} className="rounded-md bg-zinc-800/50 p-3">
-                <div className="flex items-center gap-2">
-                  {a.package?.ecosystem && (
-                    <Badge className="border-zinc-700 bg-zinc-800 text-zinc-400">
-                      {a.package.ecosystem}
-                    </Badge>
-                  )}
-                  <span className="font-mono text-sm text-zinc-300">
-                    {a.package?.name}
-                  </span>
-                </div>
-                <div className="mt-2 grid gap-1 text-xs">
-                  {introduced && introduced.length > 0 && (
-                    <div>
-                      <span className="text-zinc-500">Введено: </span>
-                      <span className="font-mono text-red-400">
-                        {introduced.join(", ")}
-                      </span>
-                    </div>
-                  )}
-                  {fixed && fixed.length > 0 && (
-                    <div>
-                      <span className="text-zinc-500">Исправлено: </span>
-                      <span className="font-mono text-emerald-400">
-                        {fixed.join(", ")}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
         </div>
       )}
     </div>
@@ -353,9 +266,10 @@ const TABS: TabMeta[] = [
 
 interface EnrichmentTabsProps {
   findingId: string;
+  findingComponent?: string;
 }
 
-export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
+export default function EnrichmentTabs({ findingId, findingComponent }: EnrichmentTabsProps) {
   const { data, isLoading } = useFindingEnrichments(findingId);
   const enrichments = data?.data ?? [];
 
@@ -448,13 +362,12 @@ export default function EnrichmentTabs({ findingId }: EnrichmentTabsProps) {
       </TabsContent>
 
       <TabsContent value="osv">
-        {getEnrichmentData<OsvData>(enrichmentMap.get("osv")?.data) ? (
+        {enrichmentMap.get("osv")?.data ? (
           <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <OsvSection
-                data={
-                  getEnrichmentData<OsvData>(enrichmentMap.get("osv")?.data)!
-                }
+                entries={((enrichmentMap.get("osv")?.data as OsvEntry[] | undefined) ?? [])}
+                findingComponent={findingComponent}
               />
             </CardContent>
           </Card>

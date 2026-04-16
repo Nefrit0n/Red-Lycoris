@@ -17,6 +17,7 @@ import (
 	"redlycoris/internal/domain/cvss"
 	"redlycoris/internal/domain/epss"
 	kevdom "redlycoris/internal/domain/kev"
+	osvdom "redlycoris/internal/domain/osv"
 	nvdrefs "redlycoris/internal/enrichment/nvd"
 )
 
@@ -29,12 +30,14 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 		CWEIDs           []int
 		Component        string
 		ComponentVersion string
+		SourceType       string
+		Kind             int16
 		FirstSeen        time.Time
 	}
 	err := pool.QueryRow(ctx, `
-		SELECT cve_ids, cwe_ids, component, component_version, first_seen
+		SELECT cve_ids, cwe_ids, component, component_version, source_type, finding_kind, first_seen
 		FROM findings WHERE id = $1
-	`, findingID).Scan(&f.CVEIDs, &f.CWEIDs, &f.Component, &f.ComponentVersion, &f.FirstSeen)
+	`, findingID).Scan(&f.CVEIDs, &f.CWEIDs, &f.Component, &f.ComponentVersion, &f.SourceType, &f.Kind, &f.FirstSeen)
 	if err != nil {
 		return fmt.Errorf("enrichment.EnrichFinding: load finding: %w", err)
 	}
@@ -342,32 +345,70 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 		}
 	}
 
-	// e) OSV — по component+version
-	if f.Component != "" {
-		ecosystem := guessEcosystem(f.Component)
+	// e) OSV — приоритетный матч по CVE (через aliases),
+	//    fallback по ecosystem+package_name
+	var osvMatched bool
+	var osvHasFix bool
+
+	// Стратегия 1: если у finding есть CVE — искать OSV-записи,
+	// у которых эта CVE в aliases (GIN-индекс на aliases работает).
+	if len(f.CVEIDs) > 0 {
+		rows, err := pool.Query(ctx, `
+			SELECT osv_id, summary, details, aliases,
+			       ecosystem, package_name,
+			       affected_ranges, severity, "references",
+			       published_at, modified_at
+			FROM osv_vulnerabilities
+			WHERE aliases && $1
+			ORDER BY modified_at DESC NULLS LAST
+			LIMIT 20
+		`, f.CVEIDs)
+		if err == nil {
+			entries := buildOSVEntries(rows)
+			rows.Close()
+			if len(entries) > 0 {
+				osvMatched = true
+				for _, e := range entries {
+					if e["has_fix"] == true {
+						osvHasFix = true
+					}
+				}
+				saveEnrichment(ctx, pool, findingID, "osv", entries)
+			}
+		}
+	}
+
+	// Стратегия 2: fallback — если по CVE ничего не нашли, пробуем
+	// по ecosystem+package_name. Это хуже, потому что может вернуть
+	// несвязанные advisory, НО — фильтруем через aliases пересечение
+	// с CVEIDs финдинга (если cve_ids пустой — оставляем как "related").
+	if !osvMatched && f.Component != "" {
+		ecosystem := osvdom.DetectEcosystem(f.SourceType, domain.FindingKind(f.Kind).String(), f.Component)
 		if ecosystem != "" {
 			rows, err := pool.Query(ctx, `
-				SELECT osv_id, summary, aliases, severity
+				SELECT osv_id, summary, details, aliases,
+				       ecosystem, package_name,
+				       affected_ranges, severity, "references",
+				       published_at, modified_at
 				FROM osv_vulnerabilities
 				WHERE ecosystem = $1 AND package_name = $2
-				LIMIT 50
+				ORDER BY modified_at DESC NULLS LAST
+				LIMIT 10
 			`, ecosystem, f.Component)
 			if err == nil {
-				var osvEntries []map[string]any
-				for rows.Next() {
-					var osvID, summary string
-					var aliases []string
-					var severity json.RawMessage
-					if err := rows.Scan(&osvID, &summary, &aliases, &severity); err != nil {
-						continue
-					}
-					osvEntries = append(osvEntries, map[string]any{
-						"osv_id": osvID, "summary": summary, "aliases": aliases,
-					})
-				}
+				entries := buildOSVEntries(rows)
 				rows.Close()
-				if len(osvEntries) > 0 {
-					saveEnrichment(ctx, pool, findingID, "osv", osvEntries)
+				if len(entries) > 0 {
+					// Пометим что это fallback-матч, UI покажет предупреждение.
+					for i := range entries {
+						entries[i]["match_type"] = "package_fallback"
+					}
+					for _, e := range entries {
+						if e["has_fix"] == true {
+							osvHasFix = true
+						}
+					}
+					saveEnrichment(ctx, pool, findingID, "osv", entries)
 				}
 			}
 		}
@@ -409,6 +450,7 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 		hasRansomware,
 		minDaysUntilDue,
 		isBDU,
+		osvHasFix,
 		daysOld,
 	)
 
@@ -491,35 +533,77 @@ func normalizeCVEIDs(cveIDs []string) []string {
 	return normalized
 }
 
-// guessEcosystem пытается определить экосистему по имени компонента.
-func guessEcosystem(component string) string {
-	// Простая эвристика по паттернам имён пакетов
-	switch {
-	case contains(component, "/") && !contains(component, ":"):
-		// "github.com/foo/bar" → Go, "lodash" without slash → could be npm
-		if contains(component, ".") {
-			return "Go"
+// buildOSVEntries разбирает rows из osv_vulnerabilities в enrichment-
+// payload. Обрабатывает affected_ranges через osvdom.ParseRanges,
+// severity как сырой JSONB (UI раскроет), aliases как строковый массив.
+func buildOSVEntries(rows pgx.Rows) []map[string]any {
+	var entries []map[string]any
+	for rows.Next() {
+		var (
+			osvID                   string
+			summary, details        string
+			aliases                 []string
+			ecosystem, packageName  string
+			rangesRaw, severityRaw  []byte
+			referencesRaw           []byte
+			publishedAt, modifiedAt *time.Time
+		)
+		if err := rows.Scan(
+			&osvID, &summary, &details, &aliases,
+			&ecosystem, &packageName,
+			&rangesRaw, &severityRaw, &referencesRaw,
+			&publishedAt, &modifiedAt,
+		); err != nil {
+			continue
 		}
-		return "npm"
-	case contains(component, ":"):
-		// "org.apache:commons" → Maven
-		return "Maven"
-	default:
-		return ""
-	}
-}
 
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && containsImpl(s, sub)
-}
-
-func containsImpl(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
+		entry := map[string]any{
+			"osv_id":     osvID,
+			"summary":    summary,
+			"match_type": "cve", // по умолчанию; fallback перезаписывает
 		}
+		if details != "" {
+			entry["details"] = details
+		}
+		if len(aliases) > 0 {
+			entry["aliases"] = aliases
+		}
+		if ecosystem != "" {
+			entry["ecosystem"] = ecosystem
+		}
+		if packageName != "" {
+			entry["package_name"] = packageName
+		}
+		if publishedAt != nil {
+			entry["published_at"] = *publishedAt
+		}
+		if modifiedAt != nil {
+			entry["modified_at"] = *modifiedAt
+		}
+		if len(severityRaw) > 0 {
+			entry["severity"] = json.RawMessage(severityRaw)
+		}
+		if len(referencesRaw) > 0 {
+			entry["references"] = json.RawMessage(referencesRaw)
+		}
+
+		// Главное: извлекаем fix versions из affected_ranges.
+		if summary, err := osvdom.ParseRanges(rangesRaw); err == nil {
+			if len(summary.FixedVersions) > 0 {
+				entry["fixed_versions"] = summary.FixedVersions
+				entry["has_fix"] = true
+			}
+			if len(summary.IntroducedVersions) > 0 {
+				entry["introduced_versions"] = summary.IntroducedVersions
+			}
+			if len(summary.Ranges) > 0 {
+				entry["ranges"] = summary.Ranges
+			}
+		}
+
+		entries = append(entries, entry)
 	}
-	return false
+	return entries
 }
 
 // GetFindingEnrichments возвращает все enrichments для finding.
