@@ -1,6 +1,7 @@
 FROM golang:1.24-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache ca-certificates wget docker-cli
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|http://dl-cdn.alpinelinux.org|g' /etc/apk/repositories && \
+    apk add --no-cache ca-certificates wget docker-cli
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -24,7 +25,8 @@ FROM alpine:3.23 AS runtime
 WORKDIR /app
 
 # Install ca-certificates and wget for healthcheck
-RUN apk add --no-cache ca-certificates wget
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|http://dl-cdn.alpinelinux.org|g' /etc/apk/repositories && \
+    apk add --no-cache ca-certificates wget
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
@@ -53,7 +55,8 @@ ARG OPENGREP_VERSION=v1.16.0
 ARG TARGETARCH
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates wget docker-cli && \
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|http://dl-cdn.alpinelinux.org|g' /etc/apk/repositories && \
+    apk add --no-cache ca-certificates wget docker-cli && \
     case "$TARGETARCH" in \
         amd64) opengrep_asset="opengrep_musllinux_x86" ;; \
         arm64) opengrep_asset="opengrep_musllinux_aarch64" ;; \
@@ -73,7 +76,8 @@ CMD ["/app/analysis_worker"]
 FROM alpine:3.23 AS intel-worker
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates wget && \
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|http://dl-cdn.alpinelinux.org|g' /etc/apk/repositories && \
+    apk add --no-cache ca-certificates wget && \
     addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
@@ -88,7 +92,8 @@ CMD ["/app/intel_worker"]
 FROM alpine:3.23 AS sbom-worker
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates wget && \
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|http://dl-cdn.alpinelinux.org|g' /etc/apk/repositories && \
+    apk add --no-cache ca-certificates wget && \
     addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
