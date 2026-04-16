@@ -304,37 +304,126 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 		var bduEntries []map[string]any
 		for _, cveID := range f.CVEIDs {
 			rows, err = pool.Query(ctx, `
-				SELECT bdu_id, name, description, remediation, severity, cvss_v3_score
-				FROM bdu_fstec WHERE cve_ids @> ARRAY[$1]::text[]
+				SELECT bdu_id, name, description, severity,
+				       vul_status, exploit_status, fix_status,
+				       vul_class, exploitation_way, mitigation_way,
+				       cvss_v2_score, cvss_v2_vector,
+				       cvss_v3_score, cvss_v3_vector,
+				       cvss_v4_score, cvss_v4_vector,
+				       software, environment,
+				       sources, remediation,
+				       cwe_ids, cve_ids,
+				       published_at, modified_at
+				FROM bdu_fstec
+				WHERE cve_ids @> ARRAY[$1]::text[]
 			`, cveID)
 			if err != nil {
 				continue
 			}
 			for rows.Next() {
 				var (
-					bduID, name, severity    string
-					description, remediation *string
-					cvssScore                *float32
+					bduID, name, severity                    string
+					description                              *string
+					vulStatus, exploitStatus, fixStatus      *string
+					vulClass, exploitationWay, mitigationWay *string
+					cvssV2Score, cvssV3Score, cvssV4Score    *float32
+					cvssV2Vector, cvssV3Vector, cvssV4Vector *string
+					softwareRaw, environmentRaw              []byte
+					sources, cveIDs                          []string
+					remediation                              *string
+					cweIDs                                   []int32
+					publishedAt, modifiedAt                  *time.Time
 				)
-				if err := rows.Scan(&bduID, &name, &description, &remediation, &severity, &cvssScore); err != nil {
+				if err := rows.Scan(
+					&bduID, &name, &description, &severity,
+					&vulStatus, &exploitStatus, &fixStatus,
+					&vulClass, &exploitationWay, &mitigationWay,
+					&cvssV2Score, &cvssV2Vector,
+					&cvssV3Score, &cvssV3Vector,
+					&cvssV4Score, &cvssV4Vector,
+					&softwareRaw, &environmentRaw,
+					&sources, &remediation,
+					&cweIDs, &cveIDs,
+					&publishedAt, &modifiedAt,
+				); err != nil {
 					continue
 				}
 
 				entry := map[string]any{
-					"bdu_id":   bduID,
-					"name":     name,
-					"severity": severity,
-					"cve_id":   cveID,
+					"bdu_id":         bduID,
+					"name":           name,
+					"matched_cve_id": cveID,
 				}
-				if description != nil && *description != "" {
-					entry["description"] = *description
+				addOptString := func(key string, val *string) {
+					if val != nil && *val != "" {
+						entry[key] = *val
+					}
 				}
-				if remediation != nil && *remediation != "" {
-					entry["remediation"] = *remediation
+				addOptString("description", description)
+				if severity != "" {
+					entry["severity"] = severity
 				}
-				if cvssScore != nil {
-					entry["cvss_v3_score"] = *cvssScore
+				addOptString("vul_status", vulStatus)
+				addOptString("exploit_status", exploitStatus)
+				addOptString("fix_status", fixStatus)
+				addOptString("vul_class", vulClass)
+				addOptString("exploitation_way", exploitationWay)
+				addOptString("mitigation_way", mitigationWay)
+				addOptString("remediation", remediation)
+
+				if cvssV2Score != nil {
+					obj := map[string]any{"score": *cvssV2Score}
+					if cvssV2Vector != nil && *cvssV2Vector != "" {
+						obj["vector"] = *cvssV2Vector
+						if m, err := cvss.ParseV2(*cvssV2Vector); err == nil {
+							obj["metrics"] = m
+						}
+					}
+					entry["cvss_v2"] = obj
 				}
+				if cvssV3Score != nil {
+					obj := map[string]any{"score": *cvssV3Score}
+					if cvssV3Vector != nil && *cvssV3Vector != "" {
+						obj["vector"] = *cvssV3Vector
+						if m, err := cvss.ParseV31(*cvssV3Vector); err == nil {
+							obj["metrics"] = m
+						}
+					}
+					entry["cvss_v3"] = obj
+				}
+				if cvssV4Score != nil {
+					obj := map[string]any{"score": *cvssV4Score}
+					if cvssV4Vector != nil && *cvssV4Vector != "" {
+						obj["vector"] = *cvssV4Vector
+						if m, err := cvss.ParseV40(*cvssV4Vector); err == nil {
+							obj["metrics"] = m
+						}
+					}
+					entry["cvss_v4"] = obj
+				}
+
+				if len(softwareRaw) > 0 {
+					entry["software"] = json.RawMessage(softwareRaw)
+				}
+				if len(environmentRaw) > 0 {
+					entry["environment"] = json.RawMessage(environmentRaw)
+				}
+				if len(sources) > 0 {
+					entry["sources"] = sources
+				}
+				if len(cveIDs) > 0 {
+					entry["related_cve_ids"] = cveIDs
+				}
+				if len(cweIDs) > 0 {
+					entry["cwe_ids"] = cweIDs
+				}
+				if publishedAt != nil {
+					entry["published_at"] = *publishedAt
+				}
+				if modifiedAt != nil {
+					entry["modified_at"] = *modifiedAt
+				}
+
 				bduEntries = append(bduEntries, entry)
 				isBDU = true
 			}

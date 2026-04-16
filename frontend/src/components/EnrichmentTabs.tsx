@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Tabs,
@@ -28,70 +27,7 @@ import NvdSection, { type NvdEntry } from "@/components/enrichment/NvdSection";
 import EpssSection, { type EpssEntry } from "@/components/enrichment/EpssSection";
 import KevSection, { type KevEntry } from "@/components/enrichment/KevSection";
 import OsvSection, { type OsvEntry } from "@/components/enrichment/OsvSection";
-
-/* ── БДУ ────────────────────────────────────────────────── */
-
-interface BduData {
-  bdu_id?: string;
-  identifier?: string;
-  name?: string;
-  description?: string;
-  remediation?: string;
-  severity?: string;
-}
-
-function BduSection({ data }: { data: BduData }) {
-  const identifier = data.identifier ?? data.bdu_id;
-
-  const severityColor =
-    data.severity === "Критический"
-      ? "text-red-400 border-red-800 bg-red-950/30"
-      : data.severity === "Высокий"
-        ? "text-orange-400 border-orange-800 bg-orange-950/30"
-        : data.severity === "Средний"
-          ? "text-yellow-400 border-yellow-800 bg-yellow-950/30"
-          : "text-emerald-400 border-emerald-800 bg-emerald-950/30";
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        {identifier && (
-          <Badge className="border-amber-800 bg-amber-950/50 font-mono text-amber-400">
-            {identifier}
-          </Badge>
-        )}
-        {data.severity && (
-          <Badge className={severityColor}>{data.severity}</Badge>
-        )}
-      </div>
-
-      {data.name && (
-        <div>
-          <span className="text-xs text-zinc-500">Наименование</span>
-          <p className="mt-0.5 text-sm text-zinc-300">{data.name}</p>
-        </div>
-      )}
-
-      {data.description && (
-        <div>
-          <span className="text-xs text-zinc-500">Описание</span>
-          <p className="mt-0.5 leading-relaxed text-zinc-400">
-            {data.description}
-          </p>
-        </div>
-      )}
-
-      {data.remediation && (
-        <div>
-          <span className="text-xs text-zinc-500">Рекомендации</span>
-          <p className="mt-0.5 leading-relaxed text-zinc-400">
-            {data.remediation}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
+import BduSection, { type BduEntry } from "@/components/enrichment/BduSection";
 
 /* ── CWE ────────────────────────────────────────────────── */
 
@@ -346,13 +282,11 @@ export default function EnrichmentTabs({ findingId, findingComponent }: Enrichme
       </TabsContent>
 
       <TabsContent value="bdu">
-        {getEnrichmentData<BduData>(enrichmentMap.get("bdu")?.data) ? (
-          <Card className="border-amber-800/40 bg-amber-950/10">
+        {enrichmentMap.get("bdu")?.data ? (
+          <Card className="border-zinc-800 bg-zinc-900/50">
             <CardContent className="pt-5">
               <BduSection
-                data={
-                  getEnrichmentData<BduData>(enrichmentMap.get("bdu")?.data)!
-                }
+                entries={((enrichmentMap.get("bdu")?.data as BduEntry[] | undefined) ?? [])}
               />
             </CardContent>
           </Card>
