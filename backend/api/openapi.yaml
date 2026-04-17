@@ -315,9 +315,37 @@ paths:
           schema: { type: integer, minimum: 1 }
           description: Размер страницы.
         - in: query
-          name: offset
-          schema: { type: integer, minimum: 0 }
-          description: Смещение.
+          name: cursor
+          schema: { type: string }
+          description: Курсор следующей страницы.
+        - in: query
+          name: status
+          schema: { type: string }
+          description: CSV-список статусов проектов.
+        - in: query
+          name: team
+          schema: { type: string }
+          description: Фильтр по команде.
+        - in: query
+          name: sla
+          schema: { type: string }
+          description: Фильтр по SLA.
+        - in: query
+          name: tag
+          schema: { type: string }
+          description: CSV-список тегов.
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Поиск по имени/описанию/тегам/repo.
+        - in: query
+          name: sort
+          schema: { type: string }
+          description: Сортировка списка.
+        - in: query
+          name: owner
+          schema: { type: string, format: uuid }
+          description: Фильтр по владельцу.
       responses:
         '200':
           description: Список проектов.
@@ -419,6 +447,79 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/projects/{id}/pinned:
+    patch:
+      tags: [Projects]
+      summary: Изменить pinned-флаг проекта
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pinned: { type: boolean }
+              required: [pinned]
+      responses:
+        '200':
+          description: Флаг updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      pinned: { type: boolean }
+                    required: [id, pinned]
+                required: [data]
+
+  /api/v1/projects/{id}/trend:
+    get:
+      tags: [Projects]
+      summary: Получить тренд high+critical findings по дням
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 365 }
+          description: Количество дней в тренде.
+      responses:
+        '200':
+          description: Точки тренда.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectTrendPoint'
+                required: [data]
+
+  /api/v1/projects/{id}/quick-peek:
+    get:
+      tags: [Projects]
+      summary: Получить данные quick-peek по проекту
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+      responses:
+        '200':
+          description: Данные quick-peek.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProjectQuickPeek'
+                required: [data]
 
   /api/v1/dashboard/stats:
     get:
@@ -820,15 +921,127 @@ components:
       description: Проект/приложение, к которому относятся findings.
       properties:
         id: { type: string, format: uuid, description: UUID проекта. }
+        slug: { type: string, description: URL-safe слаг. }
         name: { type: string, description: Название проекта. }
         description: { type: string, description: Описание проекта. }
+        icon_color: { type: string, description: HEX-цвет иконки проекта. }
+        repo_url: { type: string, description: URL репозитория. }
+        repo_provider:
+          type: string
+          enum: [github, gitlab, bitbucket, other]
+          description: Провайдер репозитория.
         tags:
           type: array
           description: Теги проекта.
           items: { type: string }
+        status:
+          type: string
+          enum: [active, paused, archived]
+        setup_completed: { type: boolean }
+        owner:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string }
+            display_name: { type: string }
+          required: [id, email, display_name]
+        team:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+            name: { type: string }
+          required: [id, name]
+        pinned: { type: boolean }
+        findings_by_severity:
+          type: object
+          properties:
+            critical: { type: integer }
+            high: { type: integer }
+            medium: { type: integer }
+            low: { type: integer }
+            info: { type: integer }
+          required: [critical, high, medium, low, info]
+        sla_breached_count: { type: integer }
+        scanners:
+          type: object
+          properties:
+            sast: { type: string, enum: [ok, missing, off] }
+            dast: { type: string, enum: [ok, missing, off] }
+            sca: { type: string, enum: [ok, missing, off] }
+            secrets: { type: string, enum: [ok, missing, off] }
+          required: [sast, dast, sca, secrets]
+        last_scan:
+          type: object
+          nullable: true
+          properties:
+            started_at: { type: string, format: date-time }
+            finished_at: { type: string, format: date-time, nullable: true }
+            status: { type: string, enum: [success, failed, running] }
+          required: [started_at, status]
+        health:
+          type: string
+          enum: [healthy, warn, breach, setup, paused]
         created_at: { type: string, format: date-time, description: Время создания проекта. }
         updated_at: { type: string, format: date-time, description: Время обновления проекта. }
-      required: [id, name, tags, created_at, updated_at]
+      required:
+        - id
+        - slug
+        - name
+        - icon_color
+        - tags
+        - status
+        - setup_completed
+        - owner
+        - pinned
+        - findings_by_severity
+        - sla_breached_count
+        - scanners
+        - health
+        - created_at
+        - updated_at
+
+    ProjectTrendPoint:
+      type: object
+      properties:
+        date: { type: string, format: date-time }
+        count: { type: integer }
+      required: [date, count]
+
+    ProjectQuickPeek:
+      type: object
+      properties:
+        top_findings:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              title: { type: string }
+              severity: { type: integer }
+              status: { type: integer }
+            required: [id, title, severity, status]
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              action: { type: string }
+              method: { type: string }
+              path: { type: string }
+              created_at: { type: string, format: date-time }
+              user_id: { type: string, format: uuid, nullable: true }
+            required: [id, action, method, path, created_at]
+        status_stats:
+          type: object
+          properties:
+            new: { type: integer }
+            triaged: { type: integer }
+            fixed: { type: integer }
+            wontfix: { type: integer }
+          required: [new, triaged, fixed, wontfix]
+      required: [top_findings, events, status_stats]
 
     Enrichment:
       type: object
