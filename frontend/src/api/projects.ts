@@ -34,12 +34,15 @@ function buildProjectsParams(query: ProjectsQueryParams): Record<string, string>
 }
 
 export function useProjects(query: ProjectsQueryParams = {}) {
+  const params = buildProjectsParams(query);
   return useQuery({
-    queryKey: ["projects", query],
+    queryKey: ["projects", params],
     queryFn: () =>
       apiGet<PaginatedResponse<Project[]>>("/api/v1/projects", {
-        ...buildProjectsParams(query),
+        ...params,
       }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 

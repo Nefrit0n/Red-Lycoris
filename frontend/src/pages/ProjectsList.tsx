@@ -133,6 +133,10 @@ export default function ProjectsList() {
   );
 
   const [searchInput, setSearchInput] = useState(urlState.q ?? "");
+  const [pendingUrlPatch, setPendingUrlPatch] = useState<{
+    patch: Partial<typeof urlState>;
+    replace?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     setSearchInput(urlState.q ?? "");
@@ -141,29 +145,45 @@ export default function ProjectsList() {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       if ((urlState.q ?? "") === searchInput.trim()) return;
-      const next = serializeProjectsUrlParams({
-        ...urlState,
-        q: searchInput.trim() || undefined,
-        cursor: undefined,
+      setPendingUrlPatch({
+        patch: {
+          q: searchInput.trim() || undefined,
+          cursor: undefined,
+        },
+        replace: true,
       });
-      setSearchParams(next, { replace: true });
     }, 300);
 
     return () => window.clearTimeout(timeout);
-  }, [searchInput, setSearchParams, urlState]);
+  }, [searchInput, urlState.q]);
 
-  const { data, isLoading } = useProjects({
-    limit: 200,
-    cursor: urlState.cursor,
-    view: urlState.view,
-    status: urlState.status,
-    team: urlState.team,
-    sla: urlState.sla,
-    tag: urlState.tag,
-    q: urlState.q,
-    sort: urlState.sort,
-    owner: urlState.owner,
-  });
+  const projectsQuery = useMemo(
+    () => ({
+      limit: 200,
+      cursor: urlState.cursor,
+      view: urlState.view,
+      status: urlState.status,
+      team: urlState.team,
+      sla: urlState.sla,
+      tag: urlState.tag,
+      q: urlState.q,
+      sort: urlState.sort,
+      owner: urlState.owner,
+    }),
+    [
+      urlState.cursor,
+      urlState.owner,
+      urlState.q,
+      urlState.sla,
+      urlState.sort,
+      urlState.status,
+      urlState.tag,
+      urlState.team,
+      urlState.view,
+    ],
+  );
+
+  const { data, isLoading } = useProjects(projectsQuery);
   const projects = data?.data ?? [];
 
   useEffect(() => {
@@ -177,12 +197,25 @@ export default function ProjectsList() {
     const fallback: ProjectsViewMode = projects.length > 12 ? "list" : "grid";
     const view: ProjectsViewMode = saved === "grid" || saved === "list" ? saved : fallback;
 
+    setPendingUrlPatch({
+      patch: {
+        view,
+      },
+      replace: true,
+    });
+  }, [projects.length, urlState.view]);
+
+  useEffect(() => {
+    if (!pendingUrlPatch) return;
     const next = serializeProjectsUrlParams({
       ...urlState,
-      view,
+      ...pendingUrlPatch.patch,
     });
-    setSearchParams(next, { replace: true });
-  }, [projects.length, setSearchParams, urlState]);
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: Boolean(pendingUrlPatch.replace) });
+    }
+    setPendingUrlPatch(null);
+  }, [pendingUrlPatch, searchParams, setSearchParams, urlState]);
 
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
@@ -315,26 +348,26 @@ export default function ProjectsList() {
 
   const handleSortChange = useCallback(
     (value: ProjectsSortMode) => {
-      const next = serializeProjectsUrlParams({
-        ...urlState,
-        sort: value,
-        cursor: undefined,
+      setPendingUrlPatch({
+        patch: {
+          sort: value,
+          cursor: undefined,
+        },
       });
-      setSearchParams(next, { replace: false });
     },
-    [setSearchParams, urlState],
+    [],
   );
 
   const handleViewChange = useCallback(
     (nextView: ProjectsViewMode) => {
       writeStorage(VIEW_MODE_KEY, nextView);
-      const next = serializeProjectsUrlParams({
-        ...urlState,
-        view: nextView,
+      setPendingUrlPatch({
+        patch: {
+          view: nextView,
+        },
       });
-      setSearchParams(next, { replace: false });
     },
-    [setSearchParams, urlState],
+    [],
   );
 
   const handlePinnedToggle = useCallback(
@@ -368,14 +401,14 @@ export default function ProjectsList() {
 
   const applyUrlState = useCallback(
     (nextState: Partial<typeof urlState>) => {
-      const next = serializeProjectsUrlParams({
-        ...urlState,
-        ...nextState,
-        cursor: undefined,
+      setPendingUrlPatch({
+        patch: {
+          ...nextState,
+          cursor: undefined,
+        },
       });
-      setSearchParams(next, { replace: false });
     },
-    [setSearchParams, urlState],
+    [],
   );
 
   const toggleMultiFilter = useCallback(
@@ -1006,12 +1039,9 @@ export default function ProjectsList() {
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    const next = serializeProjectsUrlParams({
-                      ...urlState,
+                    applyUrlState({
                       owner: project.owner.id,
-                      cursor: undefined,
                     });
-                    setSearchParams(next, { replace: false });
                   }}
                   title={project.owner.display_name || project.owner.email}
                   className={`mt-0.5 flex size-6 items-center justify-center rounded-full text-[10px] font-medium ${avatarColorSeed(project.owner.id)}`}
