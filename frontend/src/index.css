@@ -84,6 +84,29 @@
     --scrollbar-thumb: color-mix(in oklab, var(--foreground) 30%, transparent);
     --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 42%, transparent);
     --scrollbar-track: color-mix(in oklab, var(--background) 78%, transparent);
+    --radius-pill: 999px;
+    --http-2xx-bg: oklch(0.95 0.05 152);
+    --http-2xx-fg: oklch(0.44 0.12 152);
+    --http-3xx-bg: oklch(0.93 0.05 250);
+    --http-3xx-fg: oklch(0.42 0.1 250);
+    --http-4xx-bg: oklch(0.95 0.07 85);
+    --http-4xx-fg: oklch(0.5 0.12 75);
+    --http-5xx-bg: oklch(0.93 0.07 24);
+    --http-5xx-fg: oklch(0.47 0.18 24);
+    --method-get-bg: oklch(0.93 0 0);
+    --method-get-fg: oklch(0.34 0 0);
+    --method-post-bg: oklch(0.93 0.06 152);
+    --method-post-fg: oklch(0.42 0.12 152);
+    --method-patch-bg: oklch(0.94 0.08 85);
+    --method-patch-fg: oklch(0.5 0.12 75);
+    --method-put-bg: oklch(0.93 0.05 250);
+    --method-put-fg: oklch(0.44 0.1 250);
+    --method-delete-bg: oklch(0.93 0.07 24);
+    --method-delete-fg: oklch(0.47 0.18 24);
+    --risk-low: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+    --risk-medium: oklch(0.62 0.14 85);
+    --risk-high: oklch(0.58 0.18 32);
+    --risk-critical: oklch(0.5 0.22 28);
 }
 
 .dark {
@@ -121,6 +144,28 @@
     --scrollbar-thumb: color-mix(in oklab, var(--foreground) 24%, transparent);
     --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 36%, transparent);
     --scrollbar-track: color-mix(in oklab, var(--background) 92%, transparent);
+    --http-2xx-bg: oklch(0.3 0.07 152);
+    --http-2xx-fg: oklch(0.86 0.12 152);
+    --http-3xx-bg: oklch(0.29 0.06 250);
+    --http-3xx-fg: oklch(0.84 0.09 250);
+    --http-4xx-bg: oklch(0.31 0.09 85);
+    --http-4xx-fg: oklch(0.87 0.12 90);
+    --http-5xx-bg: oklch(0.3 0.12 24);
+    --http-5xx-fg: oklch(0.86 0.16 24);
+    --method-get-bg: oklch(0.3 0 0);
+    --method-get-fg: oklch(0.88 0 0);
+    --method-post-bg: oklch(0.3 0.08 152);
+    --method-post-fg: oklch(0.86 0.12 152);
+    --method-patch-bg: oklch(0.32 0.09 85);
+    --method-patch-fg: oklch(0.87 0.12 90);
+    --method-put-bg: oklch(0.29 0.06 250);
+    --method-put-fg: oklch(0.84 0.09 250);
+    --method-delete-bg: oklch(0.3 0.12 24);
+    --method-delete-fg: oklch(0.86 0.16 24);
+    --risk-low: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+    --risk-medium: oklch(0.78 0.14 85);
+    --risk-high: oklch(0.72 0.16 32);
+    --risk-critical: oklch(0.69 0.2 28);
 }
 
 @layer base {
