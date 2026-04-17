@@ -3,9 +3,11 @@ import { FileJson, Upload, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
+type ParsedFormat = "sarif" | "gitleaks" | "trufflehog" | "generic" | "unknown";
+
 interface ParsedFile {
   file: File;
-  format: "sarif" | "generic" | "unknown";
+  format: ParsedFormat;
   findingsCount: number | null;
   error: string | null;
 }
@@ -16,7 +18,23 @@ interface ImportUploadProps {
   disabled?: boolean;
 }
 
-function detectFormat(data: unknown): { format: "sarif" | "generic" | "unknown"; count: number | null } {
+function isTrufflehogLike(value: unknown): value is { SourceMetadata: unknown; DetectorName: unknown } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return record["SourceMetadata"] != null && typeof record["DetectorName"] === "string";
+}
+
+function isGitleaksLike(value: unknown): value is { RuleID: unknown; Commit: unknown; Match: unknown } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record["RuleID"] === "string" && typeof record["Commit"] === "string" && typeof record["Match"] === "string";
+}
+
+function detectFormat(data: unknown): { format: ParsedFormat; count: number | null } {
   if (typeof data !== "object" || data === null) {
     return { format: "unknown", count: null };
   }
@@ -33,6 +51,14 @@ function detectFormat(data: unknown): { format: "sarif" | "generic" | "unknown";
     return { format: "sarif", count };
   }
 
+  if (Array.isArray(data) && data.length > 0 && isTrufflehogLike(data[0])) {
+    return { format: "trufflehog", count: data.length };
+  }
+
+  if (Array.isArray(data) && data.length > 0 && isGitleaksLike(data[0])) {
+    return { format: "gitleaks", count: data.length };
+  }
+
   // Generic: array of findings or { findings: [...] }
   if (Array.isArray(data)) {
     return { format: "generic", count: data.length };
@@ -44,19 +70,41 @@ function detectFormat(data: unknown): { format: "sarif" | "generic" | "unknown";
   return { format: "unknown", count: null };
 }
 
-async function parseFile(file: File): Promise<ParsedFile> {
+function parseTrufflehogNDJSON(text: string): unknown[] | null {
+  const trimmed = text.trim();
+  if (trimmed === "") {
+    return null;
+  }
+
+  const normalized = `[${trimmed.replace(/}\s*{/g, "},{")}]`;
   try {
-    const text = await file.text();
+    const parsed = JSON.parse(normalized) as unknown;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function parseFile(file: File): Promise<ParsedFile> {
+  const text = await file.text();
+
+  try {
     const data = JSON.parse(text) as unknown;
     const { format, count } = detectFormat(data);
     return { file, format, findingsCount: count, error: null };
   } catch {
+    const ndjsonData = parseTrufflehogNDJSON(text);
+    if (ndjsonData !== null && ndjsonData.length > 0 && isTrufflehogLike(ndjsonData[0])) {
+      return { file, format: "trufflehog", findingsCount: ndjsonData.length, error: null };
+    }
     return { file, format: "unknown", findingsCount: null, error: "Invalid JSON" };
   }
 }
 
-const formatLabels: Record<string, { label: string; className: string }> = {
+const formatLabels: Record<ParsedFormat, { label: string; className: string }> = {
   sarif: { label: "SARIF", className: "border-blue-700/50 bg-blue-950/50 text-blue-400" },
+  gitleaks: { label: "Gitleaks", className: "border-orange-700/50 bg-orange-950/50 text-orange-400" },
+  trufflehog: { label: "TruffleHog", className: "border-amber-700/50 bg-amber-950/50 text-amber-400" },
   generic: { label: "Generic JSON", className: "border-red-800/50 bg-red-950/50 text-red-500" },
   unknown: { label: "Unknown", className: "border-zinc-600 bg-zinc-800/60 text-zinc-400" },
 };

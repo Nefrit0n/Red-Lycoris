@@ -77,6 +77,7 @@ RedLycoris/
 │   │       ├── parser.go           # Интерфейс парсера
 │   │       ├── sarif.go            # SARIF 2.1.0
 │   │       ├── trivy.go            # Trivy JSON
+│   │       ├── trufflehog.go      # TruffleHog v3 JSON (NDJSON + array)
 │   │       ├── generic.go          # Наш универсальный JSON
 │   │       └── detect.go           # Автоопределение формата
 │   └── migrations/

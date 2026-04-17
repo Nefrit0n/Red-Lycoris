@@ -95,7 +95,7 @@ paths:
         content:
           application/json:
             schema:
-              description: Поддерживается SARIF/Trivy/Generic JSON, определяется автоматически.
+              description: Поддерживается SARIF/Trivy/Semgrep/Gitleaks/Checkov/TruffleHog/Generic JSON (формат определяется автоматически).
               oneOf:
                 - type: object
                 - type: array
@@ -452,7 +452,7 @@ paths:
         content:
           application/json:
             schema:
-              description: Поддерживается SARIF/Trivy/Generic JSON, определяется автоматически.
+              description: Поддерживается SARIF/Trivy/Semgrep/Gitleaks/Checkov/TruffleHog/Generic JSON (формат определяется автоматически).
               oneOf:
                 - type: object
                 - type: array

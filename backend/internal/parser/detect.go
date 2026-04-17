@@ -14,6 +14,7 @@ var parsers = []struct {
 	{"sarif", &SARIFParser{}},
 	{"trivy", &TrivyParser{}},
 	{"semgrep", &SemgrepParser{}},
+	{"trufflehog", &TruffleHogParser{}},
 	{"gitleaks", &GitleaksParser{}},
 	{"checkov", &CheckovParser{}},
 	{"generic", &GenericParser{}},
