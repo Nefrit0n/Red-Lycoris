@@ -1,5 +1,5 @@
-import { memo, useEffect, useMemo, useRef } from "react";
-import type { MutableRefObject } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, MutableRefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2, SearchX } from "lucide-react";
 
@@ -11,6 +11,7 @@ import type { FindingsFilter } from "@/lib/findings-filter";
 import type { Finding, FindingKind } from "@/types";
 import { cn } from "@/lib/utils";
 import type { ColumnKey } from "@/components/findings/findingsTableConfig";
+import { COLUMN_WIDTH_PX } from "@/components/findings/findingsTableConfig";
 
 interface FlatFindingsTableProps {
   filter: FindingsFilter;
@@ -28,6 +29,49 @@ interface FlatFindingsTableProps {
   onVisibleIdsChange?: (ids: string[]) => void;
 }
 
+interface StickyMeta {
+  sticky: boolean;
+  className?: string;
+  style?: CSSProperties;
+}
+
+function columnStickyMeta(columnId: string, isHeader = false, hasScrollRight = false): StickyMeta {
+  if (columnId === "checkbox") {
+    return {
+      sticky: true,
+      className: cn(
+        "sticky left-[var(--sticky-left-0)]",
+        isHeader ? "z-[3] bg-zinc-950/95" : "z-[2] bg-zinc-950",
+      ),
+    };
+  }
+
+  if (columnId === "type") {
+    return {
+      sticky: true,
+      className: cn(
+        "sticky left-[var(--sticky-left-1)]",
+        isHeader ? "z-[2] bg-zinc-950/95" : "z-[2] bg-zinc-950",
+      ),
+    };
+  }
+
+  if (columnId === "name") {
+    return {
+      sticky: true,
+      className: cn(
+        "sticky left-[var(--sticky-left-2)]",
+        isHeader ? "z-[2] bg-zinc-950/95" : "z-[2] bg-zinc-950",
+      ),
+      style: hasScrollRight
+        ? { boxShadow: "4px 0 6px -2px rgba(0,0,0,0.3)" }
+        : undefined,
+    };
+  }
+
+  return { sticky: false };
+}
+
 const Row = memo(function Row({
   finding,
   columns,
@@ -35,6 +79,8 @@ const Row = memo(function Row({
   isSelected,
   top,
   height,
+  rowWidth,
+  hasScrollRight,
   onRowClick,
   onPickProject,
   onToggleSelect,
@@ -48,6 +94,8 @@ const Row = memo(function Row({
   isSelected: boolean;
   top: number;
   height: number;
+  rowWidth: number;
+  hasScrollRight: boolean;
   onRowClick: (id: string, triggerEl?: HTMLElement | null) => void;
   onPickProject?: (id: string) => void;
   onToggleSelect?: (id: string) => void;
@@ -71,21 +119,25 @@ const Row = memo(function Row({
       role="row"
       tabIndex={0}
       className={cn(
-        "absolute inset-x-0 flex cursor-pointer items-center gap-3 border-t border-[color:var(--row-border)] pl-3 pr-4 transition-colors hover:bg-zinc-800/45",
-        "border-l-[3px]",
+        "group absolute left-0 flex cursor-pointer items-center border-t border-[color:var(--row-border)] border-l-[3px] transition-colors hover:bg-zinc-800/45",
         sev.borderClass,
         isActive && "bg-red-950/20",
         isSelected && "bg-red-950/12",
       )}
       style={{
+        width: rowWidth,
         height,
+        maxHeight: height,
         transform: `translateY(${top}px)`,
       }}
       onClick={(e) => onRowClick(finding.id, e.currentTarget)}
     >
       {onToggleSelect && (
         <div
-          className="flex w-[40px] shrink-0 items-center"
+          className={cn(
+            "flex h-full w-[40px] shrink-0 items-center overflow-hidden border-r border-transparent px-3 group-hover:border-zinc-800/60",
+            columnStickyMeta("checkbox", false, hasScrollRight).className,
+          )}
           onClick={(e) => {
             e.stopPropagation();
             const index = findings.findIndex((f) => f.id === finding.id);
@@ -112,17 +164,26 @@ const Row = memo(function Row({
 
       {columns.map((col) => {
         const Cell = col.Cell;
+        const sticky = columnStickyMeta(col.id, false, hasScrollRight);
         return (
           <div
             role="gridcell"
             key={col.id}
             className={cn(
-              "flex min-w-0 items-center py-2.5",
-              col.widthClass,
+              "flex h-full items-center overflow-hidden border-r border-transparent px-3 group-hover:border-zinc-800/60",
               col.align === "right" && "justify-end",
+              sticky.className,
             )}
+            style={{
+              width: col.widthPx,
+              minWidth: col.widthPx,
+              maxWidth: col.widthPx,
+              ...sticky.style,
+            }}
           >
-            <Cell finding={finding} onPickProject={onPickProject} />
+            <div className="w-full overflow-hidden text-ellipsis whitespace-nowrap">
+              <Cell finding={finding} onPickProject={onPickProject} />
+            </div>
           </div>
         );
       })}
@@ -145,8 +206,12 @@ export function FlatFindingsTable({
   hasActiveFilters,
   onVisibleIdsChange,
 }: FlatFindingsTableProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const hideBarTimeoutRef = useRef<number | null>(null);
   const lastSelectedIndexRef = useRef<number | null>(null);
+
+  const [scrollState, setScrollState] = useState({ left: 0, max: 0, client: 0 });
+  const [showHorizontalIndicator, setShowHorizontalIndicator] = useState(false);
 
   const {
     data,
@@ -179,9 +244,14 @@ export function FlatFindingsTable({
   const tab = activeKind ?? "all";
   const columns = useMemo(() => getColumnsForKeys(tab, columnKeys), [columnKeys, tab]);
 
+  const rowWidth = useMemo(
+    () => (onToggleSelect ? COLUMN_WIDTH_PX.checkbox : 0) + columns.reduce((sum, col) => sum + col.widthPx, 0),
+    [columns, onToggleSelect],
+  );
+
   const virtualizer = useVirtualizer({
     count: findings.length,
-    getScrollElement: () => parentRef.current,
+    getScrollElement: () => scrollRef.current,
     estimateSize: () => rowHeight,
     overscan: 12,
   });
@@ -194,6 +264,46 @@ export function FlatFindingsTable({
       void fetchNextPage();
     }
   }, [virtualItems, findings.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const syncScrollState = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setScrollState({
+      left: el.scrollLeft,
+      max: Math.max(0, el.scrollWidth - el.clientWidth),
+      client: el.clientWidth,
+    });
+  };
+
+  useEffect(() => {
+    syncScrollState();
+  }, [rowWidth, findings.length]);
+
+  const showIndicatorTemporarily = () => {
+    setShowHorizontalIndicator(true);
+    if (hideBarTimeoutRef.current) {
+      window.clearTimeout(hideBarTimeoutRef.current);
+    }
+    hideBarTimeoutRef.current = window.setTimeout(() => {
+      setShowHorizontalIndicator(false);
+    }, 1000);
+  };
+
+  useEffect(() => () => {
+    if (hideBarTimeoutRef.current) {
+      window.clearTimeout(hideBarTimeoutRef.current);
+    }
+  }, []);
+
+  const hasScrollRight = scrollState.left < scrollState.max - 1;
+  const hasScrollLeft = scrollState.left > 0;
+
+  const thumbWidth = scrollState.max > 0
+    ? Math.max(28, (scrollState.client / (scrollState.client + scrollState.max)) * scrollState.client)
+    : scrollState.client;
+  const thumbLeft = scrollState.max > 0
+    ? (scrollState.left / scrollState.max) * (scrollState.client - thumbWidth)
+    : 0;
 
   if (isError) {
     return (
@@ -232,58 +342,119 @@ export function FlatFindingsTable({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col [--row-border:rgba(255,255,255,0.05)]" role="grid" aria-rowcount={findings.length}>
-      <div role="row" className="flex items-center border-b border-zinc-800 bg-zinc-950/60 px-0 pl-0 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-        {onToggleSelect && <div className="w-[40px] shrink-0" />}
-        {columns.map((col) => (
-          <div
-            role="columnheader"
-            key={col.id}
-            className={cn(col.widthClass, "py-2", col.align === "right" && "text-right")}
-          >
-            {col.header}
-          </div>
-        ))}
-      </div>
-
-      <div ref={parentRef} className="themed-scrollbar min-h-0 min-w-0 flex-1 overflow-auto">
-        <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-          {virtualItems.map((virtualRow) => {
-            const finding = findings[virtualRow.index];
-            if (!finding) return null;
-            return (
-              <Row
-                key={finding.id}
-                finding={finding}
-                findings={findings}
-                columns={columns}
-                isActive={finding.id === activeRowId}
-                isSelected={selectedIds?.has(finding.id) ?? false}
-                top={virtualRow.start}
-                height={rowHeight}
-                onRowClick={onRowClick}
-                onPickProject={onPickProject}
-                onToggleSelect={onToggleSelect}
-                onSelectRange={onSelectRange}
-                lastSelectedIndexRef={lastSelectedIndexRef}
+    <div
+      className="relative flex min-h-0 flex-1 flex-col [--row-border:rgba(255,255,255,0.05)]"
+      role="grid"
+      aria-rowcount={findings.length}
+      style={{
+        ["--sticky-left-0" as string]: "0px",
+        ["--sticky-left-1" as string]: `${COLUMN_WIDTH_PX.checkbox}px`,
+        ["--sticky-left-2" as string]: `${COLUMN_WIDTH_PX.checkbox + COLUMN_WIDTH_PX.type}px`,
+      }}
+    >
+      <div
+        ref={scrollRef}
+        className="themed-scrollbar min-h-0 min-w-0 flex-1 overflow-auto"
+        onScroll={() => {
+          syncScrollState();
+          showIndicatorTemporarily();
+        }}
+        onMouseEnter={showIndicatorTemporarily}
+        onMouseMove={showIndicatorTemporarily}
+      >
+        <div style={{ width: rowWidth, minWidth: rowWidth }}>
+          <div role="row" className="sticky top-0 z-[2] flex h-11 items-center border-b border-zinc-800 bg-zinc-950/95 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 backdrop-blur">
+            {onToggleSelect && (
+              <div
+                role="columnheader"
+                className={cn(
+                  "flex h-full w-[40px] shrink-0 items-center border-r border-zinc-800/80 px-3",
+                  columnStickyMeta("checkbox", true, hasScrollRight).className,
+                )}
               />
-            );
-          })}
-        </div>
-
-        {hasNextPage && (
-          <div className="flex items-center justify-center py-3 text-xs text-zinc-500">
-            {isFetchingNextPage ? (
-              <span className="flex items-center gap-1.5">
-                <Loader2 className="size-3.5 animate-spin" />
-                Загрузка ещё…
-              </span>
-            ) : (
-              <span>Прокрутите, чтобы загрузить ещё</span>
             )}
+            {columns.map((col) => {
+              const sticky = columnStickyMeta(col.id, true, hasScrollRight);
+              return (
+                <div
+                  role="columnheader"
+                  key={col.id}
+                  className={cn(
+                    "flex h-full items-center border-r border-zinc-800/80 px-3",
+                    col.align === "right" && "justify-end text-right",
+                    sticky.className,
+                  )}
+                  style={{
+                    width: col.widthPx,
+                    minWidth: col.widthPx,
+                    maxWidth: col.widthPx,
+                    ...sticky.style,
+                  }}
+                >
+                  {col.header}
+                </div>
+              );
+            })}
           </div>
-        )}
+
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+            {virtualItems.map((virtualRow) => {
+              const finding = findings[virtualRow.index];
+              if (!finding) return null;
+              return (
+                <Row
+                  key={finding.id}
+                  finding={finding}
+                  findings={findings}
+                  columns={columns}
+                  rowWidth={rowWidth}
+                  hasScrollRight={hasScrollRight}
+                  isActive={finding.id === activeRowId}
+                  isSelected={selectedIds?.has(finding.id) ?? false}
+                  top={virtualRow.start}
+                  height={rowHeight}
+                  onRowClick={onRowClick}
+                  onPickProject={onPickProject}
+                  onToggleSelect={onToggleSelect}
+                  onSelectRange={onSelectRange}
+                  lastSelectedIndexRef={lastSelectedIndexRef}
+                />
+              );
+            })}
+          </div>
+
+          {hasNextPage && (
+            <div className="flex items-center justify-center py-3 text-xs text-zinc-500">
+              {isFetchingNextPage ? (
+                <span className="flex items-center gap-1.5">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Загрузка ещё…
+                </span>
+              ) : (
+                <span>Прокрутите, чтобы загрузить ещё</span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {hasScrollRight && (
+        <div className="pointer-events-none absolute right-0 top-11 bottom-0 w-5 bg-gradient-to-l from-zinc-950/85 to-transparent" />
+      )}
+
+      {scrollState.max > 0 && (
+        <div
+          className={cn(
+            "pointer-events-none absolute right-3 bottom-1 left-3 h-1.5 rounded bg-zinc-800/70 transition-opacity duration-200",
+            showHorizontalIndicator || hasScrollLeft ? "opacity-100" : "opacity-0",
+          )}
+        >
+          <div
+            className="h-full rounded bg-zinc-500/80"
+            style={{ width: `${thumbWidth}px`, transform: `translateX(${thumbLeft}px)` }}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -32,25 +32,49 @@ export const REQUIRED_COLUMNS: ColumnKey[] = ["checkbox", "type", "name"];
 export const COLUMN_WIDTH: Record<ColumnKey, string> = {
   checkbox: "w-[40px] shrink-0",
   type: "w-[32px] shrink-0",
-  name: "min-w-[320px] flex-[1_1_auto]",
+  name: "w-[360px] shrink-0",
   component: "w-[240px] shrink-0",
   file: "w-[240px] shrink-0",
   rule: "w-[200px] shrink-0",
   secret_kind: "w-[120px] shrink-0",
-  fix: "w-[120px] shrink-0",
+  fix: "w-[160px] shrink-0",
   enrichment: "w-[320px] shrink-0",
-  cve: "w-[160px] shrink-0",
-  cwe: "w-[120px] shrink-0",
-  bdu: "w-[90px] shrink-0",
-  kev: "w-[90px] shrink-0",
-  cvss: "w-[80px] shrink-0",
+  cve: "w-[180px] shrink-0",
+  cwe: "w-[130px] shrink-0",
+  bdu: "w-[100px] shrink-0",
+  kev: "w-[100px] shrink-0",
+  cvss: "w-[90px] shrink-0",
   epss: "w-[100px] shrink-0",
-  severity: "w-[110px] shrink-0",
-  project: "w-[100px] shrink-0",
-  detected: "w-[80px] shrink-0",
-  status: "w-[120px] shrink-0",
-  first_seen: "w-[120px] shrink-0",
-  last_seen: "w-[120px] shrink-0",
+  severity: "w-[120px] shrink-0",
+  project: "w-[140px] shrink-0",
+  detected: "w-[100px] shrink-0",
+  status: "w-[130px] shrink-0",
+  first_seen: "w-[140px] shrink-0",
+  last_seen: "w-[140px] shrink-0",
+};
+
+export const COLUMN_WIDTH_PX: Record<ColumnKey, number> = {
+  checkbox: 40,
+  type: 32,
+  name: 360,
+  component: 240,
+  file: 240,
+  rule: 200,
+  secret_kind: 120,
+  fix: 160,
+  enrichment: 320,
+  cve: 180,
+  cwe: 130,
+  bdu: 100,
+  kev: 100,
+  cvss: 90,
+  epss: 100,
+  severity: 120,
+  project: 140,
+  detected: 100,
+  status: 130,
+  first_seen: 140,
+  last_seen: 140,
 };
 
 export const COLUMN_LABEL: Record<ColumnKey, string> = {
@@ -143,8 +167,8 @@ const PRESETS: Record<FindingsTabKey, Record<Exclude<FindingsPreset, "custom">, 
 };
 
 export function rowHeightForPreset(preset: FindingsPreset): number {
-  if (preset === "triage") return 40;
-  if (preset === "full") return 48;
+  if (preset === "triage") return 44;
+  if (preset === "engineering") return 48;
   return 44;
 }
 
