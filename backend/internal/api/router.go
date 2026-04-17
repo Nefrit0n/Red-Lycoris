@@ -223,6 +223,12 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Post("/users/{id}/reset-password", handleResetUserPassword(usersRepo, sessionsRepo))
 			r.Get("/users/{id}/roles", handleGetUserRoles(userProjectRolesRepo))
 			r.Get("/audit", handleListAuditLog(auditLogRepo))
+			r.Get("/audit/stats", handleAuditStats(auditLogRepo))
+			r.Get("/audit/stream", handleAuditStream(auditLogRepo))
+			r.Get("/audit/export", handleAuditExport(auditLogRepo))
+			r.Get("/audit/{id}", handleGetAuditEvent(auditLogRepo))
+			r.Get("/audit/{id}/diff", handleGetAuditDiff(auditLogRepo))
+			r.Get("/audit/{id}/related", handleGetRelatedAuditEvents(auditLogRepo))
 		})
 	})
 

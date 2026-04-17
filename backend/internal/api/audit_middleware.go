@@ -38,21 +38,33 @@ func AuditMiddleware(writer *audit.Writer) func(http.Handler) http.Handler {
 			sw := &statusCaptureWriter{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(sw, r)
 
+			riskLevel, riskSignals := deriveAuditRisk(r.Method, sw.status)
+			uaParsed := parseUserAgent(r.UserAgent())
+
 			rec := storage.AuditRecord{
-				ID:         mustUUIDv7(),
-				RequestID:  GetRequestID(r.Context()),
-				Method:     r.Method,
-				Path:       r.URL.Path,
-				StatusCode: sw.status,
-				UserAgent:  r.UserAgent(),
-				DurationMs: int(time.Since(start).Milliseconds()),
-				CreatedAt:  time.Now().UTC(),
+				ID:          mustUUIDv7(),
+				RequestID:   GetRequestID(r.Context()),
+				TraceID:     strings.TrimSpace(r.Header.Get("X-Trace-Id")),
+				Method:      r.Method,
+				Path:        r.URL.Path,
+				FullPath:    r.URL.RequestURI(),
+				StatusCode:  sw.status,
+				UserAgent:   r.UserAgent(),
+				UAParsed:    uaParsed,
+				DurationMs:  int(time.Since(start).Milliseconds()),
+				CreatedAt:   time.Now().UTC(),
+				RiskLevel:   riskLevel,
+				RiskSignals: riskSignals,
 			}
 			if ip := extractIP(r); strings.TrimSpace(ip) != "" {
-				rec.IP = &ip
+				masked := maskIP(ip)
+				rec.IP = &masked
 			}
 			if user, ok := UserFromContext(r.Context()); ok {
 				rec.UserID = &user.ID
+			}
+			if session, ok := SessionFromContext(r.Context()); ok {
+				rec.SessionID = session.ID.String()
 			}
 
 			if rctx := chi.RouteContext(r.Context()); rctx != nil {
@@ -146,4 +158,66 @@ func ptrOrNil(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func deriveAuditRisk(method string, status int) (string, []string) {
+	signals := make([]string, 0, 2)
+	level := "low"
+
+	if method == http.MethodDelete {
+		level = "high"
+		signals = append(signals, "delete_action")
+	}
+	if status >= 400 && status < 500 {
+		if level == "low" {
+			level = "medium"
+		}
+		signals = append(signals, "client_error")
+	}
+	if status >= 500 {
+		level = "critical"
+		signals = append(signals, "server_error")
+	}
+
+	return level, signals
+}
+
+func parseUserAgent(raw string) *storage.AuditUAParsed {
+	ua := strings.ToLower(raw)
+	parsed := &storage.AuditUAParsed{Browser: "Unknown", OS: "Unknown"}
+
+	switch {
+	case strings.Contains(ua, "edg"):
+		parsed.Browser = "Edge"
+	case strings.Contains(ua, "firefox"):
+		parsed.Browser = "Firefox"
+	case strings.Contains(ua, "chrome"):
+		parsed.Browser = "Chrome"
+	case strings.Contains(ua, "safari"):
+		parsed.Browser = "Safari"
+	}
+
+	switch {
+	case strings.Contains(ua, "windows"):
+		parsed.OS = "Windows"
+	case strings.Contains(ua, "mac os") || strings.Contains(ua, "macintosh"):
+		parsed.OS = "macOS"
+	case strings.Contains(ua, "android"):
+		parsed.OS = "Android"
+	case strings.Contains(ua, "iphone") || strings.Contains(ua, "ipad"):
+		parsed.OS = "iOS"
+	case strings.Contains(ua, "linux"):
+		parsed.OS = "Linux"
+	}
+
+	return parsed
+}
+
+func maskIP(ip string) string {
+	parts := strings.Split(ip, ".")
+	if len(parts) == 4 {
+		parts[3] = "x"
+		return strings.Join(parts, ".")
+	}
+	return ip
 }
