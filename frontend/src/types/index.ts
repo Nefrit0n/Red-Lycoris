@@ -142,9 +142,45 @@ export interface SavedView {
 
 export interface Project {
   id: string;
+  slug: string;
   name: string;
   description?: string;
+  icon_color: string;
+  repo_url?: string;
+  repo_provider?: "github" | "gitlab" | "bitbucket" | "other";
   tags: string[];
+  status: "active" | "paused" | "archived";
+  setup_completed: boolean;
+  owner: {
+    id: string;
+    email: string;
+    display_name: string;
+  };
+  team?: {
+    id: string;
+    name: string;
+  };
+  pinned: boolean;
+  findings_by_severity: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+  };
+  sla_breached_count: number;
+  scanners: {
+    sast: "ok" | "missing" | "off";
+    dast: "ok" | "missing" | "off";
+    sca: "ok" | "missing" | "off";
+    secrets: "ok" | "missing" | "off";
+  };
+  last_scan?: {
+    started_at: string;
+    finished_at?: string;
+    status: "success" | "failed" | "running";
+  };
+  health: "healthy" | "warn" | "breach" | "setup" | "paused";
   created_at: string;
   updated_at: string;
 }

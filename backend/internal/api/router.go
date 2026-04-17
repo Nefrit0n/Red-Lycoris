@@ -177,8 +177,14 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Route("/{id}", func(r chi.Router) {
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
 					Get("/", handleGetProject(projectsRepo))
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
+					Get("/trend", handleGetProjectTrend(projectsRepo))
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
+					Get("/quick-peek", handleGetProjectQuickPeek(projectsRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Put("/", handleUpdateProject(projectsRepo))
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
+					Patch("/pinned", handlePatchProjectPinned(projectsRepo))
 				r.With(RequireGlobalAdmin).Delete("/", handleDeleteProject(projectsRepo))
 
 				r.Route("/members", func(r chi.Router) {
