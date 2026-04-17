@@ -82,15 +82,31 @@ function buildOverlayFilter(
   groupBy: Exclude<GroupBy, "">,
   groupKey: string,
 ): FindingsFilter {
-  const overlay: FindingsFilter = { ...base, groupBy: "" };
+  const overlay: FindingsFilter = {
+    ...base,
+    groupBy: "",
+    cve: "",
+    component: "",
+    componentVersion: "",
+    ruleId: "",
+    query: "",
+  };
   switch (groupBy) {
     case "cve":
       overlay.cve = groupKey;
       break;
-    case "component":
-    case "rule":
-      overlay.query = groupKey;
+    case "component": {
+      const at = groupKey.lastIndexOf("@");
+      overlay.component = at >= 0 ? groupKey.slice(0, at) : groupKey;
+      overlay.componentVersion = at >= 0 ? groupKey.slice(at + 1) : "";
       break;
+    }
+    case "rule": {
+      const sep = " — ";
+      const i = groupKey.indexOf(sep);
+      overlay.ruleId = i >= 0 ? groupKey.slice(0, i) : groupKey;
+      break;
+    }
   }
   return overlay;
 }

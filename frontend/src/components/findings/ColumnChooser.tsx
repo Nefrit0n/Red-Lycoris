@@ -72,12 +72,12 @@ export default function ColumnChooser({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
-      <DialogContent className="max-w-xl border-zinc-800 bg-zinc-900 text-zinc-100">
+      <DialogContent className="flex h-[min(86vh,760px)] w-[min(92vw,560px)] max-w-none flex-col border-zinc-800 bg-zinc-900 text-zinc-100">
         <DialogHeader>
           <DialogTitle>Настроить колонки</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-2">
+        <div className="space-y-2 overflow-y-auto pr-1">
           <div className="rounded border border-zinc-800 bg-zinc-950/50 p-2">
             <div className="mb-1.5 flex items-center justify-between text-xs text-zinc-400">
               <span>Ширина колонок</span>
@@ -135,7 +135,7 @@ export default function ColumnChooser({
           </div>
         )}
 
-        <div className="mt-2 flex items-center justify-end gap-2">
+        <div className="mt-2 flex items-center justify-end gap-2 border-t border-zinc-800 pt-3">
           <Button variant="ghost" onClick={onCancel}>Отмена</Button>
           <Button variant="outline" onClick={onResetPreset}>Сбросить к пресету</Button>
           <Button onClick={() => onApply(orderedColumns)}>
