@@ -141,7 +141,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: ${FRONTEND_TARGET:-development}
+      # By default run production nginx build. Vite dev server inside Docker
+      # may hang/never finish first response on some host setups (especially
+      # bind-mounted projects on Windows/WSL), which looks like endless
+      # browser loading with an empty Network tab.
+      target: ${FRONTEND_TARGET:-production}
     container_name: redlycoris-frontend
     restart: unless-stopped
     ports:
