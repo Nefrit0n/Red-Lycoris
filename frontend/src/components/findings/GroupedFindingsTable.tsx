@@ -16,15 +16,16 @@ import SeverityBadge from "@/components/findings/SeverityBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFindingsGroups, useFindingsList } from "@/api/findings";
 import { severityMeta } from "@/lib/severity";
-import { getColumnsForKind } from "@/components/findings/columns";
+import { getColumnsForKeys } from "@/components/findings/columns";
 import type { FindingsFilter, GroupBy } from "@/lib/findings-filter";
 import type { Finding, FindingKind } from "@/types";
 import { cn } from "@/lib/utils";
-import type { Density } from "@/components/findings/FindingsToolbar";
+import type { ColumnKey } from "@/components/findings/findingsTableConfig";
 
 interface GroupedFindingsTableProps {
   filter: FindingsFilter;
-  density: Density;
+  rowHeight: number;
+  columnKeys: ColumnKey[];
   onRowClick: (id: string, triggerEl?: HTMLElement | null) => void;
   onPickProject?: (id: string) => void;
   onCountChange?: (total: number, fetching: boolean) => void;
@@ -99,12 +100,14 @@ function buildOverlayFilter(
 // the flat table uses so column alignment matches visually.
 function GroupChildren({
   filter,
-  density,
+  rowHeight,
+  columnKeys,
   onRowClick,
   onPickProject,
 }: {
   filter: FindingsFilter;
-  density: Density;
+  rowHeight: number;
+  columnKeys: ColumnKey[];
   onRowClick: (id: string, triggerEl?: HTMLElement | null) => void;
   onPickProject?: (id: string) => void;
 }) {
@@ -117,7 +120,8 @@ function GroupChildren({
 
   const activeKind: FindingKind | null =
     filter.kinds.length === 1 ? filter.kinds[0] : null;
-  const columns = useMemo(() => getColumnsForKind(activeKind), [activeKind]);
+  const tab = activeKind ?? "all";
+  const columns = useMemo(() => getColumnsForKeys(tab, columnKeys), [columnKeys, tab]);
 
   if (isLoading) {
     return (
@@ -153,6 +157,7 @@ function GroupChildren({
         return (
           <div
             key={finding.id}
+            style={{ minHeight: rowHeight }}
             tabIndex={0}
             onClick={(e) => onRowClick(finding.id, e.currentTarget)}
             onKeyDown={(e) => {
@@ -162,11 +167,9 @@ function GroupChildren({
               }
             }}
             className={cn(
-              "flex cursor-pointer items-center gap-3 border-b border-zinc-900/60 border-l-[3px] pl-3 pr-4 transition-colors hover:bg-zinc-800/50",
+              "flex cursor-pointer items-center gap-3 border-t border-[color:var(--row-border)] border-l-[3px] pl-3 pr-4 transition-colors hover:bg-zinc-800/50",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600/70 focus-visible:outline-offset-[-2px]",
-              density === "compact" && "min-h-8 py-0.5",
-              density === "comfortable" && "min-h-11 py-1",
-              density === "spacious" && "min-h-14 py-2.5",
+              "py-2.5",
               sev.borderClass,
             )}
           >
@@ -178,13 +181,11 @@ function GroupChildren({
                   className={cn(
                     "flex min-w-0 items-center",
                     col.widthClass,
-                    col.responsiveClass,
                     col.align === "right" && "justify-end",
                   )}
                 >
                   <Cell
                     finding={finding}
-                    density={density}
                     onPickProject={onPickProject}
                   />
                 </div>
@@ -204,7 +205,8 @@ function GroupChildren({
 
 export function GroupedFindingsTable({
   filter,
-  density,
+  rowHeight,
+  columnKeys,
   onRowClick,
   onPickProject,
   onCountChange,
@@ -283,7 +285,7 @@ export function GroupedFindingsTable({
   }
 
   return (
-    <div className="themed-scrollbar min-h-0 min-w-0 flex-1 overflow-auto">
+    <div className="themed-scrollbar min-h-0 min-w-0 flex-1 overflow-auto [--row-border:rgba(255,255,255,0.05)]">
       <div className="divide-y divide-zinc-900">
         {groups.map((group) => {
           const sev = severityMeta(group.max_severity);
@@ -364,7 +366,6 @@ export function GroupedFindingsTable({
                   inKev={group.in_kev}
                   maxEpss={group.max_epss}
                   maxCvss={group.max_cvss}
-                  compact
                   className="hidden shrink-0 md:flex"
                 />
               </div>
@@ -377,7 +378,8 @@ export function GroupedFindingsTable({
                       effectiveGroupBy,
                       group.group_key,
                     )}
-                    density={density}
+                    rowHeight={rowHeight}
+                    columnKeys={columnKeys}
                     onRowClick={onRowClick}
                     onPickProject={onPickProject}
                   />

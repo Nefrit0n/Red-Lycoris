@@ -1,6 +1,5 @@
 import { Flame } from "lucide-react";
 
-import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface EnrichmentBadgesProps {
@@ -11,22 +10,27 @@ interface EnrichmentBadgesProps {
   fixedVersion?: string | null;
   cweIds?: number[];
   className?: string;
-  compact?: boolean;
-}
-
-function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
 }
 
 function cvssClass(score: number): string {
-  if (score >= 9) return "border-red-700/70 bg-red-950/70 text-red-200";
-  if (score >= 7) return "border-orange-700/70 bg-orange-950/60 text-orange-200";
-  if (score >= 4) return "border-yellow-700/70 bg-yellow-950/50 text-yellow-200";
-  return "border-zinc-700 bg-zinc-900 text-zinc-300";
+  if (score >= 9) return "border-red-600 bg-red-600 text-white";
+  if (score >= 7) return "border-orange-500 bg-orange-500 text-zinc-950";
+  if (score >= 4) return "border-yellow-500 bg-yellow-500 text-zinc-950";
+  return "border-zinc-600 bg-zinc-700 text-zinc-100";
 }
 
-function epssBarClass(value: number): string {
-  return value >= 0.1 ? "bg-amber-500/70" : "bg-zinc-500/60";
+function epssColor(value: number): string {
+  if (value > 0.1) return "bg-orange-500";
+  if (value >= 0.01) return "bg-yellow-500";
+  return "bg-zinc-500";
+}
+
+function epssLogWidth(value: number): number {
+  if (value <= 0) return 0;
+  const min = Math.log10(0.0001);
+  const max = Math.log10(1);
+  const normalized = (Math.log10(value) - min) / (max - min);
+  return Math.max(6, Math.min(60, Math.round(normalized * 60)));
 }
 
 export function EnrichmentBadges({
@@ -38,75 +42,60 @@ export function EnrichmentBadges({
   cweIds,
   className,
 }: EnrichmentBadgesProps) {
-  const hasAny =
-    inKev || inBdu || maxEpss != null || maxCvss != null || !!fixedVersion ||
-    (cweIds?.length ?? 0) > 0;
-
-  if (!hasAny) {
-    return <span className="text-xs text-zinc-600">—</span>;
-  }
-
-  const primarySignal = inKev ? (
-    <span className="inline-flex h-6 items-center gap-1 rounded-md border border-red-700/70 bg-red-950/70 px-2 text-[11px] font-semibold uppercase tracking-wide text-red-200">
-      <Flame className="size-3" />
-      KEV
-    </span>
-  ) : maxCvss != null ? (
-    <span className={cn("inline-flex h-6 items-center rounded-md border px-2 text-[11px] font-semibold", cvssClass(maxCvss))}>
-      CVSS {maxCvss.toFixed(1)}
-    </span>
-  ) : (
-    <span className="inline-flex h-6 items-center rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[11px] text-zinc-400">
-      CVSS —
-    </span>
-  );
-
-  const secondaryTags = [
-    inBdu ? "БДУ" : null,
-    fixedVersion ? "Fix" : null,
-    cweIds && cweIds.length > 0 ? `CWE-${cweIds[0]}` : null,
-  ].filter(Boolean) as string[];
-
-  const epssValue = maxEpss ?? 0;
+  const cwe = cweIds && cweIds.length > 0 ? `CWE-${cweIds[0]}` : null;
+  const showEpss = typeof maxEpss === "number" && maxEpss > 0;
+  const showPrimary = inKev || typeof maxCvss === "number";
 
   return (
-    <div className={cn("flex h-7 w-[280px] items-center gap-2", className)}>
-      <Tooltip
-        content={
-          inKev
-            ? "В каталоге известных эксплуатируемых уязвимостей CISA (KEV)"
-            : maxCvss != null
-              ? `CVSS base score: ${maxCvss.toFixed(1)} из 10`
-              : "CVSS не рассчитан"
-        }
-      >
-        <div className="shrink-0">{primarySignal}</div>
-      </Tooltip>
-
-      <Tooltip content={`EPSS: ${formatPercent(epssValue)}`}>
-        <div className="min-w-[86px] flex-1">
-          <div className="flex items-center justify-between text-[10px] text-zinc-400">
-            <span>EPSS</span>
-            <span className={cn(epssValue >= 0.1 && "text-amber-300")}>{formatPercent(epssValue)}</span>
-          </div>
-          <div className="mt-0.5 h-1 w-full overflow-hidden rounded bg-zinc-800">
+    <div className={cn("flex h-[20px] w-[320px] items-center gap-2", className)}>
+      {showPrimary && (
+        <div className="w-[90px] shrink-0">
+          {inKev ? (
+            <span className="inline-flex h-6 items-center gap-1 rounded-full border border-red-600 bg-red-600 px-2 text-[11px] font-semibold text-white">
+              <Flame className="size-3" />
+              KEV
+            </span>
+          ) : (
             <span
-              className={cn("block h-full rounded", epssBarClass(epssValue))}
-              style={{ width: `${Math.max(4, Math.min(100, epssValue * 100))}%` }}
-            />
-          </div>
+              className={cn(
+                "inline-flex h-6 items-center rounded-full border px-2 text-[11px] font-semibold",
+                cvssClass(maxCvss ?? 0),
+              )}
+            >
+              CVSS {(maxCvss ?? 0).toFixed(1)}
+            </span>
+          )}
         </div>
-      </Tooltip>
+      )}
 
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-        {secondaryTags.map((tag) => (
-          <span
-            key={tag}
-            className="inline-flex h-5 items-center rounded border border-zinc-700 px-1.5 text-[10px] text-zinc-400"
-          >
-            {tag}
+      {showEpss && (
+        <div className="flex w-[110px] shrink-0 items-center justify-between gap-1.5">
+          <span className="font-mono text-[11px] text-zinc-400">{(maxEpss! * 100).toFixed(1)}%</span>
+          <span className="h-1 w-[60px] overflow-hidden rounded bg-zinc-800">
+            <span
+              className={cn("block h-full rounded", epssColor(maxEpss!))}
+              style={{ width: `${epssLogWidth(maxEpss!)}px` }}
+            />
           </span>
-        ))}
+        </div>
+      )}
+
+      <div className="ml-auto flex min-w-0 items-center gap-1">
+        {inBdu && (
+          <span className="inline-flex h-5 items-center rounded border border-sky-500/70 px-1.5 text-[11px] text-sky-300">
+            БДУ
+          </span>
+        )}
+        {fixedVersion && (
+          <span className="inline-flex h-5 items-center rounded border border-emerald-500/70 px-1.5 text-[11px] text-emerald-300">
+            Fix {fixedVersion}
+          </span>
+        )}
+        {cwe && (
+          <span className="inline-flex h-5 items-center rounded border border-zinc-600 px-1.5 text-[11px] text-zinc-300">
+            {cwe}
+          </span>
+        )}
       </div>
     </div>
   );

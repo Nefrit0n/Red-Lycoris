@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useHotkey } from "@/hooks/use-hotkey";
@@ -6,13 +6,12 @@ import { useHotkey } from "@/hooks/use-hotkey";
 import FiltersPanel from "@/components/findings/FiltersPanel";
 import KindTabs from "@/components/findings/KindTabs";
 import SavedViewsBar from "@/components/findings/SavedViewsBar";
-import FindingsToolbar, {
-  type Density,
-} from "@/components/findings/FindingsToolbar";
+import FindingsToolbar from "@/components/findings/FindingsToolbar";
 import FlatFindingsTable from "@/components/findings/FlatFindingsTable";
 import GroupedFindingsTable from "@/components/findings/GroupedFindingsTable";
 import PreviewPanel from "@/components/findings/PreviewPanel";
 import BulkActionsBar from "@/components/findings/BulkActionsBar";
+import ColumnChooser from "@/components/findings/ColumnChooser";
 import { useFindingsFacets } from "@/api/findings";
 import {
   DEFAULT_FINDINGS_FILTER,
@@ -20,13 +19,22 @@ import {
   filterToSearchParams,
   type FindingsFilter,
 } from "@/lib/findings-filter";
-import { useLocalStorage } from "@/hooks/use-local-storage";
+import { readStorage, removeStorage, writeStorage } from "@/lib/local-storage";
 import { useFindingsSelection } from "@/store/findings-selection";
+import type { ColumnKey, FindingsPreset, FindingsTabKey } from "@/components/findings/findingsTableConfig";
+import { presetColumns, rowHeightForPreset, sanitizeColumns } from "@/components/findings/findingsTableConfig";
 
-// FindingsList is the page shell for the redesigned list — every piece of
-// user state lives either in the URL (filter/sort/group), the preview
-// selection, or localStorage (density). This keeps deep links shareable and
-// the browser back-button behaving.
+function activeTab(filter: FindingsFilter): FindingsTabKey {
+  return filter.kinds.length === 1 ? filter.kinds[0] : "all";
+}
+
+function presetStorageKey(tab: FindingsTabKey) {
+  return `findings.preset.${tab}`;
+}
+function columnsStorageKey(tab: FindingsTabKey) {
+  return `findings.columns.${tab}`;
+}
+
 export default function FindingsList() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -43,20 +51,65 @@ export default function FindingsList() {
     [filter, setSearchParams],
   );
 
-  const [density, setDensity] = useLocalStorage<Density>(
-    "findings.density",
-    "comfortable",
+  const tab = activeTab(filter);
+  const [preset, setPreset] = useState<FindingsPreset>("triage");
+  const [columnKeys, setColumnKeys] = useState<ColumnKey[]>(() => presetColumns(tab, "triage"));
+  const [columnChooserOpen, setColumnChooserOpen] = useState(false);
+
+  useEffect(() => {
+    removeStorage("findings.density");
+  }, []);
+
+  useEffect(() => {
+    const savedPreset = readStorage<FindingsPreset>(presetStorageKey(tab), "triage");
+    const safePreset: FindingsPreset = savedPreset === "custom" ? "custom" : savedPreset;
+    setPreset(safePreset);
+
+    if (safePreset === "custom") {
+      const savedColumns = readStorage<ColumnKey[]>(columnsStorageKey(tab), presetColumns(tab, "triage"));
+      setColumnKeys(sanitizeColumns(tab, savedColumns));
+      return;
+    }
+    setColumnKeys(presetColumns(tab, safePreset));
+  }, [tab]);
+
+  const applyPreset = useCallback(
+    (nextPreset: Exclude<FindingsPreset, "custom">) => {
+      setPreset(nextPreset);
+      writeStorage(presetStorageKey(tab), nextPreset);
+      setColumnKeys(presetColumns(tab, nextPreset));
+    },
+    [tab],
   );
+
+  const applyCustomColumns = useCallback(
+    (columns: ColumnKey[]) => {
+      const sanitized = sanitizeColumns(tab, columns);
+      setColumnKeys(sanitized);
+      setPreset("custom");
+      writeStorage(presetStorageKey(tab), "custom");
+      writeStorage(columnsStorageKey(tab), sanitized);
+      setColumnChooserOpen(false);
+    },
+    [tab],
+  );
+
+  const rowHeight = rowHeightForPreset(preset);
 
   const [previewId, setPreviewId] = useState<string | null>(null);
   const previewTriggerRef = useRef<HTMLElement | null>(null);
+  const [visibleIds, setVisibleIds] = useState<string[]>([]);
+
+  const previewIndex = useMemo(
+    () => (previewId ? visibleIds.indexOf(previewId) : -1),
+    [previewId, visibleIds],
+  );
+
   const selectedIds = useFindingsSelection((s) => s.selected);
   const toggleSelect = useFindingsSelection((s) => s.toggle);
   const addManyToSelection = useFindingsSelection((s) => s.addMany);
   const clearSelection = useFindingsSelection((s) => s.clear);
 
-  // Shared count/fetching state driven from the active table so the toolbar
-  // can show a "15 342 находок" chip without owning the query itself.
   const [listMeta, setListMeta] = useState<{ total: number; fetching: boolean }>(
     { total: 0, fetching: false },
   );
@@ -76,8 +129,6 @@ export default function FindingsList() {
     void refetchFacets();
   }, [refetchFacets]);
 
-  // Keep preview + filter in sync: if the user closes a preview we also
-  // drop any current bulk selection they might have started there.
   const closePreview = useCallback(() => {
     setPreviewId(null);
     previewTriggerRef.current?.focus();
@@ -88,9 +139,6 @@ export default function FindingsList() {
     setPreviewId(id);
   }, []);
 
-  // Hotkeys: "/" focuses search, "Esc" clears multi-selection. Preview close
-  // is handled in the drawer component itself so it works even when focus is
-  // trapped inside the dialog.
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useHotkey("/", (event) => {
@@ -130,6 +178,19 @@ export default function FindingsList() {
     filter.unassigned ||
     filter.assignees.length > 0;
 
+  const onNavigate = useCallback(
+    (direction: -1 | 1) => {
+      if (previewIndex < 0) return;
+      const nextIndex = previewIndex + direction;
+      if (nextIndex < 0 || nextIndex >= visibleIds.length) return;
+      const nextId = visibleIds[nextIndex];
+      if (!nextId) return;
+      setPreviewId(nextId);
+      window.history.replaceState(window.history.state, "", `/findings/${nextId}`);
+    },
+    [previewIndex, visibleIds],
+  );
+
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40">
       <FiltersPanel
@@ -147,9 +208,6 @@ export default function FindingsList() {
         <SavedViewsBar
           filter={filter}
           onChange={(update) => {
-            // SavedViewsBar hands us a complete FindingsFilter when applying
-            // a view — the spread with DEFAULT is a belt-and-braces guard for
-            // forward-compat fields the view payload might not carry yet.
             setSearchParams(
               filterToSearchParams({ ...DEFAULT_FINDINGS_FILTER, ...update }),
               { replace: true },
@@ -161,8 +219,9 @@ export default function FindingsList() {
           filter={filter}
           onChange={updateFilter}
           total={listMeta.total}
-          density={density}
-          onDensityChange={setDensity}
+          preset={preset}
+          onPresetChange={applyPreset}
+          onOpenColumnChooser={() => setColumnChooserOpen(true)}
           isFetching={listMeta.fetching}
           onRefresh={handleRefresh}
           selectedCount={selectedIds.size}
@@ -174,7 +233,8 @@ export default function FindingsList() {
             {isGrouped ? (
               <GroupedFindingsTable
                 filter={filter}
-                density={density}
+                rowHeight={rowHeight}
+                columnKeys={columnKeys}
                 onRowClick={openPreview}
                 onCountChange={handleCountChange}
                 hasActiveFilters={hasActiveFilters}
@@ -187,13 +247,15 @@ export default function FindingsList() {
             ) : (
               <FlatFindingsTable
                 filter={filter}
-                density={density}
+                rowHeight={rowHeight}
+                columnKeys={columnKeys}
                 onRowClick={openPreview}
                 activeRowId={previewId}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
                 onSelectRange={addManyToSelection}
                 onCountChange={handleCountChange}
+                onVisibleIdsChange={setVisibleIds}
                 hasActiveFilters={hasActiveFilters}
                 onResetFilters={() =>
                   setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
@@ -213,12 +275,33 @@ export default function FindingsList() {
           onPickProject={(projectId) =>
             updateFilter({ projectIds: [projectId] })
           }
+          currentIndex={previewIndex >= 0 ? previewIndex + 1 : null}
+          totalCount={visibleIds.length}
+          onPrev={() => onNavigate(-1)}
+          onNext={() => onNavigate(1)}
+          canPrev={previewIndex > 0}
+          canNext={previewIndex >= 0 && previewIndex < visibleIds.length - 1}
         />
       )}
       <BulkActionsBar
         selected={selectedIds}
         onClear={clearSelection}
         projectId={filter.projectIds[0]}
+      />
+
+      <ColumnChooser
+        tab={tab}
+        open={columnChooserOpen}
+        value={columnKeys}
+        onApply={applyCustomColumns}
+        onCancel={() => setColumnChooserOpen(false)}
+        onResetPreset={() => {
+          if (preset !== "custom") {
+            setColumnKeys(presetColumns(tab, preset));
+          } else {
+            setColumnKeys(presetColumns(tab, "triage"));
+          }
+        }}
       />
     </div>
   );

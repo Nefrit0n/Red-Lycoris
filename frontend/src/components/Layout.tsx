@@ -42,6 +42,9 @@ export default function Layout() {
   const { data: user } = useCurrentUser();
   const crumbs = breadcrumbFor(pathname);
   const isFindingsRoute = pathname === "/findings";
+  const mainContentClass = isFindingsRoute
+    ? "w-full min-h-0"
+    : "mx-auto w-full max-w-[1600px] px-6";
 
   return (
     <div className="flex h-screen min-w-0 overflow-hidden bg-zinc-950 text-zinc-100">
@@ -116,11 +119,13 @@ export default function Layout() {
 
         <main
           className={cn(
-            "flex min-h-0 min-w-0 flex-1 p-6",
-            isFindingsRoute ? "overflow-hidden" : "overflow-y-auto themed-scrollbar",
+            "flex min-h-0 min-w-0 flex-1 py-6",
+            isFindingsRoute ? "overflow-hidden px-6" : "overflow-y-auto themed-scrollbar",
           )}
         >
-          <Outlet />
+          <div className={mainContentClass}>
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
