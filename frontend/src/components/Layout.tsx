@@ -41,9 +41,10 @@ export default function Layout() {
   const { pathname } = useLocation();
   const { data: user } = useCurrentUser();
   const crumbs = breadcrumbFor(pathname);
+  const isFindingsRoute = pathname === "/findings";
 
   return (
-    <div className="flex min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="flex h-screen min-w-0 overflow-hidden bg-zinc-950 text-zinc-100">
       <Sidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed((c) => !c)}
@@ -52,7 +53,7 @@ export default function Layout() {
 
       <div
         className={cn(
-          "flex flex-1 flex-col transition-[margin] duration-200",
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-[margin] duration-200",
           collapsed ? "ml-16" : "ml-60",
         )}
       >
@@ -113,7 +114,12 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 p-6",
+            isFindingsRoute ? "overflow-hidden" : "overflow-y-auto themed-scrollbar",
+          )}
+        >
           <Outlet />
         </main>
       </div>

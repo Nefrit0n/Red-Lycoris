@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, formatDistanceToNow, isValid } from "date-fns";
 import { ru } from "date-fns/locale";
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import {
   ChevronDown,
+  Copy,
   ExternalLink,
   GitCommit,
   Loader2,
@@ -53,23 +57,6 @@ function formatRelative(value: string | null | undefined): string {
   return formatDistanceToNow(d, { addSuffix: true, locale: ru });
 }
 
-function MetaRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-1.5 text-sm">
-      <span className="shrink-0 text-zinc-500">{label}</span>
-      <span className="min-w-0 truncate text-right text-zinc-200">
-        {children}
-      </span>
-    </div>
-  );
-}
-
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
@@ -116,57 +103,114 @@ function PreviewHeader({
         maxEpss={finding.max_epss}
         maxCvss={finding.max_cvss}
         fixedVersion={finding.fixed_version}
+        cweIds={finding.cwe_ids}
       />
-
-      {finding.description && (
-        <div className="whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-300">
-          {finding.description}
-        </div>
-      )}
     </div>
   );
 }
 
-// CommonMetaBlock — the "always-show" timestamps + priority. Every preview
-// shows these below the kind-specific body so a user can anchor on recency
-// and relative importance regardless of finding kind.
-function CommonMetaBlock({ finding }: { finding: Finding }) {
+function copyValue(value: string) {
+  void navigator.clipboard?.writeText(value);
+}
+
+function KeyMetaBlock({ finding }: { finding: Finding }) {
+  const rows: Array<{
+    key: string;
+    value: string;
+    copyable?: boolean;
+  }> = [
+    { key: "Fixed version", value: finding.fixed_version || "—", copyable: !!finding.fixed_version },
+    { key: "Status", value: statusMeta(finding.status).label },
+    { key: "Class", value: finding.rule_name || "—" },
+    { key: "Type", value: finding.kind.toUpperCase() },
+    { key: "Artifact", value: finding.component || finding.file_path || "—", copyable: !!(finding.component || finding.file_path) },
+    { key: "CVE", value: finding.cve_ids.length ? finding.cve_ids.join(", ") : "—", copyable: finding.cve_ids.length > 0 },
+    { key: "CWE", value: finding.cwe_ids.length ? finding.cwe_ids.map((id) => `CWE-${id}`).join(", ") : "—", copyable: finding.cwe_ids.length > 0 },
+    { key: "CVSS", value: typeof finding.max_cvss === "number" ? finding.max_cvss.toFixed(1) : "—" },
+    { key: "EPSS", value: typeof finding.max_epss === "number" ? `${(finding.max_epss * 100).toFixed(1)}%` : "—" },
+  ];
+
   return (
-    <div className="divide-y divide-zinc-900 rounded-md border border-zinc-800 bg-zinc-900/30 px-3">
-      {finding.cve_ids.length > 0 && (
-        <MetaRow label="CVE">
-          <span className="font-mono text-xs">
-            {finding.cve_ids.join(", ")}
-          </span>
-        </MetaRow>
-      )}
-      {finding.cwe_ids.length > 0 && (
-        <MetaRow label="CWE">
-          <span className="font-mono text-xs">
-            {finding.cwe_ids.map((id) => `CWE-${id}`).join(", ")}
-          </span>
-        </MetaRow>
-      )}
-      <MetaRow label="Впервые">
-        <span title={formatAbsolute(finding.first_seen)}>
+    <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-3">
+      <SectionTitle>Ключевые метаданные</SectionTitle>
+      <div className="mt-2 grid grid-cols-[120px_1fr] gap-x-3 gap-y-2 text-sm">
+        {rows.map((row) => (
+          <div key={row.key} className="contents">
+            <div className="text-zinc-500">{row.key}</div>
+            <div className="flex min-w-0 items-start gap-1.5 text-zinc-200">
+              <span className="min-w-0 break-words font-mono text-xs">{row.value}</span>
+              {row.copyable && row.value !== "—" && (
+                <button
+                  type="button"
+                  aria-label={`Скопировать ${row.key}`}
+                  onClick={() => copyValue(row.value)}
+                  className="mt-0.5 shrink-0 text-zinc-500 hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600/70"
+                >
+                  <Copy className="size-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-[120px_1fr] gap-x-3 gap-y-2 text-sm">
+        <div className="text-zinc-500">Впервые</div>
+        <div className="text-zinc-300" title={formatAbsolute(finding.first_seen)}>
           {formatRelative(finding.first_seen)}
-        </span>
-      </MetaRow>
-      <MetaRow label="Последний раз">
-        <span title={formatAbsolute(finding.last_seen)}>
+        </div>
+        <div className="text-zinc-500">Последний раз</div>
+        <div className="text-zinc-300" title={formatAbsolute(finding.last_seen)}>
           {formatRelative(finding.last_seen)}
-        </span>
-      </MetaRow>
-      <MetaRow label="Замечено раз">
-        <span>{finding.times_seen}</span>
-      </MetaRow>
-      {typeof finding.priority_score === "number" && (
-        <MetaRow label="Приоритет">
-          <span className="tabular-nums">
-            {finding.priority_score.toFixed(1)}
-          </span>
-        </MetaRow>
-      )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DescriptionBlock({ finding }: { finding: Finding }) {
+  if (!finding.description) return null;
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-3">
+      <SectionTitle>Описание</SectionTitle>
+      <div className="prose prose-invert prose-sm mt-2 max-w-none leading-relaxed text-zinc-300">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+          {finding.description}
+        </ReactMarkdown>
+      </div>
+    </div>
+  );
+}
+
+function ExternalLinksBlock({ finding }: { finding: Finding }) {
+  const links: Array<{ label: string; href: string }> = [];
+  finding.cve_ids.forEach((cve) =>
+    links.push({ label: cve, href: `https://nvd.nist.gov/vuln/detail/${encodeURIComponent(cve)}` }),
+  );
+  if (finding.purl) {
+    links.push({ label: "Package URL", href: `https://osv.dev/list?ecosystem=&q=${encodeURIComponent(finding.purl)}` });
+  }
+  if (finding.rule_id) {
+    links.push({ label: `Rule ${finding.rule_id}`, href: `https://github.com/search?q=${encodeURIComponent(finding.rule_id)}` });
+  }
+
+  if (links.length === 0) return null;
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-3">
+      <SectionTitle>Внешние ссылки</SectionTitle>
+      <div className="mt-2 space-y-1.5">
+        {links.map((link) => (
+          <a
+            key={`${link.label}-${link.href}`}
+            href={link.href}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-sm text-zinc-300 hover:text-zinc-100"
+          >
+            <ExternalLink className="size-3.5 text-zinc-500" />
+            <span className="truncate">{link.label}</span>
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
@@ -413,7 +457,6 @@ export function PreviewPanel({
   const finding = data?.data.finding;
   const [statusError, setStatusError] = useState<string | null>(null);
 
-
   // Focus management: when opening, pull focus into the panel so keyboard
   // shortcuts land there and the ring stays visible. Using a ref + effect
   // rather than autofocus so the panel doesn't steal focus on re-renders.
@@ -421,6 +464,60 @@ export function PreviewPanel({
     if (!findingId) return;
     const node = document.getElementById("findings-preview-panel");
     node?.focus();
+  }, [findingId]);
+
+  useEffect(() => {
+    if (!findingId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [findingId, onClose]);
+
+  useEffect(() => {
+    if (!findingId) return;
+    const panel = document.getElementById("findings-preview-panel");
+    if (!panel) return;
+
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const nodes = Array.from(
+        panel.querySelectorAll<HTMLElement>(focusableSelector),
+      ).filter((node) => !node.hasAttribute("disabled"));
+      if (nodes.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    panel.addEventListener("keydown", onKeyDown);
+    return () => panel.removeEventListener("keydown", onKeyDown);
   }, [findingId]);
 
   if (!findingId) {
@@ -445,164 +542,203 @@ export function PreviewPanel({
   };
 
   return (
-    <aside
-      id="findings-preview-panel"
-      tabIndex={-1}
-      className={cn(
-        // Slide-in animation: translates from the right into place on mount.
-        // The data-[state] attribute reacts to the findingId prop so future
-        // exit animations can hook the same selector.
-        "flex w-[420px] shrink-0 flex-col border-l border-zinc-800 bg-zinc-950/60",
-        "outline-none animate-in slide-in-from-right-8 duration-200",
-      )}
-    >
-      <header className="flex items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-xs uppercase tracking-wider text-zinc-500">
-            Предпросмотр
+    <>
+      <button
+        type="button"
+        aria-label="Закрыть предпросмотр"
+        className="fixed inset-0 z-40 cursor-default bg-black/40 opacity-100 animate-in fade-in duration-150"
+        onClick={onClose}
+      />
+      <aside
+        id="findings-preview-panel"
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="findings-preview-title"
+        className={cn(
+          "fixed right-0 top-14 bottom-0 z-[60] flex w-[min(560px,40vw)] max-w-[90vw] flex-col border-l border-zinc-800 bg-zinc-950/95",
+          "outline-none animate-in slide-in-from-right-full duration-200 ease-out",
+        )}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/95 px-4 py-3 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div
+              id="findings-preview-title"
+              className="max-h-[4.5rem] overflow-hidden text-sm font-semibold leading-snug text-zinc-100"
+            >
+              {finding?.title ?? "Загрузка…"}
+            </div>
+            {finding && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <SeverityBadge severity={finding.severity} />
+                <KindBadge kind={finding.kind} />
+                <span
+                  className={cn(
+                    "inline-block rounded-md border px-2 py-0.5 text-xs",
+                    statusMeta(finding.status).badgeClass,
+                  )}
+                >
+                  {statusMeta(finding.status).label}
+                </span>
+                {finding.fixed_version && (
+                  <span className="rounded-md border border-emerald-700/50 px-2 py-0.5 text-xs text-emerald-300">
+                    Fix {finding.fixed_version}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-          <div className="truncate text-sm font-medium text-zinc-200">
-            {finding?.title ?? "Загрузка…"}
+
+          <div className="flex items-center gap-1">
+            {finding && (
+              <Button
+                render={
+                  <Link
+                    to={`/findings/${finding.id}`}
+                    aria-label="Открыть полностью"
+                    target="_blank"
+                    rel="noreferrer"
+                  />
+                }
+                variant="ghost"
+                size="icon-sm"
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <ExternalLink className="size-4" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={onClose}
+              className="text-zinc-400 hover:text-zinc-200"
+              aria-label="Закрыть предпросмотр"
+            >
+              <X className="size-4" />
+            </Button>
           </div>
+          </div>
+        </header>
+
+        <div className="themed-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          {isLoading && (
+            <div className="space-y-3">
+              <Skeleton className="h-8 w-full bg-zinc-800/40" />
+              <Skeleton className="h-4 w-2/3 bg-zinc-800/40" />
+              <Skeleton className="h-24 w-full bg-zinc-800/40" />
+              <Skeleton className="h-32 w-full bg-zinc-800/40" />
+            </div>
+          )}
+
+          {isError && (
+            <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3 text-sm text-red-300">
+              Не удалось загрузить находку:{" "}
+              {error instanceof Error ? error.message : "неизвестная ошибка"}
+            </div>
+          )}
+
+          {finding && (
+            <div className="space-y-4">
+              <span className="sr-only" role="status" aria-live="polite">
+                Открыто: детали уязвимости {finding.title}
+              </span>
+              <PreviewHeader finding={finding} onPickProject={onPickProject} />
+              <KeyMetaBlock finding={finding} />
+              <KindPreviewBody finding={finding} />
+              <DescriptionBlock finding={finding} />
+              <ExternalLinksBlock finding={finding} />
+            </div>
+          )}
+
+          {!finding && !isLoading && !isError && (
+            <div className="flex items-center justify-center py-10 text-sm text-zinc-500">
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Загрузка…
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-1">
-          {finding && (
+        {/* Bottom action bar — only shown when the finding payload is loaded.
+          Kept outside the scroll container so the actions stay reachable even
+          for long descriptions or code snippets. */}
+        {finding && (
+          <div className="sticky bottom-0 z-10 flex items-center gap-2 border-t border-zinc-800 bg-zinc-950/95 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
             <Button
               render={
                 <Link
                   to={`/findings/${finding.id}`}
-                  aria-label="Открыть полностью"
+                  aria-label="Открыть детали"
+                  target="_blank"
+                  rel="noreferrer"
                 />
               }
-              variant="ghost"
-              size="icon-sm"
-              className="text-zinc-400 hover:text-zinc-200"
+              variant="outline"
+              size="sm"
+              className="border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
             >
-              <ExternalLink className="size-4" />
+              Открыть детали
             </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-200"
-            aria-label="Закрыть предпросмотр"
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
-      </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {isLoading && (
-          <div className="space-y-3">
-            <Skeleton className="h-8 w-full bg-zinc-800/40" />
-            <Skeleton className="h-4 w-2/3 bg-zinc-800/40" />
-            <Skeleton className="h-24 w-full bg-zinc-800/40" />
-            <Skeleton className="h-32 w-full bg-zinc-800/40" />
-          </div>
-        )}
-
-        {isError && (
-          <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3 text-sm text-red-300">
-            Не удалось загрузить находку:{" "}
-            {error instanceof Error ? error.message : "неизвестная ошибка"}
-          </div>
-        )}
-
-        {finding && (
-          <div className="space-y-4">
-            <PreviewHeader finding={finding} onPickProject={onPickProject} />
-            <KindPreviewBody finding={finding} />
-            <CommonMetaBlock finding={finding} />
-          </div>
-        )}
-
-        {!finding && !isLoading && !isError && (
-          <div className="flex items-center justify-center py-10 text-sm text-zinc-500">
-            <Loader2 className="mr-2 size-4 animate-spin" />
-            Загрузка…
-          </div>
-        )}
-      </div>
-
-      {/* Bottom action bar — only shown when the finding payload is loaded.
-        Kept outside the scroll container so the actions stay reachable even
-        for long descriptions or code snippets. */}
-      {finding && (
-        <div className="flex items-center gap-2 border-t border-zinc-800 bg-zinc-950/80 px-4 py-3">
-          <Button
-            render={
-              <Link
-                to={`/findings/${finding.id}`}
-                aria-label="Открыть детали"
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={updateStatus.isPending}
+                    className="border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                  >
+                    {updateStatus.isPending ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : null}
+                    Сменить статус
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                }
               />
-            }
-            variant="outline"
-            size="sm"
-            className="border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-          >
-            Открыть детали
-          </Button>
+              <DropdownMenuContent
+                align="start"
+                className="border-zinc-700 bg-zinc-900"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <DropdownMenuItem
+                    key={opt.value}
+                    disabled={
+                      updateStatus.isPending || opt.value === finding.status
+                    }
+                    onClick={() => handleStatusChange(opt.value)}
+                    className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+                  >
+                    {opt.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={updateStatus.isPending}
-                  className="border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-                >
-                  {updateStatus.isPending ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : null}
-                  Сменить статус
-                  <ChevronDown className="size-3.5" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent
-              align="start"
-              className="border-zinc-700 bg-zinc-900"
+            {/* Assignment is intentionally disabled for now — the feature
+              shell is part of the redesign but the backend contract isn't
+              finalised yet. Kept visible so the affordance doesn't appear
+              only later and break muscle memory. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              className="ml-auto text-zinc-500"
             >
-              {STATUS_OPTIONS.map((opt) => (
-                <DropdownMenuItem
-                  key={opt.value}
-                  disabled={
-                    updateStatus.isPending || opt.value === finding.status
-                  }
-                  onClick={() => handleStatusChange(opt.value)}
-                  className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
-                >
-                  {opt.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Assignment is intentionally disabled for now — the feature
-            shell is part of the redesign but the backend contract isn't
-            finalised yet. Kept visible so the affordance doesn't appear
-            only later and break muscle memory. */}
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled
-            className="ml-auto text-zinc-500"
-          >
-            Назначить
-            <ChevronDown className="size-3.5" />
-          </Button>
-          {statusError ? (
-            <div className="ml-2 max-w-[220px] text-xs text-red-300">
-              {statusError}
-            </div>
-          ) : null}
-        </div>
-      )}
-    </aside>
+              Назначить
+              <ChevronDown className="size-3.5" />
+            </Button>
+            {statusError ? (
+              <div className="ml-2 max-w-[220px] text-xs text-red-300">
+                {statusError}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </aside>
+    </>
   );
 }
 

@@ -56,7 +56,14 @@ export function KindTabs({ filter, onChange, facets }: KindTabsProps) {
             label={meta.short}
             count={counts.get(kind)}
             onClick={() => selectKind(kind)}
-            icon={<Icon className={cn("size-3.5", meta.dotClass)} />}
+            icon={
+              <Icon
+                className={cn(
+                  "size-3.5 transition-colors",
+                  activeKind === kind ? meta.dotClass : "text-zinc-500",
+                )}
+              />
+            }
           />
         );
       })}
@@ -82,10 +89,10 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex items-center gap-1.5 px-3 py-2.5 text-sm transition-colors",
+        "relative flex items-center gap-1.5 rounded-t-md border-b border-transparent px-3 py-2.5 text-sm transition-colors",
         active
-          ? "text-zinc-100"
-          : "text-zinc-500 hover:text-zinc-300",
+          ? "border-b-2 border-red-500 font-semibold text-zinc-100"
+          : "text-zinc-500 hover:border-zinc-700 hover:bg-zinc-900/40 hover:text-zinc-300",
       )}
     >
       {icon}
@@ -95,15 +102,12 @@ function TabButton({
           className={cn(
             "tabular-nums rounded-full px-1.5 text-[10px] font-medium",
             active
-              ? "bg-red-950/60 text-red-300"
-              : "bg-zinc-800/60 text-zinc-500",
+              ? "bg-red-700/20 text-red-300"
+              : "border border-zinc-700 text-zinc-500",
           )}
         >
           {count.toLocaleString("ru-RU")}
         </span>
-      )}
-      {active && (
-        <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-red-500" />
       )}
     </button>
   );

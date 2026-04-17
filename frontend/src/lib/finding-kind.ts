@@ -1,10 +1,10 @@
 import {
   CircleAlert,
+  Cog,
   Code,
   Globe,
   Key,
   Package,
-  Server,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,8 +34,8 @@ export const FINDING_KIND_META: Record<FindingKind, FindingKindMeta> = {
     label: "Компоненты (SCA)",
     short: "SCA",
     icon: Package,
-    chipClass: "border-indigo-700/50 bg-indigo-950/40 text-indigo-300",
-    dotClass: "text-indigo-400",
+    chipClass: "border-teal-700/45 bg-teal-950/30 text-teal-300",
+    dotClass: "text-teal-400",
   },
   sast: {
     label: "Код (SAST)",
@@ -48,15 +48,15 @@ export const FINDING_KIND_META: Record<FindingKind, FindingKindMeta> = {
     label: "Веб (DAST)",
     short: "DAST",
     icon: Globe,
-    chipClass: "border-cyan-700/50 bg-cyan-950/40 text-cyan-300",
-    dotClass: "text-cyan-400",
+    chipClass: "border-blue-700/45 bg-blue-950/30 text-blue-300",
+    dotClass: "text-blue-400",
   },
   iac: {
     label: "Инфраструктура (IaC)",
     short: "IaC",
-    icon: Server,
-    chipClass: "border-teal-700/50 bg-teal-950/40 text-teal-300",
-    dotClass: "text-teal-400",
+    icon: Cog,
+    chipClass: "border-emerald-700/45 bg-emerald-950/30 text-emerald-300",
+    dotClass: "text-emerald-400",
   },
   secrets: {
     label: "Секреты",

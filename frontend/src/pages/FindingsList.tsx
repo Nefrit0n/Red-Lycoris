@@ -44,11 +44,12 @@ export default function FindingsList() {
   );
 
   const [density, setDensity] = useLocalStorage<Density>(
-    "rl_findings_density",
-    "compact",
+    "findings.density",
+    "comfortable",
   );
 
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const previewTriggerRef = useRef<HTMLElement | null>(null);
   const selectedIds = useFindingsSelection((s) => s.selected);
   const toggleSelect = useFindingsSelection((s) => s.toggle);
   const addManyToSelection = useFindingsSelection((s) => s.addMany);
@@ -77,11 +78,19 @@ export default function FindingsList() {
 
   // Keep preview + filter in sync: if the user closes a preview we also
   // drop any current bulk selection they might have started there.
-  const closePreview = useCallback(() => setPreviewId(null), []);
+  const closePreview = useCallback(() => {
+    setPreviewId(null);
+    previewTriggerRef.current?.focus();
+  }, []);
 
-  // Hotkeys: "/" focuses search, "Esc" closes the preview first and then
-  // (on second press) clears the selection. The input ref is populated by
-  // the FiltersPanel via onSearchRef.
+  const openPreview = useCallback((id: string, triggerEl?: HTMLElement | null) => {
+    previewTriggerRef.current = triggerEl ?? null;
+    setPreviewId(id);
+  }, []);
+
+  // Hotkeys: "/" focuses search, "Esc" clears multi-selection. Preview close
+  // is handled in the drawer component itself so it works even when focus is
+  // trapped inside the dialog.
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useHotkey("/", (event) => {
@@ -92,10 +101,6 @@ export default function FindingsList() {
   useHotkey(
     "Escape",
     () => {
-      if (previewId) {
-        closePreview();
-        return;
-      }
       if (selectedIds.size > 0) {
         clearSelection();
       }
@@ -104,9 +109,29 @@ export default function FindingsList() {
   );
 
   const isGrouped = filter.groupBy !== "";
+  const hasActiveFilters =
+    filter.severities.length > 0 ||
+    filter.statuses.length > 0 ||
+    filter.kinds.length > 0 ||
+    filter.projectIds.length > 0 ||
+    filter.sources.length > 0 ||
+    filter.ecosystems.length > 0 ||
+    filter.iacProviders.length > 0 ||
+    filter.secretKinds.length > 0 ||
+    filter.query.trim().length > 0 ||
+    filter.hasCVE ||
+    filter.hasFix ||
+    filter.inKEV ||
+    filter.inBDU ||
+    filter.epssMin !== null ||
+    filter.cvssMin !== null ||
+    filter.ageMaxDays !== null ||
+    filter.assigneeMe ||
+    filter.unassigned ||
+    filter.assignees.length > 0;
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] min-h-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40">
+    <div className="flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40">
       <FiltersPanel
         filter={filter}
         onChange={updateFilter}
@@ -116,7 +141,7 @@ export default function FindingsList() {
         }}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <KindTabs filter={filter} onChange={updateFilter} facets={facets} />
 
         <SavedViewsBar
@@ -144,39 +169,52 @@ export default function FindingsList() {
           onBulkStatusClick={() => undefined}
         />
 
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
             {isGrouped ? (
               <GroupedFindingsTable
                 filter={filter}
-                onRowClick={setPreviewId}
+                density={density}
+                onRowClick={openPreview}
                 onCountChange={handleCountChange}
+                hasActiveFilters={hasActiveFilters}
+                onResetFilters={() =>
+                  setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
+                    replace: true,
+                  })
+                }
               />
             ) : (
               <FlatFindingsTable
                 filter={filter}
                 density={density}
-                onRowClick={setPreviewId}
+                onRowClick={openPreview}
                 activeRowId={previewId}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
                 onSelectRange={addManyToSelection}
                 onCountChange={handleCountChange}
+                hasActiveFilters={hasActiveFilters}
+                onResetFilters={() =>
+                  setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
+                    replace: true,
+                  })
+                }
               />
             )}
           </div>
 
-          {previewId && (
-            <PreviewPanel
-              findingId={previewId}
-              onClose={closePreview}
-              onPickProject={(projectId) =>
-                updateFilter({ projectIds: [projectId] })
-              }
-            />
-          )}
         </div>
       </div>
+      {previewId && (
+        <PreviewPanel
+          findingId={previewId}
+          onClose={closePreview}
+          onPickProject={(projectId) =>
+            updateFilter({ projectIds: [projectId] })
+          }
+        />
+      )}
       <BulkActionsBar
         selected={selectedIds}
         onClear={clearSelection}

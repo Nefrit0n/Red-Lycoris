@@ -8,6 +8,7 @@ import {
   FileCode,
   Package,
   ShieldAlert,
+  SearchX,
 } from "lucide-react";
 
 import EnrichmentBadges from "@/components/findings/EnrichmentBadges";
@@ -19,12 +20,16 @@ import { getColumnsForKind } from "@/components/findings/columns";
 import type { FindingsFilter, GroupBy } from "@/lib/findings-filter";
 import type { Finding, FindingKind } from "@/types";
 import { cn } from "@/lib/utils";
+import type { Density } from "@/components/findings/FindingsToolbar";
 
 interface GroupedFindingsTableProps {
   filter: FindingsFilter;
-  onRowClick: (id: string) => void;
+  density: Density;
+  onRowClick: (id: string, triggerEl?: HTMLElement | null) => void;
   onPickProject?: (id: string) => void;
   onCountChange?: (total: number, fetching: boolean) => void;
+  onResetFilters?: () => void;
+  hasActiveFilters?: boolean;
 }
 
 // Group-mode metadata: what icon to render, how to label the group title,
@@ -94,11 +99,13 @@ function buildOverlayFilter(
 // the flat table uses so column alignment matches visually.
 function GroupChildren({
   filter,
+  density,
   onRowClick,
   onPickProject,
 }: {
   filter: FindingsFilter;
-  onRowClick: (id: string) => void;
+  density: Density;
+  onRowClick: (id: string, triggerEl?: HTMLElement | null) => void;
   onPickProject?: (id: string) => void;
 }) {
   const { data, isLoading, isError, error } = useFindingsList(filter);
@@ -146,9 +153,20 @@ function GroupChildren({
         return (
           <div
             key={finding.id}
-            onClick={() => onRowClick(finding.id)}
+            tabIndex={0}
+            onClick={(e) => onRowClick(finding.id, e.currentTarget)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onRowClick(finding.id, e.currentTarget);
+              }
+            }}
             className={cn(
-              "flex cursor-pointer items-center gap-3 border-b border-zinc-900/60 border-l-4 py-1.5 pl-3 pr-4 transition-colors hover:bg-zinc-900/60",
+              "flex cursor-pointer items-center gap-3 border-b border-zinc-900/60 border-l-[3px] pl-3 pr-4 transition-colors hover:bg-zinc-800/50",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600/70 focus-visible:outline-offset-[-2px]",
+              density === "compact" && "min-h-8 py-0.5",
+              density === "comfortable" && "min-h-11 py-1",
+              density === "spacious" && "min-h-14 py-2.5",
               sev.borderClass,
             )}
           >
@@ -164,7 +182,11 @@ function GroupChildren({
                     col.align === "right" && "justify-end",
                   )}
                 >
-                  <Cell finding={finding} onPickProject={onPickProject} />
+                  <Cell
+                    finding={finding}
+                    density={density}
+                    onPickProject={onPickProject}
+                  />
                 </div>
               );
             })}
@@ -182,9 +204,12 @@ function GroupChildren({
 
 export function GroupedFindingsTable({
   filter,
+  density,
   onRowClick,
   onPickProject,
   onCountChange,
+  onResetFilters,
+  hasActiveFilters,
 }: GroupedFindingsTableProps) {
   const { data, isLoading, isError, error, isFetching } =
     useFindingsGroups(filter);
@@ -195,24 +220,20 @@ export function GroupedFindingsTable({
   // Expanded group keys: Set makes toggling O(1) and the memo keeps hover
   // handlers stable. Expansion state is local — nothing about it lives in the
   // URL, so changing groupBy naturally resets expansions via unmount.
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedByMode, setExpandedByMode] = useState<
+    Partial<Record<Exclude<GroupBy, "">, Set<string>>>
+  >({});
 
   useEffect(() => {
     onCountChange?.(total, isFetching);
   }, [total, isFetching, onCountChange]);
 
-  // Changing the grouping mode must clear the expanded set — otherwise stale
-  // group keys from a previous mode would leak across.
-  useEffect(() => {
-    setExpanded(new Set());
-  }, [filter.groupBy]);
-
-  const toggle = (key: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
+  const toggle = (mode: Exclude<GroupBy, "">, key: string) => {
+    setExpandedByMode((prev) => {
+      const modeSet = new Set(prev[mode] ?? []);
+      if (modeSet.has(key)) modeSet.delete(key);
+      else modeSet.add(key);
+      return { ...prev, [mode]: modeSet };
     });
   };
 
@@ -220,6 +241,7 @@ export function GroupedFindingsTable({
   // component can be dropped in without guessing the caller's state.
   const effectiveGroupBy: Exclude<GroupBy, ""> =
     filter.groupBy === "" ? "cve" : filter.groupBy;
+  const expanded = expandedByMode[effectiveGroupBy] ?? new Set<string>();
   const meta = GROUP_META[effectiveGroupBy];
   const Icon = meta.icon;
 
@@ -244,14 +266,24 @@ export function GroupedFindingsTable({
 
   if (groups.length === 0) {
     return (
-      <div className="flex min-h-[320px] flex-1 items-center justify-center text-sm text-zinc-500">
-        Нет групп под текущие фильтры.
+      <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
+        <SearchX className="size-7 text-zinc-600" />
+        <div>Находок не найдено</div>
+        {hasActiveFilters && onResetFilters && (
+          <button
+            type="button"
+            onClick={onResetFilters}
+            className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800/60"
+          >
+            Сбросить фильтры
+          </button>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <div className="themed-scrollbar min-h-0 min-w-0 flex-1 overflow-auto">
       <div className="divide-y divide-zinc-900">
         {groups.map((group) => {
           const sev = severityMeta(group.max_severity);
@@ -279,7 +311,7 @@ export function GroupedFindingsTable({
                   disabled={!canExpand}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (canExpand) toggle(key);
+                    if (canExpand) toggle(effectiveGroupBy, key);
                   }}
                   className={cn(
                     "mt-0.5 shrink-0 rounded p-0.5 text-zinc-500 transition-colors",
@@ -305,7 +337,7 @@ export function GroupedFindingsTable({
                     interactive && "cursor-pointer",
                   )}
                   onClick={
-                    interactive ? () => onRowClick(firstSample) : undefined
+                    interactive ? (e) => onRowClick(firstSample, e.currentTarget) : undefined
                   }
                 >
                   <div className="flex items-center gap-2">
@@ -345,6 +377,7 @@ export function GroupedFindingsTable({
                       effectiveGroupBy,
                       group.group_key,
                     )}
+                    density={density}
                     onRowClick={onRowClick}
                     onPickProject={onPickProject}
                   />
