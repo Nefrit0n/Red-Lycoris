@@ -22,12 +22,17 @@ func parseFindingsFilter(w http.ResponseWriter, r *http.Request, rolesRepo *stor
 	q := r.URL.Query()
 
 	filter := storage.FindingsFilter{
-		Query:     q.Get("q"),
-		CVE:       q.Get("cve"),
-		Cursor:    q.Get("cursor"),
-		SortField: q.Get("sort"),
-		SortDir:   q.Get("dir"),
-		GroupBy:   q.Get("group_by"),
+		Query:            q.Get("q"),
+		CVE:              q.Get("cve"),
+		RuleID:           q.Get("rule_id"),
+		ComponentVersion: q.Get("component_version"),
+		Cursor:           q.Get("cursor"),
+		SortField:        q.Get("sort"),
+		SortDir:          q.Get("dir"),
+		GroupBy:          q.Get("group_by"),
+	}
+	if component := strings.TrimSpace(q.Get("component")); component != "" {
+		filter.Components = []string{component}
 	}
 
 	if v := q.Get("project_id"); v != "" {

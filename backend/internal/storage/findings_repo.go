@@ -76,6 +76,8 @@ type FindingsFilter struct {
 	IacProviders         []string
 	SecretKinds          []string
 	Components           []string
+	ComponentVersion     string
+	RuleID               string
 	AssigneeUserIDs      []uuid.UUID
 	AssigneeMeUserID     *uuid.UUID
 	Unassigned           bool
@@ -380,6 +382,16 @@ func buildBaseWhere(filter *FindingsFilter, excludeField string, startArg int) (
 		}
 		conditions = append(conditions, fmt.Sprintf("f.component ILIKE ANY($%d)", argN))
 		args = append(args, componentPatterns)
+		argN++
+	}
+	if filter.ComponentVersion != "" {
+		conditions = append(conditions, fmt.Sprintf("COALESCE(f.component_version, '') = $%d", argN))
+		args = append(args, filter.ComponentVersion)
+		argN++
+	}
+	if filter.RuleID != "" {
+		conditions = append(conditions, fmt.Sprintf("f.rule_id = $%d", argN))
+		args = append(args, filter.RuleID)
 		argN++
 	}
 	if filter.Query != "" {
