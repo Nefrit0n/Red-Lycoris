@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   Accordion,
   AccordionItem,
@@ -272,15 +273,36 @@ export function FiltersPanel({
           </span>
         )}
         <div className="flex flex-col items-center gap-1.5">
-          {COLLAPSED_FILTER_ICONS.map(({ key, icon: Icon, label }) => (
-            <span
-              key={key}
-              title={label}
-              className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500"
-            >
-              <Icon className="size-4" />
-            </span>
-          ))}
+          {COLLAPSED_FILTER_ICONS.map(({ key, icon: Icon, label }) => {
+            const sectionCount =
+              key === "severity"
+                ? filter.severities.length
+                : key === "status"
+                  ? filter.statuses.length
+                  : key === "project"
+                    ? filter.projectIds.length
+                    : key === "source"
+                      ? filter.sources.length
+                      : key === "thresholds"
+                        ? Number(filter.epssMin !== null) + Number(filter.cvssMin !== null) + Number(filter.ageMaxDays !== null)
+                        : 0;
+            return (
+              <Tooltip key={key} side="right" align="start" content={`${label} • ${sectionCount}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCollapsed(false);
+                    if (!openSections.includes(key)) {
+                      setOpenSections((prev) => [...prev, key]);
+                    }
+                  }}
+                  className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-200"
+                >
+                  <Icon className="size-4" />
+                </button>
+              </Tooltip>
+            );
+          })}
         </div>
       </aside>
     );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, formatDistanceToNow, isValid } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -11,6 +11,7 @@ import {
   ExternalLink,
   GitCommit,
   Loader2,
+  ChevronUp,
   X,
 } from "lucide-react";
 
@@ -36,6 +37,12 @@ interface PreviewPanelProps {
   findingId: string | null;
   onClose: () => void;
   onPickProject?: (projectId: string) => void;
+  currentIndex?: number | null;
+  totalCount?: number;
+  canPrev?: boolean;
+  canNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
 }
 
 const STATUS_OPTIONS = [
@@ -451,11 +458,19 @@ export function PreviewPanel({
   findingId,
   onClose,
   onPickProject,
+  currentIndex = null,
+  totalCount = 0,
+  canPrev = false,
+  canNext = false,
+  onPrev,
+  onNext,
 }: PreviewPanelProps) {
   const { data, isLoading, isError, error } = useFinding(findingId ?? "");
   const updateStatus = useUpdateStatus();
   const finding = data?.data.finding;
   const [statusError, setStatusError] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [fadeIn, setFadeIn] = useState(true);
 
   // Focus management: when opening, pull focus into the panel so keyboard
   // shortcuts land there and the ring stays visible. Using a ref + effect
@@ -520,6 +535,34 @@ export function PreviewPanel({
     return () => panel.removeEventListener("keydown", onKeyDown);
   }, [findingId]);
 
+
+  useEffect(() => {
+    setFadeIn(false);
+    const t = window.setTimeout(() => setFadeIn(true), 30);
+    if (bodyRef.current) {
+      bodyRef.current.scrollTo({ top: 0, behavior: "auto" });
+    }
+    return () => window.clearTimeout(t);
+  }, [findingId]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const editable = !!target?.isContentEditable || tag === "input" || tag === "textarea" || tag === "select";
+      if (editable) return;
+      if ((event.key === "j" || event.key === "ArrowDown") && canNext) {
+        event.preventDefault();
+        onNext?.();
+      }
+      if ((event.key === "k" || event.key === "ArrowUp") && canPrev) {
+        event.preventDefault();
+        onPrev?.();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [canNext, canPrev, onNext, onPrev]);
   if (!findingId) {
     return null;
   }
@@ -592,6 +635,29 @@ export function PreviewPanel({
           </div>
 
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={!canPrev}
+              onClick={onPrev}
+              className="text-zinc-400 hover:text-zinc-200"
+              aria-label="Предыдущая находка"
+            >
+              <ChevronUp className="size-4" />
+            </Button>
+            <span className="min-w-[52px] text-center text-xs text-zinc-500">
+              {currentIndex ? `${currentIndex} / ${totalCount}` : `— / ${totalCount}`}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={!canNext}
+              onClick={onNext}
+              className="text-zinc-400 hover:text-zinc-200"
+              aria-label="Следующая находка"
+            >
+              <ChevronDown className="size-4" />
+            </Button>
             {finding && (
               <Button
                 render={
@@ -622,7 +688,7 @@ export function PreviewPanel({
           </div>
         </header>
 
-        <div className="themed-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div ref={bodyRef} className={cn("themed-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4 transition-opacity duration-150", fadeIn ? "opacity-100" : "opacity-0")}>
           {isLoading && (
             <div className="space-y-3">
               <Skeleton className="h-8 w-full bg-zinc-800/40" />

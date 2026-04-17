@@ -1,5 +1,6 @@
 import {
   ArrowDownUp,
+  Columns3,
   Group,
   Loader2,
   RefreshCw,
@@ -10,20 +11,24 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/ui/tooltip";
+import type {
+  FindingsPreset,
+} from "@/components/findings/findingsTableConfig";
+import { PRESET_LABEL } from "@/components/findings/findingsTableConfig";
 import type { FindingsFilter, GroupBy, SortField } from "@/lib/findings-filter";
 import { cn } from "@/lib/utils";
-
-export type Density = "compact" | "comfortable" | "spacious";
 
 interface FindingsToolbarProps {
   filter: FindingsFilter;
   onChange: (update: Partial<FindingsFilter>) => void;
   total?: number;
-  density: Density;
-  onDensityChange: (d: Density) => void;
+  preset: FindingsPreset;
+  onPresetChange: (preset: Exclude<FindingsPreset, "custom">) => void;
+  onOpenColumnChooser: () => void;
   isFetching?: boolean;
   onRefresh?: () => void;
   selectedCount?: number;
@@ -44,28 +49,13 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "rule", label: "По правилу" },
 ];
 
-const DENSITY_OPTIONS: { value: Density; label: string }[] = [
-  { value: "compact", label: "Compact" },
-  { value: "comfortable", label: "Comfortable" },
-  { value: "spacious", label: "Spacious" },
-];
-
-function DensityIcon() {
-  return (
-    <span className="inline-flex flex-col gap-[2px]" aria-hidden>
-      <span className="h-[2px] w-4 rounded bg-current/90" />
-      <span className="h-[2px] w-4 rounded bg-current/70" />
-      <span className="h-[2px] w-4 rounded bg-current/50" />
-    </span>
-  );
-}
-
 export function FindingsToolbar({
   filter,
   onChange,
   total,
-  density,
-  onDensityChange,
+  preset,
+  onPresetChange,
+  onOpenColumnChooser,
   isFetching,
   onRefresh,
   selectedCount = 0,
@@ -190,30 +180,33 @@ export function FindingsToolbar({
               <Button
                 variant="ghost"
                 size="sm"
-                title="Плотность строк"
                 className="text-zinc-400 hover:text-zinc-200"
               >
-                <DensityIcon />
-                {DENSITY_OPTIONS.find((o) => o.value === density)?.label}
+                <Columns3 className="size-4" />
+                {PRESET_LABEL[preset]}
               </Button>
             }
           />
-          <DropdownMenuContent
-            align="end"
-            className="border-zinc-700 bg-zinc-900"
-          >
-            {DENSITY_OPTIONS.map((opt) => (
+          <DropdownMenuContent align="end" className="border-zinc-700 bg-zinc-900">
+            {(["triage", "engineering", "compliance", "full"] as const).map((presetValue) => (
               <DropdownMenuItem
-                key={opt.value}
-                onClick={() => onDensityChange(opt.value)}
+                key={presetValue}
+                onClick={() => onPresetChange(presetValue)}
                 className={cn(
                   "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
-                  density === opt.value && "bg-zinc-800/60",
+                  preset === presetValue && "bg-zinc-800/60",
                 )}
               >
-                {opt.label}
+                {PRESET_LABEL[presetValue]}
               </DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator className="bg-zinc-800" />
+            <DropdownMenuItem
+              onClick={onOpenColumnChooser}
+              className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+            >
+              Настроить колонки...
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
