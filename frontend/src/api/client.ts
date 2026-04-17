@@ -14,6 +14,8 @@ class ApiClientError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 10_000;
+
 async function request<T>(
   method: string,
   path: string,
@@ -31,7 +33,27 @@ async function request<T>(
     opts.body = JSON.stringify(body);
   }
 
-  const res = await fetch(path, opts);
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(path, { ...opts, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiClientError(0, {
+        code: "REQUEST_TIMEOUT",
+        message: `request timed out after ${REQUEST_TIMEOUT_MS}ms`,
+      });
+    }
+
+    throw new ApiClientError(0, {
+      code: "NETWORK_ERROR",
+      message: "network request failed",
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
     let apiErr: ApiError["error"];
