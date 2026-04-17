@@ -14,6 +14,22 @@ export function KindBadge({ kind, className, iconOnly }: KindBadgeProps) {
   const meta = findingKindMeta(kind ?? undefined);
   const Icon = meta.icon;
 
+  if (iconOnly) {
+    return (
+      <Tooltip content={meta.label}>
+        <span
+          className={cn(
+            "inline-flex size-5 items-center justify-center rounded text-current",
+            meta.dotClass,
+            className,
+          )}
+        >
+          <Icon className="size-4" />
+        </span>
+      </Tooltip>
+    );
+  }
+
   const body = (
     <Badge
       variant="outline"
@@ -23,11 +39,7 @@ export function KindBadge({ kind, className, iconOnly }: KindBadgeProps) {
       {!iconOnly && <span>{meta.short}</span>}
     </Badge>
   );
-
-  if (!iconOnly) {
-    return body;
-  }
-  return <Tooltip content={meta.label}>{body}</Tooltip>;
+  return body;
 }
 
 export default KindBadge;

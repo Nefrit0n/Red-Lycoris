@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Loader2 } from "lucide-react";
+import { Loader2, SearchX } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFindingsList } from "@/api/findings";
@@ -14,13 +14,15 @@ import type { Density } from "@/components/findings/FindingsToolbar";
 interface FlatFindingsTableProps {
   filter: FindingsFilter;
   density: Density;
-  onRowClick: (id: string) => void;
+  onRowClick: (id: string, triggerEl?: HTMLElement | null) => void;
   activeRowId?: string | null;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onSelectRange?: (ids: string[]) => void;
   onPickProject?: (id: string) => void;
   onCountChange?: (total: number, fetching: boolean) => void;
+  onResetFilters?: () => void;
+  hasActiveFilters?: boolean;
 }
 
 export function FlatFindingsTable({
@@ -33,6 +35,8 @@ export function FlatFindingsTable({
   onSelectRange,
   onPickProject,
   onCountChange,
+  onResetFilters,
+  hasActiveFilters,
 }: FlatFindingsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const lastSelectedIndexRef = useRef<number | null>(null);
@@ -68,7 +72,8 @@ export function FlatFindingsTable({
 
   // Densities affect only the row height; the column layout is shared so the
   // header alignment stays stable.
-  const rowHeight = density === "compact" ? 44 : 64;
+  const rowHeight =
+    density === "compact" ? 32 : density === "comfortable" ? 44 : 56;
 
   const virtualizer = useVirtualizer({
     count: findings.length,
@@ -109,21 +114,32 @@ export function FlatFindingsTable({
 
   if (findings.length === 0) {
     return (
-      <div className="flex min-h-[320px] flex-1 items-center justify-center text-sm text-zinc-500">
-        Нет находок под текущие фильтры.
+      <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
+        <SearchX className="size-7 text-zinc-600" />
+        <div>Находок не найдено</div>
+        {hasActiveFilters && onResetFilters && (
+          <button
+            type="button"
+            onClick={onResetFilters}
+            className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800/60"
+          >
+            Сбросить фильтры
+          </button>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col" role="grid" aria-rowcount={findings.length}>
       {/* Column header strip — sticky above the scroll container. Offset the
         checkbox column when selection is enabled so headers line up with
         row content below. */}
-      <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-950/60 px-3 py-2 pl-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+      <div role="row" className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-950/60 px-3 py-2 pl-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
         {onToggleSelect && <div className="w-4 shrink-0" />}
         {columns.map((col) => (
           <div
+            role="columnheader"
             key={col.id}
             className={cn(
               col.widthClass,
@@ -136,7 +152,7 @@ export function FlatFindingsTable({
         ))}
       </div>
 
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-auto">
+      <div ref={parentRef} className="themed-scrollbar min-h-0 min-w-0 flex-1 overflow-auto">
         <div
           style={{
             height: virtualizer.getTotalSize(),
@@ -154,20 +170,34 @@ export function FlatFindingsTable({
             return (
               <div
                 key={finding.id}
+                role="row"
+                tabIndex={0}
                 className={cn(
-                  "absolute inset-x-0 flex cursor-pointer items-center gap-3 border-b border-zinc-900 pl-3 pr-4 transition-colors hover:bg-zinc-900/60",
-                  "border-l-4",
+                  "absolute inset-x-0 relative flex cursor-pointer items-center gap-3 border-b border-zinc-900 pl-3 pr-4 transition-colors hover:bg-zinc-800/50",
+                  "border-l-[3px]",
                   sev.borderClass,
-                  isActive && "bg-zinc-900/80",
-                  isSelected && "bg-red-950/10",
-                  density === "compact" ? "py-1.5" : "py-3",
+                  isActive && "bg-red-950/18",
+                  isSelected && "bg-red-950/12",
+                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600/70 focus-visible:outline-offset-[-2px]",
+                  density === "compact" && "py-0",
+                  density === "comfortable" && "py-1",
+                  density === "spacious" && "py-2.5",
                 )}
                 style={{
                   height: rowHeight,
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
-                onClick={() => onRowClick(finding.id)}
+                onClick={(e) => onRowClick(finding.id, e.currentTarget)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onRowClick(finding.id, e.currentTarget);
+                  }
+                }}
               >
+                {isSelected && (
+                  <span className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-red-500" />
+                )}
                 {onToggleSelect && (
                   <div
                     className="flex w-4 shrink-0 items-center"
@@ -200,6 +230,7 @@ export function FlatFindingsTable({
                   const Cell = col.Cell;
                   return (
                     <div
+                      role="gridcell"
                       key={col.id}
                       className={cn(
                         "flex min-w-0 items-center",
@@ -208,7 +239,11 @@ export function FlatFindingsTable({
                         col.align === "right" && "justify-end",
                       )}
                     >
-                      <Cell finding={finding} onPickProject={onPickProject} />
+                      <Cell
+                        finding={finding}
+                        density={density}
+                        onPickProject={onPickProject}
+                      />
                     </div>
                   );
                 })}

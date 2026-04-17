@@ -81,6 +81,9 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --scrollbar-thumb: color-mix(in oklab, var(--foreground) 30%, transparent);
+    --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 42%, transparent);
+    --scrollbar-track: color-mix(in oklab, var(--background) 78%, transparent);
 }
 
 .dark {
@@ -115,9 +118,17 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    --scrollbar-thumb: color-mix(in oklab, var(--foreground) 24%, transparent);
+    --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 36%, transparent);
+    --scrollbar-track: color-mix(in oklab, var(--background) 92%, transparent);
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    @apply h-full overflow-hidden;
+  }
   * {
     @apply border-border outline-ring/50;
     }
@@ -127,4 +138,41 @@
   html {
     @apply font-sans;
     }
+}
+
+.themed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.themed-scrollbar:hover {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.themed-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.themed-scrollbar:hover::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.themed-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+
+.themed-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }

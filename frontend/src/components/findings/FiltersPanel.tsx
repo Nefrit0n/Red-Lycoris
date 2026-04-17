@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  Folder,
+  Gauge,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,8 +22,8 @@ import {
   AccordionTrigger,
   AccordionPanel,
 } from "@/components/ui/accordion";
-import SeverityBadge from "@/components/findings/SeverityBadge";
-import { statusMeta } from "@/lib/severity";
+import { useLocalStorage } from "@/hooks/use-local-storage";
+import { severityMeta, statusMeta } from "@/lib/severity";
 import {
   DEFAULT_FINDINGS_FILTER,
   type FindingsFilter,
@@ -129,6 +139,14 @@ const DEFAULT_OPEN = [
   "thresholds",
 ];
 
+const COLLAPSED_FILTER_ICONS = [
+  { key: "severity", icon: AlertTriangle, label: "Критичность" },
+  { key: "status", icon: SlidersHorizontal, label: "Статус" },
+  { key: "project", icon: Folder, label: "Проекты" },
+  { key: "source", icon: Database, label: "Источник" },
+  { key: "thresholds", icon: Gauge, label: "Пороги" },
+];
+
 export function FiltersPanel({
   filter,
   onChange,
@@ -136,6 +154,14 @@ export function FiltersPanel({
   onSearchRef,
 }: FiltersPanelProps) {
   const [localQuery, setLocalQuery] = useState(filter.query);
+  const [collapsed, setCollapsed] = useLocalStorage<boolean>(
+    "findings.filters.collapsed",
+    false,
+  );
+  const [openSections, setOpenSections] = useLocalStorage<string[]>(
+    "findings.filters.open-sections",
+    DEFAULT_OPEN,
+  );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showAllProjects, setShowAllProjects] = useState(false);
 
@@ -208,24 +234,92 @@ export function FiltersPanel({
     filter.assigneeMe ||
     filter.unassigned ||
     filter.assignees.length > 0;
+  const activeCount =
+    filter.severities.length +
+    filter.statuses.length +
+    filter.kinds.length +
+    filter.projectIds.length +
+    filter.sources.length +
+    filter.ecosystems.length +
+    filter.iacProviders.length +
+    filter.secretKinds.length +
+    (filter.query.trim().length > 0 ? 1 : 0) +
+    (filter.hasCVE ? 1 : 0) +
+    (filter.hasFix ? 1 : 0) +
+    (filter.inKEV ? 1 : 0) +
+    (filter.inBDU ? 1 : 0) +
+    (filter.epssMin !== null ? 1 : 0) +
+    (filter.cvssMin !== null ? 1 : 0) +
+    (filter.ageMaxDays !== null ? 1 : 0) +
+    (filter.assigneeMe ? 1 : 0) +
+    (filter.unassigned ? 1 : 0) +
+    filter.assignees.length;
+
+  if (collapsed) {
+    return (
+      <aside className="flex min-h-0 w-12 shrink-0 flex-col items-center border-r border-zinc-800 bg-zinc-950/70 py-2">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-label="Развернуть фильтры"
+          className="mb-3 inline-flex size-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600/70"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+        {activeCount > 0 && (
+          <span className="mb-3 rounded-full bg-red-900/70 px-1.5 py-0.5 text-[10px] text-red-200">
+            {activeCount}
+          </span>
+        )}
+        <div className="flex flex-col items-center gap-1.5">
+          {COLLAPSED_FILTER_ICONS.map(({ key, icon: Icon, label }) => (
+            <span
+              key={key}
+              title={label}
+              className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500"
+            >
+              <Icon className="size-4" />
+            </span>
+          ))}
+        </div>
+      </aside>
+    );
+  }
 
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-r border-zinc-800">
+    <aside className="themed-scrollbar flex min-h-0 w-[280px] shrink-0 flex-col overflow-y-auto border-r border-zinc-800">
       <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-          Фильтры
-        </span>
-        {hasActive && (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="h-6 px-1.5 text-xs text-zinc-500 hover:text-zinc-200"
-            onClick={() => onChange({ ...DEFAULT_FINDINGS_FILTER })}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Фильтры
+          </span>
+          {activeCount > 0 && (
+            <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
+              {activeCount}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {hasActive && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="h-6 px-1.5 text-xs text-zinc-500 hover:text-zinc-200"
+              onClick={() => onChange({ ...DEFAULT_FINDINGS_FILTER })}
+            >
+              <X className="size-3" />
+              Очистить всё
+            </Button>
+          )}
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            aria-label="Свернуть фильтры"
+            className="inline-flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600/70"
           >
-            <X className="size-3" />
-            Очистить всё
-          </Button>
-        )}
+            <ChevronLeft className="size-4" />
+          </button>
+        </div>
       </div>
 
       <div className="px-4 pb-2">
@@ -246,7 +340,8 @@ export function FiltersPanel({
 
       <Accordion
         multiple
-        defaultValue={DEFAULT_OPEN}
+        value={openSections}
+        onValueChange={(value) => setOpenSections(value as string[])}
         className="flex-1 px-4"
       >
         <AccordionItem value="severity">
@@ -270,7 +365,16 @@ export function FiltersPanel({
                     })
                   }
                 >
-                  <SeverityBadge severity={level} />
+                  <span
+                    className={cn(
+                      "inline-block rounded-md border px-2 py-0.5 text-xs",
+                      filter.severities.includes(level)
+                        ? severityMeta(level).badgeClass
+                        : "border-zinc-700 text-zinc-400",
+                    )}
+                  >
+                    {severityMeta(level).label}
+                  </span>
                 </CheckboxRow>
               ))}
             </div>

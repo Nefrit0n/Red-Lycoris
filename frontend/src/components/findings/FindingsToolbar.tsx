@@ -2,8 +2,6 @@ import {
   ArrowDownUp,
   Group,
   Loader2,
-  Rows2,
-  Rows3,
   RefreshCw,
 } from "lucide-react";
 
@@ -18,7 +16,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { FindingsFilter, GroupBy, SortField } from "@/lib/findings-filter";
 import { cn } from "@/lib/utils";
 
-export type Density = "compact" | "comfortable";
+export type Density = "compact" | "comfortable" | "spacious";
 
 interface FindingsToolbarProps {
   filter: FindingsFilter;
@@ -45,6 +43,22 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "component", label: "По компоненту" },
   { value: "rule", label: "По правилу" },
 ];
+
+const DENSITY_OPTIONS: { value: Density; label: string }[] = [
+  { value: "compact", label: "Compact" },
+  { value: "comfortable", label: "Comfortable" },
+  { value: "spacious", label: "Spacious" },
+];
+
+function DensityIcon() {
+  return (
+    <span className="inline-flex flex-col gap-[2px]" aria-hidden>
+      <span className="h-[2px] w-4 rounded bg-current/90" />
+      <span className="h-[2px] w-4 rounded bg-current/70" />
+      <span className="h-[2px] w-4 rounded bg-current/50" />
+    </span>
+  );
+}
 
 export function FindingsToolbar({
   filter,
@@ -170,28 +184,38 @@ export function FindingsToolbar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Tooltip
-          content={
-            density === "compact"
-              ? "Комфортный режим"
-              : "Компактный режим"
-          }
-        >
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() =>
-              onDensityChange(density === "compact" ? "comfortable" : "compact")
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                title="Плотность строк"
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <DensityIcon />
+                {DENSITY_OPTIONS.find((o) => o.value === density)?.label}
+              </Button>
             }
-            className="text-zinc-400 hover:text-zinc-200"
+          />
+          <DropdownMenuContent
+            align="end"
+            className="border-zinc-700 bg-zinc-900"
           >
-            {density === "compact" ? (
-              <Rows2 className="size-4" />
-            ) : (
-              <Rows3 className="size-4" />
-            )}
-          </Button>
-        </Tooltip>
+            {DENSITY_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt.value}
+                onClick={() => onDensityChange(opt.value)}
+                className={cn(
+                  "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
+                  density === opt.value && "bg-zinc-800/60",
+                )}
+              >
+                {opt.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {onRefresh && (
           <Tooltip content="Обновить">
