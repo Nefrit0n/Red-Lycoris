@@ -61,7 +61,7 @@ function columnStickyMeta(columnId: string, isHeader = false, hasScrollRight = f
       sticky: true,
       className: cn(
         "sticky left-[var(--sticky-left-2)]",
-        isHeader ? "z-[2] bg-zinc-950/95" : "z-[2] bg-zinc-950",
+        isHeader ? "z-[1] bg-zinc-950/95" : "z-[1] bg-zinc-950",
       ),
       style: hasScrollRight
         ? { boxShadow: "4px 0 6px -2px rgba(0,0,0,0.3)" }
@@ -171,6 +171,7 @@ const Row = memo(function Row({
             key={col.id}
             className={cn(
               "flex h-full items-center overflow-hidden border-r border-transparent px-3 group-hover:border-zinc-800/60",
+              col.id === "type" && "justify-center px-1.5",
               col.align === "right" && "justify-end",
               sticky.className,
             )}
@@ -381,6 +382,7 @@ export function FlatFindingsTable({
                   key={col.id}
                   className={cn(
                     "flex h-full items-center border-r border-zinc-800/80 px-3",
+                    col.id === "type" && "justify-center px-1.5",
                     col.align === "right" && "justify-end text-right",
                     sticky.className,
                   )}

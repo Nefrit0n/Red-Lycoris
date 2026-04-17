@@ -112,21 +112,27 @@ export function EnrichmentBadges({
   return (
     <div className={cn("flex h-full w-full items-center gap-2 overflow-hidden", className)}>
       {visibleBadges.map((badge) => (
-        <span
-          key={badge.key}
-          className={cn(
-            "inline-flex h-5 shrink-0 items-center rounded border px-1.5 text-[11px] whitespace-nowrap",
-            badgeClass(badge.tone),
-          )}
-        >
-          {badge.tone === "cvss" ? (
-            <span className={cn("inline-flex h-5 items-center rounded border px-1.5 text-[11px] font-semibold", cvssClass(maxCvss ?? 0))}>
-              {badge.label}
-            </span>
-          ) : (
-            badge.label
-          )}
-        </span>
+        badge.tone === "cvss" ? (
+          <span
+            key={badge.key}
+            className={cn(
+              "inline-flex h-5 shrink-0 items-center rounded border px-1.5 text-[11px] font-semibold whitespace-nowrap",
+              cvssClass(maxCvss ?? 0),
+            )}
+          >
+            {badge.label}
+          </span>
+        ) : (
+          <span
+            key={badge.key}
+            className={cn(
+              "inline-flex h-5 shrink-0 items-center rounded border px-1.5 text-[11px] whitespace-nowrap",
+              badgeClass(badge.tone),
+            )}
+          >
+            {badge.label}
+          </span>
+        )
       ))}
 
       {hiddenBadges.length > 0 && (

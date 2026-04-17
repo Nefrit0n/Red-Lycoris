@@ -103,7 +103,7 @@ function FixCell({ finding }: { finding: Finding }) {
       <span className="font-mono text-xs text-emerald-400">→ {primary}</span>
       {hidden.length > 0 && (
         <DropdownMenu>
-          <Tooltip content={hiddenTooltip} align="start">
+          <Tooltip content={hiddenTooltip} side="right" align="start">
             <DropdownMenuTrigger className="inline-flex h-5 items-center rounded border border-emerald-600/60 bg-emerald-950/40 px-1.5 text-[11px] text-emerald-300">
               +{hidden.length}
             </DropdownMenuTrigger>
