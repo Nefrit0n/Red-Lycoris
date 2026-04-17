@@ -332,10 +332,11 @@ export function useBulkUpdateStatus() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ ids, status }: { ids: string[]; status: number }) =>
+    mutationFn: ({ ids, status, note }: { ids: string[]; status: number; note?: string }) =>
       apiPatch<{ data: { succeeded: string[]; failed: Record<string, string> } }>("/api/v1/findings/bulk/status", {
         ids,
         status,
+        note: note ?? "",
       }),
 
     onSuccess: async (_result, variables) => {

@@ -50,7 +50,8 @@ func checkBulkProjectAccess(w http.ResponseWriter, r *http.Request, repo *storag
 
 func handleUpdateStatus(findingsRepo *storage.FindingsRepo) http.HandlerFunc {
 	type reqBody struct {
-		Status int `json:"status"`
+		Status int    `json:"status"`
+		Note   string `json:"note"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -68,7 +69,10 @@ func handleUpdateStatus(findingsRepo *storage.FindingsRepo) http.HandlerFunc {
 			return
 		}
 		user, _ := UserFromContext(r.Context())
-		if err := findingsRepo.ApplyTriageAction(r.Context(), user.ID, id, &domain.ChangeStatusAction{NewStatus: req.Status}); err != nil {
+		if err := findingsRepo.ApplyTriageAction(r.Context(), user.ID, id, &domain.ChangeStatusAction{
+			NewStatus: req.Status,
+			Note:      req.Note,
+		}); err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 			return
 		}
@@ -227,6 +231,7 @@ func handleBulkUpdateStatus(findingsRepo *storage.FindingsRepo, rolesRepo *stora
 	type reqBody struct {
 		IDs    []uuid.UUID `json:"ids"`
 		Status int         `json:"status"`
+		Note   string      `json:"note"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req reqBody
@@ -247,7 +252,10 @@ func handleBulkUpdateStatus(findingsRepo *storage.FindingsRepo, rolesRepo *stora
 		}
 		user, _ := UserFromContext(r.Context())
 		result, err := findingsRepo.ApplyBulkTriageAction(r.Context(), user.ID, req.IDs, func(_ uuid.UUID) domain.TriageAction {
-			return &domain.ChangeStatusAction{NewStatus: req.Status}
+			return &domain.ChangeStatusAction{
+				NewStatus: req.Status,
+				Note:      req.Note,
+			}
 		})
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to bulk update status")
