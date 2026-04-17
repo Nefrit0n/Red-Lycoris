@@ -154,12 +154,6 @@ export function filterFromSearchParams(
   const rawDir = params.get("dir") ?? "";
   const sortDir: SortDir = rawDir === "asc" ? "asc" : "desc";
 
-  const rawGroup = params.get("group_by") ?? "";
-  const groupBy: GroupBy =
-    rawGroup === "cve" || rawGroup === "component" || rawGroup === "rule"
-      ? rawGroup
-      : "";
-
   const epssMin = parseFloatOrNull(params.get("epss_min"));
   const cvssMin = parseFloatOrNull(params.get("cvss_min"));
   const ageMaxDays = parseIntOrNull(params.get("age_max_days"));
@@ -191,7 +185,7 @@ export function filterFromSearchParams(
     ageMaxDays: ageMaxDays !== null && ageMaxDays > 0 ? ageMaxDays : null,
     sortField,
     sortDir,
-    groupBy,
+    groupBy: "",
   };
 }
 
@@ -251,8 +245,6 @@ export function filterToSearchParams(filter: FindingsFilter): URLSearchParams {
   if (filter.sortDir !== DEFAULT_FINDINGS_FILTER.sortDir) {
     p.set("dir", filter.sortDir);
   }
-  if (filter.groupBy) p.set("group_by", filter.groupBy);
-
   return p;
 }
 
