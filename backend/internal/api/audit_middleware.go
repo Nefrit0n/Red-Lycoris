@@ -25,11 +25,15 @@ func (w *statusCaptureWriter) WriteHeader(code int) {
 func AuditMiddleware(writer *audit.Writer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			if r.Method == http.MethodHead || r.Method == http.MethodOptions {
 				next.ServeHTTP(w, r)
 				return
 			}
 			if strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if strings.HasPrefix(r.URL.Path, "/api/v1/admin/audit/stream") {
 				next.ServeHTTP(w, r)
 				return
 			}

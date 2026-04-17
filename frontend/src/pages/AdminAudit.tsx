@@ -316,12 +316,17 @@ export default function AdminAudit() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3">
+      <div className="space-y-1">
         <div className="text-sm text-muted-foreground">admin / audit</div>
+        <h1 className="text-3xl font-semibold tracking-tight">Журнал аудита</h1>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3">
+        <div />
         <div className="flex items-center gap-2">
           <Button variant={liveEnabled ? "default" : "outline"} size="sm" onClick={() => setLiveEnabled((v) => !v)}>
             <ActivityIcon className="mr-1 size-3" />
-            <span className="text-xs">Live tail {liveEnabled ? "вкл" : "выкл"}</span>
+            <span className="text-xs">Live tail</span>
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
@@ -339,27 +344,32 @@ export default function AdminAudit() {
         <button type="button" className="rounded-lg border bg-card p-3 text-left" onClick={() => { updateParam("from", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()); updateParam("to", new Date().toISOString()); }}>
           <div className="text-xs text-muted-foreground">События за 24ч</div>
           <div className="text-2xl font-medium">{stats?.events_24h ?? 0}</div>
-          <div className="text-xs text-muted-foreground">{kpiDelta(stats?.events_24h ?? 0, stats?.prev_events_24h ?? 0)}</div>
+          <div className={`text-xs ${(stats?.events_24h ?? 0) >= (stats?.prev_events_24h ?? 0) ? "text-emerald-400" : "text-muted-foreground"}`}>
+            {kpiDelta(stats?.events_24h ?? 0, stats?.prev_events_24h ?? 0)} vs вчера
+          </div>
         </button>
         <button type="button" className="rounded-lg border bg-card p-3 text-left" onClick={() => updateParam("user_id", undefined)}>
           <div className="text-xs text-muted-foreground">Уникальные пользователи</div>
           <div className="text-2xl font-medium">{stats?.unique_users_24h ?? 0}</div>
-          <div className="text-xs text-muted-foreground">{kpiDelta(stats?.unique_users_24h ?? 0, stats?.prev_unique_users_24h ?? 0)}</div>
+          <div className="text-xs text-muted-foreground">из {Math.max(stats?.unique_users_24h ?? 0, stats?.prev_unique_users_24h ?? 0)} активных</div>
         </button>
         <button type="button" className="rounded-lg border bg-card p-3 text-left" onClick={() => updateParam("status_min", "400")}>
           <div className="text-xs text-muted-foreground">Ошибки 4xx/5xx</div>
-          <div className="text-2xl font-medium">{stats?.errors_24h ?? 0}</div>
-          <div className="text-xs text-muted-foreground">{kpiDelta(stats?.errors_24h ?? 0, stats?.prev_errors_24h ?? 0)}</div>
+          <div className="text-2xl font-medium text-amber-400">{stats?.errors_24h ?? 0}</div>
+          <div className="text-xs text-amber-300">{kpiDelta(stats?.errors_24h ?? 0, stats?.prev_errors_24h ?? 0)}</div>
         </button>
         <button type="button" className="rounded-lg border bg-card p-3 text-left" onClick={() => updateParam("risk_level", "critical")}>
           <div className="text-xs text-muted-foreground">Критичные действия</div>
-          <div className="text-2xl font-medium">{stats?.critical_24h ?? 0}</div>
-          <div className="text-xs text-muted-foreground">{kpiDelta(stats?.critical_24h ?? 0, stats?.prev_critical_24h ?? 0)}</div>
+          <div className="text-2xl font-medium text-rose-400">{stats?.critical_24h ?? 0}</div>
+          <div className="text-xs text-rose-300">{kpiDelta(stats?.critical_24h ?? 0, stats?.prev_critical_24h ?? 0)}</div>
         </button>
       </div>
 
       <div className="rounded-lg border bg-card p-3">
-        <div className="mb-2 text-sm font-medium">Активность за 24 часа</div>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-sm font-medium">Активность за 24 часа</div>
+          <div className="text-xs text-muted-foreground">UTC+3 · клик по столбцу = фильтр по часу</div>
+        </div>
         <div className="grid h-28 grid-cols-24 items-end gap-1">
           {(stats?.histogram ?? []).slice(-24).map((bucket) => {
             const max = Math.max(...(stats?.histogram ?? [{ total: 1 }]).map((h) => h.total), 1);
@@ -388,7 +398,10 @@ export default function AdminAudit() {
 
       <div className="rounded-lg border bg-card p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <ActiveChips params={params} onRemove={(k) => updateParam(k, undefined)} />
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Фильтры:</span>
+            <ActiveChips params={params} onRemove={(k) => updateParam(k, undefined)} />
+          </div>
           <div className="flex items-center gap-3 text-xs">
             {BUILTIN_PRESETS.map((preset) => <button key={preset.id} type="button" className="text-muted-foreground hover:text-foreground" onClick={() => applyPreset(preset)}>{preset.label}</button>)}
             {customPresets.map((preset) => <button key={preset.id} type="button" className="text-muted-foreground hover:text-foreground" onClick={() => applyPreset(preset)}>{preset.label}</button>)}
