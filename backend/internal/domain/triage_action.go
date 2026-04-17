@@ -21,6 +21,7 @@ type TriageAction interface {
 
 type ChangeStatusAction struct {
 	NewStatus int
+	Note      string
 	oldStatus int
 }
 
@@ -34,7 +35,11 @@ func (a *ChangeStatusAction) ApplyTo(f *Finding, _ ClosureReasonLookup) error {
 }
 
 func (a *ChangeStatusAction) BuildEvent(userID uuid.UUID, f *Finding) (FindingEvent, error) {
-	payload, err := json.Marshal(StatusChangedPayload{From: a.oldStatus, To: a.NewStatus})
+	payload, err := json.Marshal(StatusChangedPayload{
+		From: a.oldStatus,
+		To:   a.NewStatus,
+		Note: strings.TrimSpace(a.Note),
+	})
 	if err != nil {
 		return FindingEvent{}, fmt.Errorf("marshal status_changed payload: %w", err)
 	}

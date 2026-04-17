@@ -9,9 +9,11 @@ import SavedViewsBar from "@/components/findings/SavedViewsBar";
 import FindingsToolbar from "@/components/findings/FindingsToolbar";
 import FlatFindingsTable from "@/components/findings/FlatFindingsTable";
 import PreviewPanel from "@/components/findings/PreviewPanel";
-import BulkActionsBar from "@/components/findings/BulkActionsBar";
 import ColumnChooser from "@/components/findings/ColumnChooser";
-import { useFindingsFacets } from "@/api/findings";
+import BulkStatusCommentDialog, {
+  type BulkStatusOption,
+} from "@/components/findings/BulkStatusCommentDialog";
+import { useBulkClose, useBulkUpdateStatus, useFindingsFacets } from "@/api/findings";
 import {
   DEFAULT_FINDINGS_FILTER,
   filterFromSearchParams,
@@ -115,6 +117,10 @@ export default function FindingsList() {
 
   const { data: facetsData, refetch: refetchFacets } = useFindingsFacets(filter);
   const facets = facetsData?.data;
+  const bulkUpdateStatus = useBulkUpdateStatus();
+  const bulkClose = useBulkClose();
+  const [nextStatus, setNextStatus] = useState<BulkStatusOption | null>(null);
+  const [statusDialogError, setStatusDialogError] = useState<string | null>(null);
 
   const handleCountChange = useCallback((total: number, fetching: boolean) => {
     setListMeta((prev) =>
@@ -189,6 +195,48 @@ export default function FindingsList() {
     [previewIndex, visibleIds],
   );
 
+  const pendingStatusChange = bulkUpdateStatus.isPending || bulkClose.isPending;
+
+  const handleStatusSelect = useCallback((statusKey: BulkStatusOption) => {
+    setStatusDialogError(null);
+    setNextStatus(statusKey);
+  }, []);
+
+  const closeStatusDialog = useCallback(() => {
+    if (pendingStatusChange) return;
+    setStatusDialogError(null);
+    setNextStatus(null);
+  }, [pendingStatusChange]);
+
+  const submitBulkStatus = useCallback(
+    async (note: string) => {
+      if (!nextStatus || selectedIds.size === 0) return;
+      setStatusDialogError(null);
+
+      const ids = Array.from(selectedIds);
+
+      try {
+        if (nextStatus === "open") {
+          await bulkUpdateStatus.mutateAsync({ ids, status: 0, note });
+        } else if (nextStatus === "confirmed") {
+          await bulkUpdateStatus.mutateAsync({ ids, status: 1, note });
+        } else if (nextStatus === "false_positive") {
+          await bulkClose.mutateAsync({ ids, reasonCode: "false_positive", note });
+        } else if (nextStatus === "fixed") {
+          await bulkClose.mutateAsync({ ids, reasonCode: "mitigated", note });
+        } else if (nextStatus === "accepted_risk") {
+          await bulkClose.mutateAsync({ ids, reasonCode: "acceptable_risk", note });
+        }
+
+        clearSelection();
+        setNextStatus(null);
+      } catch (error) {
+        setStatusDialogError(error instanceof Error ? error.message : "Не удалось сменить статус");
+      }
+    },
+    [bulkClose, bulkUpdateStatus, clearSelection, nextStatus, selectedIds],
+  );
+
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40">
       <FiltersPanel
@@ -223,7 +271,7 @@ export default function FindingsList() {
           isFetching={listMeta.fetching}
           onRefresh={handleRefresh}
           selectedCount={selectedIds.size}
-          onBulkStatusClick={() => undefined}
+          onBulkStatusSelect={handleStatusSelect}
         />
 
         <div className="flex min-h-0 min-w-0 flex-1">
@@ -265,10 +313,14 @@ export default function FindingsList() {
           canNext={previewIndex >= 0 && previewIndex < visibleIds.length - 1}
         />
       )}
-      <BulkActionsBar
-        selected={selectedIds}
-        onClear={clearSelection}
-        projectId={filter.projectIds[0]}
+      <BulkStatusCommentDialog
+        open={Boolean(nextStatus)}
+        status={nextStatus}
+        selectedCount={selectedIds.size}
+        pending={pendingStatusChange}
+        error={statusDialogError}
+        onClose={closeStatusDialog}
+        onSubmit={submitBulkStatus}
       />
 
       <ColumnChooser

@@ -31,8 +31,9 @@ type FindingEvent struct {
 }
 
 type StatusChangedPayload struct {
-	From int `json:"from"`
-	To   int `json:"to"`
+	From int    `json:"from"`
+	To   int    `json:"to"`
+	Note string `json:"note,omitempty"`
 }
 
 type ClosedPayload struct {

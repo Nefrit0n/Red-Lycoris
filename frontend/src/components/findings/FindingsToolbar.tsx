@@ -17,6 +17,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type {
   FindingsPreset,
 } from "@/components/findings/findingsTableConfig";
+import type { BulkStatusOption } from "@/components/findings/BulkStatusCommentDialog";
 import { PRESET_LABEL } from "@/components/findings/findingsTableConfig";
 import type { FindingsFilter, SortField } from "@/lib/findings-filter";
 import { cn } from "@/lib/utils";
@@ -31,7 +32,7 @@ interface FindingsToolbarProps {
   isFetching?: boolean;
   onRefresh?: () => void;
   selectedCount?: number;
-  onBulkStatusClick?: () => void;
+  onBulkStatusSelect?: (statusKey: BulkStatusOption) => void;
 }
 
 const SORT_OPTIONS: { value: SortField; label: string }[] = [
@@ -51,7 +52,7 @@ export function FindingsToolbar({
   isFetching,
   onRefresh,
   selectedCount = 0,
-  onBulkStatusClick,
+  onBulkStatusSelect,
 }: FindingsToolbarProps) {
   const sortLabel =
     SORT_OPTIONS.find((o) => o.value === filter.sortField)?.label ??
@@ -73,15 +74,55 @@ export function FindingsToolbar({
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-1.5">
-        {selectedCount > 0 && onBulkStatusClick && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onBulkStatusClick}
-            className="border-zinc-700 bg-zinc-900 text-zinc-300"
-          >
-            Сменить статус
-          </Button>
+        {selectedCount > 0 && onBulkStatusSelect && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-zinc-700 bg-zinc-900 text-zinc-300"
+                >
+                  Сменить статус
+                </Button>
+              }
+            />
+            <DropdownMenuContent
+              align="end"
+              className="border-zinc-700 bg-zinc-900"
+            >
+              <DropdownMenuItem
+                onClick={() => onBulkStatusSelect("open")}
+                className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+              >
+                Открыто
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onBulkStatusSelect("confirmed")}
+                className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+              >
+                Подтверждено
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onBulkStatusSelect("false_positive")}
+                className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+              >
+                Ложное
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onBulkStatusSelect("fixed")}
+                className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+              >
+                Исправлено
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onBulkStatusSelect("accepted_risk")}
+                className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+              >
+                Принят риск
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
         <DropdownMenu>
