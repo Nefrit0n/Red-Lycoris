@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Loader2, Star, EllipsisVertical } from "lucide-react";
+import { Plus, Star, EllipsisVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -9,15 +10,6 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -33,7 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useProjects, useCreateProject, usePatchProjectPinned } from "@/api/projects";
+import { useProjects, usePatchProjectPinned } from "@/api/projects";
 import { apiGet } from "@/api/client";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -47,6 +39,7 @@ import { groupPinnedFirst, hasProjectsFilters } from "@/lib/projects-list-utils"
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
 import type { Project } from "@/types";
+import { CreateProjectWizardDialog } from "@/components/projects/CreateProjectWizardDialog";
 
 const VIEW_MODE_KEY = "projects:view-mode";
 const TREND_TTL_MS = 5 * 60 * 1000;
@@ -218,10 +211,6 @@ export default function ProjectsList() {
   }, [pendingUrlPatch, searchParams, setSearchParams, urlState]);
 
   const [showCreate, setShowCreate] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
-  const createProject = useCreateProject();
   const patchPinned = usePatchProjectPinned();
   const [trendCache, setTrendCache] = useState<Record<string, { points: TrendPoint[]; fetchedAt: number }>>({});
   const [loadingTrendIds, setLoadingTrendIds] = useState<Set<string>>(new Set());
@@ -379,25 +368,6 @@ export default function ProjectsList() {
     },
     [patchPinned],
   );
-
-  const handleCreate = useCallback(() => {
-    if (!name.trim()) return;
-    const tags = tagsInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    createProject.mutate(
-      { name: name.trim(), description: description.trim(), tags },
-      {
-        onSuccess: () => {
-          setShowCreate(false);
-          setName("");
-          setDescription("");
-          setTagsInput("");
-        },
-      },
-    );
-  }, [name, description, tagsInput, createProject]);
 
   const applyUrlState = useCallback(
     (nextState: Partial<typeof urlState>) => {
@@ -1138,60 +1108,7 @@ export default function ProjectsList() {
         </div>
       </div>
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="border-zinc-700 bg-zinc-900">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-100">Создать проект</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <label className="mb-1 block text-xs text-zinc-500">
-                Название <span className="text-red-400">*</span>
-              </label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Название проекта"
-                className="border-zinc-700 bg-zinc-800 text-zinc-200"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-zinc-500">Описание</label>
-              <Input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Описание (опционально)"
-                className="border-zinc-700 bg-zinc-800 text-zinc-200"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-zinc-500">
-                Теги (через запятую)
-              </label>
-              <Input
-                value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
-                placeholder="backend, api, production"
-                className="border-zinc-700 bg-zinc-800 text-zinc-200"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="ghost" className="text-zinc-400" />}>
-              Отмена
-            </DialogClose>
-            <Button
-              onClick={handleCreate}
-              disabled={!name.trim() || createProject.isPending}
-              className="bg-red-700 text-white hover:bg-red-800"
-            >
-              {createProject.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Создать
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateProjectWizardDialog open={showCreate} onOpenChange={setShowCreate} />
     </div>
   );
 }
