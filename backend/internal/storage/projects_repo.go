@@ -155,10 +155,10 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 				count(*) FILTER (WHERE f.status IN (0, 1, 4) AND f.severity = 1) AS low,
 				count(*) FILTER (WHERE f.status IN (0, 1, 4) AND f.severity = 0) AS info,
 				count(*) FILTER (WHERE f.status IN (0, 1, 4) AND f.severity >= 3 AND now() - f.first_seen > interval '7 day') AS sla_breached_count,
-				bool_or(f.kind = 'sast') AS has_sast,
-				bool_or(f.kind = 'dast') AS has_dast,
-				bool_or(f.kind = 'sca') AS has_sca,
-				bool_or(f.kind = 'secrets') AS has_secrets
+				bool_or(f.finding_kind = 1) AS has_sast,
+				bool_or(f.finding_kind = 2) AS has_dast,
+				bool_or(f.finding_kind = 0) AS has_sca,
+				bool_or(f.finding_kind = 4) AS has_secrets
 			FROM findings f
 			WHERE f.project_id = p.id
 		) fs ON true
@@ -347,10 +347,10 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 				count(*) FILTER (WHERE f.status IN (0, 1, 4) AND f.severity = 1) AS low,
 				count(*) FILTER (WHERE f.status IN (0, 1, 4) AND f.severity = 0) AS info,
 				count(*) FILTER (WHERE f.status IN (0, 1, 4) AND f.severity >= 3 AND now() - f.first_seen > interval '7 day') AS sla_breached_count,
-				bool_or(f.kind = 'sast') AS has_sast,
-				bool_or(f.kind = 'dast') AS has_dast,
-				bool_or(f.kind = 'sca') AS has_sca,
-				bool_or(f.kind = 'secrets') AS has_secrets
+				bool_or(f.finding_kind = 1) AS has_sast,
+				bool_or(f.finding_kind = 2) AS has_dast,
+				bool_or(f.finding_kind = 0) AS has_sca,
+				bool_or(f.finding_kind = 4) AS has_secrets
 			FROM findings f
 			WHERE f.project_id = p.id
 		) sev ON true
