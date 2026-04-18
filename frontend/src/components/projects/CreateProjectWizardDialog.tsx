@@ -61,6 +61,44 @@ const SOURCE_OPTIONS = [
 ] as const;
 
 const DIALOG_TITLE_ID = "create-project-title";
+const FALLBACK_TEMPLATES: ProjectTemplate[] = [
+  {
+    id: "web-api",
+    key: "web-api",
+    name: "Web API",
+    icon_label: "API",
+    description: "SAST + DAST + SCA + Secrets",
+    scanners: ["SAST", "DAST", "SCA", "Secrets"],
+    sla: { critical_days: 7, high_days: 30, medium_days: 90 },
+  },
+  {
+    id: "mobile",
+    key: "mobile",
+    name: "Mobile",
+    icon_label: "APP",
+    description: "SAST + SCA + Secrets",
+    scanners: ["SAST", "SCA", "Secrets"],
+    sla: { critical_days: 7, high_days: 30, medium_days: 90 },
+  },
+  {
+    id: "iac",
+    key: "iac",
+    name: "Infra as Code",
+    icon_label: "IaC",
+    description: "IaC + Secrets",
+    scanners: ["IaC", "Secrets"],
+    sla: { critical_days: 7, high_days: 30, medium_days: 90 },
+  },
+  {
+    id: "library",
+    key: "library",
+    name: "Library/SDK",
+    icon_label: "LIB",
+    description: "SCA + SAST + Secrets",
+    scanners: ["SCA", "SAST", "Secrets"],
+    sla: { critical_days: 7, high_days: 30, medium_days: 90 },
+  },
+];
 
 export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
@@ -103,8 +141,15 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
         }
       })
       .catch(() => {
-        setTemplates([]);
-        setTemplateLoadError("Не удалось загрузить шаблоны");
+        setTemplates(FALLBACK_TEMPLATES);
+        setTemplateLoadError("Не удалось загрузить шаблоны workspace — используются шаблоны по умолчанию");
+        if (!state.template_id) {
+          dispatch({
+            type: "SET_TEMPLATE",
+            template_id: FALLBACK_TEMPLATES[0].id,
+            templateSla: FALLBACK_TEMPLATES[0].sla,
+          });
+        }
       });
 
     void apiGet<{ data: WorkspaceMember[] }>("/api/v1/workspace/members", { q: "" })
@@ -186,7 +231,10 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
     );
   }, [members, ownerQuery]);
 
-  const canContinueStep1 = isProjectNameFormatValid(state.name) && slugStatus !== "taken";
+  const canContinueStep1 =
+    isProjectNameFormatValid(state.name) &&
+    slugStatus !== "taken" &&
+    Boolean(state.template_id || templates.length === 0);
 
   const canContinueStep2 = useMemo(() => {
     if (!state.source) return true;
@@ -229,7 +277,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
     if (step === 1) {
       if (!isProjectNameFormatValid(state.name)) nextErrors.name = "Название должно быть 3–64 символа";
       if (slugStatus === "taken") nextErrors.slug = "Slug уже занят";
-      if (!state.template_id) nextErrors.generic = "Выберите шаблон проекта";
+      if (!state.template_id && templates.length > 0) nextErrors.generic = "Выберите шаблон проекта";
     }
     if (step === 2 && state.source && !canContinueStep2) {
       nextErrors.source = "Завершите настройку выбранного источника";
@@ -240,7 +288,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
     }
     setStepErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [canContinueStep2, isSlaValid, slugStatus, state]);
+  }, [canContinueStep2, isSlaValid, slugStatus, state, templates.length]);
 
   const goToStep = useCallback((step: WizardStep) => {
     if (step >= state.step) return;
@@ -417,7 +465,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
 
       <div>
         <label className="mb-1 block text-sm text-zinc-300">Теги</label>
-        <div className="rounded-md border border-zinc-700 bg-zinc-950 p-2 focus-within:border-sky-500">
+        <div className="min-h-9 rounded-md border border-zinc-700 bg-zinc-950 p-2 focus-within:border-sky-500">
           <div className="flex flex-wrap items-center gap-1">
             {state.tags.map((tag) => (
               <span key={tag} className="inline-flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-200">
@@ -440,7 +488,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
                 }
               }}
               className="min-w-[120px] flex-1 bg-transparent text-sm text-zinc-100 outline-none"
-              placeholder="Добавить тег"
+              placeholder="Добавить тег и нажмите Enter"
             />
           </div>
         </div>
