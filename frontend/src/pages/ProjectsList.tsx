@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Loader2, Folder, Star, EllipsisVertical } from "lucide-react";
+import { Plus, Loader2, Star, EllipsisVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -184,7 +184,7 @@ export default function ProjectsList() {
   );
 
   const { data, isLoading } = useProjects(projectsQuery);
-  const projects = data?.data ?? [];
+  const projects = useMemo(() => data?.data ?? [], [data]);
 
   useEffect(() => {
     if (urlState.view) {
@@ -518,16 +518,6 @@ export default function ProjectsList() {
     };
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-40 bg-zinc-800/50" />
-        ))}
-      </div>
-    );
-  }
-
   const viewMode: ProjectsViewMode = urlState.view ?? (projects.length > 12 ? "list" : "grid");
   const hasActiveFilters = hasProjectsFilters(urlState);
   const sortedProjects = useMemo(() => groupPinnedFirst(projects), [projects]);
@@ -539,6 +529,16 @@ export default function ProjectsList() {
     estimateSize: () => 120,
     overscan: 8,
   });
+
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-40 bg-zinc-800/50" />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
