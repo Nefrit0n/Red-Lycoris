@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
@@ -23,8 +24,12 @@ func NewUsersRepo(pool *pgxpool.Pool) *UsersRepo {
 
 func (r *UsersRepo) Create(ctx context.Context, user *domain.User) error {
 	const q = `
-		INSERT INTO users (id, email, password_hash, full_name, is_active, global_role, created_at, updated_at, last_login_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+		INSERT INTO users (
+			id, email, password_hash, full_name, is_active, global_role,
+			status, is_system_account, created_by_user_id,
+			created_at, updated_at, last_login_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 
 	now := time.Now()
 	if user.ID == uuid.Nil {
@@ -36,10 +41,14 @@ func (r *UsersRepo) Create(ctx context.Context, user *domain.User) error {
 	if user.UpdatedAt.IsZero() {
 		user.UpdatedAt = now
 	}
+	if user.Status == "" {
+		user.Status = domain.UserStatusActive
+	}
 
 	_, err := r.pool.Exec(ctx, q,
 		user.ID, user.Email, user.PasswordHash, user.FullName, user.IsActive,
-		int16(user.GlobalRole), user.CreatedAt, user.UpdatedAt, user.LastLoginAt,
+		int16(user.GlobalRole), string(user.Status), user.IsSystemAccount, user.CreatedByUserID,
+		user.CreatedAt, user.UpdatedAt, user.LastLoginAt,
 	)
 	if err != nil {
 		return fmt.Errorf("storage.UsersRepo.Create: %w", err)
@@ -47,42 +56,51 @@ func (r *UsersRepo) Create(ctx context.Context, user *domain.User) error {
 	return nil
 }
 
-func (r *UsersRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
-	const q = `
-		SELECT id, email, password_hash, full_name, is_active, global_role, created_at, updated_at, last_login_at
-		FROM users
-		WHERE id = $1`
+// selectUserCols — полный набор колонок для SELECT запросов по users.
+const selectUserCols = `
+	id, email, password_hash, full_name, is_active, global_role,
+	status, is_system_account, created_by_user_id, last_login_ip,
+	created_at, updated_at, last_login_at`
 
+func scanUser(row interface {
+	Scan(dest ...any) error
+}) (*domain.User, error) {
 	var u domain.User
 	var role int16
-	err := r.pool.QueryRow(ctx, q, id).Scan(
+	var status string
+	var lastIP *net.IP
+	err := row.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.IsActive, &role,
+		&status, &u.IsSystemAccount, &u.CreatedByUserID, &lastIP,
 		&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("storage.UsersRepo.GetByID: %w", err)
+		return nil, err
 	}
 	u.GlobalRole = domain.GlobalRole(role)
+	u.Status = domain.UserStatus(status)
+	if lastIP != nil {
+		u.LastLoginIP = *lastIP
+	}
 	return &u, nil
 }
 
-func (r *UsersRepo) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
-	const q = `
-		SELECT id, email, password_hash, full_name, is_active, global_role, created_at, updated_at, last_login_at
-		FROM users
-		WHERE email = $1`
+func (r *UsersRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	q := `SELECT` + selectUserCols + ` FROM users WHERE id = $1`
+	u, err := scanUser(r.pool.QueryRow(ctx, q, id))
+	if err != nil {
+		return nil, fmt.Errorf("storage.UsersRepo.GetByID: %w", err)
+	}
+	return u, nil
+}
 
-	var u domain.User
-	var role int16
-	err := r.pool.QueryRow(ctx, q, email).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.IsActive, &role,
-		&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
-	)
+func (r *UsersRepo) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
+	q := `SELECT` + selectUserCols + ` FROM users WHERE email = $1`
+	u, err := scanUser(r.pool.QueryRow(ctx, q, email))
 	if err != nil {
 		return nil, fmt.Errorf("storage.UsersRepo.GetByEmail: %w", err)
 	}
-	u.GlobalRole = domain.GlobalRole(role)
-	return &u, nil
+	return u, nil
 }
 
 func (r *UsersRepo) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
@@ -112,7 +130,9 @@ func (r *UsersRepo) Update(ctx context.Context, id uuid.UUID, fields map[string]
 		"full_name":     "full_name",
 		"is_active":     "is_active",
 		"global_role":   "global_role",
+		"status":        "status",
 		"last_login_at": "last_login_at",
+		"last_login_ip": "last_login_ip",
 	}
 
 	keys := make([]string, 0, len(fields))
@@ -157,8 +177,7 @@ func (r *UsersRepo) List(ctx context.Context, limit, offset int) ([]domain.User,
 		return nil, 0, fmt.Errorf("storage.UsersRepo.List: count: %w", err)
 	}
 
-	const q = `
-		SELECT id, email, password_hash, full_name, is_active, global_role, created_at, updated_at, last_login_at
+	q := `SELECT` + selectUserCols + `
 		FROM users
 		ORDER BY created_at DESC, id
 		LIMIT $1 OFFSET $2`
@@ -171,22 +190,30 @@ func (r *UsersRepo) List(ctx context.Context, limit, offset int) ([]domain.User,
 
 	users := make([]domain.User, 0, limit)
 	for rows.Next() {
-		var u domain.User
-		var role int16
-		if err := rows.Scan(
-			&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.IsActive, &role,
-			&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
-		); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, 0, fmt.Errorf("storage.UsersRepo.List: scan: %w", err)
 		}
-		u.GlobalRole = domain.GlobalRole(role)
-		users = append(users, u)
+		users = append(users, *u)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("storage.UsersRepo.List: rows: %w", err)
 	}
 
 	return users, total, nil
+}
+
+// CountActiveAdmins возвращает количество активных администраторов.
+// Используется для защиты от удаления последнего admin'а.
+func (r *UsersRepo) CountActiveAdmins(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM users WHERE global_role = 1 AND status = 'active'`,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("storage.UsersRepo.CountActiveAdmins: %w", err)
+	}
+	return count, nil
 }
 
 func (r *UsersRepo) Deactivate(ctx context.Context, id uuid.UUID) error {
@@ -218,8 +245,7 @@ func (r *UsersRepo) SearchActive(ctx context.Context, q string, limit int) ([]do
 		limit = 20
 	}
 
-	const query = `
-		SELECT id, email, password_hash, full_name, is_active, global_role, created_at, updated_at, last_login_at
+	query := `SELECT` + selectUserCols + `
 		FROM users
 		WHERE is_active
 		  AND (email ILIKE $1 OR full_name ILIKE $1)
@@ -235,16 +261,11 @@ func (r *UsersRepo) SearchActive(ctx context.Context, q string, limit int) ([]do
 
 	users := make([]domain.User, 0)
 	for rows.Next() {
-		var u domain.User
-		var role int16
-		if err := rows.Scan(
-			&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.IsActive, &role,
-			&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
-		); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, fmt.Errorf("storage.UsersRepo.SearchActive: scan: %w", err)
 		}
-		u.GlobalRole = domain.GlobalRole(role)
-		users = append(users, u)
+		users = append(users, *u)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("storage.UsersRepo.SearchActive: rows: %w", err)
