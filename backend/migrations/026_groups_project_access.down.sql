@@ -1,0 +1,9 @@
+DROP INDEX IF EXISTS idx_groups_source;
+DROP INDEX IF EXISTS idx_groups_name;
+DROP INDEX IF EXISTS idx_user_groups_group_id;
+DROP INDEX IF EXISTS idx_user_groups_user_id;
+DROP INDEX IF EXISTS idx_project_access_subject;
+DROP INDEX IF EXISTS idx_project_access_project;
+DROP TABLE IF EXISTS project_access;
+DROP TABLE IF EXISTS user_groups;
+DROP TABLE IF EXISTS groups;
