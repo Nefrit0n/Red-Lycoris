@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,7 +38,9 @@ func (r *SessionsRepo) GetByTokenHashWithUser(ctx context.Context, tokenHash []b
 	const q = `
 		SELECT
 			s.id, s.user_id, s.token_hash, s.expires_at, s.revoked_at, s.user_agent, s.ip, s.created_at, s.last_used_at,
-			u.id, u.email, u.password_hash, u.full_name, u.is_active, u.global_role, u.created_at, u.updated_at, u.last_login_at
+			u.id, u.email, u.password_hash, u.full_name, u.is_active, u.global_role,
+			u.status, u.is_system_account, u.created_by_user_id, u.last_login_ip,
+			u.created_at, u.updated_at, u.last_login_at
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = $1
@@ -48,16 +51,23 @@ func (r *SessionsRepo) GetByTokenHashWithUser(ctx context.Context, tokenHash []b
 	var user domain.User
 	var session domain.Session
 	var role int16
+	var status string
+	var lastIP *net.IP
 	err := r.pool.QueryRow(ctx, q, tokenHash).Scan(
 		&session.ID, &session.UserID, &session.TokenHash, &session.ExpiresAt, &session.RevokedAt,
 		&session.UserAgent, &session.IP, &session.CreatedAt, &session.LastUsedAt,
 		&user.ID, &user.Email, &user.PasswordHash, &user.FullName, &user.IsActive, &role,
+		&status, &user.IsSystemAccount, &user.CreatedByUserID, &lastIP,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("storage.SessionsRepo.GetByTokenHashWithUser: %w", err)
 	}
 	user.GlobalRole = domain.GlobalRole(role)
+	user.Status = domain.UserStatus(status)
+	if lastIP != nil {
+		user.LastLoginIP = *lastIP
+	}
 	return &session, &user, nil
 }
 
@@ -74,13 +84,19 @@ func (r *SessionsRepo) Revoke(ctx context.Context, tokenHash []byte) error {
 }
 
 func (r *SessionsRepo) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
+	return r.RevokeAllForUserWithReason(ctx, userID, "")
+}
+
+// RevokeAllForUserWithReason инвалидирует все активные сессии пользователя
+// и записывает причину для аудита.
+func (r *SessionsRepo) RevokeAllForUserWithReason(ctx context.Context, userID uuid.UUID, reason string) error {
 	const q = `
 		UPDATE sessions
-		SET revoked_at = now()
+		SET revoked_at = now(), revoked_reason = NULLIF($2, '')
 		WHERE user_id = $1 AND revoked_at IS NULL`
 
-	if _, err := r.pool.Exec(ctx, q, userID); err != nil {
-		return fmt.Errorf("storage.SessionsRepo.RevokeAllForUser: %w", err)
+	if _, err := r.pool.Exec(ctx, q, userID, reason); err != nil {
+		return fmt.Errorf("storage.SessionsRepo.RevokeAllForUserWithReason: %w", err)
 	}
 	return nil
 }
