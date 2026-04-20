@@ -73,21 +73,73 @@ func handleListProjects(repo *storage.ProjectsRepo, rolesRepo *storage.UserProje
 	}
 }
 
+type createProjectSLA struct {
+	UseTemplate      bool `json:"use_template"`
+	CriticalDays     *int `json:"critical_days"`
+	HighDays         *int `json:"high_days"`
+	MediumDays       *int `json:"medium_days"`
+	LowDays          *int `json:"low_days"`
+	NotifyBeforeDays int  `json:"notify_before_breach_days"`
+}
+
+type createProjectRequest struct {
+	Name        string          `json:"name"`
+	Slug        string          `json:"slug"`
+	Description string          `json:"description"`
+	IconColor   string          `json:"icon_color"`
+	Tags        []string        `json:"tags"`
+	TemplateID  string          `json:"template_id"`
+	OwnerID     string          `json:"owner_id"`
+	TeamID      string          `json:"team_id"`
+	TeamName    string          `json:"team_name"`
+	Visibility  string          `json:"visibility"`
+	SLA         createProjectSLA `json:"sla"`
+	// Source and Invites are accepted but not processed (stub)
+	Source  json.RawMessage   `json:"source"`
+	Invites []json.RawMessage `json:"invites"`
+}
+
 func handleCreateProject(pool *pgxpool.Pool, repo *storage.ProjectsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var p domain.Project
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		var req createProjectRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
 			return
+		}
+
+		user, _ := UserFromContext(r.Context())
+
+		p := domain.Project{
+			Name:        req.Name,
+			Slug:        req.Slug,
+			Description: req.Description,
+			IconColor:   req.IconColor,
+			Tags:        req.Tags,
+			Visibility:  req.Visibility,
+			CreatedBy:   user.ID,
+			SLACriticalDays:     req.SLA.CriticalDays,
+			SLAHighDays:         req.SLA.HighDays,
+			SLAMediumDays:       req.SLA.MediumDays,
+			SLALowDays:          req.SLA.LowDays,
+			SLANotifyBeforeDays: req.SLA.NotifyBeforeDays,
+		}
+
+		// Team: accept either team_id or team_name (for newly created teams)
+		if req.TeamID != "" || req.TeamName != "" {
+			p.Team = &domain.ProjectTeam{ID: req.TeamID, Name: req.TeamName}
+		}
+
+		// Owner: use provided owner_id or fall back to current user
+		if req.OwnerID != "" {
+			if ownerUUID, err := uuid.Parse(req.OwnerID); err == nil {
+				p.Owner = domain.ProjectOwner{ID: ownerUUID}
+			}
 		}
 
 		if err := p.Validate(); err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 			return
 		}
-
-		user, _ := UserFromContext(r.Context())
-		p.CreatedBy = user.ID
 
 		tx, err := pool.Begin(r.Context())
 		if err != nil {
