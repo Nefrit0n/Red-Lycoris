@@ -79,9 +79,12 @@ func (r *ProjectsRepo) create(ctx context.Context, exec projectExecutor, p *doma
 	const q = `
 		INSERT INTO projects (
 			id, slug, name, description, icon_color, repo_url, repo_provider,
-			tags, status, setup_completed, pinned, created_by, created_at, updated_at
+			tags, status, setup_completed, pinned, created_by,
+			visibility, sla_critical_days, sla_high_days, sla_medium_days, sla_low_days,
+			sla_notify_before_days, team_id,
+			created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`
 
 	if p.ID == uuid.Nil {
 		p.ID = uuid.New()
@@ -105,10 +108,23 @@ func (r *ProjectsRepo) create(ctx context.Context, exec projectExecutor, p *doma
 	if !p.SetupCompleted {
 		p.SetupCompleted = true
 	}
+	if p.Visibility == "" {
+		p.Visibility = "workspace"
+	}
+
+	var teamID any
+	if p.Team != nil && p.Team.ID != "" {
+		if tid, err := uuid.Parse(p.Team.ID); err == nil {
+			teamID = tid
+		}
+	}
 
 	_, err := exec.Exec(ctx, q,
 		p.ID, p.Slug, p.Name, p.Description, p.IconColor, emptyToNil(p.RepoURL), emptyToNil(p.RepoProvider),
-		p.Tags, p.Status, p.SetupCompleted, p.Pinned, uuidOrNil(p.CreatedBy), p.CreatedAt, p.UpdatedAt,
+		p.Tags, p.Status, p.SetupCompleted, p.Pinned, uuidOrNil(p.CreatedBy),
+		p.Visibility, p.SLACriticalDays, p.SLAHighDays, p.SLAMediumDays, p.SLALowDays,
+		p.SLANotifyBeforeDays, teamID,
+		p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("storage.ProjectsRepo.Create: %w", err)
@@ -130,6 +146,7 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 			p.status,
 			p.setup_completed,
 			p.pinned,
+			coalesce(p.visibility, 'workspace'),
 			coalesce(owner.id, p.created_by, '00000000-0000-0000-0000-000000000000'::uuid),
 			coalesce(owner.email, ''),
 			coalesce(nullif(owner.full_name, ''), owner.email, 'Unknown Owner'),
@@ -144,9 +161,17 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 			case when coalesce(fs.has_sast, false) then 'ok' else 'off' end,
 			case when coalesce(fs.has_dast, false) then 'ok' else 'off' end,
 			case when coalesce(fs.has_sca, false) then 'ok' else 'off' end,
-			case when coalesce(fs.has_secrets, false) then 'ok' else 'off' end
+			case when coalesce(fs.has_secrets, false) then 'ok' else 'off' end,
+			p.sla_critical_days,
+			p.sla_high_days,
+			p.sla_medium_days,
+			p.sla_low_days,
+			coalesce(p.sla_notify_before_days, 3),
+			coalesce(t.id::text, ''),
+			coalesce(t.name, '')
 		FROM projects p
 		LEFT JOIN users owner ON owner.id = p.created_by
+		LEFT JOIN teams t ON t.id = p.team_id
 		LEFT JOIN LATERAL (
 			SELECT
 				count(*) FILTER (WHERE f.status IN (0, 1, 4) AND f.severity = 4) AS critical,
@@ -166,9 +191,9 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 
 	var p domain.Project
 	var ownerID uuid.UUID
-	var ownerEmail string
-	var ownerDisplay string
+	var ownerEmail, ownerDisplay string
 	var sast, dast, sca, secrets string
+	var teamID, teamName string
 	if err := r.pool.QueryRow(ctx, q, id).Scan(
 		&p.ID,
 		&p.Slug,
@@ -181,6 +206,7 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 		&p.Status,
 		&p.SetupCompleted,
 		&p.Pinned,
+		&p.Visibility,
 		&ownerID,
 		&ownerEmail,
 		&ownerDisplay,
@@ -196,6 +222,13 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 		&dast,
 		&sca,
 		&secrets,
+		&p.SLACriticalDays,
+		&p.SLAHighDays,
+		&p.SLAMediumDays,
+		&p.SLALowDays,
+		&p.SLANotifyBeforeDays,
+		&teamID,
+		&teamName,
 	); err != nil {
 		return nil, fmt.Errorf("storage.ProjectsRepo.GetByID: %w", err)
 	}
@@ -203,6 +236,9 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 	p.Owner = domain.ProjectOwner{ID: ownerID, Email: ownerEmail, DisplayName: ownerDisplay}
 	p.Scanners = domain.ProjectScanners{
 		SAST: domain.ScannerState(sast), DAST: domain.ScannerState(dast), SCA: domain.ScannerState(sca), Secrets: domain.ScannerState(secrets),
+	}
+	if teamID != "" {
+		p.Team = &domain.ProjectTeam{ID: teamID, Name: teamName}
 	}
 	setDerivedProjectHealth(&p)
 	if p.Tags == nil {
@@ -257,6 +293,18 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 	if len(filter.Tags) > 0 {
 		where = append(where, fmt.Sprintf("coalesce(p.tags, '{}'::text[]) && %s", addArg(filter.Tags)))
 	}
+	if filter.Team != "" {
+		where = append(where, fmt.Sprintf("p.team_id::text = %s", addArg(filter.Team)))
+	}
+	if filter.SLA == "breached" {
+		where = append(where, `EXISTS (
+			SELECT 1 FROM findings f
+			WHERE f.project_id = p.id
+			  AND f.status IN (0, 1, 4)
+			  AND f.severity >= 3
+			  AND now() - f.first_seen > interval '7 day'
+		)`)
+	}
 
 	baseWhere := ""
 	if len(where) > 0 {
@@ -293,6 +341,13 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 		orderBy = "ORDER BY p.pinned DESC, p.updated_at DESC, p.id DESC"
 	case "critical-desc":
 		orderBy = "ORDER BY p.pinned DESC, sev.critical DESC, p.id DESC"
+	case "scan-date":
+		orderBy = `ORDER BY p.pinned DESC, (
+			SELECT max(f.last_seen) FROM findings f WHERE f.project_id = p.id
+		) DESC NULLS LAST, p.id DESC`
+	case "trend":
+		// Sort by critical count — approximates trend direction
+		orderBy = "ORDER BY p.pinned DESC, sev.critical DESC, p.id DESC"
 	}
 
 	countQ := `
@@ -322,6 +377,7 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 			p.status,
 			p.setup_completed,
 			p.pinned,
+			coalesce(p.visibility, 'workspace'),
 			coalesce(owner.id, p.created_by, '00000000-0000-0000-0000-000000000000'::uuid),
 			coalesce(owner.email, ''),
 			coalesce(nullif(owner.full_name, ''), owner.email, 'Unknown Owner'),
@@ -336,9 +392,12 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 			case when coalesce(sev.has_sast, false) then 'ok' else 'off' end,
 			case when coalesce(sev.has_dast, false) then 'ok' else 'off' end,
 			case when coalesce(sev.has_sca, false) then 'ok' else 'off' end,
-			case when coalesce(sev.has_secrets, false) then 'ok' else 'off' end
+			case when coalesce(sev.has_secrets, false) then 'ok' else 'off' end,
+			coalesce(t.id::text, ''),
+			coalesce(t.name, '')
 		FROM projects p
 		LEFT JOIN users owner ON owner.id = p.created_by
+		LEFT JOIN teams t ON t.id = p.team_id
 		LEFT JOIN LATERAL (
 			SELECT
 				count(*) FILTER (WHERE f.status IN (0, 1, 4) AND f.severity = 4) AS critical,
@@ -369,9 +428,9 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 	for rows.Next() {
 		var p domain.Project
 		var ownerID uuid.UUID
-		var ownerEmail string
-		var ownerDisplay string
+		var ownerEmail, ownerDisplay string
 		var sast, dast, sca, secrets string
+		var teamID, teamName string
 		if err := rows.Scan(
 			&p.ID,
 			&p.Slug,
@@ -384,6 +443,7 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 			&p.Status,
 			&p.SetupCompleted,
 			&p.Pinned,
+			&p.Visibility,
 			&ownerID,
 			&ownerEmail,
 			&ownerDisplay,
@@ -399,6 +459,8 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 			&dast,
 			&sca,
 			&secrets,
+			&teamID,
+			&teamName,
 		); err != nil {
 			return nil, 0, "", fmt.Errorf("storage.ProjectsRepo.List: scan: %w", err)
 		}
@@ -411,6 +473,9 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 		p.Owner = domain.ProjectOwner{ID: ownerID, Email: ownerEmail, DisplayName: ownerDisplay}
 		p.Scanners = domain.ProjectScanners{
 			SAST: domain.ScannerState(sast), DAST: domain.ScannerState(dast), SCA: domain.ScannerState(sca), Secrets: domain.ScannerState(secrets),
+		}
+		if teamID != "" {
+			p.Team = &domain.ProjectTeam{ID: teamID, Name: teamName}
 		}
 		setDerivedProjectHealth(&p)
 		if p.Tags == nil {
@@ -446,15 +511,35 @@ func (r *ProjectsRepo) Update(ctx context.Context, p *domain.Project) error {
 			tags = $6,
 			status = $7,
 			setup_completed = $8,
-			updated_at = $9
-		WHERE id = $10`
+			visibility = $9,
+			sla_critical_days = $10,
+			sla_high_days = $11,
+			sla_medium_days = $12,
+			sla_low_days = $13,
+			sla_notify_before_days = $14,
+			team_id = $15,
+			updated_at = $16
+		WHERE id = $17`
 
 	p.UpdatedAt = time.Now()
 	if p.Slug == "" {
 		p.Slug = slugifyProjectName(p.Name)
 	}
+	if p.Visibility == "" {
+		p.Visibility = "workspace"
+	}
+
+	var teamID any
+	if p.Team != nil && p.Team.ID != "" {
+		if tid, err := uuid.Parse(p.Team.ID); err == nil {
+			teamID = tid
+		}
+	}
+
 	tag, err := r.pool.Exec(ctx, q,
-		p.Name, p.Slug, p.Description, emptyToNil(p.RepoURL), emptyToNil(p.RepoProvider), p.Tags, p.Status, p.SetupCompleted, p.UpdatedAt, p.ID,
+		p.Name, p.Slug, p.Description, emptyToNil(p.RepoURL), emptyToNil(p.RepoProvider), p.Tags, p.Status, p.SetupCompleted,
+		p.Visibility, p.SLACriticalDays, p.SLAHighDays, p.SLAMediumDays, p.SLALowDays, p.SLANotifyBeforeDays,
+		teamID, p.UpdatedAt, p.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("storage.ProjectsRepo.Update: %w", err)
