@@ -80,6 +80,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	closureReasonsRepo := storage.NewClosureReasonsRepo(pool)
 	findingEventsRepo := storage.NewFindingEventsRepo(pool)
 	projectsRepo := storage.NewProjectsRepo(pool)
+	workspaceRepo := storage.NewWorkspaceRepo(pool)
 	dashboardRepo := storage.NewDashboardRepo(pool)
 	usersRepo := storage.NewUsersRepo(pool)
 	sessionsRepo := storage.NewSessionsRepo(pool)
@@ -170,9 +171,19 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
 			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb))
 
+		r.Route("/api/v1/workspace", func(r chi.Router) {
+			r.Get("/project-templates", handleGetProjectTemplates())
+			r.Get("/members", handleGetWorkspaceMembers(workspaceRepo))
+			r.Get("/teams", handleGetWorkspaceTeams(workspaceRepo))
+			r.Post("/teams", handleCreateWorkspaceTeam(workspaceRepo))
+			r.Get("/tags", handleGetWorkspaceTags(workspaceRepo))
+		})
+
 		r.Route("/api/v1/projects", func(r chi.Router) {
 			r.Get("/", handleListProjects(projectsRepo, userProjectRolesRepo))
 			r.With(RequireGlobalAdmin).Post("/", handleCreateProject(pool, projectsRepo, userProjectRolesRepo))
+			// check-slug must be registered before /{id} to avoid routing conflict
+			r.Get("/check-slug", handleCheckProjectSlug(workspaceRepo))
 
 			r.Route("/{id}", func(r chi.Router) {
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
@@ -186,6 +197,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Patch("/pinned", handlePatchProjectPinned(projectsRepo))
 				r.With(RequireGlobalAdmin).Delete("/", handleDeleteProject(projectsRepo))
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
+					Post("/ingest-token", handleGetIngestToken())
 
 				r.Route("/members", func(r chi.Router) {
 					r.Use(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id")))
