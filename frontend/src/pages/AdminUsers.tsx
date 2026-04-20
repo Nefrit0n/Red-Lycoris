@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 
 interface AdminUser {
   id: string;
@@ -469,12 +469,5 @@ function ActionButton({ label, disabledReason, destructive, onClick }: ActionBut
 
   if (!disabledReason) return btn;
 
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span>{btn}</span>
-      </TooltipTrigger>
-      <TooltipContent>{disabledReason}</TooltipContent>
-    </Tooltip>
-  );
+  return <Tooltip content={disabledReason}><span>{btn}</span></Tooltip>;
 }
