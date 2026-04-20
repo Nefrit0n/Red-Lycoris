@@ -76,12 +76,18 @@ type Project struct {
 	Tags           []string                  `json:"tags"`
 	Status         ProjectStatus             `json:"status"`
 	SetupCompleted bool                      `json:"setup_completed"`
+	Visibility     string                    `json:"visibility"`
 	Owner          ProjectOwner              `json:"owner"`
 	Team           *ProjectTeam              `json:"team,omitempty"`
 	Pinned         bool                      `json:"pinned"`
 	CreatedBy      uuid.UUID                 `json:"-"`
 	FindingsBySev  ProjectFindingsBySeverity `json:"findings_by_severity"`
 	SLABreached    int                       `json:"sla_breached_count"`
+	SLACriticalDays     *int                 `json:"sla_critical_days,omitempty"`
+	SLAHighDays         *int                 `json:"sla_high_days,omitempty"`
+	SLAMediumDays       *int                 `json:"sla_medium_days,omitempty"`
+	SLALowDays          *int                 `json:"sla_low_days,omitempty"`
+	SLANotifyBeforeDays int                  `json:"sla_notify_before_days"`
 	Scanners       ProjectScanners           `json:"scanners"`
 	LastScan       *ProjectLastScan          `json:"last_scan,omitempty"`
 	Health         ProjectHealth             `json:"health"`
