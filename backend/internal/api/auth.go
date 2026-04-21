@@ -38,17 +38,27 @@ func readAuthToken(r *http.Request) (token string, ok bool) {
 		}
 	}
 
-	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
-	if authHeader != "" {
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-			if token = strings.TrimSpace(parts[1]); token != "" {
-				return token, true
-			}
-		}
+	if token, ok := readBearerToken(r); ok {
+		return token, true
 	}
 
 	return "", false
+}
+
+func readBearerToken(r *http.Request) (token string, ok bool) {
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	if authHeader == "" {
+		return "", false
+	}
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", false
+	}
+	token = strings.TrimSpace(parts[1])
+	if token == "" {
+		return "", false
+	}
+	return token, true
 }
 
 func extractIP(r *http.Request, trustProxy ...bool) string {

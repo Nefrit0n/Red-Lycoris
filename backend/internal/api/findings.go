@@ -210,7 +210,7 @@ func handleListFindings(repo *storage.FindingsRepo, rolesRepo *storage.UserProje
 	}
 }
 
-func handleGetFinding(repo *storage.FindingsRepo, pool *pgxpool.Pool) http.HandlerFunc {
+func handleGetFinding(repo *storage.FindingsRepo, scansRepo *storage.ScansRepo, pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
@@ -234,6 +234,11 @@ func handleGetFinding(repo *storage.FindingsRepo, pool *pgxpool.Pool) http.Handl
 		score, err := enrichment.GetFindingScore(r.Context(), pool, id)
 		if err == nil && score != nil {
 			result["score"] = score
+		}
+		if scansRepo != nil {
+			if scans, scanErr := scansRepo.ListRecentForFinding(r.Context(), id, 50); scanErr == nil {
+				result["seen_in_scans"] = scans
+			}
 		}
 
 		respondJSON(w, http.StatusOK, map[string]any{"data": result})

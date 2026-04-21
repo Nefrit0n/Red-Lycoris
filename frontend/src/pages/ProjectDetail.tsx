@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import ProjectSettingsTokens from "@/pages/ProjectSettingsTokens";
+import ProjectScans from "@/pages/ProjectScans";
 
 interface Project {
   id: string;
@@ -97,6 +99,8 @@ export default function ProjectDetail() {
         <TabsTrigger value="overview">Обзор</TabsTrigger>
         <TabsTrigger value="findings">Находки</TabsTrigger>
         <TabsTrigger value="members">Участники</TabsTrigger>
+        <TabsTrigger value="tokens">Токены</TabsTrigger>
+        <TabsTrigger value="scans">Сканы</TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview">
@@ -143,6 +147,14 @@ export default function ProjectDetail() {
             </CardContent>
           </Card>
         )}
+      </TabsContent>
+
+      <TabsContent value="tokens">
+        <ProjectSettingsTokens projectId={id} />
+      </TabsContent>
+
+      <TabsContent value="scans">
+        <ProjectScans projectId={id} />
       </TabsContent>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
