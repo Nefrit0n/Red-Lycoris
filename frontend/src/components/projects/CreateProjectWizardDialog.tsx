@@ -17,8 +17,10 @@ import {
   projectWizardReducer,
   serializeDraft,
   type InviteRole,
+  normalizeTemplate,
   type ProjectTemplate,
   type ProjectVisibility,
+  type RawProjectTemplate,
   type WizardStep,
 } from "@/lib/project-wizard";
 import { useCreateProject } from "@/api/projects";
@@ -132,12 +134,17 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    void apiGet<{ data: ProjectTemplate[] }>("/api/v1/workspace/project-templates")
+    void apiGet<{ data: RawProjectTemplate[] }>("/api/v1/workspace/project-templates")
       .then((res) => {
-        setTemplates(res.data);
+        const normalized = (res.data ?? []).map(normalizeTemplate);
+        setTemplates(normalized);
         setTemplateLoadError("");
-        if (!state.template_id && res.data[0]) {
-          dispatch({ type: "SET_TEMPLATE", template_id: res.data[0].id, templateSla: res.data[0].sla });
+        if (!state.template_id && normalized[0]) {
+          dispatch({
+            type: "SET_TEMPLATE",
+            template_id: normalized[0].id,
+            templateSla: normalized[0].sla,
+          });
         }
       })
       .catch(() => {
@@ -531,7 +538,13 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
         </div>
         <div className="mt-2 rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-xs text-sky-200">
           {activeTemplate
-            ? `Шаблон ${activeTemplate.name}: включает ${activeTemplate.scanners.join(" + ")}. SLA critical-${activeTemplate.sla.critical_days ?? 7}д / high-${activeTemplate.sla.high_days ?? 30}д / medium-${activeTemplate.sla.medium_days ?? 90}д`
+            ? `Шаблон ${activeTemplate.name}: включает ${
+                activeTemplate.scanners.length > 0
+                  ? activeTemplate.scanners.join(" + ")
+                  : "—"
+              }. SLA critical-${activeTemplate.sla.critical_days ?? 7}д / high-${
+                activeTemplate.sla.high_days ?? 30
+              }д / medium-${activeTemplate.sla.medium_days ?? 90}д`
             : templateLoadError || "Выберите шаблон"}
         </div>
       </div>

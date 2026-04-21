@@ -17,18 +17,13 @@ import (
 
 // projectTemplate is the static definition served from GET /workspace/project-templates.
 type projectTemplate struct {
-	ID          string                   `json:"id"`
-	Name        string                   `json:"name"`
-	Description string                   `json:"description"`
-	Scanners    projectTemplateScanners  `json:"scanners"`
-	SLA         projectTemplateSLA       `json:"sla"`
-}
-
-type projectTemplateScanners struct {
-	SAST    string `json:"sast"`
-	DAST    string `json:"dast"`
-	SCA     string `json:"sca"`
-	Secrets string `json:"secrets"`
+	ID          string             `json:"id"`
+	Key         string             `json:"key"`
+	Name        string             `json:"name"`
+	IconLabel   string             `json:"icon_label"`
+	Description string             `json:"description"`
+	Scanners    []string           `json:"scanners"`
+	SLA         projectTemplateSLA `json:"sla"`
 }
 
 type projectTemplateSLA struct {
@@ -39,27 +34,27 @@ type projectTemplateSLA struct {
 
 var defaultProjectTemplates = []projectTemplate{
 	{
-		ID: "web-api", Name: "Web API",
+		ID: "web-api", Key: "web-api", Name: "Web API", IconLabel: "API",
 		Description: "SAST + DAST + SCA + Secrets. SLA: critical 7д / high 30д / medium 90д",
-		Scanners:    projectTemplateScanners{SAST: "required", DAST: "required", SCA: "required", Secrets: "required"},
+		Scanners:    []string{"SAST", "DAST", "SCA", "Secrets"},
 		SLA:         projectTemplateSLA{CriticalDays: 7, HighDays: 30, MediumDays: 90},
 	},
 	{
-		ID: "mobile", Name: "Mobile",
+		ID: "mobile", Key: "mobile", Name: "Mobile", IconLabel: "APP",
 		Description: "SAST + SCA + Secrets. SLA: critical 7д / high 30д / medium 90д",
-		Scanners:    projectTemplateScanners{SAST: "required", DAST: "off", SCA: "required", Secrets: "required"},
+		Scanners:    []string{"SAST", "SCA", "Secrets"},
 		SLA:         projectTemplateSLA{CriticalDays: 7, HighDays: 30, MediumDays: 90},
 	},
 	{
-		ID: "iac", Name: "Infra as Code",
-		Description: "SAST + Secrets. SLA: critical 3д / high 14д / medium 60д",
-		Scanners:    projectTemplateScanners{SAST: "required", DAST: "off", SCA: "off", Secrets: "required"},
+		ID: "iac", Key: "iac", Name: "Infra as Code", IconLabel: "IaC",
+		Description: "IaC + Secrets. SLA: critical 3д / high 14д / medium 60д",
+		Scanners:    []string{"IaC", "Secrets"},
 		SLA:         projectTemplateSLA{CriticalDays: 3, HighDays: 14, MediumDays: 60},
 	},
 	{
-		ID: "library", Name: "Library/SDK",
-		Description: "SAST + SCA + Secrets. SLA: critical 7д / high 30д / medium 90д",
-		Scanners:    projectTemplateScanners{SAST: "required", DAST: "off", SCA: "required", Secrets: "required"},
+		ID: "library", Key: "library", Name: "Library/SDK", IconLabel: "LIB",
+		Description: "SCA + SAST + Secrets. SLA: critical 7д / high 30д / medium 90д",
+		Scanners:    []string{"SCA", "SAST", "Secrets"},
 		SLA:         projectTemplateSLA{CriticalDays: 7, HighDays: 30, MediumDays: 90},
 	},
 }
