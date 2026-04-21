@@ -946,7 +946,7 @@ func (r *FindingsRepo) getForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID
 		FROM findings f
 		LEFT JOIN finding_scores fs ON fs.finding_id = f.id
 		WHERE f.id = $1
-		FOR UPDATE`, id))
+		FOR UPDATE OF f`, id))
 	if err != nil {
 		return nil, fmt.Errorf("storage.FindingsRepo.getForUpdate: %w", err)
 	}
