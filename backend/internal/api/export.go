@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -37,12 +38,13 @@ type exportHandlers struct {
 }
 
 type cveAgg struct {
-	Count    int
-	Projects map[string]struct{}
-	MaxSev   int
-	EPSS     float64
-	InKEV    bool
-	InBDU    bool
+	Count       int
+	Projects    map[string]struct{}
+	MaxSev      int
+	EPSS        float64
+	InKEV       bool
+	InBDU       bool
+	MaxPriority float64
 }
 
 type compAgg struct {
@@ -286,6 +288,9 @@ func (h *exportHandlers) handleXLSX() http.HandlerFunc {
 					cv.InKEV = cv.InKEV || item.InKEV
 					cv.InBDU = cv.InBDU || item.InBDU
 					cv.Projects[item.ProjectName] = struct{}{}
+					if item.PriorityScore != nil && *item.PriorityScore > cv.MaxPriority {
+						cv.MaxPriority = *item.PriorityScore
+					}
 				}
 
 				desc := item.Description
@@ -310,7 +315,15 @@ func (h *exportHandlers) handleXLSX() http.HandlerFunc {
 			return
 		}
 
-		writeSummarySheet(f, filtersMap, total, sevCounts, statusCounts, compMap)
+		userName := ""
+		if user, ok := UserFromContext(r.Context()); ok {
+			if user.FullName != "" {
+				userName = user.FullName + " <" + user.Email + ">"
+			} else {
+				userName = user.Email
+			}
+		}
+		writeSummarySheet(f, filtersMap, total, sevCounts, statusCounts, compMap, userName)
 		writeByCVESheet(f, cveMap)
 		writeByComponentSheet(f, compMap)
 		writeAboutSheet(f, h.version, total, filtersMap)
@@ -529,7 +542,7 @@ func sanitizeSlug(v string) string {
 	v = strings.ReplaceAll(v, " ", "-")
 	var b strings.Builder
 	for _, ch := range v {
-		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' {
+		if unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '-' {
 			b.WriteRune(ch)
 		}
 	}
@@ -550,31 +563,73 @@ func setBasicSheetStyle(f *excelize.File, sheet string, headers []string) error 
 	return nil
 }
 
-func writeSummarySheet(f *excelize.File, filters map[string]any, total int, sevCounts, statusCounts map[string]int, comp map[string]*compAgg) {
+func writeSummarySheet(f *excelize.File, filters map[string]any, total int, sevCounts, statusCounts map[string]int, comp map[string]*compAgg, userName string) {
+	// Context block
 	_ = f.SetCellValue("Summary", "A1", "Контекст выгрузки")
 	_ = f.SetCellValue("Summary", "A2", "Дата")
 	_ = f.SetCellValue("Summary", "B2", time.Now().UTC().Format(time.RFC3339))
-	_ = f.SetCellValue("Summary", "A3", "Фильтры")
+	_ = f.SetCellValue("Summary", "A3", "Пользователь")
+	_ = f.SetCellValue("Summary", "B3", userName)
+	_ = f.SetCellValue("Summary", "A4", "Фильтры")
 	buf, _ := json.Marshal(filters)
-	_ = f.SetCellValue("Summary", "B3", string(buf))
-	_ = f.SetCellValue("Summary", "A4", "Всего")
-	_ = f.SetCellValue("Summary", "B4", total)
+	_ = f.SetCellValue("Summary", "B4", string(buf))
+	_ = f.SetCellValue("Summary", "A5", "Всего")
+	_ = f.SetCellValue("Summary", "B5", total)
 
-	row := 6
-	_ = f.SetCellValue("Summary", "A6", "Распределение по severity")
-	for _, s := range []string{"critical", "high", "medium", "low", "info"} {
+	// Severity distribution with percentage column
+	sevOrder := []string{"critical", "high", "medium", "low", "info"}
+	row := 7
+	_ = f.SetCellValue("Summary", "A7", "Распределение по severity")
+	_ = f.SetCellValue("Summary", "B7", "Количество")
+	_ = f.SetCellValue("Summary", "C7", "% от общего")
+	sevStartRow := row + 1
+	for _, s := range sevOrder {
 		row++
+		pct := 0.0
+		if total > 0 {
+			pct = float64(sevCounts[s]) / float64(total) * 100
+		}
 		_ = f.SetCellValue("Summary", fmt.Sprintf("A%d", row), s)
 		_ = f.SetCellValue("Summary", fmt.Sprintf("B%d", row), sevCounts[s])
+		_ = f.SetCellValue("Summary", fmt.Sprintf("C%d", row), fmt.Sprintf("%.1f%%", pct))
 	}
-	row += 2
-	_ = f.SetCellValue("Summary", fmt.Sprintf("A%d", row), "Распределение по статусам")
-	for _, s := range []string{"open", "confirmed", "false_positive", "fixed", "accepted_risk"} {
-		row++
-		_ = f.SetCellValue("Summary", fmt.Sprintf("A%d", row), s)
-		_ = f.SetCellValue("Summary", fmt.Sprintf("B%d", row), statusCounts[s])
+	sevEndRow := row
+
+	// Conditional formatting for severity names
+	sevColors := map[string]string{
+		"critical": "#FEE2E2",
+		"high":     "#FED7AA",
+		"medium":   "#FEF9C3",
+		"low":      "#DBEAFE",
+		"info":     "#F3F4F6",
+	}
+	for r := sevStartRow; r <= sevEndRow; r++ {
+		cellRef := fmt.Sprintf("A%d", r)
+		sevIdx := r - sevStartRow
+		if sevIdx >= 0 && sevIdx < len(sevOrder) {
+			color := sevColors[sevOrder[sevIdx]]
+			sevStyle, _ := f.NewStyle(&excelize.Style{Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{color}}})
+			_ = f.SetCellStyle("Summary", cellRef, cellRef, sevStyle)
+		}
 	}
 
+	// Status distribution with percentage
+	row += 2
+	_ = f.SetCellValue("Summary", fmt.Sprintf("A%d", row), "Распределение по статусам")
+	_ = f.SetCellValue("Summary", fmt.Sprintf("B%d", row), "Количество")
+	_ = f.SetCellValue("Summary", fmt.Sprintf("C%d", row), "% от общего")
+	for _, s := range []string{"open", "confirmed", "false_positive", "fixed", "accepted_risk"} {
+		row++
+		pct := 0.0
+		if total > 0 {
+			pct = float64(statusCounts[s]) / float64(total) * 100
+		}
+		_ = f.SetCellValue("Summary", fmt.Sprintf("A%d", row), s)
+		_ = f.SetCellValue("Summary", fmt.Sprintf("B%d", row), statusCounts[s])
+		_ = f.SetCellValue("Summary", fmt.Sprintf("C%d", row), fmt.Sprintf("%.1f%%", pct))
+	}
+
+	// Top-10 components
 	type pair struct {
 		K   string
 		C   int
@@ -587,6 +642,8 @@ func writeSummarySheet(f *excelize.File, filters map[string]any, total int, sevC
 	sort.Slice(items, func(i, j int) bool { return items[i].C > items[j].C })
 	row += 2
 	_ = f.SetCellValue("Summary", fmt.Sprintf("A%d", row), "Топ-10 компонентов")
+	_ = f.SetCellValue("Summary", fmt.Sprintf("B%d", row), "Findings")
+	_ = f.SetCellValue("Summary", fmt.Sprintf("C%d", row), "Max severity")
 	for i := 0; i < len(items) && i < 10; i++ {
 		row++
 		_ = f.SetCellValue("Summary", fmt.Sprintf("A%d", row), items[i].K)
@@ -609,7 +666,7 @@ func writeByCVESheet(f *excelize.File, cveMap map[string]*cveAgg) {
 	for k, v := range cveMap {
 		rows = append(rows, row{CVE: k, cveAgg: v})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].Count > rows[j].Count })
+	sort.Slice(rows, func(i, j int) bool { return rows[i].MaxPriority > rows[j].MaxPriority })
 	for idx, item := range rows {
 		r := idx + 2
 		_ = f.SetCellValue("By CVE", fmt.Sprintf("A%d", r), item.CVE)
