@@ -152,6 +152,60 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 	return inserted, nil
 }
 
+// CreateTx is identical to Create but runs inside an existing transaction.
+func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Finding) (inserted bool, err error) {
+	const q = `
+		INSERT INTO findings (
+			id, title, description, severity, confidence, status,
+			file_path, line_start, line_end, component, component_version,
+			cve_ids, cwe_ids, cpe_uri, fingerprint, first_seen, last_seen,
+			times_seen, project_id, source_type, finding_kind,
+			fixed_version, package_ecosystem, purl, code_snippet, code_flow,
+			url, http_method, http_param, http_evidence, iac_resource,
+			iac_provider, secret_kind, commit_sha, rule_id, rule_name
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11,
+			$12, $13, $14, $15, $16, $17,
+			$18, $19, $20, $21,
+			$22, $23, $24, $25, $26,
+			$27, $28, $29, $30, $31,
+			$32, $33, $34, $35, $36
+		)
+		ON CONFLICT (fingerprint) DO UPDATE SET
+			last_seen  = EXCLUDED.last_seen,
+			times_seen = findings.times_seen + 1
+		RETURNING (xmax = 0) AS inserted`
+
+	if f.ID == uuid.Nil {
+		f.ID = uuid.New()
+	}
+	now := time.Now()
+	if f.FirstSeen.IsZero() {
+		f.FirstSeen = now
+	}
+	if f.LastSeen.IsZero() {
+		f.LastSeen = now
+	}
+	if f.TimesSeen == 0 {
+		f.TimesSeen = 1
+	}
+
+	err = tx.QueryRow(ctx, q,
+		f.ID, f.Title, f.Description, f.Severity, f.Confidence, f.Status,
+		f.FilePath, f.LineStart, f.LineEnd, f.Component, f.ComponentVersion,
+		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint, f.FirstSeen, f.LastSeen,
+		f.TimesSeen, f.ProjectID, f.SourceType, int16(f.Kind),
+		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
+		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
+		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
+	).Scan(&inserted)
+	if err != nil {
+		return false, fmt.Errorf("storage.FindingsRepo.CreateTx: %w", err)
+	}
+	return inserted, nil
+}
+
 var findingColumns = `
 	f.id, f.finding_kind, f.title, f.description, f.severity, f.confidence, f.status,
 	f.file_path, f.line_start, f.line_end, f.component, f.component_version,

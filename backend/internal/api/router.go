@@ -178,7 +178,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb))
 		r.With(RequireScope("scans:write")).
 			Post("/api/v1/scans", handleCreateScan(scansRepo, findingsRepo))
-		r.Get("/api/v1/scans/{id}", handleGetScan(scansRepo))
+		r.Get("/api/v1/scans/{id}", handleGetScan(scansRepo, userProjectRolesRepo))
 
 		r.Route("/api/v1/workspace", func(r chi.Router) {
 			r.Get("/project-templates", handleGetProjectTemplates())

@@ -28,6 +28,16 @@ export interface ScanItem {
   status: "running" | "completed" | "failed";
 }
 
+export interface ScanFindingItem {
+  id: string;
+  title: string;
+  severity: number;
+  file_path?: string | null;
+  line_start?: number | null;
+  cve_ids?: string[];
+  is_new: boolean;
+}
+
 export function useProjectTokens(projectId?: string) {
   return useQuery({
     queryKey: ["project-api-tokens", projectId],
@@ -60,10 +70,17 @@ export function useRevokeProjectToken(projectId: string) {
   });
 }
 
-export function useProjectScans(projectId?: string, params?: Record<string, string>) {
+export function useProjectScans(
+  projectId?: string,
+  params?: Record<string, string>,
+) {
   return useQuery({
     queryKey: ["project-scans", projectId, params],
-    queryFn: async () => apiGet<{ data: ScanItem[] }>(`/api/v1/projects/${projectId}/scans`, params),
+    queryFn: async () =>
+      apiGet<{ data: ScanItem[]; meta: { next_cursor: string; has_more: boolean } }>(
+        `/api/v1/projects/${projectId}/scans`,
+        params,
+      ),
     enabled: Boolean(projectId),
   });
 }
@@ -71,7 +88,10 @@ export function useProjectScans(projectId?: string, params?: Record<string, stri
 export function useScan(scanId?: string) {
   return useQuery({
     queryKey: ["scan", scanId],
-    queryFn: async () => apiGet<{ data: { scan: ScanItem; findings: any[] } }>(`/api/v1/scans/${scanId}`),
+    queryFn: async () =>
+      apiGet<{ data: { scan: ScanItem; findings: ScanFindingItem[] } }>(
+        `/api/v1/scans/${scanId}`,
+      ),
     enabled: Boolean(scanId),
   });
 }

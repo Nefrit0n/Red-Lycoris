@@ -59,16 +59,12 @@ func RequireScope(required string) func(http.Handler) http.Handler {
 				return
 			}
 
-			user, ok := UserFromContext(r.Context())
-			if !ok {
-				respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
-				return
-			}
-			if user.IsAdmin() {
+			// Session users go through RBAC — scope check is PAT-only.
+			if _, ok := UserFromContext(r.Context()); ok {
 				next.ServeHTTP(w, r)
 				return
 			}
-			respondError(w, r, http.StatusForbidden, "FORBIDDEN", "project admin or api token required")
+			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
 		})
 	}
 }

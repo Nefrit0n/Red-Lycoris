@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"redlycoris/internal/domain"
 	"redlycoris/internal/parser"
@@ -67,9 +69,17 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			return
 		}
 
+		if scanner == "" {
+			scanner = "unknown"
+		}
+
 		tokenID, _ := uuid.Parse(tok.TokenID)
 		rawSize := int(hdr.Size)
-		scan := &domain.Scan{ProjectID: projectID, CommitSHA: commitSHA, Branch: branch, Scanner: scanner, Status: domain.ScanStatusRunning, TokenID: &tokenID, RawReportSize: &rawSize}
+		scan := &domain.Scan{
+			ProjectID: projectID, CommitSHA: commitSHA, Branch: branch,
+			Scanner: scanner, Status: domain.ScanStatusRunning,
+			TokenID: &tokenID, RawReportSize: &rawSize,
+		}
 		if scannerVersion != "" {
 			scan.ScannerVersion = &scannerVersion
 		}
@@ -83,7 +93,7 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 		start := time.Now()
 		tx, err := findingsRepo.DB().Begin(r.Context())
 		if err != nil {
-			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create scan")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to begin transaction")
 			return
 		}
 		if err := scansRepo.Create(r.Context(), tx, scan); err != nil {
@@ -99,9 +109,10 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			respondError(w, r, http.StatusBadRequest, "PARSE_ERROR", err.Error())
 			return
 		}
-		if scan.Scanner == "" {
+		if detected != "" && scan.Scanner == "unknown" {
 			scan.Scanner = detected
 		}
+
 		imported, updated := 0, 0
 		now := time.Now()
 		for i := range findings {
@@ -120,7 +131,8 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			if f.Fingerprint == "" {
 				f.Fingerprint = domain.CalculateFingerprint(f)
 			}
-			isNew, err := findingsRepo.Create(r.Context(), f)
+			// CreateTx runs inside the same transaction so findings+links are atomic
+			isNew, err := findingsRepo.CreateTx(r.Context(), tx, f)
 			if err != nil {
 				_ = tx.Rollback(r.Context())
 				_ = scansRepo.Fail(r.Context(), scan.ID)
@@ -190,7 +202,7 @@ func handleListScans(scansRepo *storage.ScansRepo) http.HandlerFunc {
 	}
 }
 
-func handleGetScan(scansRepo *storage.ScansRepo) http.HandlerFunc {
+func handleGetScan(scansRepo *storage.ScansRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		scanID, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
@@ -199,9 +211,36 @@ func handleGetScan(scansRepo *storage.ScansRepo) http.HandlerFunc {
 		}
 		scan, err := scansRepo.Get(r.Context(), scanID)
 		if err != nil {
-			respondError(w, r, http.StatusNotFound, "NOT_FOUND", "scan not found")
+			if errors.Is(err, pgx.ErrNoRows) {
+				respondError(w, r, http.StatusNotFound, "NOT_FOUND", "scan not found")
+			} else {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get scan")
+			}
 			return
 		}
+
+		// Verify the caller has at least viewer access to the scan's project.
+		user, hasUser := UserFromContext(r.Context())
+		patTok, hasPAT := APITokenFromContext(r.Context())
+		switch {
+		case hasPAT:
+			if patTok.ProjectID != scan.ProjectID.String() {
+				respondError(w, r, http.StatusForbidden, "FORBIDDEN", "token does not belong to this project")
+				return
+			}
+		case hasUser:
+			if !user.IsAdmin() {
+				role, found, roleErr := rolesRepo.GetRole(r.Context(), user.ID, scan.ProjectID)
+				if roleErr != nil || !found || role < domain.RoleViewer {
+					respondError(w, r, http.StatusForbidden, "FORBIDDEN", "access denied")
+					return
+				}
+			}
+		default:
+			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
+			return
+		}
+
 		findings, err := scansRepo.ListFindings(r.Context(), scanID, 200)
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list scan findings")

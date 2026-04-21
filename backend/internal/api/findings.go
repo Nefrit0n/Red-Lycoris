@@ -236,7 +236,7 @@ func handleGetFinding(repo *storage.FindingsRepo, scansRepo *storage.ScansRepo, 
 			result["score"] = score
 		}
 		if scansRepo != nil {
-			if scans, scanErr := scansRepo.ListRecentForFinding(r.Context(), id, 50); scanErr == nil {
+			if scans, scanErr := scansRepo.ListRecentForFinding(r.Context(), id, 5); scanErr == nil {
 				result["seen_in_scans"] = scans
 			}
 		}

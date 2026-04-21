@@ -80,15 +80,26 @@ func (r *APITokensRepo) Revoke(ctx context.Context, tokenID, projectID uuid.UUID
 	return nil
 }
 
+const touchDebounce = time.Minute
+
+// TouchLastUsed updates last_used_at at most once per minute per token.
+// Entries older than 2× debounce are evicted from the in-memory map to prevent
+// unbounded growth.
 func (r *APITokensRepo) TouchLastUsed(ctx context.Context, tokenID uuid.UUID) error {
 	now := time.Now()
 	r.touchMu.Lock()
 	last := r.lastTouchMap[tokenID]
-	if !last.IsZero() && now.Sub(last) < time.Minute {
+	if !last.IsZero() && now.Sub(last) < touchDebounce {
 		r.touchMu.Unlock()
 		return nil
 	}
 	r.lastTouchMap[tokenID] = now
+	// Evict stale entries while the lock is held to keep the map bounded.
+	for k, v := range r.lastTouchMap {
+		if now.Sub(v) > 2*touchDebounce {
+			delete(r.lastTouchMap, k)
+		}
+	}
 	r.touchMu.Unlock()
 
 	const q = `UPDATE api_tokens SET last_used_at = now() WHERE id = $1`
