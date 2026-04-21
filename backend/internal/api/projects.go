@@ -157,6 +157,9 @@ func handleCreateProject(pool *pgxpool.Pool, repo *storage.ProjectsRepo, rolesRe
 				case "23505":
 					respondError(w, r, http.StatusConflict, "CONFLICT", "project with the same name or slug already exists")
 					return
+				case "23503":
+					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "selected team does not exist")
+					return
 				case "23514":
 					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project data")
 					return
