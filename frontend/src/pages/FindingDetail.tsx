@@ -716,14 +716,42 @@ export default function FindingDetail() {
         </TabsContent>
 
         <TabsContent value="enrichment">
-          <EnrichmentTabs
-            findingId={finding.id}
-            findingComponent={
-              finding.component_version
-                ? `${finding.component}@${finding.component_version}`
-                : finding.component
-            }
-          />
+          <div className="space-y-4">
+            <EnrichmentTabs
+              findingId={finding.id}
+              findingComponent={
+                finding.component_version
+                  ? `${finding.component}@${finding.component_version}`
+                  : finding.component
+              }
+            />
+            <Card className="border-zinc-800 bg-zinc-900/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-zinc-400">Где видели</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {(data?.data.seen_in_scans ?? []).slice(0, 5).map((scan) => (
+                  <div key={scan.id} className="flex flex-wrap items-center gap-2 text-zinc-300">
+                    <span>{formatRelativeDate(scan.started_at)}</span>
+                    <span>·</span>
+                    <span>{scan.branch}</span>
+                    <span>·</span>
+                    <span className="font-mono">{scan.commit_sha.slice(0, 8)}</span>
+                    <span>·</span>
+                    <span>{scan.scanner}</span>
+                    {scan.ci_job_url && (
+                      <a href={scan.ci_job_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                        CI
+                      </a>
+                    )}
+                  </div>
+                ))}
+                {(data?.data.seen_in_scans ?? []).length === 0 && (
+                  <div className="text-zinc-500">Нет данных по сканам.</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="comments">

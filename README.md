@@ -118,6 +118,19 @@ GET /api/v1/findings?limit=50&cursor=...&sort=-priority_score
 | Метод | Путь | Описание |
 |-------|------|----------|
 | POST | `/api/v1/import` | Импорт findings (SARIF, Trivy JSON, generic JSON) |
+| POST | `/api/v1/scans` | Импорт сканов из CI по project API token |
+
+### CI Integration
+
+- Подробная инструкция и готовый `.gitlab-ci.yml`: [docs/gitlab-ci.md](docs/gitlab-ci.md)
+- Для CI используйте project API token со scope `scans:write`.
+
+### Supported scanners
+
+- OpenGrep (SARIF)
+- Trivy
+- TruffleHog
+- Gitleaks
 
 ### Enrichment
 

@@ -2,30 +2,73 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	authsvc "redlycoris/internal/auth"
+	"redlycoris/internal/storage"
 )
 
 type (
 	userCtxKeyType             struct{}
 	sessionCtxKeyType          struct{}
 	authTokenInvalidCtxKeyType struct{}
+	apiTokenCtxKeyType         struct{}
 )
 
 var (
 	userCtxKey             = userCtxKeyType{}
 	sessionCtxKey          = sessionCtxKeyType{}
 	authTokenInvalidCtxKey = authTokenInvalidCtxKeyType{}
+	apiTokenCtxKey         = apiTokenCtxKeyType{}
 )
 
-func LoadSessionMiddleware(svc *authsvc.Service) func(http.Handler) http.Handler {
+type APITokenContext struct {
+	TokenID   string
+	ProjectID string
+	Scopes    []string
+}
+
+func LoadSessionMiddleware(svc *authsvc.Service, tokensRepo *storage.APITokensRepo) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if bearer, ok := readBearerToken(r); ok && strings.HasPrefix(strings.TrimSpace(bearer), "rl_pat_") {
+				prefix, secret, err := authsvc.ParsePAT(bearer)
+				if err != nil {
+					respondError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "invalid api token")
+					return
+				}
+				token, err := tokensRepo.GetByPrefix(r.Context(), prefix)
+				if err != nil {
+					respondError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "invalid api token")
+					return
+				}
+				secretHash := authsvc.HashPATSecret(secret)
+				if subtle.ConstantTimeCompare([]byte(secretHash), []byte(token.TokenHash)) != 1 {
+					respondError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "invalid api token")
+					return
+				}
+				ctx := context.WithValue(r.Context(), apiTokenCtxKey, &APITokenContext{
+					TokenID:   token.ID.String(),
+					ProjectID: token.ProjectID.String(),
+					Scopes:    token.Scopes,
+				})
+				go func(tokenID string) {
+					id, parseErr := uuid.Parse(tokenID)
+					if parseErr == nil {
+						_ = tokensRepo.TouchLastUsed(context.Background(), id)
+					}
+				}(token.ID.String())
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
 			hasAuthHeader := strings.TrimSpace(r.Header.Get("Authorization")) != ""
 			hasSessionCookie := false
 			if c, err := r.Cookie("rl_session"); err == nil && strings.TrimSpace(c.Value) != "" {
@@ -117,4 +160,12 @@ func SessionFromContext(ctx context.Context) (*authsvc.Session, bool) {
 	}
 	session, ok := ctx.Value(sessionCtxKey).(*authsvc.Session)
 	return session, ok && session != nil
+}
+
+func APITokenFromContext(ctx context.Context) (*APITokenContext, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	tok, ok := ctx.Value(apiTokenCtxKey).(*APITokenContext)
+	return tok, ok && tok != nil
 }

@@ -39,6 +39,14 @@ export interface FindingDetailPayload {
   finding: Finding;
   enrichments?: FindingEnrichment[];
   score?: FindingScore;
+  seen_in_scans?: Array<{
+    id: string;
+    branch: string;
+    commit_sha: string;
+    scanner: string;
+    started_at: string;
+    ci_job_url?: string | null;
+  }>;
 }
 
 export interface FindingDetailResponse {

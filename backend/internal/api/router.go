@@ -86,6 +86,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	sessionsRepo := storage.NewSessionsRepo(pool)
 	userProjectRolesRepo := storage.NewUserProjectRolesRepo(pool)
 	savedViewsRepo := storage.NewSavedViewsRepo(pool)
+	apiTokensRepo := storage.NewAPITokensRepo(pool)
+	scansRepo := storage.NewScansRepo(pool)
 	auditLogRepo := cfg.auditRepo
 	if auditLogRepo == nil {
 		auditLogRepo = storage.NewAuditLogRepo(pool)
@@ -104,7 +106,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	r.Use(RequestIDMiddleware)
 	r.Use(RequestLoggerMiddleware)
 	r.Use(CORSMiddleware(corsOrigins))
-	r.Use(LoadSessionMiddleware(authService))
+	r.Use(LoadSessionMiddleware(authService, apiTokensRepo))
 	r.Use(AuditMiddleware(auditWriter))
 
 	// Health check
@@ -135,7 +137,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 				vMw := RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromFinding(findingsRepo, "id"))
 				aMw := RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromFinding(findingsRepo, "id"))
 
-				r.With(vMw).Get("/", handleGetFinding(findingsRepo, pool))
+				r.With(vMw).Get("/", handleGetFinding(findingsRepo, scansRepo, pool))
 				r.With(vMw).Get("/enrichments", handleGetFindingEnrichments(pool))
 				r.With(vMw).Get("/score", handleGetFindingScore(pool))
 				r.With(vMw).Get("/events", handleListFindingEvents(findingEventsRepo))
@@ -170,6 +172,9 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
 			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb))
+		r.With(RequireScope("scans:write")).
+			Post("/api/v1/scans", handleCreateScan(scansRepo, findingsRepo))
+		r.Get("/api/v1/scans/{id}", handleGetScan(scansRepo))
 
 		r.Route("/api/v1/workspace", func(r chi.Router) {
 			r.Get("/project-templates", handleGetProjectTemplates())
@@ -199,6 +204,14 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 				r.With(RequireGlobalAdmin).Delete("/", handleDeleteProject(projectsRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Post("/ingest-token", handleGetIngestToken())
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
+					Get("/api-tokens", handleListAPITokens(apiTokensRepo))
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
+					Post("/api-tokens", handleCreateAPIToken(apiTokensRepo))
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
+					Delete("/api-tokens/{tokenID}", handleRevokeAPIToken(apiTokensRepo))
+				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
+					Get("/scans", handleListScans(scansRepo))
 
 				r.Route("/members", func(r chi.Router) {
 					r.Use(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id")))

@@ -34,11 +34,43 @@ func RequireAuth(next http.Handler) http.Handler {
 		)
 
 		if !ok {
+			if _, hasPAT := APITokenFromContext(r.Context()); hasPAT {
+				next.ServeHTTP(w, r)
+				return
+			}
 			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func RequireScope(required string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if tok, ok := APITokenFromContext(r.Context()); ok {
+				for _, scope := range tok.Scopes {
+					if scope == required {
+						next.ServeHTTP(w, r)
+						return
+					}
+				}
+				respondError(w, r, http.StatusForbidden, "INSUFFICIENT_SCOPE", "insufficient token scope")
+				return
+			}
+
+			user, ok := UserFromContext(r.Context())
+			if !ok {
+				respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
+				return
+			}
+			if user.IsAdmin() {
+				next.ServeHTTP(w, r)
+				return
+			}
+			respondError(w, r, http.StatusForbidden, "FORBIDDEN", "project admin or api token required")
+		})
+	}
 }
 
 func RequireGlobalAdmin(next http.Handler) http.Handler {
