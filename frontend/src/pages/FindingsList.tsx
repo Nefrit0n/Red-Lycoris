@@ -121,6 +121,7 @@ export default function FindingsList() {
   const bulkClose = useBulkClose();
   const [nextStatus, setNextStatus] = useState<BulkStatusOption | null>(null);
   const [statusDialogError, setStatusDialogError] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const handleCountChange = useCallback((total: number, fetching: boolean) => {
     setListMeta((prev) =>
@@ -237,6 +238,44 @@ export default function FindingsList() {
     [bulkClose, bulkUpdateStatus, clearSelection, nextStatus, selectedIds],
   );
 
+  const exportFindings = useCallback(
+    async (format: "csv" | "xlsx" | "json") => {
+      try {
+        setExportLoading(true);
+        const params = filterToSearchParams(filter);
+        const url = `/api/v1/findings/export.${format}?${params.toString()}`;
+        const res = await fetch(url, { credentials: "include" });
+        if (!res.ok) {
+          let message = `Ошибка экспорта (${res.status})`;
+          try {
+            const body = (await res.json()) as { error?: { message?: string } };
+            if (body.error?.message) message = body.error.message;
+          } catch {
+            // noop
+          }
+          window.alert(message);
+          return;
+        }
+        const blob = await res.blob();
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = href;
+        const cd = res.headers.get("content-disposition");
+        const fileName = cd?.match(/filename="([^"]+)"/)?.[1] ?? `findings.${format}`;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(href);
+        const count = Number(res.headers.get("x-export-total") ?? "0");
+        window.alert(`Выгрузка готова: ${count} записей`);
+      } finally {
+        setExportLoading(false);
+      }
+    },
+    [filter],
+  );
+
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40">
       <FiltersPanel
@@ -272,6 +311,9 @@ export default function FindingsList() {
           onRefresh={handleRefresh}
           selectedCount={selectedIds.size}
           onBulkStatusSelect={handleStatusSelect}
+          onExport={exportFindings}
+          exportDisabled={listMeta.total === 0}
+          exportLoading={exportLoading}
         />
 
         <div className="flex min-h-0 min-w-0 flex-1">

@@ -1,6 +1,7 @@
 import {
   ArrowDownUp,
   Columns3,
+  Download,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -33,6 +34,9 @@ interface FindingsToolbarProps {
   onRefresh?: () => void;
   selectedCount?: number;
   onBulkStatusSelect?: (statusKey: BulkStatusOption) => void;
+  onExport?: (format: "csv" | "xlsx" | "json") => void;
+  exportDisabled?: boolean;
+  exportLoading?: boolean;
 }
 
 const SORT_OPTIONS: { value: SortField; label: string }[] = [
@@ -53,6 +57,9 @@ export function FindingsToolbar({
   onRefresh,
   selectedCount = 0,
   onBulkStatusSelect,
+  onExport,
+  exportDisabled = false,
+  exportLoading = false,
 }: FindingsToolbarProps) {
   const sortLabel =
     SORT_OPTIONS.find((o) => o.value === filter.sortField)?.label ??
@@ -124,6 +131,48 @@ export function FindingsToolbar({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={exportDisabled || exportLoading}
+                className="border-zinc-700 bg-zinc-900 text-zinc-300"
+              >
+                <Download className="mr-1 size-3" />
+                {exportLoading ? "Экспорт..." : "Экспорт"}
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="border-zinc-700 bg-zinc-900">
+            <DropdownMenuItem
+              disabled={exportDisabled}
+              onClick={() => onExport?.("csv")}
+              className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+            >
+              CSV
+              <span className="ml-auto text-xs text-zinc-500">для обработки</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={exportDisabled}
+              onClick={() => onExport?.("xlsx")}
+              className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+            >
+              Excel (XLSX)
+              <span className="ml-auto text-xs text-zinc-500">со сводкой</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={exportDisabled}
+              onClick={() => onExport?.("json")}
+              className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+            >
+              JSON (NDJSON)
+              <span className="ml-auto text-xs text-zinc-500">для API</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <DropdownMenu>
           <DropdownMenuTrigger
