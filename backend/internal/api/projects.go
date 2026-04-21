@@ -2,12 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"redlycoris/internal/domain"
@@ -149,6 +151,17 @@ func handleCreateProject(pool *pgxpool.Pool, repo *storage.ProjectsRepo, rolesRe
 		defer tx.Rollback(r.Context())
 
 		if err := repo.CreateTx(r.Context(), tx, &p); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				switch pgErr.Code {
+				case "23505":
+					respondError(w, r, http.StatusConflict, "CONFLICT", "project with the same name or slug already exists")
+					return
+				case "23514":
+					respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project data")
+					return
+				}
+			}
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create project")
 			return
 		}
