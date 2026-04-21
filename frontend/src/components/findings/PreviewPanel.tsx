@@ -766,7 +766,7 @@ export function PreviewPanel({
               />
               <DropdownMenuContent
                 align="start"
-                className="border-zinc-700 bg-zinc-900"
+                className="z-[70] border-zinc-700 bg-zinc-900"
               >
                 {STATUS_OPTIONS.map((opt) => (
                   <DropdownMenuItem
