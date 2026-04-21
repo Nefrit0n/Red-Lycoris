@@ -121,6 +121,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
   const [footerError, setFooterError] = useState("");
   const [showRestoreDraft, setShowRestoreDraft] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [creatingTeam, setCreatingTeam] = useState(false);
   const [sarifFiles, setSarifFiles] = useState<Array<{ id: string; name: string; size: number; findings: number; critical: number }>>([]);
   const [newTeamName, setNewTeamName] = useState("");
   const createProject = useCreateProject();
@@ -747,15 +748,28 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
           <Button
             type="button"
             variant="outline"
+            disabled={creatingTeam}
             onClick={() => {
-              if (!newTeamName.trim()) return;
-              const item = { id: crypto.randomUUID(), name: newTeamName.trim() };
-              setTeams((prev) => [...prev, item]);
-              setNewTeamName("");
-              dispatch({ type: "PATCH", patch: { team_id: item.id } });
+              if (!newTeamName.trim() || creatingTeam) return;
+              const name = newTeamName.trim();
+              setCreatingTeam(true);
+              setFooterError("");
+              void apiPost<{ data: WorkspaceTeam }>("/api/v1/workspace/teams", { name })
+                .then((res) => {
+                  const item = res.data;
+                  setTeams((prev) => (prev.some((team) => team.id === item.id) ? prev : [...prev, item]));
+                  setNewTeamName("");
+                  dispatch({ type: "PATCH", patch: { team_id: item.id } });
+                })
+                .catch(() => {
+                  setFooterError("Не удалось создать команду");
+                })
+                .finally(() => {
+                  setCreatingTeam(false);
+                });
             }}
           >
-            <Plus className="size-4" />
+            {creatingTeam ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           </Button>
         </div>
       </div>
