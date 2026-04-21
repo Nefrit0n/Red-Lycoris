@@ -335,8 +335,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
         window.sessionStorage.removeItem(PROJECT_WIZARD_DRAFT_KEY);
         onOpenChange(false);
         dispatch({ type: "RESET", ownerId: currentUser?.id ?? "" });
-        const createdSlug = res.data.slug || state.slug;
-        navigate(`/projects/${createdSlug}/settings?tab=integrations`);
+        navigate(`/projects/${res.data.id}?tab=tokens`);
       },
       onError: (err: unknown) => {
         const maybeErr = err as { status?: number; message?: string };

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/api/client";
 import { useCurrentUser } from "@/api/auth";
@@ -27,6 +27,7 @@ interface Member {
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: user } = useCurrentUser();
@@ -93,8 +94,26 @@ export default function ProjectDetail() {
 
   if (!id) return <Navigate to="/projects" replace />;
 
+  const tabFromQuery = searchParams.get("tab");
+  const activeTab =
+    tabFromQuery === "overview" ||
+    tabFromQuery === "findings" ||
+    tabFromQuery === "members" ||
+    tabFromQuery === "tokens" ||
+    tabFromQuery === "scans"
+      ? tabFromQuery
+      : "overview";
+
   return (
-    <Tabs defaultValue="overview" className="space-y-4">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => {
+        const next = new URLSearchParams(searchParams);
+        next.set("tab", value);
+        setSearchParams(next, { replace: true });
+      }}
+      className="space-y-4"
+    >
       <TabsList>
         <TabsTrigger value="overview">Обзор</TabsTrigger>
         <TabsTrigger value="findings">Находки</TabsTrigger>
