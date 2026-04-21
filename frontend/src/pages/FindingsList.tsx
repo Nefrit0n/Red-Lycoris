@@ -257,7 +257,7 @@ export default function FindingsList() {
   );
 
   const exportFindings = useCallback(
-    async (format: "csv" | "xlsx" | "json") => {
+    async (format: "csv" | "xlsx" | "json" | "html") => {
       setExportToast({ type: "loading", message: "Готовим выгрузку..." });
       setExportLoading(true);
       try {

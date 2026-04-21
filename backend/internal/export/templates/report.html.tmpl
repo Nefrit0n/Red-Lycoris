@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>{{ .Title }}</title>
+  <style>
+    :root { --bg:#F8F7F3; --card:#fff; --text:#1F1F1F; --muted:#6B6B6B; --border:rgba(0,0,0,.08); --accent:#930000; }
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif}
+    .wrap{max-width:1000px;margin:0 auto;padding:2rem 1.5rem}
+    .card{background:#fff;border:.5px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px}
+    h1{font-size:24px;line-height:1.3;margin:0} h2{font-size:18px;margin:0 0 12px 0}
+    .head{border-left:3px solid var(--accent);display:flex;justify-content:space-between;gap:16px}.logo{width:32px;height:32px;background:#930000;color:#E8E8E8;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-weight:700}
+    .muted{color:var(--muted)} .small{font-size:12px}.mono{font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;font-size:12px}
+    .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+    .kpi-item{background:#fff;border:.5px solid var(--border);border-radius:8px;padding:8px 10px}.kpi-item .n{font-size:24px;font-weight:600;line-height:1.2}
+    .bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:#eee}
+    .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+    .sev-critical{background:#FCEBEB;color:#A32D2D}.sev-high{background:#FAEEDA;color:#BA7517}.sev-medium{background:#FAEEDA;color:#8c5c15}.sev-low{background:#E6F1FB;color:#378ADD}.sev-info{background:#F1EFE8;color:#888780}
+    table{width:100%;border-collapse:collapse} th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 4px;cursor:pointer} td{padding:8px 4px;border-top:.5px solid var(--border);vertical-align:top}
+    .chip{display:inline-block;border:.5px solid var(--border);border-radius:999px;padding:2px 8px;font-size:11px;margin:2px}
+    details{margin-top:10px}
+    .cve-card{border:.5px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px}
+    @page { size:A4; margin:18mm 15mm; }
+    @media print { body{background:#fff}.no-print{display:none!important}details{page-break-inside:avoid}tr{page-break-inside:avoid} }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section class="card head">
+    <div>
+      <div class="small muted">RED LYCORIS · SECURITY REPORT</div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="logo">RL</span><h1>{{ .HeaderTitle }}</h1></div>
+    </div>
+    <div class="small muted">{{ .GeneratedAt }}<br>{{ .AuthorEmail }}<br>{{ .Platform }}</div>
+  </section>
+
+  <section class="card">
+    <h2>Executive summary</h2>
+    <div class="kpi">
+      <div class="kpi-item"><div class="small muted">Всего findings</div><div class="n">{{ .Summary.Total }}</div></div>
+      <div class="kpi-item"><div class="small muted">Critical открыто</div><div class="n" style="color:#A32D2D">{{ .Summary.CriticalOpen }}</div></div>
+      <div class="kpi-item"><div class="small muted">В KEV</div><div class="n">{{ .Summary.InKEV }}</div></div>
+      <div class="kpi-item"><div class="small muted">Есть fix</div><div class="n">{{ .Summary.HasFix }} <span class="small muted">({{ .Summary.HasFixPct }})</span></div></div>
+    </div>
+    <div class="small muted" style="margin-top:8px">Severity</div>
+    <div class="bar">{{ range .SeveritySegments }}<div title="{{ .Label }}: {{ .Count }}" style="background:{{ .Color }};width:{{ .Width }}"></div>{{ end }}</div>
+    <div class="small muted" style="margin-top:6px">{{ range .SeveritySegments }}{{ .Label }}: {{ .Count }}&nbsp;&nbsp;{{ end }}</div>
+    <table>
+      <caption class="small muted" style="text-align:left;padding:8px 0">Распределение по статусу</caption>
+      <tbody>{{ range .StatusRows }}<tr><td>{{ .Label }}</td><td class="mono">{{ .Count }}</td><td class="mono">{{ .Percent }}</td></tr>{{ end }}</tbody>
+    </table>
+    <div style="margin-top:8px"><span class="small muted">Фильтры:</span> {{ if .FilterChips }}{{ range .FilterChips }}<span class="chip">{{ . }}</span>{{ end }}{{ else }}<span class="small muted">без фильтров, все находки</span>{{ end }}</div>
+  </section>
+
+  <section class="card">
+    <h2>Топ уязвимостей по CVE · {{ len .TopCVEs }}</h2>
+    {{ range .TopCVEs }}
+      <article class="cve-card">
+        <div><a class="mono" href="https://nvd.nist.gov/vuln/detail/{{ .CVE }}" target="_blank" rel="noreferrer">{{ .CVE }}</a> <span class="badge {{ sevClass .MaxSeverity }}">{{ sevLabel .MaxSeverity }}</span> {{ if .InKEV }}<span class="badge sev-critical">KEV</span>{{ end }}{{ if .EPSS }}<span class="badge sev-medium">EPSS {{ printf "%.2f" .EPSS }}</span>{{ end }}</div>
+        <div>{{ .Title }}</div>
+        <div class="small muted">{{ .Findings }} findings · компоненты: {{ .Components }} · источники: {{ .Scanners }}</div>
+      </article>
+    {{ end }}
+  </section>
+
+  <section class="card">
+    <h2>Компоненты с уязвимостями · {{ len .Components }}</h2>
+    <table>
+      <thead><tr><th>Компонент</th><th>Версия</th><th>Findings</th><th>Max severity</th><th>Есть fix</th></tr></thead>
+      <tbody>
+      {{ range .Components }}
+        <tr><td class="mono">{{ .Name }}</td><td class="mono">{{ if .Version }}{{ .Version }}{{ else }}—{{ end }}</td><td>{{ .Findings }}</td><td><span class="badge {{ sevClass .MaxSeverity }}">{{ sevLabel .MaxSeverity }}</span></td><td class="mono">{{ .FixVersion }}</td></tr>
+      {{ end }}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Все findings · {{ len .TableFindings }} записей</h2>
+    <table id="findings-table">
+      <thead>
+      <tr><th data-sortable="0">Sev</th><th data-sortable="1">Заголовок</th><th data-sortable="2">CVE</th><th>Компонент</th><th>Сканер</th><th>Файл:строка</th><th data-sortable="6">Статус</th></tr>
+      </thead>
+      <tbody>
+      {{ range .TableFindings }}
+      <tr data-finding-id="{{ .ID }}">
+        <td><span class="badge {{ sevClass .Severity }}" aria-label="{{ sevLabel .Severity }}">{{ sevLabel .Severity }}</span></td>
+        <td>{{ .Title }}</td>
+        <td class="mono">{{ firstCVE .CVEIDs }}</td>
+        <td class="mono">{{ if .Component }}{{ .Component }}{{ else }}—{{ end }}</td>
+        <td>{{ .SourceType }}</td>
+        <td class="mono">{{ lineRef .FilePath .LineStart }}</td>
+        <td>{{ statusLabel .Status }}</td>
+      </tr>{{ end }}
+      </tbody>
+    </table>
+  </section>
+
+  {{ if .IncludeDetails }}
+  <section class="card">
+    <h2>Детали · {{ len .DetailFindings }} finding</h2>
+    {{ range .DetailFindings }}
+    <details id="detail-{{ .ID }}" open>
+      <summary><span class="badge {{ sevClass .Severity }}">{{ sevLabel .Severity }}</span> {{ .Title }}</summary>
+      <div class="small muted">Первое обнаружение: {{ .FirstSeen.Format "2006-01-02" }} · Последнее: {{ .LastSeen.Format "2006-01-02" }} · Источник: {{ .SourceType }}</div>
+      <div class="small"><span class="mono">{{ lineRef .FilePath .LineStart }}</span> · статус: {{ statusLabel .Status }}</div>
+      <p>{{ .Description }}</p>
+      {{ if .CodeSnippet }}<pre>{{ .CodeSnippet }}</pre>{{ end }}
+    </details>
+    {{ end }}
+    {{ if gt .DetailsHidden 0 }}<div class="small muted">ещё {{ .DetailsHidden }} finding скрыто; повторите запрос с уточнёнными фильтрами</div>{{ end }}
+  </section>
+  {{ end }}
+
+  <section class="card">
+    <h2>О выгрузке</h2>
+    {{ if .DetailsAutoHidden }}<div class="small muted">детали скрыты из-за объёма</div>{{ end }}
+    <div class="small">Применённые фильтры</div>
+    <pre class="mono">{{ .FiltersJSON }}</pre>
+  </section>
+</div>
+<script defer>
+(function(){
+  const table=document.getElementById('findings-table');if(!table)return;
+  const ths=table.querySelectorAll('th[data-sortable]');
+  ths.forEach((th)=>th.addEventListener('click',()=>{
+    const i=Number(th.getAttribute('data-sortable'));const tbody=table.tBodies[0];
+    const rows=[...tbody.rows];const dir=th.dataset.dir==='asc'?'desc':'asc';th.dataset.dir=dir;
+    rows.sort((a,b)=>{const av=a.cells[i]?.innerText||'';const bv=b.cells[i]?.innerText||'';return dir==='asc'?av.localeCompare(bv):bv.localeCompare(av)});
+    rows.forEach(r=>tbody.appendChild(r));
+  }));
+  table.querySelectorAll('tbody tr').forEach((tr)=>tr.addEventListener('click',()=>{
+    const id=tr.getAttribute('data-finding-id');const el=document.querySelector('#detail-'+id);if(el)el.scrollIntoView({behavior:'smooth'});
+  }));
+})();
+</script>
+</body>
+</html>
