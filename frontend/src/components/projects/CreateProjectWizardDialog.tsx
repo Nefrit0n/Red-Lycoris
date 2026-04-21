@@ -896,7 +896,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
         aria-modal="true"
         aria-labelledby={DIALOG_TITLE_ID}
         showCloseButton={false}
-        className="w-[580px] max-w-[calc(100%-2rem)] gap-0 border-zinc-700 bg-zinc-900 p-0 text-zinc-100 sm:max-w-[580px]"
+        className="flex max-h-[90vh] w-[580px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden border-zinc-700 bg-zinc-900 p-0 text-zinc-100 sm:max-w-[580px]"
         onKeyDown={onDialogKeyDown}
       >
         <div className="border-b border-zinc-700 px-4 py-3">
@@ -941,7 +941,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
           <div className="mt-2 text-xs text-zinc-400 sm:hidden">{state.step} / 3</div>
         </div>
 
-        <div className="max-h-[70vh] overflow-auto px-4 py-4">
+        <div className="themed-scrollbar min-h-0 flex-1 overflow-auto px-4 py-4">
           {showRestoreDraft && (
             <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-200">
               У вас есть черновик проекта. Восстановить?
@@ -956,7 +956,7 @@ export function CreateProjectWizardDialog({ open, onOpenChange }: Props) {
           {state.step === 3 && renderStep3()}
         </div>
 
-        <div className="sticky bottom-0 flex items-center justify-between gap-2 border-t border-zinc-700 bg-zinc-900 px-4 py-3">
+        <div className="flex items-center justify-between gap-2 border-t border-zinc-700 bg-zinc-900 px-4 py-3">
           <Button variant="outline" onClick={handleCancel} disabled={creating}>Отмена</Button>
           <div className="flex items-center gap-2">
             <Button
