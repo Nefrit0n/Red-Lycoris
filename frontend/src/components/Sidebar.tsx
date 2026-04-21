@@ -49,7 +49,7 @@ export default function Sidebar({ collapsed, onToggle, isAdmin }: SidebarProps) 
         {collapsed ? (
           <img src="/logo.svg" alt="Red Lycoris" className="h-6" />
         ) : (
-          <img src="/logo_full.svg" alt="Red Lycoris" className="h-7" />
+          <img src="/logo_full.svg" alt="Red Lycoris" className="h-7 w-full object-contain object-left" />
         )}
       </div>
 
