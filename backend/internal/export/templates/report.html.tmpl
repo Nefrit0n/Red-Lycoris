@@ -18,9 +18,9 @@
     .bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:#eee}
     .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
     .sev-critical{background:#FCEBEB;color:#A32D2D}.sev-high{background:#FAEEDA;color:#BA7517}.sev-medium{background:#FAEEDA;color:#8c5c15}.sev-low{background:#E6F1FB;color:#378ADD}.sev-info{background:#F1EFE8;color:#888780}
-    table{width:100%;border-collapse:collapse} th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 4px;cursor:pointer} td{padding:8px 4px;border-top:.5px solid var(--border);vertical-align:top}
+    table{width:100%;border-collapse:collapse;table-layout:fixed} th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 4px;cursor:pointer} td{padding:8px 4px;border-top:.5px solid var(--border);vertical-align:top;word-break:break-word;overflow-wrap:anywhere}
     .chip{display:inline-block;border:.5px solid var(--border);border-radius:999px;padding:2px 8px;font-size:11px;margin:2px}
-    details{margin-top:10px}
+    details{margin-top:10px} pre{white-space:pre-wrap;word-break:break-word;overflow:auto;max-width:100%}
     .cve-card{border:.5px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px}
     @page { size:A4; margin:18mm 15mm; }
     @media print { body{background:#fff}.no-print{display:none!important}details{page-break-inside:avoid}tr{page-break-inside:avoid} }
@@ -58,7 +58,7 @@
     <h2>Топ уязвимостей по CVE · {{ len .TopCVEs }}</h2>
     {{ range .TopCVEs }}
       <article class="cve-card">
-        <div><a class="mono" href="https://nvd.nist.gov/vuln/detail/{{ .CVE }}" target="_blank" rel="noreferrer">{{ .CVE }}</a> <span class="badge {{ sevClass .MaxSeverity }}">{{ sevLabel .MaxSeverity }}</span> {{ if .InKEV }}<span class="badge sev-critical">KEV</span>{{ end }}{{ if .EPSS }}<span class="badge sev-medium">EPSS {{ printf "%.2f" .EPSS }}</span>{{ end }}</div>
+        <div><a class="mono" href="https://nvd.nist.gov/vuln/detail/{{ .CVE }}" target="_blank" rel="noreferrer">{{ .CVE }}</a> <span class="badge {{ sevClass .MaxSeverity }}">{{ sevLabel .MaxSeverity }}</span> {{ if .InKEV }}<span class="badge sev-critical">KEV</span>{{ end }}{{ if .BDU }}<span class="badge sev-low">БДУ {{ .BDU }}</span>{{ end }}{{ if .EPSS }}<span class="badge sev-medium">EPSS {{ epss .EPSS }}</span>{{ end }}</div>
         <div>{{ .Title }}</div>
         <div class="small muted">{{ .Findings }} findings · компоненты: {{ .Components }} · источники: {{ .Scanners }}</div>
       </article>
@@ -88,7 +88,7 @@
       <tr data-finding-id="{{ .ID }}">
         <td><span class="badge {{ sevClass .Severity }}" aria-label="{{ sevLabel .Severity }}">{{ sevLabel .Severity }}</span></td>
         <td>{{ .Title }}</td>
-        <td class="mono">{{ firstCVE .CVEIDs }}</td>
+        <td class="mono">{{ $c := firstCVE .CVEIDs }}{{ $c }}{{ $b := bduByCVE $c }}{{ if $b }}<div class="small muted">БДУ: {{ $b }}</div>{{ end }}</td>
         <td class="mono">{{ if .Component }}{{ .Component }}{{ else }}—{{ end }}</td>
         <td>{{ .SourceType }}</td>
         <td class="mono">{{ lineRef .FilePath .LineStart }}</td>
@@ -106,7 +106,7 @@
       <summary><span class="badge {{ sevClass .Severity }}">{{ sevLabel .Severity }}</span> {{ .Title }}</summary>
       <div class="small muted">Первое обнаружение: {{ .FirstSeen.Format "2006-01-02" }} · Последнее: {{ .LastSeen.Format "2006-01-02" }} · Источник: {{ .SourceType }}</div>
       <div class="small"><span class="mono">{{ lineRef .FilePath .LineStart }}</span> · статус: {{ statusLabel .Status }}</div>
-      <p>{{ .Description }}</p>
+      <p>{{ cleanText .Description }}</p>
       {{ if .CodeSnippet }}<pre>{{ .CodeSnippet }}</pre>{{ end }}
     </details>
     {{ end }}

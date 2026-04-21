@@ -30,6 +30,7 @@ type ReportOptions struct {
 	DetailsAutoHidden bool
 	DetailsHidden     int
 	FilterChips       []string
+	BDUByCVE          map[string]string
 }
 
 type CVEGroup struct {
@@ -41,6 +42,7 @@ type CVEGroup struct {
 	Title       string
 	Scanners    string
 	Components  string
+	BDU         string
 }
 
 type ComponentGroup struct {
@@ -102,6 +104,7 @@ type reportView struct {
 	FilterChips       []string
 	TopCVEs           []CVEGroup
 	Components        []ComponentGroup
+	BDUByCVE          map[string]string
 }
 
 func RenderHTMLReport(data ReportData, opts ReportOptions) ([]byte, error) {
@@ -112,6 +115,9 @@ func RenderHTMLReport(data ReportData, opts ReportOptions) ([]byte, error) {
 		"firstCVE":    firstCVE,
 		"lineRef":     lineRef,
 		"percent":     percent,
+		"epss":        epssPercent,
+		"bduByCVE":    func(cve string) string { return opts.BDUByCVE[cve] },
+		"cleanText":   cleanText,
 	}).Parse(reportTemplate)
 	if err != nil {
 		return nil, err
@@ -135,6 +141,7 @@ func RenderHTMLReport(data ReportData, opts ReportOptions) ([]byte, error) {
 		FilterChips:       opts.FilterChips,
 		TopCVEs:           data.TopCVEs,
 		Components:        data.Components,
+		BDUByCVE:          opts.BDUByCVE,
 	}
 
 	var out bytes.Buffer
@@ -178,7 +185,7 @@ func BuildStatusRows(findings []domain.Finding) []StatusRow {
 	return rows
 }
 
-func BuildTopCVEs(findings []domain.Finding, limit int) []CVEGroup {
+func BuildTopCVEs(findings []domain.Finding, limit int, bduByCVE map[string]string) []CVEGroup {
 	type agg struct {
 		count      int
 		maxSev     int
@@ -231,6 +238,7 @@ func BuildTopCVEs(findings []domain.Finding, limit int) []CVEGroup {
 			Title:       a.title,
 			Scanners:    joinSet(a.scanners, 3),
 			Components:  joinSet(a.components, 4),
+			BDU:         bduByCVE[cve],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -323,6 +331,24 @@ func joinSet(m map[string]struct{}, limit int) string {
 		return strings.Join(vals[:limit], ", ") + fmt.Sprintf(" +%d", len(vals)-limit)
 	}
 	return strings.Join(vals, ", ")
+}
+
+func epssPercent(v *float64) string {
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprintf("%.1f%%", (*v)*100)
+}
+
+func cleanText(s string) string {
+	s = strings.ReplaceAll(s, "**", "")
+	s = strings.ReplaceAll(s, "###", "")
+	s = strings.ReplaceAll(s, "##", "")
+	s = strings.ReplaceAll(s, "`", "")
+	if len(s) > 8000 {
+		s = s[:8000] + "…"
+	}
+	return s
 }
 
 func fallbackTitle(custom, generated string) string {

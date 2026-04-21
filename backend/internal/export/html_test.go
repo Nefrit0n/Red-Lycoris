@@ -30,7 +30,7 @@ func TestRenderHTMLReport_Basic(t *testing.T) {
 	for i := range items {
 		items[i] = mkFinding(i)
 	}
-	body, err := RenderHTMLReport(ReportData{HeaderTitle: "Все проекты", Summary: BuildSummary(items), StatusRows: BuildStatusRows(items), TableFindings: items, DetailFindings: items, TopCVEs: BuildTopCVEs(items, 20), Components: BuildComponents(items, 100)}, ReportOptions{GeneratedAt: time.Now(), Platform: "v1", IncludeDetails: true})
+	body, err := RenderHTMLReport(ReportData{HeaderTitle: "Все проекты", Summary: BuildSummary(items), StatusRows: BuildStatusRows(items), TableFindings: items, DetailFindings: items, TopCVEs: BuildTopCVEs(items, 20, nil), Components: BuildComponents(items, 100)}, ReportOptions{GeneratedAt: time.Now(), Platform: "v1", IncludeDetails: true})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestRenderHTMLReport_NoDetails(t *testing.T) {
 	for i := range items {
 		items[i] = mkFinding(i)
 	}
-	body, err := RenderHTMLReport(ReportData{HeaderTitle: "Все проекты", Summary: BuildSummary(items), StatusRows: BuildStatusRows(items), TableFindings: items, DetailFindings: items, TopCVEs: BuildTopCVEs(items, 20), Components: BuildComponents(items, 100)}, ReportOptions{GeneratedAt: time.Now(), Platform: "v1", IncludeDetails: false})
+	body, err := RenderHTMLReport(ReportData{HeaderTitle: "Все проекты", Summary: BuildSummary(items), StatusRows: BuildStatusRows(items), TableFindings: items, DetailFindings: items, TopCVEs: BuildTopCVEs(items, 20, nil), Components: BuildComponents(items, 100)}, ReportOptions{GeneratedAt: time.Now(), Platform: "v1", IncludeDetails: false})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestRenderHTMLReport_NoDetails(t *testing.T) {
 func TestRenderHTMLReport_Escaping(t *testing.T) {
 	f := mkFinding(1)
 	f.Title = "<script>alert(1)</script>"
-	body, err := RenderHTMLReport(ReportData{HeaderTitle: "t", Summary: BuildSummary([]domain.Finding{f}), StatusRows: BuildStatusRows([]domain.Finding{f}), TableFindings: []domain.Finding{f}, TopCVEs: BuildTopCVEs([]domain.Finding{f}, 20), Components: BuildComponents([]domain.Finding{f}, 100)}, ReportOptions{GeneratedAt: time.Now(), Platform: "v1"})
+	body, err := RenderHTMLReport(ReportData{HeaderTitle: "t", Summary: BuildSummary([]domain.Finding{f}), StatusRows: BuildStatusRows([]domain.Finding{f}), TableFindings: []domain.Finding{f}, TopCVEs: BuildTopCVEs([]domain.Finding{f}, 20, nil), Components: BuildComponents([]domain.Finding{f}, 100)}, ReportOptions{GeneratedAt: time.Now(), Platform: "v1"})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestRenderHTMLReport_AutoHiddenWarning(t *testing.T) {
 		items[i] = mkFinding(i)
 	}
 	body, err := RenderHTMLReport(
-		ReportData{HeaderTitle: "Все проекты", Summary: BuildSummary(items), StatusRows: BuildStatusRows(items), TableFindings: items, TopCVEs: BuildTopCVEs(items, 20), Components: BuildComponents(items, 100)},
+		ReportData{HeaderTitle: "Все проекты", Summary: BuildSummary(items), StatusRows: BuildStatusRows(items), TableFindings: items, TopCVEs: BuildTopCVEs(items, 20, nil), Components: BuildComponents(items, 100)},
 		ReportOptions{GeneratedAt: time.Now(), Platform: "v1", IncludeDetails: false, DetailsAutoHidden: true},
 	)
 	if err != nil {

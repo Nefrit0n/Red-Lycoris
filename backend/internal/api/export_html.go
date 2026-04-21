@@ -88,13 +88,15 @@ func (h *exportHandlers) handleHTML() http.HandlerFunc {
 			detailsFindings = nil
 		}
 
+		bduByCVE := h.fetchBDUByCVEs(r, findings)
+
 		reportData := htmlexport.ReportData{
 			HeaderTitle:    headerTitle,
 			Summary:        htmlexport.BuildSummary(findings),
 			StatusRows:     htmlexport.BuildStatusRows(findings),
 			TableFindings:  findings,
 			DetailFindings: detailsFindings,
-			TopCVEs:        htmlexport.BuildTopCVEs(findings, 20),
+			TopCVEs:        htmlexport.BuildTopCVEs(findings, 20, bduByCVE),
 			Components:     htmlexport.BuildComponents(findings, 100),
 		}
 		htmlBody, err := htmlexport.RenderHTMLReport(reportData, htmlexport.ReportOptions{
@@ -107,6 +109,7 @@ func (h *exportHandlers) handleHTML() http.HandlerFunc {
 			DetailsHidden:     detailsHidden,
 			DetailsAutoHidden: autoHidden,
 			FilterChips:       buildFilterChips(r),
+			BDUByCVE:          bduByCVE,
 		})
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to render html export")
@@ -158,6 +161,45 @@ func (h *exportHandlers) collectFindings(r *http.Request, filter storage.Finding
 		filter.Cursor = next
 	}
 	return out, nil
+}
+
+func (h *exportHandlers) fetchBDUByCVEs(r *http.Request, findings []domain.Finding) map[string]string {
+	out := map[string]string{}
+	set := map[string]struct{}{}
+	for _, f := range findings {
+		for _, cve := range f.CVEIDs {
+			if strings.TrimSpace(cve) != "" {
+				set[cve] = struct{}{}
+			}
+		}
+	}
+	if len(set) == 0 {
+		return out
+	}
+	cves := make([]string, 0, len(set))
+	for c := range set {
+		cves = append(cves, c)
+	}
+	rows, err := h.findingsRepo.DB().Query(r.Context(), `SELECT bdu_id, cve_ids FROM bdu_fstec WHERE cve_ids && $1`, cves)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var bduID string
+		var rowCVEs []string
+		if err := rows.Scan(&bduID, &rowCVEs); err != nil {
+			continue
+		}
+		for _, c := range rowCVEs {
+			if _, ok := set[c]; ok {
+				if _, exists := out[c]; !exists {
+					out[c] = bduID
+				}
+			}
+		}
+	}
+	return out
 }
 
 func shortBuildCommit(bi *debug.BuildInfo) string {
