@@ -121,7 +121,7 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 		ON CONFLICT (fingerprint) DO UPDATE SET
 			last_seen  = EXCLUDED.last_seen,
 			times_seen = findings.times_seen + 1
-		RETURNING (xmax = 0) AS inserted`
+		RETURNING id, (xmax = 0) AS inserted`
 
 	if f.ID == uuid.Nil {
 		f.ID = uuid.New()
@@ -145,7 +145,7 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
-	).Scan(&inserted)
+	).Scan(&f.ID, &inserted)
 	if err != nil {
 		return false, fmt.Errorf("storage.FindingsRepo.Create: %w", err)
 	}
@@ -175,7 +175,7 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 		ON CONFLICT (fingerprint) DO UPDATE SET
 			last_seen  = EXCLUDED.last_seen,
 			times_seen = findings.times_seen + 1
-		RETURNING (xmax = 0) AS inserted`
+		RETURNING id, (xmax = 0) AS inserted`
 
 	if f.ID == uuid.Nil {
 		f.ID = uuid.New()
@@ -199,7 +199,7 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
-	).Scan(&inserted)
+	).Scan(&f.ID, &inserted)
 	if err != nil {
 		return false, fmt.Errorf("storage.FindingsRepo.CreateTx: %w", err)
 	}
