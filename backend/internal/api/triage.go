@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -64,15 +66,35 @@ func handleUpdateStatus(findingsRepo *storage.FindingsRepo) http.HandlerFunc {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
 			return
 		}
-		if req.Status != domain.StatusOpen && req.Status != domain.StatusConfirmed {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "use POST /close")
+		user, _ := UserFromContext(r.Context())
+
+		var action domain.TriageAction
+		switch req.Status {
+		case domain.StatusOpen:
+			current, err := findingsRepo.GetByID(r.Context(), id)
+			if err != nil {
+				respondError(w, r, http.StatusNotFound, "NOT_FOUND", "finding not found")
+				return
+			}
+			if current.Status == domain.StatusFP || current.Status == domain.StatusResolved || current.Status == domain.StatusRiskAccepted {
+				action = &domain.ReopenAction{Note: req.Note}
+			} else {
+				action = &domain.ChangeStatusAction{NewStatus: req.Status, Note: req.Note}
+			}
+		case domain.StatusConfirmed:
+			action = &domain.ChangeStatusAction{NewStatus: req.Status, Note: req.Note}
+		case domain.StatusFP:
+			action = &domain.CloseAction{ReasonCode: "false_positive", Note: req.Note, UserID: user.ID}
+		case domain.StatusResolved:
+			action = &domain.CloseAction{ReasonCode: "mitigated", Note: req.Note, UserID: user.ID}
+		case domain.StatusRiskAccepted:
+			action = &domain.CloseAction{ReasonCode: "acceptable_risk", Note: req.Note, UserID: user.ID}
+		default:
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid status")
 			return
 		}
-		user, _ := UserFromContext(r.Context())
-		if err := findingsRepo.ApplyTriageAction(r.Context(), user.ID, id, &domain.ChangeStatusAction{
-			NewStatus: req.Status,
-			Note:      req.Note,
-		}); err != nil {
+
+		if err := findingsRepo.ApplyTriageAction(r.Context(), user.ID, id, action); err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 			return
 		}
@@ -141,9 +163,13 @@ func handleAssignFinding(findingsRepo *storage.FindingsRepo, usersRepo *storage.
 			return
 		}
 		var req reqBody
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
 			return
+		}
+		user, _ := UserFromContext(r.Context())
+		if req.UserID == uuid.Nil {
+			req.UserID = user.ID
 		}
 		projectID, err := findingsRepo.GetProjectID(r.Context(), id.String())
 		if err != nil {
@@ -164,7 +190,6 @@ func handleAssignFinding(findingsRepo *storage.FindingsRepo, usersRepo *storage.
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "target user not found")
 			return
 		}
-		user, _ := UserFromContext(r.Context())
 		action := &domain.AssignAction{ToUserID: req.UserID, ToEmail: target.Email}
 		if err := findingsRepo.ApplyTriageAction(r.Context(), user.ID, id, action); err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
