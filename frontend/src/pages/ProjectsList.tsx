@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useProjects, usePatchProjectPinned } from "@/api/projects";
 import { apiGet } from "@/api/client";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   parseProjectsUrlParams,
   serializeProjectsUrlParams,
@@ -492,14 +491,6 @@ export default function ProjectsList() {
   const hasActiveFilters = hasProjectsFilters(urlState);
   const sortedProjects = useMemo(() => groupPinnedFirst(projects), [projects]);
 
-  const listScrollRef = useRef<HTMLDivElement | null>(null);
-  const rowVirtualizer = useVirtualizer({
-    count: sortedProjects.length,
-    getScrollElement: () => listScrollRef.current,
-    estimateSize: () => 120,
-    overscan: 8,
-  });
-
   if (isLoading) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -827,29 +818,14 @@ export default function ProjectsList() {
             <span>Owner</span>
             <span aria-hidden>⋯</span>
           </div>
-          <div ref={listScrollRef} className="max-h-[70vh] overflow-auto themed-scrollbar">
-            <div
-              className="relative divide-y divide-zinc-800"
-              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-            >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const project = sortedProjects[virtualRow.index];
-              if (!project) return null;
-              return (
+          <div className="max-h-[70vh] overflow-auto themed-scrollbar">
+            <div className="divide-y divide-zinc-800">
+            {sortedProjects.map((project) => (
               <div key={project.id}>
                 <div
-                  ref={(el) => rowVirtualizer.measureElement(el)}
-                  data-index={virtualRow.index}
                   className={`grid cursor-pointer grid-cols-[28px_1fr_170px_64px_80px_34px_28px] items-start gap-2 px-3 py-3 ${
                     !project.setup_completed ? "bg-zinc-900/70" : "hover:bg-zinc-900/60"
                   }`}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
                   onDoubleClick={() => navigate(`/projects/${project.id}`)}
                   onClick={() => openQuickPeek(project.id)}
                   onMouseEnter={() => {
@@ -1033,7 +1009,9 @@ export default function ProjectsList() {
                     <DropdownMenuItem>Переименовать</DropdownMenuItem>
                     <DropdownMenuItem>Дублировать</DropdownMenuItem>
                     <DropdownMenuItem>Архивировать</DropdownMenuItem>
-                    <DropdownMenuItem>Настройки</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => navigate(`/projects/${project.id}?tab=tokens`)}>
+                      Настройки
+                    </DropdownMenuItem>
                     <DropdownMenuItem>Экспорт</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1092,7 +1070,13 @@ export default function ProjectsList() {
                               Открыть
                             </Button>
                             <Button size="sm" variant="outline">Запустить скан</Button>
-                            <Button size="sm" variant="outline">Настройки</Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`/projects/${project.id}?tab=tokens`)}
+                            >
+                              Настройки
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -1100,7 +1084,7 @@ export default function ProjectsList() {
                   </div>
                 )}
               </div>
-            );})}
+            ))}
             </div>
           </div>
         </div>
