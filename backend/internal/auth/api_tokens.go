@@ -42,7 +42,8 @@ func ParsePAT(token string) (prefix, secret string, err error) {
 	if !strings.HasPrefix(value, patPrefixLiteral) {
 		return "", "", errors.New("invalid token prefix")
 	}
-	parts := strings.Split(value, "_")
+	// SplitN(..., 4) keeps underscores inside base64url secret intact
+	parts := strings.SplitN(value, "_", 4)
 	if len(parts) != 4 {
 		return "", "", errors.New("invalid token format")
 	}

@@ -13,6 +13,12 @@ import (
 	"redlycoris/internal/storage"
 )
 
+// allowedScopes is the complete list of valid PAT scopes.
+var allowedScopes = map[string]struct{}{
+	"scans:write":    {},
+	"findings:read":  {},
+}
+
 type createAPITokenRequest struct {
 	Name          string   `json:"name"`
 	Scopes        []string `json:"scopes"`
@@ -35,24 +41,41 @@ func handleCreateAPIToken(repo *storage.APITokensRepo) http.HandlerFunc {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "name and scopes are required")
 			return
 		}
+		for _, s := range req.Scopes {
+			if _, ok := allowedScopes[s]; !ok {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "unknown scope: "+s)
+				return
+			}
+		}
+
+		user, ok := UserFromContext(r.Context())
+		if !ok {
+			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "session required to create tokens")
+			return
+		}
+
 		fullToken, prefix, hash, err := auth.GeneratePAT()
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to generate token")
 			return
 		}
-		user, _ := UserFromContext(r.Context())
 		var expiresAt *time.Time
 		if req.ExpiresInDays != nil && *req.ExpiresInDays > 0 {
 			t := time.Now().Add(time.Duration(*req.ExpiresInDays) * 24 * time.Hour)
 			expiresAt = &t
 		}
-		t := &domain.APIToken{ProjectID: projectID, Name: req.Name, Prefix: prefix, TokenHash: hash, Scopes: req.Scopes, CreatedByUserID: user.ID, ExpiresAt: expiresAt}
+		t := &domain.APIToken{
+			ProjectID: projectID, Name: req.Name, Prefix: prefix,
+			TokenHash: hash, Scopes: req.Scopes,
+			CreatedByUserID: user.ID, ExpiresAt: expiresAt,
+		}
 		if err := repo.Create(r.Context(), t); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create token")
 			return
 		}
 		respondJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{
-			"id": t.ID, "name": t.Name, "prefix": t.Prefix, "token": fullToken, "scopes": t.Scopes, "expires_at": t.ExpiresAt,
+			"id": t.ID, "name": t.Name, "prefix": t.Prefix,
+			"token": fullToken, "scopes": t.Scopes, "expires_at": t.ExpiresAt,
 		}})
 	}
 }
@@ -72,12 +95,13 @@ func handleListAPITokens(repo *storage.APITokensRepo) http.HandlerFunc {
 		data := make([]map[string]any, 0, len(tokens))
 		for _, t := range tokens {
 			data = append(data, map[string]any{
-				"id": t.ID, "name": t.Name, "prefix": t.Prefix, "scopes": t.Scopes, "last_used_at": t.LastUsedAt,
-				"expires_at": t.ExpiresAt, "revoked_at": t.RevokedAt, "created_at": t.CreatedAt,
+				"id": t.ID, "name": t.Name, "prefix": t.Prefix, "scopes": t.Scopes,
+				"last_used_at": t.LastUsedAt, "expires_at": t.ExpiresAt,
+				"revoked_at": t.RevokedAt, "created_at": t.CreatedAt,
 				"created_by": map[string]any{"id": t.CreatedByUserID, "email": t.CreatedByEmail},
 			})
 		}
-		respondJSON(w, http.StatusOK, map[string]any{"data": data})
+		respondJSON(w, http.StatusOK, map[string]any{"data": data, "meta": map[string]any{"total": len(data)}})
 	}
 }
 
