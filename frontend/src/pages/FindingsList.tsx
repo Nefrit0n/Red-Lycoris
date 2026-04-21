@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 
 import { useHotkey } from "@/hooks/use-hotkey";
 
@@ -122,6 +125,21 @@ export default function FindingsList() {
   const [nextStatus, setNextStatus] = useState<BulkStatusOption | null>(null);
   const [statusDialogError, setStatusDialogError] = useState<string | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
+  const [highlightFilters, setHighlightFilters] = useState(false);
+
+  type ExportToast = {
+    type: "loading" | "success" | "error";
+    message: string;
+    action?: { label: string; onClick: () => void };
+  } | null;
+  const [exportToast, setExportToast] = useState<ExportToast>(null);
+
+  useEffect(() => {
+    if (highlightFilters) {
+      const t = setTimeout(() => setHighlightFilters(false), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [highlightFilters]);
 
   const handleCountChange = useCallback((total: number, fetching: boolean) => {
     setListMeta((prev) =>
@@ -240,8 +258,9 @@ export default function FindingsList() {
 
   const exportFindings = useCallback(
     async (format: "csv" | "xlsx" | "json") => {
+      setExportToast({ type: "loading", message: "Готовим выгрузку..." });
+      setExportLoading(true);
       try {
-        setExportLoading(true);
         const params = filterToSearchParams(filter);
         const url = `/api/v1/findings/export.${format}?${params.toString()}`;
         const res = await fetch(url, { credentials: "include" });
@@ -253,7 +272,21 @@ export default function FindingsList() {
           } catch {
             // noop
           }
-          window.alert(message);
+          if (res.status === 400) {
+            setExportToast({
+              type: "error",
+              message,
+              action: {
+                label: "Уточнить фильтры",
+                onClick: () => {
+                  setHighlightFilters(true);
+                  setExportToast(null);
+                },
+              },
+            });
+          } else {
+            setExportToast({ type: "error", message });
+          }
           return;
         }
         const blob = await res.blob();
@@ -268,7 +301,11 @@ export default function FindingsList() {
         a.remove();
         URL.revokeObjectURL(href);
         const count = Number(res.headers.get("x-export-total") ?? "0");
-        window.alert(`Выгрузка готова: ${count} записей`);
+        setExportToast({
+          type: "success",
+          message: `Выгрузка готова: ${count.toLocaleString("ru-RU")} записей`,
+        });
+        setTimeout(() => setExportToast(null), 5000);
       } finally {
         setExportLoading(false);
       }
@@ -278,14 +315,21 @@ export default function FindingsList() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40">
-      <FiltersPanel
-        filter={filter}
-        onChange={updateFilter}
-        facets={facets}
-        onSearchRef={(el) => {
-          searchInputRef.current = el;
-        }}
-      />
+      <div
+        className={cn(
+          "transition-all duration-300",
+          highlightFilters && "ring-2 ring-amber-400",
+        )}
+      >
+        <FiltersPanel
+          filter={filter}
+          onChange={updateFilter}
+          facets={facets}
+          onSearchRef={(el) => {
+            searchInputRef.current = el;
+          }}
+        />
+      </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <KindTabs filter={filter} onChange={updateFilter} facets={facets} />
@@ -379,6 +423,43 @@ export default function FindingsList() {
           }
         }}
       />
+
+      {exportToast && (
+        <div
+          className={cn(
+            "fixed bottom-6 right-6 z-50 flex max-w-sm flex-col gap-3 rounded-xl border p-4 shadow-2xl",
+            exportToast.type === "loading" &&
+              "border-zinc-700 bg-zinc-900 text-zinc-300",
+            exportToast.type === "success" &&
+              "border-emerald-700 bg-emerald-950 text-emerald-200",
+            exportToast.type === "error" &&
+              "border-red-800 bg-red-950 text-red-200",
+          )}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            {exportToast.type === "loading" && (
+              <Loader2 className="size-4 shrink-0 animate-spin" />
+            )}
+            <span>{exportToast.message}</span>
+            {exportToast.type !== "loading" && (
+              <button
+                onClick={() => setExportToast(null)}
+                className="ml-auto shrink-0 text-xs opacity-60 hover:opacity-100"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {exportToast.action && (
+            <button
+              onClick={exportToast.action.onClick}
+              className="self-start rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500"
+            >
+              {exportToast.action.label}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
