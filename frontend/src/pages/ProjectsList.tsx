@@ -306,7 +306,7 @@ export default function ProjectsList() {
         setQuickPeekCache((prev) => ({
           ...prev,
           [projectId]: {
-            data: response.data,
+            data: response.data ?? { top_findings: [], events: [], status_stats: { new: 0, triaged: 0, fixed: 0, wontfix: 0 } },
             fetchedAt: Date.now(),
           },
         }));
@@ -1003,7 +1003,7 @@ export default function ProjectsList() {
                         <div>
                           <p className="mb-1 text-[11px] uppercase text-zinc-500">Top findings</p>
                           <ul className="space-y-1 text-xs">
-                            {(quickPeekCache[project.id]?.data.top_findings ?? []).slice(0, 5).map((finding) => (
+                            {(quickPeekCache[project.id]?.data?.top_findings ?? []).slice(0, 5).map((finding) => (
                               <li key={finding.id} className="truncate text-zinc-300">
                                 S{finding.severity} · {finding.title}
                               </li>
@@ -1013,7 +1013,7 @@ export default function ProjectsList() {
                         <div>
                           <p className="mb-1 text-[11px] uppercase text-zinc-500">Последние события</p>
                           <ul className="space-y-1 text-xs">
-                            {(quickPeekCache[project.id]?.data.events ?? []).slice(0, 5).map((event) => (
+                            {(quickPeekCache[project.id]?.data?.events ?? []).slice(0, 5).map((event) => (
                               <li key={event.id} className="truncate text-zinc-400">
                                 {event.action || event.method} · {event.path}
                               </li>
@@ -1023,7 +1023,7 @@ export default function ProjectsList() {
                         <div className="space-y-2">
                           <p className="text-[11px] uppercase text-zinc-500">Findings by status</p>
                           {(() => {
-                            const stats = quickPeekCache[project.id]?.data.status_stats;
+                            const stats = quickPeekCache[project.id]?.data?.status_stats;
                             const total = (stats?.new ?? 0) + (stats?.triaged ?? 0) + (stats?.fixed ?? 0) + (stats?.wontfix ?? 0);
                             const part = (n: number) => (total > 0 ? `${(n / total) * 100}%` : "0%");
                             return (
