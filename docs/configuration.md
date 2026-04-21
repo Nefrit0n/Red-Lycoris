@@ -17,3 +17,16 @@
 | `ENRICHMENT_ENABLED` | `true` | Да | Включить фоновые sync/enrichment процессы. |
 | `NVD_API_KEY` | `` (пусто) | Нет | API-ключ NVD для увеличенного rate limit. |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Нет | Разрешённые CORS origins для backend. |
+
+## Экспорт отчётов об уязвимостях
+
+Для выгрузки находок доступны endpoints:
+
+- `GET /api/v1/findings/export.csv`
+- `GET /api/v1/findings/export.json` (NDJSON)
+- `GET /api/v1/findings/export.xlsx`
+
+Экспорт использует те же query-параметры фильтрации, что и `/api/v1/findings`.
+Ограничения: максимум 100000 записей на одну выгрузку; rate limit — до 3 одновременных экспортов и до 10 запросов за 5 минут на пользователя.
+
+Для автоматизации через PAT используйте токен со scope `findings:read`.

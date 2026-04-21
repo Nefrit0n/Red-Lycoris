@@ -67,6 +67,7 @@ type Finding struct {
 	ClosedAt         *time.Time      `json:"closed_at,omitempty"`
 	ClosedBy         *uuid.UUID      `json:"closed_by,omitempty"`
 	AssignedTo       *uuid.UUID      `json:"assigned_to,omitempty"`
+	AssigneeEmail    string          `json:"assignee_email,omitempty"`
 
 	// Joined badge fields — populated only by list queries.
 	InKEV       bool     `json:"in_kev,omitempty"`

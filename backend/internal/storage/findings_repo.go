@@ -183,7 +183,8 @@ var findingListColumns = findingColumns + `,
 		SELECT 1 FROM bdu_fstec b
 		WHERE f.cve_ids IS NOT NULL AND b.cve_ids && f.cve_ids
 	) AS in_bdu,
-	p.name AS project_name`
+	p.name AS project_name,
+	COALESCE(au.email, '') AS assignee_email`
 
 func scanFinding(row pgx.Row) (*domain.Finding, error) {
 	var f domain.Finding
@@ -224,7 +225,7 @@ func scanFindingListItem(row pgx.Row) (*domain.Finding, error) {
 		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
 		&f.RuleID, &f.RuleName, &f.PriorityScore,
 		&f.ClosureReasonID, &f.ClosureNote, &f.ClosedAt, &f.ClosedBy, &f.AssignedTo,
-		&f.InKEV, &f.MaxEPSS, &f.MaxCVSS, &f.InBDU, &projectName,
+		&f.InKEV, &f.MaxEPSS, &f.MaxCVSS, &f.InBDU, &projectName, &f.AssigneeEmail,
 	)
 	if err != nil {
 		return nil, err
@@ -433,7 +434,7 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 	}
 
 	limit := filter.Limit
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
 
@@ -475,7 +476,8 @@ func (r *FindingsRepo) List(ctx context.Context, filter FindingsFilter) ([]domai
 
 	// Main query with joins for priority_score + project name.
 	joinClause := `LEFT JOIN finding_scores fs ON fs.finding_id = f.id
-		LEFT JOIN projects p ON p.id = f.project_id`
+		LEFT JOIN projects p ON p.id = f.project_id
+		LEFT JOIN users au ON au.id = f.assigned_to`
 
 	q := fmt.Sprintf(`SELECT %s FROM findings f %s %s ORDER BY %s %s, f.id %s LIMIT $%d`,
 		findingListColumns, joinClause, where, sortCol, sortDir, sortDir, argN)
