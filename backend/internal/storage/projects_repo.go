@@ -621,9 +621,10 @@ func (r *ProjectsRepo) GetTrend(ctx context.Context, projectID uuid.UUID, days i
 func (r *ProjectsRepo) GetQuickPeek(ctx context.Context, projectID uuid.UUID) ([]QuickPeekFinding, []QuickPeekEvent, QuickPeekStatusStats, error) {
 	findingsQ := `
 		SELECT id, title, severity, status
-		FROM findings
-		WHERE project_id = $1 AND status IN (0, 1, 4)
-		ORDER BY severity DESC, priority_score DESC NULLS LAST, last_seen DESC
+		FROM findings f
+		LEFT JOIN finding_scores fs ON fs.finding_id = f.id
+		WHERE f.project_id = $1 AND f.status IN (0, 1, 4)
+		ORDER BY f.severity DESC, fs.priority_score DESC NULLS LAST, f.last_seen DESC
 		LIMIT 5`
 	eventsQ := `
 		SELECT id, coalesce(action, ''), method, path, created_at, user_id

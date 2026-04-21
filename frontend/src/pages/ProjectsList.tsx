@@ -219,11 +219,6 @@ export default function ProjectsList() {
   const [activeQuickPeekId, setActiveQuickPeekId] = useState<string | null>(null);
   const trendTargetsRef = useRef<Map<string, Element>>(new Map());
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const hoverTimerRef = useRef<number | null>(null);
-  const isTouchDevice =
-    typeof window !== "undefined" &&
-    window.matchMedia &&
-    window.matchMedia("(hover: none), (pointer: coarse)").matches;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -328,7 +323,7 @@ export default function ProjectsList() {
 
   const openQuickPeek = useCallback(
     (projectId: string) => {
-      setActiveQuickPeekId(projectId);
+      setActiveQuickPeekId((prev) => (prev === projectId ? null : projectId));
       void loadQuickPeek(projectId);
     },
     [loadQuickPeek],
@@ -478,14 +473,6 @@ export default function ProjectsList() {
     }
     return chips;
   }, [applyUrlState, toggleMultiFilter, urlState.owner, urlState.sla, urlState.status, urlState.tag, urlState.team]);
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimerRef.current != null) {
-        window.clearTimeout(hoverTimerRef.current);
-      }
-    };
-  }, []);
 
   const viewMode: ProjectsViewMode = urlState.view ?? (projects.length > 12 ? "list" : "grid");
   const hasActiveFilters = hasProjectsFilters(urlState);
@@ -828,15 +815,6 @@ export default function ProjectsList() {
                   }`}
                   onDoubleClick={() => navigate(`/projects/${project.id}`)}
                   onClick={() => openQuickPeek(project.id)}
-                  onMouseEnter={() => {
-                    if (isTouchDevice) return;
-                    if (hoverTimerRef.current != null) window.clearTimeout(hoverTimerRef.current);
-                    hoverTimerRef.current = window.setTimeout(() => openQuickPeek(project.id), 400);
-                  }}
-                  onMouseLeave={() => {
-                    if (isTouchDevice) return;
-                    if (hoverTimerRef.current != null) window.clearTimeout(hoverTimerRef.current);
-                  }}
                   role="row"
                 >
                 <button
