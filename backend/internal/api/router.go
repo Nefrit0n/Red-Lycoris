@@ -190,7 +190,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 		r.Route("/api/v1/projects", func(r chi.Router) {
 			r.Get("/", handleListProjects(projectsRepo, userProjectRolesRepo))
-			r.With(RequireGlobalAdmin).Post("/", handleCreateProject(pool, projectsRepo, userProjectRolesRepo))
+			r.Post("/", handleCreateProject(pool, projectsRepo, userProjectRolesRepo))
 			// check-slug must be registered before /{id} to avoid routing conflict
 			r.Get("/check-slug", handleCheckProjectSlug(workspaceRepo))
 
