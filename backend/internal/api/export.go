@@ -19,7 +19,6 @@ import (
 
 	"redlycoris/internal/audit"
 	"redlycoris/internal/domain"
-	"redlycoris/internal/enrichment"
 	"redlycoris/internal/storage"
 )
 
@@ -63,6 +62,7 @@ func (h *exportHandlers) handleCSV() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		defer h.releaseExportSlot(r)
 
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
@@ -154,6 +154,7 @@ func (h *exportHandlers) handleNDJSON() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		defer h.releaseExportSlot(r)
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
 		w.Header().Set("X-Export-Total", strconv.Itoa(total))
@@ -183,14 +184,7 @@ func (h *exportHandlers) handleNDJSON() http.HandlerFunc {
 				break
 			}
 			for _, f := range batch {
-				payload := map[string]any{"finding": f}
-				if enrichments, err := enrichment.GetFindingEnrichments(r.Context(), h.findingsRepo.DB(), f.ID); err == nil && len(enrichments) > 0 {
-					payload["enrichments"] = enrichments
-				}
-				if score, err := enrichment.GetFindingScore(r.Context(), h.findingsRepo.DB(), f.ID); err == nil && score != nil {
-					payload["score"] = score
-				}
-				if err := enc.Encode(payload); err != nil {
+				if err := enc.Encode(f); err != nil {
 					respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to stream ndjson")
 					return
 				}
@@ -214,13 +208,14 @@ func (h *exportHandlers) handleXLSX() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		defer h.releaseExportSlot(r)
 		f := excelize.NewFile()
 		defer func() { _ = f.Close() }()
 		f.SetSheetName("Sheet1", "Summary")
-		_ = f.NewSheet("Findings")
-		_ = f.NewSheet("By CVE")
-		_ = f.NewSheet("By Component")
-		_ = f.NewSheet("About")
+		_, _ = f.NewSheet("Findings")
+		_, _ = f.NewSheet("By CVE")
+		_, _ = f.NewSheet("By Component")
+		_, _ = f.NewSheet("About")
 
 		headers := []string{"id", "project_name", "severity", "status", "confidence", "title", "cve_ids", "cwe_ids", "component", "component_version", "fixed_version", "file_path", "line_start", "line_end", "url", "http_method", "priority_score", "epss_score", "is_kev", "is_bdu", "first_seen", "last_seen", "times_seen", "source_type", "rule_id", "assignee_email", "description", "extra_urls"}
 		stream, err := f.NewStreamWriter("Findings")
@@ -228,9 +223,13 @@ func (h *exportHandlers) handleXLSX() http.HandlerFunc {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to prepare xlsx stream")
 			return
 		}
+		hdrStyle, _ := f.NewStyle(&excelize.Style{
+			Font: &excelize.Font{Bold: true},
+			Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"#E5E7EB"}},
+		})
 		headerIface := make([]any, 0, len(headers))
-		for _, h := range headers {
-			headerIface = append(headerIface, h)
+		for _, col := range headers {
+			headerIface = append(headerIface, excelize.Cell{StyleID: hdrStyle, Value: col})
 		}
 		if err := stream.SetRow("A1", headerIface); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to write xlsx header")
@@ -315,9 +314,21 @@ func (h *exportHandlers) handleXLSX() http.HandlerFunc {
 		writeByCVESheet(f, cveMap)
 		writeByComponentSheet(f, compMap)
 		writeAboutSheet(f, h.version, total, filtersMap)
-		_ = f.SetPanes("Findings", &excelize.Pane{})
-		_ = f.AutoFilter("Findings", "A1", "AB1", nil)
-		_ = setBasicSheetStyle(f, "Findings", headers)
+		_ = f.SetPanes("Findings", &excelize.Panes{
+			Freeze:      true,
+			YSplit:      1,
+			TopLeftCell: "A2",
+			ActivePane:  "bottomLeft",
+			Selection:   []excelize.Selection{{SQRef: "A2", ActiveCell: "A2", Pane: "bottomLeft"}},
+		})
+		_ = f.AutoFilter("Findings", "A1:AB1", nil)
+		// Only set column widths — cell styles were already embedded in the
+		// header row written via StreamWriter. Calling SetCellStyle on a
+		// flushed streaming sheet corrupts the underlying XML.
+		for i := range headers {
+			col, _ := excelize.ColumnNumberToName(i + 1)
+			_ = f.SetColWidth("Findings", col, col, 18)
+		}
 
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
@@ -405,6 +416,26 @@ func (h *exportHandlers) takeExportSlot(w http.ResponseWriter, r *http.Request) 
 	return true
 }
 
+func (h *exportHandlers) exportUID(r *http.Request) string {
+	if user, ok := UserFromContext(r.Context()); ok {
+		return user.ID.String()
+	}
+	if tok, ok := APITokenFromContext(r.Context()); ok {
+		return tok.TokenID
+	}
+	return "anonymous"
+}
+
+// releaseExportSlot decrements the concurrent-exports counter. Call via defer
+// immediately after takeExportSlot succeeds so the slot is always released,
+// even when the handler returns early due to an error.
+func (h *exportHandlers) releaseExportSlot(r *http.Request) {
+	if h.rdb == nil {
+		return
+	}
+	_ = h.rdb.Decr(r.Context(), "ratelimit:export:concurrent:"+h.exportUID(r)).Err()
+}
+
 func (h *exportHandlers) writeExportAudit(r *http.Request, format string, filter storage.FindingsFilter, rows int) {
 	if h.auditWriter == nil {
 		return
@@ -423,15 +454,6 @@ func (h *exportHandlers) writeExportAudit(r *http.Request, format string, filter
 		ResourceType: &resourceType,
 		Changes:      []storage.AuditChange{{Field: "format", After: format}, {Field: "rows", After: rows}, {Field: "filters", After: filter}},
 	})
-	if h.rdb != nil {
-		uid := "anonymous"
-		if user, ok := UserFromContext(r.Context()); ok {
-			uid = user.ID.String()
-		} else if tok, ok := APITokenFromContext(r.Context()); ok {
-			uid = tok.TokenID
-		}
-		_ = h.rdb.Decr(r.Context(), "ratelimit:export:concurrent:"+uid).Err()
-	}
 }
 
 func severityLabel(s int) string {
@@ -472,9 +494,9 @@ func ptrString(s *string) string {
 }
 func boolRU(v bool) string {
 	if v {
-		return "yes"
+		return "да"
 	}
-	return "no"
+	return "нет"
 }
 func formatFloatPtr(v *float64) string {
 	if v == nil {
@@ -518,7 +540,7 @@ func sanitizeSlug(v string) string {
 }
 
 func setBasicSheetStyle(f *excelize.File, sheet string, headers []string) error {
-	style, _ := f.NewStyle(excelize.Style{Font: &excelize.Font{Bold: true}, Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"#E5E7EB"}}})
+	style, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}, Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"#E5E7EB"}}})
 	end, _ := excelize.CoordinatesToCellName(len(headers), 1)
 	_ = f.SetCellStyle(sheet, "A1", end, style)
 	for i := range headers {
