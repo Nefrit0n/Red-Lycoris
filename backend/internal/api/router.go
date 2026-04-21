@@ -136,6 +136,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Get("/export.csv", exporter.handleCSV())
 			r.Get("/export.json", exporter.handleNDJSON())
 			r.Get("/export.xlsx", exporter.handleXLSX())
+			r.Get("/export.html", exporter.handleHTML())
 
 			r.Route("/{id}", func(r chi.Router) {
 				vMw := RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromFinding(findingsRepo, "id"))

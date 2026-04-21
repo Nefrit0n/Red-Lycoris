@@ -34,7 +34,7 @@ interface FindingsToolbarProps {
   onRefresh?: () => void;
   selectedCount?: number;
   onBulkStatusSelect?: (statusKey: BulkStatusOption) => void;
-  onExport?: (format: "csv" | "xlsx" | "json") => void;
+  onExport?: (format: "csv" | "xlsx" | "json" | "html") => void;
   exportDisabled?: boolean;
   exportLoading?: boolean;
 }
@@ -170,6 +170,14 @@ export function FindingsToolbar({
             >
               JSON (NDJSON)
               <span className="ml-auto text-xs text-zinc-500">для API</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={exportDisabled}
+              onClick={() => onExport?.("html")}
+              className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
+            >
+              HTML отчёт
+              <span className="ml-auto text-xs text-zinc-500">для чтения/печати</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
