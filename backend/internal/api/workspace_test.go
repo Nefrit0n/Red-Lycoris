@@ -29,8 +29,11 @@ func TestHandleGetProjectTemplates(t *testing.T) {
 
 	var resp struct {
 		Data []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
+			ID        string   `json:"id"`
+			Key       string   `json:"key"`
+			Name      string   `json:"name"`
+			IconLabel string   `json:"icon_label"`
+			Scanners  []string `json:"scanners"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
@@ -44,8 +47,17 @@ func TestHandleGetProjectTemplates(t *testing.T) {
 		if tmpl.ID == "" {
 			t.Error("template id is empty")
 		}
+		if tmpl.Key == "" {
+			t.Errorf("template key is empty for %q", tmpl.ID)
+		}
 		if tmpl.Name == "" {
 			t.Error("template name is empty")
+		}
+		if tmpl.IconLabel == "" {
+			t.Errorf("template icon_label is empty for %q", tmpl.ID)
+		}
+		if tmpl.Scanners == nil {
+			t.Errorf("template scanners should be array for %q", tmpl.ID)
 		}
 		ids[tmpl.ID] = true
 	}

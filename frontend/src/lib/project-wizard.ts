@@ -20,6 +20,63 @@ export interface ProjectTemplate {
   sla: TemplateSla;
 }
 
+
+/** Сырой ответ бэкенда — scanners может быть объектом или массивом. */
+export interface RawProjectTemplate {
+  id: string;
+  key?: string;
+  name: string;
+  icon_label?: string;
+  description?: string;
+  scanners?:
+    | string[]
+    | Partial<Record<"sast" | "dast" | "sca" | "secrets" | "iac", string>>;
+  sla?: {
+    critical_days?: number;
+    high_days?: number;
+    medium_days?: number;
+    low_days?: number;
+  };
+}
+
+const SCANNER_LABELS: Record<string, string> = {
+  sast: "SAST",
+  dast: "DAST",
+  sca: "SCA",
+  secrets: "Secrets",
+  iac: "IaC",
+};
+
+export function normalizeTemplate(raw: RawProjectTemplate): ProjectTemplate {
+  let scanners: string[] = [];
+  if (Array.isArray(raw.scanners)) {
+    scanners = raw.scanners.filter(Boolean);
+  } else if (raw.scanners && typeof raw.scanners === "object") {
+    scanners = Object.entries(raw.scanners)
+      .filter(([, v]) => v && v !== "off")
+      .map(([k]) => SCANNER_LABELS[k] ?? k.toUpperCase());
+  }
+
+  const icon_label =
+    raw.icon_label?.trim() ||
+    (raw.id || raw.key || "PRJ").slice(0, 3).toUpperCase();
+
+  return {
+    id: raw.id,
+    key: raw.key ?? raw.id,
+    name: raw.name,
+    icon_label,
+    description: raw.description ?? "",
+    scanners,
+    sla: {
+      critical_days: raw.sla?.critical_days ?? 7,
+      high_days: raw.sla?.high_days ?? 30,
+      medium_days: raw.sla?.medium_days ?? 90,
+      low_days: raw.sla?.low_days,
+    },
+  };
+}
+
 export interface SourceGit {
   kind: "git";
   provider: "github" | "gitlab" | "bitbucket";
