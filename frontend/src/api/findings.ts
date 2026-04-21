@@ -166,10 +166,16 @@ function patchFindingStatusesInListCache(
     { queryKey: findingsKeys.all },
     (old) => {
       if (!old) return old;
+      if (!("pages" in old) || !Array.isArray(old.pages)) {
+        return old;
+      }
 
       let changed = false;
 
       const pages = old.pages.map((page) => {
+        if (!page || !Array.isArray(page.data)) {
+          return page;
+        }
         let pageChanged = false;
 
         const data = page.data.map((finding) => {
