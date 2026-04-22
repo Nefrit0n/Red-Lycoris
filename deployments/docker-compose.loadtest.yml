@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: redlycoris-loadtest-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-redlycoris}
+      POSTGRES_USER: ${POSTGRES_USER:-redlycoris}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_redlycoris_password}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    volumes:
+      - redlycoris-loadtest-pgdata:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./deployments/loadtest/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-redlycoris}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - redlycoris-loadtest-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: redlycoris-loadtest-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --appendonly yes
+        --appendfsync everysec
+    volumes:
+      - redlycoris-loadtest-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - redlycoris-loadtest-net
+
+  backend:
+    image: ${BACKEND_IMAGE:-redlycoris/backend:0.1.0b}
+    container_name: redlycoris-loadtest-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: "postgres://${POSTGRES_USER:-redlycoris}:${POSTGRES_PASSWORD:-change_me_redlycoris_password}@postgres:5432/${POSTGRES_DB:-redlycoris}?sslmode=disable"
+      DATABASE_MAX_CONNS: "25"
+      DATABASE_MIN_CONNS: "5"
+      REDIS_URL: "redis://redis:6379/0"
+      ENRICHMENT_ENABLED: "${ENRICHMENT_ENABLED:-true}"
+      CORS_ORIGINS: "http://localhost:${FRONTEND_PORT:-3000}"
+      BOOTSTRAP_ADMIN_EMAIL: "${BOOTSTRAP_ADMIN_EMAIL:-admin@localhost}"
+      BOOTSTRAP_ADMIN_PASSWORD: "${BOOTSTRAP_ADMIN_PASSWORD:?set_BOOTSTRAP_ADMIN_PASSWORD}"
+      BOOTSTRAP_ADMIN_FULL_NAME: "${BOOTSTRAP_ADMIN_FULL_NAME:-Administrator}"
+      BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE: "${BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE:-true}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - redlycoris-loadtest-net
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-redlycoris/frontend:0.1.0b}
+    container_name: redlycoris-loadtest-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      VITE_API_URL: "http://localhost:${API_PORT:-8080}"
+      VITE_PROXY_TARGET: "http://backend:8080"
+    networks:
+      - redlycoris-loadtest-net
+
+volumes:
+  redlycoris-loadtest-pgdata:
+    driver: local
+  redlycoris-loadtest-redisdata:
+    driver: local
+
+networks:
+  redlycoris-loadtest-net:
+    name: redlycoris-loadtest-net
+    driver: bridge
