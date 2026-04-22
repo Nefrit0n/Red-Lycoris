@@ -127,6 +127,9 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	// Health check
 	r.Get("/health", healthHandler(pool, rdb, cfg.version, cfg.startTime))
 
+	// Version info — public, no auth required
+	r.Get("/api/v1/version", handleVersion())
+
 	if cfg.env == "dev" {
 		r.Get("/api/docs", docsHandler(cfg.env))
 		r.Get("/api/openapi.yaml", openAPIHandler(cfg.env))

@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import Sidebar from "@/components/Sidebar";
 import { useCurrentUser, logout } from "@/api/auth";
+import { useVersion } from "@/api/version";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +41,7 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const { pathname } = useLocation();
   const { data: user } = useCurrentUser();
+  const { data: versionInfo } = useVersion();
   const crumbs = breadcrumbFor(pathname);
   const isFindingsRoute = pathname === "/findings";
   const mainContentClass = isFindingsRoute
@@ -127,6 +129,19 @@ export default function Layout() {
             <Outlet />
           </div>
         </main>
+
+        <footer className="shrink-0 border-t border-zinc-800/60 px-6 py-1.5">
+          <span
+            className="text-xs text-zinc-600 cursor-default select-none"
+            title={
+              versionInfo
+                ? `Commit ${versionInfo.commit} · Сборка ${versionInfo.build_date.slice(0, 10)}`
+                : undefined
+            }
+          >
+            RedLycoris {versionInfo?.version ?? "..."}
+          </span>
+        </footer>
       </div>
     </div>
   );
