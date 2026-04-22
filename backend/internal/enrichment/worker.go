@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,8 @@ const (
 	StreamName    = "enrichment:pending"
 	ConsumerGroup = "enrichment-workers"
 )
+
+var streamBaseline atomic.Int64
 
 // PublishEnrichment добавляет finding ID в Redis Stream для асинхронного обогащения.
 func PublishEnrichment(ctx context.Context, rdb *redis.Client, findingIDs ...uuid.UUID) error {
@@ -41,6 +44,8 @@ type Worker struct {
 
 // StartWorkers запускает N воркеров в горутинах. Создаёт consumer group если её нет.
 func StartWorkers(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, count int) {
+	streamBaseline.Store(readStreamLength(ctx, rdb))
+
 	// Создаём consumer group (игнорируем BUSYGROUP если уже существует)
 	err := rdb.XGroupCreateMkStream(ctx, StreamName, ConsumerGroup, "0").Err()
 	if err != nil && !isBusyGroup(err) {
@@ -58,6 +63,18 @@ func StartWorkers(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, co
 	}
 
 	slog.Info("enrichment workers started", "count", count)
+}
+
+func readStreamLength(ctx context.Context, rdb *redis.Client) int64 {
+	n, err := rdb.XLen(ctx, StreamName).Result()
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func streamLagBaseline() int64 {
+	return streamBaseline.Load()
 }
 
 func (w *Worker) run(ctx context.Context) {
