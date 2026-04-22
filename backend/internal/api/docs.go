@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/swaggest/swgui/v5emb"
 )
@@ -15,6 +16,7 @@ func openAPIHandler(env string) http.HandlerFunc {
 			return
 		}
 
+		setPublicCacheHeaders(w, 10*time.Minute)
 		http.ServeFile(w, r, openAPIPath)
 	}
 }
@@ -28,6 +30,7 @@ func docsHandler(env string) http.HandlerFunc {
 			return
 		}
 
+		setPublicCacheHeaders(w, time.Minute)
 		swagger.ServeHTTP(w, r)
 	}
 }
