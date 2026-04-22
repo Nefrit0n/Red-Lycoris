@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,27 +19,32 @@ type ProjectIDExtractor func(*http.Request) (uuid.UUID, error)
 
 func RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw := r.Context().Value(userCtxKey)
 		u, ok := UserFromContext(r.Context())
+		_, sessionPresent := SessionFromContext(r.Context())
 
-		slog.Info("RequireAuth check",
-			"request_id", GetRequestID(r.Context()),
-			"path", r.URL.Path,
-			"user_in_ctx", ok,
-			"user_nil", u == nil,
-			"raw_value_type", fmt.Sprintf("%T", raw),
-			"raw_value_nil", raw == nil,
-			"userCtxKey_addr", fmt.Sprintf("%p", userCtxKey),
-		)
-
-		if !ok {
+		if !ok || u == nil {
 			if _, hasPAT := APITokenFromContext(r.Context()); hasPAT {
+				slog.Debug("require_auth",
+					"request_id", GetRequestID(r.Context()),
+					"session_presence", sessionPresent,
+					"outcome", "allowed",
+				)
 				next.ServeHTTP(w, r)
 				return
 			}
+			slog.Warn("require_auth",
+				"request_id", GetRequestID(r.Context()),
+				"session_presence", sessionPresent,
+				"outcome", "denied",
+			)
 			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
 			return
 		}
+		slog.Debug("require_auth",
+			"request_id", GetRequestID(r.Context()),
+			"session_presence", sessionPresent,
+			"outcome", "allowed",
+		)
 		next.ServeHTTP(w, r)
 	})
 }
