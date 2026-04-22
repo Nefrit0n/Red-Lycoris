@@ -7,6 +7,10 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"redlycoris/internal/observability"
 )
 
 func CORSMiddleware(allowedOrigins string) func(http.Handler) http.Handler {
@@ -79,4 +83,23 @@ func RecoveryMiddleware(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+func Instrument(obs *observability.Observability) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+
+			next.ServeHTTP(sw, r)
+
+			route := "unknown"
+			if routeCtx := chi.RouteContext(r.Context()); routeCtx != nil {
+				if pattern := strings.TrimSpace(routeCtx.RoutePattern()); pattern != "" {
+					route = pattern
+				}
+			}
+			obs.RecordHTTPRequest(route, r.Method, sw.status, time.Since(start))
+		})
+	}
 }

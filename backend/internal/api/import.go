@@ -14,6 +14,7 @@ import (
 
 	"redlycoris/internal/domain"
 	"redlycoris/internal/enrichment"
+	"redlycoris/internal/observability"
 	"redlycoris/internal/parser"
 	"redlycoris/internal/storage"
 )
@@ -23,7 +24,7 @@ type importError struct {
 	Message string `json:"message"`
 }
 
-func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client) http.HandlerFunc {
+func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client, obs *observability.Observability) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID := r.URL.Query().Get("project_id")
 		var overrideProjectID uuid.UUID
@@ -84,6 +85,9 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 
 			if f.ProjectID == uuid.Nil {
 				errs = append(errs, importError{Index: i, Message: "project_id is required"})
+				if obs != nil {
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected"})
+				}
 				continue
 			}
 
@@ -102,6 +106,9 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 
 			if err := f.Validate(); err != nil {
 				errs = append(errs, importError{Index: i, Message: err.Error()})
+				if obs != nil {
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected"})
+				}
 				continue
 			}
 
@@ -109,11 +116,17 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			if err != nil {
 				slog.Error("import: failed to create finding", "index", i, "error", err)
 				errs = append(errs, importError{Index: i, Message: "failed to save finding"})
+				if obs != nil {
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected"})
+				}
 				continue
 			}
 
 			if isNew {
 				imported++
+				if obs != nil {
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "inserted"})
+				}
 				importedIDs = append(importedIDs, f.ID)
 				payload, _ := json.Marshal(domain.CreatedPayload{
 					SourceType: f.SourceType,
@@ -130,6 +143,9 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 				_ = eventsRepo.Create(r.Context(), repo.DB(), evt)
 			} else {
 				updated++
+				if obs != nil {
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "updated"})
+				}
 				evt := domain.FindingEvent{
 					ID:        uuid.New(),
 					FindingID: f.ID,
