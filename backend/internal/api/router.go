@@ -12,6 +12,7 @@ import (
 	"redlycoris/internal/auth"
 	"redlycoris/internal/domain"
 	"redlycoris/internal/enrichment"
+	"redlycoris/internal/observability"
 	"redlycoris/internal/storage"
 )
 
@@ -25,6 +26,7 @@ type routerConfig struct {
 	trustProxy   bool
 	cookieSecure bool
 	sessionDur   time.Duration
+	obs          *observability.Observability
 }
 
 type RouterOption func(*routerConfig)
@@ -65,6 +67,10 @@ func WithSessionDuration(d time.Duration) RouterOption {
 	return func(c *routerConfig) { c.sessionDur = d }
 }
 
+func WithObservability(obs *observability.Observability) RouterOption {
+	return func(c *routerConfig) { c.obs = obs }
+}
+
 func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts ...RouterOption) http.Handler {
 	var cfg routerConfig
 	cfg.env = "dev"
@@ -103,11 +109,20 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 	// Middleware
 	r.Use(RequestIDMiddleware)
+	if cfg.obs != nil {
+		r.Use(Instrument(cfg.obs))
+	}
 	r.Use(RecoveryMiddleware)
 	r.Use(RequestLoggerMiddleware)
 	r.Use(CORSMiddleware(corsOrigins))
 	r.Use(LoadSessionMiddleware(authService, apiTokensRepo))
 	r.Use(AuditMiddleware(auditWriter))
+
+	if cfg.obs != nil {
+		r.Get("/healthz", cfg.obs.Healthz())
+		r.Get("/readyz", cfg.obs.Readyz(pool, rdb))
+		r.Handle("/metrics", cfg.obs.Metrics())
+	}
 
 	// Health check
 	r.Get("/health", healthHandler(pool, rdb, cfg.version, cfg.startTime))
@@ -176,7 +191,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		})
 
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
-			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb))
+			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb, cfg.obs))
 		r.With(RequireScope("scans:write")).
 			Post("/api/v1/scans", handleCreateScan(scansRepo, findingsRepo))
 		r.Get("/api/v1/scans/{id}", handleGetScan(scansRepo, userProjectRolesRepo))

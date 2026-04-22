@@ -31,10 +31,14 @@ import (
 	"redlycoris/internal/enrichment/kev"
 	"redlycoris/internal/enrichment/nvd"
 	"redlycoris/internal/enrichment/osv"
+	"redlycoris/internal/observability"
 	"redlycoris/internal/storage"
+	buildversion "redlycoris/internal/version"
 )
 
 var version = "dev"
+var commit = "unknown"
+var date = "unknown"
 
 func main() {
 	startTime := time.Now()
@@ -58,6 +62,20 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	resolvedVersion := buildversion.Version
+	if version != "dev" {
+		resolvedVersion = version
+	}
+	resolvedCommit := buildversion.Commit
+	if commit != "unknown" {
+		resolvedCommit = commit
+	}
+	resolvedDate := buildversion.Date
+	if date != "unknown" {
+		resolvedDate = date
+	}
+	obs := observability.New(resolvedVersion, resolvedCommit, resolvedDate)
+
 	// PostgreSQL
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -71,6 +89,7 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("connected to PostgreSQL")
+	obs.StartDBPoolMetrics(ctx.Done(), pool, 15*time.Second)
 
 	auditRepo := storage.NewAuditLogRepo(pool)
 	auditWriter := audit.NewWriter(auditRepo)
@@ -158,17 +177,19 @@ func main() {
 
 	// Enrichment workers (Redis Streams consumer group)
 	enrichment.StartWorkers(ctx, pool, rdb, 3)
+	enrichment.StartMetricsCollector(ctx, pool, rdb, obs)
 
 	// Enrichment scheduler
 	routerOpts := []api.RouterOption{
 		api.WithEnv(cfg.Env),
-		api.WithVersion(version),
+		api.WithVersion(resolvedVersion),
 		api.WithStartTime(startTime),
 		api.WithAuditRepo(auditRepo),
 		api.WithAuditWriter(auditWriter),
 		api.WithTrustProxy(cfg.TrustProxy),
 		api.WithCookieSecure(cfg.CookieSecure),
 		api.WithSessionDuration(cfg.SessionDuration),
+		api.WithObservability(obs),
 	}
 	if cfg.EnrichmentEnabled {
 		scheduler := enrichment.NewScheduler(pool)
