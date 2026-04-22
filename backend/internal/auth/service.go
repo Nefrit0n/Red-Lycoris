@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
@@ -112,7 +113,11 @@ func (s *Service) ValidateToken(ctx context.Context, rawToken string) (*User, *S
 	}
 
 	if err := s.sessions.UpdateLastUsed(ctx, session.ID); err != nil {
-		return nil, nil, fmt.Errorf("auth.Service.ValidateToken: update last_used_at: %w", err)
+		slog.Warn("sessions.update_last_used failed",
+			"session_id", session.ID,
+			"error", err,
+		)
+		return user, session, nil
 	}
 	session.LastUsedAt = time.Now()
 

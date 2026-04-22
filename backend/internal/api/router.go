@@ -102,8 +102,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	r := chi.NewRouter()
 
 	// Middleware
-	r.Use(RecoveryMiddleware)
 	r.Use(RequestIDMiddleware)
+	r.Use(RecoveryMiddleware)
 	r.Use(RequestLoggerMiddleware)
 	r.Use(CORSMiddleware(corsOrigins))
 	r.Use(LoadSessionMiddleware(authService, apiTokensRepo))

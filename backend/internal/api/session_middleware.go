@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -17,14 +16,14 @@ import (
 
 type (
 	userCtxKeyType             struct{}
-	sessionCtxKeyType          struct{}
+	sessionCtxKey              struct{}
 	authTokenInvalidCtxKeyType struct{}
 	apiTokenCtxKeyType         struct{}
 )
 
 var (
 	userCtxKey             = userCtxKeyType{}
-	sessionCtxKey          = sessionCtxKeyType{}
+	sessionKey             = sessionCtxKey{}
 	authTokenInvalidCtxKey = authTokenInvalidCtxKeyType{}
 	apiTokenCtxKey         = apiTokenCtxKeyType{}
 )
@@ -77,12 +76,11 @@ func LoadSessionMiddleware(svc *authsvc.Service, tokensRepo *storage.APITokensRe
 
 			rawToken, ok := readAuthToken(r)
 			if !ok {
-				slog.Info("session validation result",
+				slog.Debug("load_session",
 					"request_id", GetRequestID(r.Context()),
-					"path", r.URL.Path,
+					"outcome", "absent",
 					"has_auth_header", hasAuthHeader,
 					"has_session_cookie", hasSessionCookie,
-					"validate_result", "missing_token",
 				)
 				next.ServeHTTP(w, r)
 				return
@@ -96,35 +94,22 @@ func LoadSessionMiddleware(svc *authsvc.Service, tokensRepo *storage.APITokensRe
 				}
 				slog.Warn("session validate failed",
 					"request_id", GetRequestID(r.Context()),
-					"path", r.URL.Path,
-					"has_auth_header", hasAuthHeader,
-					"has_session_cookie", hasSessionCookie,
-					"validate_result", "invalid",
+					"outcome", "expired",
 					"error_type", classifySessionError(err),
 				)
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			slog.Info("session validation result",
+			slog.Debug("load_session",
 				"request_id", GetRequestID(r.Context()),
-				"path", r.URL.Path,
-				"has_auth_header", hasAuthHeader,
-				"has_session_cookie", hasSessionCookie,
-				"validate_result", "valid",
-				"user_id", user.ID,
+				"outcome", "loaded",
 				"session_id", session.ID,
+				"user_id", user.ID,
 			)
 
 			ctx := context.WithValue(r.Context(), userCtxKey, user)
-			ctx = context.WithValue(ctx, sessionCtxKey, session)
-
-			slog.Info("LoadSession storing user",
-				"request_id", GetRequestID(r.Context()),
-				"path", r.URL.Path,
-				"user_type", fmt.Sprintf("%T", user),
-				"userCtxKey_addr", fmt.Sprintf("%p", userCtxKey),
-			)
+			ctx = withSession(ctx, session)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -155,10 +140,18 @@ func UserFromContext(ctx context.Context) (*authsvc.User, bool) {
 }
 
 func SessionFromContext(ctx context.Context) (*authsvc.Session, bool) {
+	return sessionFromContext(ctx)
+}
+
+func withSession(ctx context.Context, s *authsvc.Session) context.Context {
+	return context.WithValue(ctx, sessionKey, s)
+}
+
+func sessionFromContext(ctx context.Context) (*authsvc.Session, bool) {
 	if ctx == nil {
 		return nil, false
 	}
-	session, ok := ctx.Value(sessionCtxKey).(*authsvc.Session)
+	session, ok := ctx.Value(sessionKey).(*authsvc.Session)
 	return session, ok && session != nil
 }
 
