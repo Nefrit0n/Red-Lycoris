@@ -3,6 +3,26 @@ backend/server
 backend/seed
 
 # Environment
-.env.local
 .env
+.env.local
 backend/internal/enrichment/bdu/*.xml
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*.swn
+.idea/
+.vscode/
+
+# Frontend build & deps
+frontend/node_modules/
+frontend/dist/
+
+# Go temp & local data
+backend/tmp/
+backend/data/
+
+# Test coverage
+coverage/
+*.log
