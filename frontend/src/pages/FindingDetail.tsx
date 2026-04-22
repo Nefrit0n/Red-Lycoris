@@ -38,7 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import SeverityBadge from "@/components/SeverityBadge";
+import SeverityBadge from "@/components/findings/SeverityBadge";
 import StatusBadge from "@/components/StatusBadge";
 import PriorityScore from "@/components/PriorityScore";
 import EnrichmentTabs from "@/components/EnrichmentTabs";
