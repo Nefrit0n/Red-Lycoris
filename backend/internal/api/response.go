@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 func respondJSON(w http.ResponseWriter, status int, data any) {
@@ -36,4 +38,16 @@ func respondList(w http.ResponseWriter, data any, total int, nextCursor string) 
 			HasMore:    nextCursor != "",
 		},
 	})
+}
+
+func setPublicCacheHeaders(w http.ResponseWriter, ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	seconds := int(ttl.Seconds())
+	if seconds <= 0 {
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
+	w.Header().Set("Expires", time.Now().UTC().Add(time.Duration(seconds)*time.Second).Format(http.TimeFormat))
 }
