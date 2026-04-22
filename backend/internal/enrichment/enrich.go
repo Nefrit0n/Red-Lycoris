@@ -535,12 +535,12 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 			var cweEntries []map[string]any
 			for rows.Next() {
 				var (
-					cweID                    int
-					name, desc               string
-					extDesc, category        *string
-					likelihood, impact       *string
-					parentIDs                []int32
-					mitigationsRaw           []byte
+					cweID              int
+					name, desc         string
+					extDesc, category  *string
+					likelihood, impact *string
+					parentIDs          []int32
+					mitigationsRaw     []byte
 				)
 				if err := rows.Scan(
 					&cweID, &name, &desc, &extDesc,

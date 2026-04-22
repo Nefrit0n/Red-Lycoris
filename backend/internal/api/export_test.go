@@ -78,10 +78,10 @@ func TestSanitizeSlug(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"My Project", "my project"},          // spaces become dashes after lower
-		{"Мой проект", "мой проект"},           // Cyrillic preserved
-		{"  ", "project"},                      // blank → fallback
-		{"API/Service", "apiservice"},           // slash stripped
+		{"My Project", "my project"},  // spaces become dashes after lower
+		{"Мой проект", "мой проект"},  // Cyrillic preserved
+		{"  ", "project"},             // blank → fallback
+		{"API/Service", "apiservice"}, // slash stripped
 		{"test-123", "test-123"},
 	}
 	for _, tc := range cases {
@@ -184,10 +184,10 @@ func TestNDJSONMetaLine(t *testing.T) {
 
 	meta := map[string]any{
 		"_meta": map[string]any{
-			"exported_at":       "2026-04-21T10:00:00Z",
-			"filters":           map[string]any{"severity": "4"},
-			"total_estimated":   42,
-			"platform_version":  "1.0.0",
+			"exported_at":      "2026-04-21T10:00:00Z",
+			"filters":          map[string]any{"severity": "4"},
+			"total_estimated":  42,
+			"platform_version": "1.0.0",
 		},
 	}
 	_ = enc.Encode(meta)
