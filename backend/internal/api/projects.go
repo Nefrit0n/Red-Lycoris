@@ -85,16 +85,16 @@ type createProjectSLA struct {
 }
 
 type createProjectRequest struct {
-	Name        string          `json:"name"`
-	Slug        string          `json:"slug"`
-	Description string          `json:"description"`
-	IconColor   string          `json:"icon_color"`
-	Tags        []string        `json:"tags"`
-	TemplateID  string          `json:"template_id"`
-	OwnerID     string          `json:"owner_id"`
-	TeamID      string          `json:"team_id"`
-	TeamName    string          `json:"team_name"`
-	Visibility  string          `json:"visibility"`
+	Name        string           `json:"name"`
+	Slug        string           `json:"slug"`
+	Description string           `json:"description"`
+	IconColor   string           `json:"icon_color"`
+	Tags        []string         `json:"tags"`
+	TemplateID  string           `json:"template_id"`
+	OwnerID     string           `json:"owner_id"`
+	TeamID      string           `json:"team_id"`
+	TeamName    string           `json:"team_name"`
+	Visibility  string           `json:"visibility"`
 	SLA         createProjectSLA `json:"sla"`
 	// Source and Invites are accepted but not processed (stub)
 	Source  json.RawMessage   `json:"source"`
@@ -112,13 +112,13 @@ func handleCreateProject(pool *pgxpool.Pool, repo *storage.ProjectsRepo, rolesRe
 		user, _ := UserFromContext(r.Context())
 
 		p := domain.Project{
-			Name:        req.Name,
-			Slug:        req.Slug,
-			Description: req.Description,
-			IconColor:   req.IconColor,
-			Tags:        req.Tags,
-			Visibility:  req.Visibility,
-			CreatedBy:   user.ID,
+			Name:                req.Name,
+			Slug:                req.Slug,
+			Description:         req.Description,
+			IconColor:           req.IconColor,
+			Tags:                req.Tags,
+			Visibility:          req.Visibility,
+			CreatedBy:           user.ID,
 			SLACriticalDays:     req.SLA.CriticalDays,
 			SLAHighDays:         req.SLA.HighDays,
 			SLAMediumDays:       req.SLA.MediumDays,
