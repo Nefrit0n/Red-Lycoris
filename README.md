@@ -1,209 +1,221 @@
-# Red Lycoris
+# RedLycoris
 
-Платформа для централизованного хранения, дедупликации, корреляции и обогащения уязвимостей. Замена DefectDojo с фокусом на производительность при 1M+ findings.
+**On-premise ASOC-платформа** для централизованного хранения, дедупликации и приоритизации уязвимостей.
 
-## Quick Start
+Замена DefectDojo с фокусом на производительность при **1M+ findings**, поддержкой воздушных зазоров и русскоязычным интерфейсом.
+
+[![Version](https://img.shields.io/badge/version-0.1.0b-dc2626)](https://github.com/nefrit0n/red-lycoris/releases)
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8)](https://golang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/license-TBD-lightgrey)](LICENSE)
+
+---
+
+## Что это
+
+RedLycoris принимает результаты SAST/SCA/DAST/IaC/Secrets-сканеров, дедуплицирует их по fingerprint, обогащает данными из NVD, EPSS, KEV, БДУ ФСТЭК, OSV и CWE, вычисляет priority score и предоставляет REST API + веб-интерфейс.
+
+**Не запускает сканеры.** Только принимает их результаты.
+
+---
+
+## Возможности
+
+- **Агрегация** — единое хранилище для SAST/SCA/DAST/IaC/Secrets findings
+- **Дедупликация** — SHA256-fingerprint, без дублей при повторном импорте
+- **Обогащение** — NVD, EPSS, CISA KEV, БДУ ФСТЭК, OSV, CWE (локальные зеркала, offline-режим)
+- **Приоритизация** — формула с учётом CVSS, EPSS, KEV-статуса, давности публикации
+- **Масштаб** — cursor-based пагинация, materialized views, протестировано на 100k+ findings
+- **RBAC** — Viewer / Triager / Project Admin / Global Admin
+- **Аудит** — полная история изменений с diff
+- **Экспорт** — CSV, XLSX, NDJSON, HTML
+- **Наблюдаемость** — `/healthz`, `/readyz`, `/metrics` (Prometheus)
+- **Русский UI** — React 18 + TanStack Table/Query/Virtual + shadcn/ui
+
+---
+
+## Быстрый старт
 
 ```bash
-git clone https://github.com/Nefrit0n/Red-Lycoris.git && cd Red-Lycoris
+git clone https://github.com/nefrit0n/red-lycoris.git
+cd red-lycoris
+
 cp env.example .env
-make dev
-```
+# Обязательно: POSTGRES_PASSWORD, BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD
 
-Откройте http://localhost:3000 (UI) и http://localhost:8080/health (API).
-
-Для тестовых данных (100k findings):
-
-```bash
-make seed
-```
-
-## Развёртывание
-
-Быстрый старт (Docker Compose):
-
-```bash
-git clone https://github.com/Nefrit0n/Red-Lycoris.git
-cd Red-Lycoris
-cp env.example .env
+./scripts/build.sh
 docker compose up -d
 ```
 
-Подробные инструкции:
+Откройте [http://localhost:3000](http://localhost:3000).
 
-- [docs/deployment.md](docs/deployment.md)
-- [docs/configuration.md](docs/configuration.md)
-- [docs/network_requirements.md](docs/network_requirements.md)
+Логин по умолчанию задаётся через `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` в `.env`.
+
+### Production-развёртывание
+
+```bash
+./scripts/build.sh
+docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml up -d
+```
+
+Отличия production-режима: порты postgres/redis закрыты, увеличены лимиты ресурсов, LOG_LEVEL=warn.
+
+---
+
+## Поддерживаемые сканеры
+
+| Сканер | Формат | Парсер |
+|--------|--------|--------|
+| Semgrep / OpenGrep | SARIF 2.1.0 | `SARIFParser` |
+| Trivy | JSON | `TrivyParser` |
+| Checkov | JSON | `CheckovParser` |
+| Gitleaks | JSON | `GitleaksParser` |
+| TruffleHog v3 | JSON / NDJSON | `TruffleHogParser` |
+| Любой | Generic JSON | `GenericParser` |
+
+Формат определяется автоматически. Добавить новый парсер — реализовать интерфейс `parser.Parser`.
+
+---
+
+## Источники обогащения
+
+| База | Частота | Режим |
+|------|---------|-------|
+| NVD API 2.0 | 2 часа (инкремент) | online / зеркало |
+| EPSS (Cyentia) | ежедневно | daily CSV |
+| CISA KEV | 6 часов | JSON feed |
+| БДУ ФСТЭК | еженедельно | XML в ZIP |
+| OSV | ежедневно | GCS bucket ZIP |
+| CWE (MITRE) | ежемесячно | XML в ZIP |
+| NVD CPE | еженедельно | JSON API |
+
+Все источники работают в фоне через Redis Streams. При отключении внешних сетей используются локально кешированные данные.
+
+---
 
 ## Архитектура
 
 ```
-┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   Frontend   │────▶│   Backend (Go)   │────▶│  PostgreSQL 16   │
-│  React + TS  │     │   Chi Router     │     │  findings, views │
-│  Vite / nginx│     │   REST API       │     │  enrichment data │
-└──────────────┘     └───────┬──────────┘     └──────────────────┘
-                             │
-                             ▼
-                     ┌──────────────────┐
-                     │    Redis 7       │
-                     │  кэш + Streams   │
-                     │  (enrichment     │
-                     │   pipeline)      │
-                     └──────────────────┘
+Сканер → POST /api/v1/import
+              │
+              ▼
+        Парсер (SARIF/Trivy/...)
+              │
+              ▼
+        Дедупликация (fingerprint SHA256)
+              │
+         ┌────┴────┐
+         │ новый   │ дубль
+         ▼         ▼
+      INSERT    UPDATE last_seen
+                times_seen++
+              │
+              ▼
+        Redis Streams → Enrichment Workers (×3)
+              │           NVD / EPSS / KEV / БДУ / OSV / CWE
+              ▼
+        Priority Score (materialized view, обновление каждые 5 мин)
+              │
+              ▼
+        REST API → React UI
 ```
 
-- **Backend** принимает результаты сканеров (SARIF, Trivy JSON, generic), дедуплицирует по fingerprint, обогащает из NVD/EPSS/KEV/BDU/OSV/CWE/CPE
-- **Materialized Views** (`dashboard_stats`, `enrichment_coverage`) обновляются каждые 5 минут для быстрого дашборда
-- **Redis** кэширует dashboard stats (60с), sync status (30с), enrichment данные (5мин)
+Подробнее: [docs/architecture.md](docs/architecture.md)
 
-## API
-
-Base URL: `http://localhost:8080/api/v1`
-
-### Health
-
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/health` | Статус сервера, БД, Redis |
-
-### Projects
-
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/api/v1/projects` | Список проектов |
-| POST | `/api/v1/projects` | Создать проект |
-| GET | `/api/v1/projects/{id}` | Получить проект |
-| PUT | `/api/v1/projects/{id}` | Обновить проект |
-| DELETE | `/api/v1/projects/{id}` | Удалить проект |
-
-### Findings
-
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/api/v1/findings` | Список findings (cursor pagination) |
-| GET | `/api/v1/findings/{id}` | Детали finding + enrichments + score |
-| PATCH | `/api/v1/findings/{id}/status` | Обновить статус |
-| POST | `/api/v1/findings/{id}/enrich` | Запустить обогащение finding |
-| PATCH | `/api/v1/findings/bulk/status` | Массовое обновление статуса |
-| DELETE | `/api/v1/findings/{id}` | Удалить finding |
-
-**Параметры списка findings:**
-
-```
-GET /api/v1/findings?limit=50&cursor=...&sort=-priority_score
-    &severity=3,4&status=0&project_id=...&q=sql+injection
-```
-
-| Параметр | Описание |
-|----------|----------|
-| `limit` | Количество (1-200, по умолчанию 50) |
-| `cursor` | Opaque cursor для пагинации |
-| `sort` | Поле сортировки: `first_seen`, `last_seen`, `severity`, `priority_score` (префикс `-` для DESC) |
-| `severity` | Фильтр по severity (0-4, через запятую) |
-| `status` | Фильтр по статусу (0-4, через запятую) |
-| `project_id` | UUID проекта |
-| `q` | Полнотекстовый поиск |
-| `cve` | Фильтр по CVE ID |
-| `cwe` | Фильтр по CWE ID |
-
-### Dashboard
-
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/api/v1/dashboard/stats` | Статистика (из materialized views, кэш 60с) |
-
-### Import
-
-| Метод | Путь | Описание |
-|-------|------|----------|
-| POST | `/api/v1/import` | Импорт findings (SARIF, Trivy JSON, generic JSON) |
-| POST | `/api/v1/scans` | Импорт сканов из CI по project API token |
-
-### CI Integration
-
-- Подробная инструкция и готовый `.gitlab-ci.yml`: [docs/gitlab-ci.md](docs/gitlab-ci.md)
-- Для CI используйте project API token со scope `scans:write`.
-
-### Supported scanners
-
-- OpenGrep (SARIF)
-- Trivy
-- TruffleHog
-- Gitleaks
-
-### Enrichment
-
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/api/v1/enrichment/status` | Статус всех источников синхронизации |
-| POST | `/api/v1/enrichment/enrich-all` | Обогатить все необогащённые findings |
-| POST | `/api/v1/enrichment/sync/{source}` | Ручной запуск синхронизации (nvd, epss, kev, bdu, osv, cwe, cpe) |
-
-### Формат ответов
-
-Успех:
-```json
-{
-  "data": { ... },
-  "meta": { "total": 15000, "next_cursor": "eyJp...", "has_more": true }
-}
-```
-
-Ошибка:
-```json
-{
-  "error": { "code": "VALIDATION_ERROR", "message": "severity must be between 0 and 4" }
-}
-```
+---
 
 ## Конфигурация
 
-Все настройки через переменные окружения (файл `.env`):
+Все параметры — через переменные окружения. Полный список с описанием: [docs/configuration.md](docs/configuration.md).
 
-| Переменная | По умолчанию | Описание |
-|-----------|-------------|----------|
-| `POSTGRES_DB` | `RedLycoris` | Имя базы данных |
-| `POSTGRES_USER` | `RedLycoris` | Пользователь БД |
-| `POSTGRES_PASSWORD` | `RedLycoris_secret` | Пароль БД |
-| `POSTGRES_PORT` | `5432` | Порт PostgreSQL (host) |
-| `REDIS_PORT` | `6379` | Порт Redis (host) |
-| `API_PORT` | `8080` | Порт backend API (host) |
-| `LOG_LEVEL` | `info` | Уровень логирования: debug, info, warn, error |
-| `ENV` | `dev` | Окружение приложения (`dev` включает `/api/docs` и `/api/openapi.yaml`) |
-| `FRONTEND_PORT` | `3000` | Порт frontend (host) |
-| `FRONTEND_TARGET` | `development` | Docker build target: development / production |
-| `ENRICHMENT_ENABLED` | `true` | Включить автоматическое обогащение |
-| `NVD_API_KEY` | — | API ключ NVD (увеличивает rate limit 5 → 50 req/30s) |
+Критичные параметры для production:
 
-## Команды (Make)
+| Переменная | Обязательна | Описание |
+|------------|-------------|----------|
+| `POSTGRES_PASSWORD` | да | Пароль БД |
+| `BOOTSTRAP_ADMIN_EMAIL` | да | Email первого администратора |
+| `BOOTSTRAP_ADMIN_PASSWORD` | да | Пароль первого администратора |
+| `COOKIE_SECURE` | рекомендуется | `true` при HTTPS |
+| `TRUST_PROXY` | только за nginx | `true` если за reverse proxy |
+| `NVD_API_KEY` | нет | Увеличивает rate limit NVD с 5 до 50 req/30s |
 
+---
+
+## API
+
+REST API с OpenAPI 3.1 спецификацией. В dev-режиме доступна документация: [http://localhost:8080/api/docs](http://localhost:8080/api/docs).
+
+```bash
+# Версия сервиса (публичный endpoint)
+curl http://localhost:8080/api/v1/version
+
+# Импорт результатов сканирования
+curl -X POST http://localhost:8080/api/v1/import \
+     -H "Cookie: rl_session=<token>" \
+     -F "file=@trivy-results.json" \
+     -F "project_id=<uuid>"
+
+# Список findings с фильтрацией
+curl "http://localhost:8080/api/v1/findings?severity=high,critical&status=open&limit=50"
 ```
-make help          # Список всех команд
-make dev           # Запуск в dev режиме (hot reload)
-make prod          # Запуск в production (nginx + warn logs)
-make seed          # Генерация 100k тестовых findings
-make sync          # Ручной запуск всех синхронизаций
-make logs          # Логи всех сервисов (follow)
-make clean         # Остановка + удаление всех данных
+
+---
+
+## Разработка
+
+```bash
+# Только инфраструктура
+docker compose up -d postgres redis
+
+# Backend
+cd backend && go run ./cmd/server
+
+# Frontend
+cd frontend && npm install && npm run dev
 ```
 
-## Стек
+### Make-команды
 
-- **Backend:** Go 1.22, Chi router, pgx/v5
-- **Database:** PostgreSQL 16 (materialized views, BRIN/GIN индексы, cursor pagination)
-- **Cache:** Redis 7 (кэш + Redis Streams для async enrichment)
-- **Frontend:** React 18, TypeScript, Vite, TanStack (Table/Query/Virtual), Tailwind CSS, shadcn/ui
-- **Deploy:** Docker Compose
+```bash
+make up          # docker compose up -d
+make down        # docker compose down
+make logs        # tail логов
+make migrate     # применить миграции вручную
+make seed        # загрузить тестовые данные
+make build       # ./scripts/build.sh
+```
 
-## Источники обогащения
+### Тесты
 
-| Источник | Описание | Частота |
-|----------|----------|---------|
-| NVD | CVSS scores, CWE mapping | Каждые 2 часа |
-| EPSS | Вероятность эксплуатации | Ежедневно |
-| CISA KEV | Известные эксплуатируемые уязвимости | Каждые 6 часов |
-| БДУ ФСТЭК | Российский реестр уязвимостей | Еженедельно |
-| OSV | Open Source уязвимости | Ежедневно |
-| CWE | Каталог типов уязвимостей | Ежемесячно |
-| CPE | Словарь продуктов | Еженедельно |
+```bash
+cd backend && go test ./...
+```
+
+---
+
+## Документация
+
+- [Быстрый старт и развёртывание](docs/deployment.md)
+- [Конфигурация](docs/configuration.md)
+- [Архитектура](docs/architecture.md)
+- [Модель безопасности](docs/security-model.md)
+- [CI/CD (GitLab)](docs/gitlab-ci.md)
+- [Резервное копирование и восстановление](docs/ops/backup-restore.md)
+- [Наблюдаемость](docs/ops/observability.md)
+- [Нагрузочное тестирование](docs/ops/load-testing.md)
+- [Известные проблемы](docs/KNOWN_ISSUES.md)
+
+---
+
+## Требования
+
+- Docker 24+ и Docker Compose v2
+- 4 ГБ RAM (минимум), 8 ГБ (рекомендуется для production)
+- 20 ГБ дискового пространства (для данных PostgreSQL + Redis AOF)
+- Сетевой доступ к источникам обогащения (или pre-loaded данные для air-gapped)
+
+---
+
+## Лицензия
+
+См. [LICENSE](LICENSE).
