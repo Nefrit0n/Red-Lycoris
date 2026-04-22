@@ -1,6 +1,0 @@
-BEGIN;
-
-ALTER TABLE vuln_intel
-    ADD COLUMN IF NOT EXISTS bdu_payload JSONB;
-
-COMMIT;
