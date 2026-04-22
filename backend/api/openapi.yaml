@@ -1,14 +1,16 @@
 openapi: 3.1.0
 info:
   title: RedLycoris API
-  version: 1.0.0
+  version: 0.1.0b
   description: |
-    OpenAPI 3.1 спецификация текущих REST-эндпоинтов платформы RedLycoris.
+    OpenAPI 3.1 спецификация REST-эндпоинтов платформы RedLycoris.
+    On-premise ASOC-платформа для централизованного хранения, дедупликации и приоритизации уязвимостей.
 servers:
   - url: http://localhost:8080
     description: Local development
 
 tags:
+  - name: System
   - name: Findings
   - name: Projects
   - name: Dashboard
@@ -17,6 +19,34 @@ tags:
   - name: Auth
 
 paths:
+  /api/v1/version:
+    get:
+      tags: [System]
+      summary: Версия сервиса
+      description: Возвращает версию, commit и дату сборки. Публичный endpoint, авторизация не требуется.
+      operationId: getVersion
+      responses:
+        "200":
+          description: Информация о сборке
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    example: "0.1.0b"
+                  commit:
+                    type: string
+                    example: "abc1234"
+                  build_date:
+                    type: string
+                    format: date-time
+                    example: "2026-04-22T10:00:00Z"
+                  go_version:
+                    type: string
+                    example: "go1.24.0"
+
   /api/v1/findings:
     get:
       tags: [Findings]
