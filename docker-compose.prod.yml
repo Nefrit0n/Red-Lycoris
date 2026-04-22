@@ -1,0 +1,43 @@
+# Production overrides — используй с:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+services:
+  postgres:
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 1G
+
+  redis:
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+
+  backend:
+    environment:
+      LOG_LEVEL: warn
+      CORS_ORIGINS: "http://localhost:${FRONTEND_PORT:-3000}"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+        reservations:
+          memory: 256M
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    volumes: !reset []
+    environment:
+      VITE_API_URL: ""

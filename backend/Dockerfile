@@ -1,0 +1,35 @@
+# ── Stage 1: Build ──
+FROM golang:1.24-alpine AS builder
+
+RUN sed -i 's#https://dl-cdn.alpinelinux.org#http://dl-cdn.alpinelinux.org#g' /etc/apk/repositories
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -o /build/redlycoris ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -o /build/admin ./cmd/admin
+
+# ── Stage 2: Run ──
+FROM alpine:3.19
+
+RUN sed -i 's#https://dl-cdn.alpinelinux.org#http://dl-cdn.alpinelinux.org#g' /etc/apk/repositories
+RUN apk add --no-cache ca-certificates tzdata curl
+
+WORKDIR /app
+
+COPY --from=builder /build/redlycoris .
+COPY --from=builder /build/admin .
+COPY --from=builder /build/migrations ./migrations
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["./redlycoris"]
