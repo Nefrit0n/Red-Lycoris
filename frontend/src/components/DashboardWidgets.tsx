@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import SeverityBadge from "@/components/SeverityBadge";
+import SeverityBadge from "@/components/findings/SeverityBadge";
 import type { DashboardStats } from "@/api/dashboard";
 import { cn } from "@/lib/utils";
 
