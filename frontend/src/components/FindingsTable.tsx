@@ -12,7 +12,7 @@ import { formatDistanceToNow, isValid } from "date-fns";
 import { ru } from "date-fns/locale";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import SeverityBadge from "@/components/SeverityBadge";
+import SeverityBadge from "@/components/findings/SeverityBadge";
 import StatusBadge from "@/components/StatusBadge";
 import { useFiltersStore } from "@/store/filters";
 import type { Finding } from "@/types";
