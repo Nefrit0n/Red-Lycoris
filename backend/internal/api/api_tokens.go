@@ -15,8 +15,8 @@ import (
 
 // allowedScopes is the complete list of valid PAT scopes.
 var allowedScopes = map[string]struct{}{
-	"scans:write":    {},
-	"findings:read":  {},
+	"scans:write":   {},
+	"findings:read": {},
 }
 
 type createAPITokenRequest struct {
