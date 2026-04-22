@@ -1,0 +1,1185 @@
+openapi: 3.1.0
+info:
+  title: RedLycoris API
+  version: 1.0.0
+  description: |
+    OpenAPI 3.1 спецификация текущих REST-эндпоинтов платформы RedLycoris.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Findings
+  - name: Projects
+  - name: Dashboard
+  - name: Import
+  - name: Enrichment
+  - name: Auth
+
+paths:
+  /api/v1/findings:
+    get:
+      tags: [Findings]
+      summary: Получить список findings
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Поисковый запрос.
+        - in: query
+          name: cve
+          schema: { type: string }
+          description: Фильтр по CVE.
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: Курсор пагинации.
+        - in: query
+          name: sort
+          schema: { type: string }
+          description: Поле сортировки.
+        - in: query
+          name: dir
+          schema: { type: string, enum: [asc, desc] }
+          description: Направление сортировки.
+        - in: query
+          name: project_id
+          schema: { type: string, format: uuid }
+          description: UUID проекта.
+        - in: query
+          name: severity
+          schema: { type: string }
+          description: Список severity через запятую.
+        - in: query
+          name: status
+          schema: { type: string }
+          description: Список status через запятую.
+        - in: query
+          name: cwe
+          schema: { type: integer }
+          description: CWE ID.
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1 }
+          description: Лимит записей.
+      responses:
+        '200':
+          description: Список findings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Finding'
+                  meta:
+                    $ref: '#/components/schemas/ListMeta'
+                required: [data, meta]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      tags: [Import]
+      summary: Импорт findings (альтернативный endpoint)
+      description: Эквивалент `/api/v1/import`.
+      parameters:
+        - in: query
+          name: project_id
+          schema: { type: string, format: uuid }
+          description: Принудительный project_id для всех импортируемых findings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: Поддерживается SARIF/Trivy/Semgrep/Gitleaks/Checkov/TruffleHog/Generic JSON (формат определяется автоматически).
+              oneOf:
+                - type: object
+                - type: array
+                  items: { type: object }
+      responses:
+        '200':
+          description: Результат импорта.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/findings/bulk/status:
+    patch:
+      tags: [Findings]
+      summary: Массовое обновление статуса findings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  description: Список UUID findings.
+                  items:
+                    type: string
+                    format: uuid
+                status:
+                  type: integer
+                  description: Новый статус (0..4).
+                  minimum: 0
+                  maximum: 4
+              required: [ids, status]
+      responses:
+        '200':
+          description: Статусы обновлены.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    description: Текстовый результат операции.
+                  updated:
+                    type: integer
+                    description: Количество обновлённых записей.
+                required: [status, updated]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/findings/{id}:
+    get:
+      tags: [Findings]
+      summary: Получить finding по ID
+      parameters:
+        - $ref: '#/components/parameters/FindingID'
+      responses:
+        '200':
+          description: Детали finding.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      finding:
+                        $ref: '#/components/schemas/Finding'
+                      enrichments:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Enrichment'
+                      score:
+                        $ref: '#/components/schemas/FindingScore'
+                    required: [finding]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      tags: [Findings]
+      summary: Удалить finding
+      parameters:
+        - $ref: '#/components/parameters/FindingID'
+      responses:
+        '204':
+          description: Finding удалён.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/findings/{id}/status:
+    patch:
+      tags: [Findings]
+      summary: Обновить статус finding
+      parameters:
+        - $ref: '#/components/parameters/FindingID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: integer
+                  minimum: 0
+                  maximum: 4
+                  description: Новый статус finding.
+              required: [status]
+      responses:
+        '200':
+          description: Статус обновлён.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    description: Результат операции.
+                required: [status]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/findings/{id}/enrichments:
+    get:
+      tags: [Enrichment]
+      summary: Получить enrichments finding
+      parameters:
+        - $ref: '#/components/parameters/FindingID'
+      responses:
+        '200':
+          description: Список enrichment-записей.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Enrichment'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/findings/{id}/score:
+    get:
+      tags: [Enrichment]
+      summary: Получить score finding
+      parameters:
+        - $ref: '#/components/parameters/FindingID'
+      responses:
+        '200':
+          description: Данные расчёта score.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/FindingScore'
+                      - type: 'null'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/findings/{id}/enrich:
+    post:
+      tags: [Enrichment]
+      summary: Запустить enrichment одного finding
+      parameters:
+        - $ref: '#/components/parameters/FindingID'
+      responses:
+        '200':
+          description: Enrichment выполнен синхронно.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrichQueueResult'
+        '202':
+          description: Enrichment поставлен в очередь.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrichQueueResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      summary: Получить список проектов
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1 }
+          description: Размер страницы.
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: Курсор следующей страницы.
+        - in: query
+          name: status
+          schema: { type: string }
+          description: CSV-список статусов проектов.
+        - in: query
+          name: team
+          schema: { type: string }
+          description: Фильтр по команде.
+        - in: query
+          name: sla
+          schema: { type: string }
+          description: Фильтр по SLA.
+        - in: query
+          name: tag
+          schema: { type: string }
+          description: CSV-список тегов.
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Поиск по имени/описанию/тегам/repo.
+        - in: query
+          name: sort
+          schema: { type: string }
+          description: Сортировка списка.
+        - in: query
+          name: owner
+          schema: { type: string, format: uuid }
+          description: Фильтр по владельцу.
+      responses:
+        '200':
+          description: Список проектов.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+                  meta:
+                    $ref: '#/components/schemas/ListMeta'
+                required: [data, meta]
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      tags: [Projects]
+      summary: Создать проект
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+      responses:
+        '201':
+          description: Проект создан.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Получить проект
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+      responses:
+        '200':
+          description: Проект.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    put:
+      tags: [Projects]
+      summary: Обновить проект
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+      responses:
+        '200':
+          description: Проект обновлён.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      tags: [Projects]
+      summary: Удалить проект
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+      responses:
+        '204':
+          description: Проект удалён.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/projects/{id}/pinned:
+    patch:
+      tags: [Projects]
+      summary: Изменить pinned-флаг проекта
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pinned: { type: boolean }
+              required: [pinned]
+      responses:
+        '200':
+          description: Флаг updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      pinned: { type: boolean }
+                    required: [id, pinned]
+                required: [data]
+
+  /api/v1/projects/{id}/trend:
+    get:
+      tags: [Projects]
+      summary: Получить тренд high+critical findings по дням
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 365 }
+          description: Количество дней в тренде.
+      responses:
+        '200':
+          description: Точки тренда.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectTrendPoint'
+                required: [data]
+
+  /api/v1/projects/{id}/quick-peek:
+    get:
+      tags: [Projects]
+      summary: Получить данные quick-peek по проекту
+      parameters:
+        - $ref: '#/components/parameters/ProjectID'
+      responses:
+        '200':
+          description: Данные quick-peek.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProjectQuickPeek'
+                required: [data]
+
+  /api/v1/dashboard/stats:
+    get:
+      tags: [Dashboard]
+      summary: Получить агрегированную статистику дашборда
+      responses:
+        '200':
+          description: Статистика дашборда.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DashboardStats'
+                required: [data]
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/import:
+    post:
+      tags: [Import]
+      summary: Импорт findings
+      parameters:
+        - in: query
+          name: project_id
+          schema: { type: string, format: uuid }
+          description: Принудительный project_id для всех импортируемых findings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: Поддерживается SARIF/Trivy/Semgrep/Gitleaks/Checkov/TruffleHog/Generic JSON (формат определяется автоматически).
+              oneOf:
+                - type: object
+                - type: array
+                  items: { type: object }
+      responses:
+        '200':
+          description: Результат импорта.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/enrichment/status:
+    get:
+      tags: [Enrichment]
+      summary: Получить статусы синхронизации источников enrichment
+      responses:
+        '200':
+          description: Массив статусов синхронизации.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SyncStatus'
+                required: [data]
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/enrichment/epss/history:
+    get:
+      tags: [Enrichment]
+      summary: Получить историю EPSS по CVE
+      parameters:
+        - in: query
+          name: cve
+          required: true
+          schema:
+            type: string
+            pattern: '^CVE-\d{4}-\d{4,}$'
+          description: Идентификатор CVE (например, CVE-2021-44228).
+        - in: query
+          name: days
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 90
+          description: Глубина истории в днях.
+      responses:
+        '200':
+          description: История EPSS для указанного CVE.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      cve_id:
+                        type: string
+                      days:
+                        type: integer
+                      points:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date:
+                              type: string
+                              format: date-time
+                            score:
+                              type: number
+                            percentile:
+                              type: number
+                          required: [date, score, percentile]
+                    required: [cve_id, days, points]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/enrichment/enrich-all:
+    post:
+      tags: [Enrichment]
+      summary: Запустить массовое обогащение необогащённых findings
+      responses:
+        '202':
+          description: Массовое обогащение запущено.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        description: Статус фоновой операции.
+                    required: [status]
+                required: [data]
+
+  /api/v1/enrichment/sync/{source}:
+    post:
+      tags: [Enrichment]
+      summary: Запустить ручную синхронизацию источника
+      parameters:
+        - in: path
+          name: source
+          required: true
+          schema:
+            type: string
+          description: Имя источника (`nvd`, `epss`, `kev`, `bdu`, `osv`, `cwe`, `cpe`).
+      responses:
+        '202':
+          description: Синхронизация запущена.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                        description: Источник синхронизации.
+                      message:
+                        type: string
+                        description: Сообщение о запуске.
+                    required: [source, message]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Логин пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный логин
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Устанавливается cookie `rl_session`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout текущей сессии
+      responses:
+        '200':
+          description: Выход выполнен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string }
+                    required: [status]
+                required: [data]
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Обновить сессию по токену
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Сессия обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Текущий пользователь
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Данные текущего пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: rl_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    FindingID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID finding.
+    ProjectID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID проекта.
+
+  responses:
+    ErrorResponse:
+      description: Ошибка выполнения запроса.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/Error'
+            required: [error]
+
+  schemas:
+    User:
+      type: object
+      description: Пользователь системы.
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        full_name: { type: string }
+        is_active: { type: boolean }
+        global_role: { type: integer, description: 0=user, 1=admin }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        last_login_at: { type: string, format: date-time, nullable: true }
+      required: [id, email, full_name, is_active, global_role, created_at, updated_at]
+
+    Session:
+      type: object
+      description: Серверная сессия пользователя.
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        user_agent: { type: string }
+        ip: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
+      required: [id, user_id, expires_at, user_agent, created_at, last_used_at]
+
+    LoginRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+      required: [email, password]
+
+    LoginResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            token:
+              type: string
+              description: Токен сессии для Bearer-аутентификации (fallback помимо cookie).
+          required: [user, token]
+      required: [data]
+
+    Finding:
+      type: object
+      description: Запись об уязвимости (finding).
+      properties:
+        id: { type: string, format: uuid, description: UUID finding. }
+        title: { type: string, description: Короткий заголовок finding. }
+        description: { type: string, description: Подробное описание finding. }
+        severity: { type: integer, minimum: 0, maximum: 4, description: Уровень критичности (0=info..4=critical). }
+        confidence: { type: integer, minimum: 0, maximum: 3, description: Доверие к finding (0..3). }
+        status: { type: integer, minimum: 0, maximum: 4, description: Статус finding (0=open..4=risk_accepted). }
+        file_path: { type: string, description: Путь к файлу в исходниках/артефакте. }
+        line_start: { type: integer, description: Начальная строка в файле. }
+        line_end: { type: integer, description: Конечная строка в файле. }
+        component: { type: string, description: Имя компонента/пакета. }
+        component_version: { type: string, description: Версия компонента. }
+        cve_ids:
+          type: array
+          description: Связанные CVE ID.
+          items: { type: string }
+        cwe_ids:
+          type: array
+          description: Связанные CWE ID.
+          items: { type: integer }
+        cpe_uri: { type: string, description: CPE URI компонента. }
+        fingerprint: { type: string, description: Уникальный отпечаток для дедупликации. }
+        first_seen: { type: string, format: date-time, description: Когда finding впервые обнаружен. }
+        last_seen: { type: string, format: date-time, description: Когда finding последний раз обнаружен. }
+        times_seen: { type: integer, description: Сколько раз finding встречался. }
+        project_id: { type: string, format: uuid, description: UUID проекта-владельца. }
+        source_type: { type: string, description: Источник импорта finding (sarif/trivy/generic). }
+        priority_score: { type: number, format: double, description: Расчитанный приоритет устранения. }
+      required:
+        - id
+        - title
+        - severity
+        - confidence
+        - status
+        - cve_ids
+        - cwe_ids
+        - fingerprint
+        - first_seen
+        - last_seen
+        - times_seen
+        - project_id
+        - source_type
+
+    Project:
+      type: object
+      description: Проект/приложение, к которому относятся findings.
+      properties:
+        id: { type: string, format: uuid, description: UUID проекта. }
+        slug: { type: string, description: URL-safe слаг. }
+        name: { type: string, description: Название проекта. }
+        description: { type: string, description: Описание проекта. }
+        icon_color: { type: string, description: HEX-цвет иконки проекта. }
+        repo_url: { type: string, description: URL репозитория. }
+        repo_provider:
+          type: string
+          enum: [github, gitlab, bitbucket, other]
+          description: Провайдер репозитория.
+        tags:
+          type: array
+          description: Теги проекта.
+          items: { type: string }
+        status:
+          type: string
+          enum: [active, paused, archived]
+        setup_completed: { type: boolean }
+        owner:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string }
+            display_name: { type: string }
+          required: [id, email, display_name]
+        team:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+            name: { type: string }
+          required: [id, name]
+        pinned: { type: boolean }
+        findings_by_severity:
+          type: object
+          properties:
+            critical: { type: integer }
+            high: { type: integer }
+            medium: { type: integer }
+            low: { type: integer }
+            info: { type: integer }
+          required: [critical, high, medium, low, info]
+        sla_breached_count: { type: integer }
+        scanners:
+          type: object
+          properties:
+            sast: { type: string, enum: [ok, missing, off] }
+            dast: { type: string, enum: [ok, missing, off] }
+            sca: { type: string, enum: [ok, missing, off] }
+            secrets: { type: string, enum: [ok, missing, off] }
+          required: [sast, dast, sca, secrets]
+        last_scan:
+          type: object
+          nullable: true
+          properties:
+            started_at: { type: string, format: date-time }
+            finished_at: { type: string, format: date-time, nullable: true }
+            status: { type: string, enum: [success, failed, running] }
+          required: [started_at, status]
+        health:
+          type: string
+          enum: [healthy, warn, breach, setup, paused]
+        created_at: { type: string, format: date-time, description: Время создания проекта. }
+        updated_at: { type: string, format: date-time, description: Время обновления проекта. }
+      required:
+        - id
+        - slug
+        - name
+        - icon_color
+        - tags
+        - status
+        - setup_completed
+        - owner
+        - pinned
+        - findings_by_severity
+        - sla_breached_count
+        - scanners
+        - health
+        - created_at
+        - updated_at
+
+    ProjectTrendPoint:
+      type: object
+      properties:
+        date: { type: string, format: date-time }
+        count: { type: integer }
+      required: [date, count]
+
+    ProjectQuickPeek:
+      type: object
+      properties:
+        top_findings:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              title: { type: string }
+              severity: { type: integer }
+              status: { type: integer }
+            required: [id, title, severity, status]
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              action: { type: string }
+              method: { type: string }
+              path: { type: string }
+              created_at: { type: string, format: date-time }
+              user_id: { type: string, format: uuid, nullable: true }
+            required: [id, action, method, path, created_at]
+        status_stats:
+          type: object
+          properties:
+            new: { type: integer }
+            triaged: { type: integer }
+            fixed: { type: integer }
+            wontfix: { type: integer }
+          required: [new, triaged, fixed, wontfix]
+      required: [top_findings, events, status_stats]
+
+    Enrichment:
+      type: object
+      description: Данные обогащения finding из внешнего источника.
+      properties:
+        finding_id: { type: string, format: uuid, description: UUID finding. }
+        source: { type: string, description: Источник данных (`nvd`, `epss`, `kev`, `bdu`, `osv`, `cwe`, `cpe`). }
+        data: { type: object, description: Нормализованные/сырые enrichment-данные источника. }
+        enriched_at: { type: string, format: date-time, description: Время обогащения finding этим источником. }
+      required: [finding_id, source, data, enriched_at]
+
+    EnrichmentCoverage:
+      type: object
+      description: Процент покрытия findings данными обогащения по источникам.
+      properties:
+        nvd: { type: number, format: double, description: Процент покрытия NVD. }
+        epss: { type: number, format: double, description: Процент покрытия EPSS. }
+        kev: { type: number, format: double, description: Процент покрытия KEV. }
+        bdu: { type: number, format: double, description: Процент покрытия БДУ ФСТЭК. }
+      required: [nvd, epss, kev, bdu]
+
+    DashboardStats:
+      type: object
+      description: Агрегированные показатели для dashboard.
+      properties:
+        total_findings: { type: integer, description: Общее количество findings. }
+        total_open: { type: integer, description: Количество findings в открытом статусе. }
+        total_critical_open: { type: integer, description: Количество открытых critical findings. }
+        new_this_week: { type: integer, description: Новых findings за неделю. }
+        by_severity:
+          type: array
+          description: Распределение findings по severity.
+          items:
+            type: object
+            properties:
+              severity: { type: integer, description: Severity-уровень. }
+              count: { type: integer, description: Количество findings. }
+            required: [severity, count]
+        by_status:
+          type: array
+          description: Распределение findings по статусам.
+          items:
+            type: object
+            properties:
+              status: { type: integer, description: Статус finding. }
+              count: { type: integer, description: Количество findings. }
+            required: [status, count]
+        top_findings:
+          type: array
+          description: Топ findings по приоритету.
+          items:
+            $ref: '#/components/schemas/Finding'
+        enrichment_coverage:
+          $ref: '#/components/schemas/EnrichmentCoverage'
+      required:
+        - total_findings
+        - total_open
+        - total_critical_open
+        - new_this_week
+        - by_severity
+        - by_status
+        - top_findings
+        - enrichment_coverage
+
+    Error:
+      type: object
+      description: Унифицированная структура ошибки API.
+      properties:
+        code: { type: string, description: Машиночитаемый код ошибки. }
+        message: { type: string, description: Человекочитаемое описание ошибки. }
+        request_id: { type: string, description: Идентификатор запроса для трассировки в логах. }
+      required: [code, message, request_id]
+
+    ListMeta:
+      type: object
+      description: Метаданные пагинации списков.
+      properties:
+        total: { type: integer, description: Общее количество записей. }
+        next_cursor: { type: string, description: Курсор следующей страницы (если есть). }
+        has_more: { type: boolean, description: Флаг наличия следующей страницы. }
+      required: [total, has_more]
+
+    SyncStatus:
+      type: object
+      description: Статус синхронизации источника обогащения.
+      properties:
+        source: { type: string, description: Имя источника. }
+        last_sync_at: { type: string, format: date-time, description: Время последней синхронизации. }
+        records_count: { type: integer, description: Количество записей в локальной таблице источника. }
+        status: { type: string, description: Текущий статус (`running`, `success`, `error`). }
+        error_message: { type: string, description: Текст ошибки последней синхронизации (если есть). }
+        duration_seconds: { type: integer, description: Длительность последней синхронизации в секундах. }
+      required: [source, records_count, status, duration_seconds]
+
+    FindingScore:
+      type: object
+      description: Вычисленные метрики приоритизации finding.
+      properties:
+        finding_id: { type: string, format: uuid, description: UUID finding. }
+        base_score: { type: number, format: double, description: Базовый CVSS score. }
+        epss_score: { type: number, format: double, description: EPSS score. }
+        epss_percentile: { type: number, format: double, description: EPSS percentile. }
+        is_kev: { type: boolean, description: Флаг наличия в каталоге KEV. }
+        is_bdu: { type: boolean, description: Флаг наличия в БДУ ФСТЭК. }
+        priority_score: { type: number, format: double, description: Итоговый score приоритизации. }
+        calculated_at: { type: string, format: date-time, description: Время расчёта score. }
+      required: [finding_id, base_score, epss_score, epss_percentile, is_kev, is_bdu, priority_score, calculated_at]
+
+    ImportError:
+      type: object
+      description: Ошибка по конкретной записи при импорте.
+      properties:
+        index: { type: integer, description: Индекс записи во входном массиве. }
+        message: { type: string, description: Текст ошибки. }
+      required: [index, message]
+
+    ImportResult:
+      type: object
+      description: Результат операции импорта.
+      properties:
+        format: { type: string, description: Определённый формат входного файла. }
+        imported: { type: integer, description: Количество новых записей. }
+        updated: { type: integer, description: Количество обновлённых записей. }
+        errors:
+          type: array
+          description: Ошибки валидации/обработки отдельных записей.
+          items:
+            $ref: '#/components/schemas/ImportError'
+      required: [format, imported, updated, errors]
+
+    EnrichQueueResult:
+      type: object
+      description: Результат постановки/выполнения enrichment.
+      properties:
+        data:
+          type: object
+          properties:
+            finding_id: { type: string, format: uuid, description: UUID finding. }
+            status: { type: string, description: Статус enrichment (`queued`, `enriched_sync`). }
+          required: [finding_id, status]
+      required: [data]
