@@ -1,0 +1,179 @@
+services:
+  # ──────────────────────────────────────────────
+  # PostgreSQL 16 — основное хранилище
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: redlycoris-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-redlycoris}
+      POSTGRES_USER: ${POSTGRES_USER:-redlycoris}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-redlycoris_secret}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - redlycoris-pgdata:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
+    command: >
+      postgres
+        -c shared_buffers=256MB
+        -c effective_cache_size=768MB
+        -c work_mem=16MB
+        -c maintenance_work_mem=128MB
+        -c random_page_cost=1.1
+        -c effective_io_concurrency=200
+        -c max_connections=100
+        -c wal_buffers=16MB
+        -c max_wal_size=1GB
+        -c checkpoint_completion_target=0.9
+        -c default_statistics_target=100
+        -c log_min_duration_statement=200
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-redlycoris}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ──────────────────────────────────────────────
+  # Redis 7 — кэш + очередь обогащения
+  # ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redlycoris-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redlycoris-redisdata:/data
+    command: >
+      redis-server
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --appendonly yes
+        --appendfsync everysec
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ──────────────────────────────────────────────
+  # Backend — Go API server
+  # ──────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: redlycoris-backend
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: "postgres://${POSTGRES_USER:-redlycoris}:${POSTGRES_PASSWORD:-redlycoris_secret}@postgres:5432/${POSTGRES_DB:-redlycoris}?sslmode=disable"
+      DATABASE_MAX_CONNS: "25"
+      DATABASE_MIN_CONNS: "5"
+      REDIS_URL: "redis://redis:6379/0"
+      NVD_API_KEY: "${NVD_API_KEY:-}"
+      ENRICHMENT_ENABLED: "${ENRICHMENT_ENABLED:-true}"
+      CORS_ORIGINS: "http://localhost:${FRONTEND_PORT:-3000},http://localhost:5173"
+      BOOTSTRAP_ADMIN_EMAIL: "${BOOTSTRAP_ADMIN_EMAIL:-admin@localhost}"
+      BOOTSTRAP_ADMIN_PASSWORD: "${BOOTSTRAP_ADMIN_PASSWORD:-admin}"
+      BOOTSTRAP_ADMIN_FULL_NAME: "${BOOTSTRAP_ADMIN_FULL_NAME:-Administrator}"
+      BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE: "${BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE:-true}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ──────────────────────────────────────────────
+  # Frontend — React (dev: vite, prod: nginx)
+  # ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # By default run production nginx build. Vite dev server inside Docker
+      # may hang/never finish first response on some host setups (especially
+      # bind-mounted projects on Windows/WSL), which looks like endless
+      # browser loading with an empty Network tab.
+      target: ${FRONTEND_TARGET:-production}
+    container_name: redlycoris-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      VITE_API_URL: "http://localhost:${API_PORT:-8080}"
+      VITE_PROXY_TARGET: "http://backend:8080"
+    volumes:
+      # Dev mode: mount source для hot reload
+      - ./frontend/src:/app/src:ro
+      - ./frontend/index.html:/app/index.html:ro
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  redlycoris-pgdata:
+    driver: local
+  redlycoris-redisdata:
+    driver: local

@@ -1,0 +1,2 @@
+DROP MATERIALIZED VIEW IF EXISTS enrichment_coverage;
+DROP MATERIALIZED VIEW IF EXISTS dashboard_stats;
