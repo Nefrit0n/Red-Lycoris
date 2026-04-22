@@ -3,6 +3,7 @@ import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import { ru } from "date-fns/locale";
 
 import { useFindingEvents } from "@/api/findings";
+import type { FindingEvent } from "@/types";
 
 function dateKey(date: string): string {
   const d = new Date(date);
@@ -11,21 +12,57 @@ function dateKey(date: string): string {
   return format(d, "d MMMM", { locale: ru });
 }
 
-function EventItem({ event }: { event: { event_type: string; created_at: string; payload: Record<string, unknown> } }) {
+const STATUS_LABEL: Record<number, string> = {
+  0: "Открыта",
+  1: "Подтверждена",
+  2: "Ложное срабатывание",
+  3: "Устранена",
+  4: "Риск принят",
+};
+
+const CLOSE_REASON_LABEL: Record<string, string> = {
+  false_positive: "Ложное срабатывание",
+  mitigated: "Устранена",
+  acceptable_risk: "Риск принят",
+};
+
+function actorLabel(event: FindingEvent): string | null {
+  return event.user_full_name || event.user_email || null;
+}
+
+function EventItem({ event }: { event: FindingEvent }) {
   const rel = formatDistanceToNow(new Date(event.created_at), { locale: ru, addSuffix: true });
+  const actor = actorLabel(event);
+  const actorSuffix = actor ? ` · ${actor}` : "";
 
   switch (event.event_type) {
     case "created":
-      return <BaseEvent icon="🆕" text="Находка создана" rel={rel} />;
-    case "seen_again":
-      return <BaseEvent icon="👁️" text="Находка снова обнаружена" rel={rel} />;
-    case "status_changed":
-      return <BaseEvent icon="🔄" text={`Статус изменён: ${String(event.payload.from)} → ${String(event.payload.to)}`} rel={rel} />;
-    case "closed": {
-      const note = typeof event.payload.note === "string" ? event.payload.note : "";
+      return <BaseEvent icon="🆕" text={`Находка создана${actorSuffix}`} rel={rel} />;
+    case "status_changed": {
+      const from = typeof event.payload.from === "number" ? event.payload.from : -1;
+      const to = typeof event.payload.to === "number" ? event.payload.to : -1;
+      const note = typeof event.payload.note === "string" ? event.payload.note.trim() : "";
+      const fromLabel = STATUS_LABEL[from] ?? String(event.payload.from ?? "—");
+      const toLabel = STATUS_LABEL[to] ?? String(event.payload.to ?? "—");
       return (
         <div className="rounded-md border border-zinc-800 p-2">
-          <BaseEvent icon="✅" text={`Закрыта (${String(event.payload.reason_code ?? "—")})`} rel={rel} />
+          <BaseEvent icon="🔄" text={`Статус изменён: ${fromLabel} → ${toLabel}${actorSuffix}`} rel={rel} />
+          {note ? (
+            <details className="mt-1 text-xs text-zinc-400">
+              <summary className="cursor-pointer">Комментарий</summary>
+              <div className="mt-1 whitespace-pre-wrap">{note}</div>
+            </details>
+          ) : null}
+        </div>
+      );
+    }
+    case "closed": {
+      const note = typeof event.payload.note === "string" ? event.payload.note : "";
+      const reasonCode = String(event.payload.reason_code ?? "—");
+      const reasonLabel = CLOSE_REASON_LABEL[reasonCode] ?? reasonCode;
+      return (
+        <div className="rounded-md border border-zinc-800 p-2">
+          <BaseEvent icon="✅" text={`Закрыта (${reasonLabel})${actorSuffix}`} rel={rel} />
           {note ? (
             <details className="mt-1 text-xs text-zinc-400">
               <summary className="cursor-pointer">Комментарий</summary>
@@ -36,11 +73,17 @@ function EventItem({ event }: { event: { event_type: string; created_at: string;
       );
     }
     case "reopened":
-      return <BaseEvent icon="♻️" text="Переоткрыта" rel={rel} />;
+      return <BaseEvent icon="♻️" text={`Переоткрыта${actorSuffix}`} rel={rel} />;
     case "assigned":
-      return <BaseEvent icon="👤" text={`Назначена: ${String(event.payload.to_email ?? "—")}`} rel={rel} />;
+      return <BaseEvent icon="👤" text={`Назначена: ${String(event.payload.to_email ?? "—")}${actorSuffix}`} rel={rel} />;
     case "unassigned":
-      return <BaseEvent icon="🚫" text="Назначение снято" rel={rel} />;
+      return <BaseEvent icon="🚫" text={`Назначение снято${actorSuffix}`} rel={rel} />;
+    case "comment_added":
+      return <BaseEvent icon="💬" text={`Комментарий добавлен${actorSuffix}`} rel={rel} />;
+    case "comment_edited":
+      return <BaseEvent icon="✏️" text={`Комментарий изменён${actorSuffix}`} rel={rel} />;
+    case "comment_deleted":
+      return <BaseEvent icon="🗑️" text={`Комментарий удалён${actorSuffix}`} rel={rel} />;
     default:
       return <BaseEvent icon="•" text={event.event_type} rel={rel} />;
   }

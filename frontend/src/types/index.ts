@@ -75,13 +75,18 @@ export interface FindingEvent {
   id: string;
   finding_id: string;
   user_id?: string;
+  user_email?: string;
+  user_full_name?: string;
   event_type:
     | "status_changed"
     | "closed"
     | "reopened"
     | "assigned"
     | "unassigned"
-    | "created";
+    | "created"
+    | "comment_added"
+    | "comment_edited"
+    | "comment_deleted";
   payload: Record<string, unknown>;
   created_at: string;
 }

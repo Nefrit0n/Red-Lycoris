@@ -1,4 +1,4 @@
-import { useCallback, type ComponentType, type ReactNode } from "react";
+import { useCallback, useState, type ComponentType, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -46,11 +46,12 @@ import CodeSnippet from "@/components/CodeSnippet";
 import { useHotkey } from "@/hooks/use-hotkey";
 import { useCurrentUser } from "@/api/auth";
 import { useCreateComment } from "@/api/comments";
-import { useFinding, useTriageAction, useUpdateStatus } from "@/api/findings";
+import { useFinding, useTriageAction } from "@/api/findings";
 import { useFindingScore } from "@/api/enrichment";
 import CommentForm from "@/components/findings/CommentForm";
 import CommentList from "@/components/findings/CommentList";
 import FindingHistory from "@/components/findings/FindingHistory";
+import BulkStatusCommentDialog, { type BulkStatusOption } from "@/components/findings/BulkStatusCommentDialog";
 import type { Finding } from "@/types";
 
 const statusOptions = [
@@ -380,7 +381,6 @@ export default function FindingDetail() {
 
   const { data: scoreData } = useFindingScore(id ?? "");
   const { data: currentUser } = useCurrentUser();
-  const updateStatus = useUpdateStatus();
   const triageAction = useTriageAction();
   const createComment = useCreateComment(id ?? "");
 
@@ -389,6 +389,8 @@ export default function FindingDetail() {
 
   const cveIds = finding?.cve_ids ?? [];
   const cweIds = finding?.cwe_ids ?? [];
+  const [pendingStatus, setPendingStatus] = useState<BulkStatusOption | null>(null);
+  const [statusDialogError, setStatusDialogError] = useState<string | null>(null);
   const goBack = useCallback(() => {
     navigate("/findings");
   }, [navigate]);
@@ -399,14 +401,67 @@ export default function FindingDetail() {
 
   const handleStatusChange = useCallback(
     (status: number) => {
-      if (!finding || updateStatus.isPending || finding.status === status) {
+      if (!finding || triageAction.isPending || finding.status === status) {
         return;
       }
-
-      updateStatus.mutate({ id: finding.id, status });
+      const statusMap: Record<number, BulkStatusOption> = {
+        0: "open",
+        1: "confirmed",
+        2: "false_positive",
+        3: "fixed",
+        4: "accepted_risk",
+      };
+      setStatusDialogError(null);
+      setPendingStatus(statusMap[status] ?? null);
     },
-    [finding, updateStatus],
+    [finding, triageAction.isPending],
   );
+
+  const handleStatusDialogClose = useCallback(() => {
+    if (triageAction.isPending) return;
+    setPendingStatus(null);
+    setStatusDialogError(null);
+  }, [triageAction.isPending]);
+
+  const submitStatusChange = useCallback(async (note: string) => {
+    if (!finding || !pendingStatus) return;
+    setStatusDialogError(null);
+    try {
+      if (pendingStatus === "false_positive") {
+        await triageAction.mutateAsync({
+          id: finding.id,
+          request: { action: "close", reason_code: "false_positive", note },
+        });
+      } else if (pendingStatus === "fixed") {
+        await triageAction.mutateAsync({
+          id: finding.id,
+          request: { action: "close", reason_code: "mitigated", note },
+        });
+      } else if (pendingStatus === "accepted_risk") {
+        await triageAction.mutateAsync({
+          id: finding.id,
+          request: { action: "close", reason_code: "acceptable_risk", note },
+        });
+      } else if (pendingStatus === "open" && [2, 3, 4].includes(finding.status)) {
+        await triageAction.mutateAsync({
+          id: finding.id,
+          request: { action: "reopen", note },
+        });
+      } else {
+        await triageAction.mutateAsync({
+          id: finding.id,
+          request: {
+            action: "change_status",
+            status: pendingStatus === "open" ? 0 : 1,
+            note,
+          },
+        });
+      }
+      setPendingStatus(null);
+    } catch (error) {
+      setStatusDialogError(error instanceof Error ? error.message : "Не удалось сменить статус");
+    }
+  }, [finding, pendingStatus, triageAction]);
 
   if (isLoading) {
     return (
@@ -511,10 +566,10 @@ export default function FindingDetail() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  disabled={updateStatus.isPending}
+                  disabled={triageAction.isPending}
                   className="h-auto px-0 py-0 text-sm hover:bg-transparent"
                 >
-                  {updateStatus.isPending ? (
+                  {triageAction.isPending ? (
                     <Loader2 className="mr-1 size-3.5 animate-spin text-zinc-500" />
                   ) : null}
                   <StatusBadge status={finding.status} />
@@ -527,7 +582,7 @@ export default function FindingDetail() {
               {statusOptions.map((opt) => (
                 <DropdownMenuItem
                   key={opt.value}
-                  disabled={updateStatus.isPending || opt.value === finding.status}
+                  disabled={triageAction.isPending || opt.value === finding.status}
                   onClick={() => handleStatusChange(opt.value)}
                   className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100"
                 >
@@ -770,6 +825,15 @@ export default function FindingDetail() {
           <FindingHistory findingId={finding.id} />
         </TabsContent>
       </Tabs>
+      <BulkStatusCommentDialog
+        open={pendingStatus !== null}
+        selectedCount={1}
+        status={pendingStatus}
+        pending={triageAction.isPending}
+        error={statusDialogError}
+        onClose={handleStatusDialogClose}
+        onSubmit={submitStatusChange}
+      />
     </div>
   );
 }
