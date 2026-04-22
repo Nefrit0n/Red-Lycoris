@@ -5,4 +5,4 @@ backend/seed
 # Environment
 .env.local
 .env
-vulxml.xml
+backend/internal/enrichment/bdu/*.xml
