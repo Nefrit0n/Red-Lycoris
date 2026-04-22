@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+
+	"redlycoris/internal/observability"
 )
 
 // Syncer — интерфейс для источника обогащения.
@@ -128,4 +131,70 @@ func GetAllSyncStatuses(ctx context.Context, pool *pgxpool.Pool) ([]SyncStatus, 
 		statuses = append(statuses, s)
 	}
 	return statuses, rows.Err()
+}
+
+func StartMetricsCollector(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, obs *observability.Observability) {
+	if obs == nil {
+		return
+	}
+
+	collect := func() {
+		obs.EnrichmentStreamLag.Set(map[string]string{"source": "nvd"}, readStreamLag(ctx, rdb))
+		obs.EnrichmentLastSyncAge.Set(map[string]string{"source": "nvd"}, readSyncAge(ctx, pool, "nvd"))
+	}
+
+	collect()
+	ticker := time.NewTicker(30 * time.Second)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				collect()
+			}
+		}
+	}()
+}
+
+func readStreamLag(ctx context.Context, rdb *redis.Client) float64 {
+	groups, err := rdb.XInfoGroups(ctx, StreamName).Result()
+	if err != nil {
+		slog.Warn("enrichment metrics: xinfo groups failed", "error", err)
+		return fallbackLagFromBaseline(ctx, rdb)
+	}
+	for _, group := range groups {
+		if group.Name == ConsumerGroup {
+			if group.Lag < 0 {
+				return 0
+			}
+			return float64(group.Lag)
+		}
+	}
+	return fallbackLagFromBaseline(ctx, rdb)
+}
+
+func readSyncAge(ctx context.Context, pool *pgxpool.Pool, source string) float64 {
+	var lastSyncAt *time.Time
+	if err := pool.QueryRow(ctx, "SELECT last_sync_at FROM sync_status WHERE source = $1", source).Scan(&lastSyncAt); err != nil {
+		slog.Warn("enrichment metrics: failed to fetch last_sync_at", "source", source, "error", err)
+		return 0
+	}
+	if lastSyncAt == nil {
+		return 0
+	}
+	return time.Since(*lastSyncAt).Seconds()
+}
+
+func fallbackLagFromBaseline(ctx context.Context, rdb *redis.Client) float64 {
+	xlen, err := rdb.XLen(ctx, StreamName).Result()
+	if err != nil {
+		return 0
+	}
+	lag := xlen - streamLagBaseline()
+	if lag < 0 {
+		return 0
+	}
+	return float64(lag)
 }
