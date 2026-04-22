@@ -18,6 +18,7 @@ var parsers = []struct {
 	{"gitleaks", &GitleaksParser{}},
 	{"checkov", &CheckovParser{}},
 	{"zap", &ZAPParser{}},
+	{"grype", &GrypeParser{}},
 	{"generic", &GenericParser{}},
 }
 
