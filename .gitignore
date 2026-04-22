@@ -26,3 +26,14 @@ backend/data/
 # Test coverage
 coverage/
 *.log
+
+
+# Analyze
+checkov.json
+gitleaks.json
+grype.json
+sbom.cdx.json
+trivy.json
+trufflehog.json
+zap-full.json
+zap.json
