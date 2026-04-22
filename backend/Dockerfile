@@ -16,14 +16,14 @@ ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build \
-      -ldflags="-s -w \
-        -X redlycoris/internal/version.Version=${VERSION} \
-        -X redlycoris/internal/version.Commit=${COMMIT} \
-        -X redlycoris/internal/version.Date=${BUILD_DATE}" \
-      -o /build/redlycoris ./cmd/server
+  go build \
+  -ldflags="-s -w \
+  -X redlycoris/internal/version.Version=${VERSION} \
+  -X redlycoris/internal/version.Commit=${COMMIT} \
+  -X redlycoris/internal/version.Date=${BUILD_DATE}" \
+  -o /build/redlycoris ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o /build/admin ./cmd/admin
+  go build -ldflags="-s -w" -o /build/admin ./cmd/admin
 
 # ── Stage 2: Run ──
 FROM alpine:3.19
@@ -41,11 +41,11 @@ COPY --from=builder /build/migrations ./migrations
 
 RUN chown -R app:app /app
 
-USER app
+USER 1000:1000
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+  CMD curl -f http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["./redlycoris"]
