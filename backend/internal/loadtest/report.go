@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -182,7 +183,7 @@ func (c *Collector) BuildReport(scenario string, started, finished time.Time, co
 }
 
 func WriteReport(path string, report ScenarioReport) error {
-	f, err := os.Create(path)
+	f, err := os.Create(filepath.Clean(path)) // #nosec G304 -- path is provided by trusted loadtest operator input
 	if err != nil {
 		return err
 	}
