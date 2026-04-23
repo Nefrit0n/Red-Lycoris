@@ -2,6 +2,7 @@ package observability
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"sort"
@@ -368,7 +369,7 @@ func (o *Observability) Metrics() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(o.registry.writePrometheusText()))
+		_, _ = io.Copy(w, strings.NewReader(o.registry.writePrometheusText()))
 	})
 }
 

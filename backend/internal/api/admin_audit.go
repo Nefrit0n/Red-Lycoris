@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -244,14 +245,14 @@ func handleAuditStream(auditRepo *storage.AuditLogRepo) http.HandlerFunc {
 					if marshalErr != nil {
 						continue
 					}
-					_, _ = fmt.Fprintf(w, "id: %s\n", item.ID.String())
-					_, _ = fmt.Fprintf(w, "event: audit\n")
-					_, _ = fmt.Fprintf(w, "data: %s\n\n", payload)
+					_, _ = io.WriteString(w, "id: "+item.ID.String()+"\n")
+					_, _ = io.WriteString(w, "event: audit\n")
+					_, _ = io.WriteString(w, "data: "+string(payload)+"\n\n")
 					flusher.Flush()
 					lastCreatedAt = item.CreatedAt
 					lastID = item.ID
 				}
-				_, _ = fmt.Fprint(w, ": heartbeat\n\n")
+				_, _ = io.WriteString(w, ": heartbeat\n\n")
 				flusher.Flush()
 			}
 		}
