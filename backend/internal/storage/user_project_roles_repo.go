@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -43,7 +44,11 @@ func (r *UserProjectRolesRepo) Grant(ctx context.Context, tx pgx.Tx, userID, pro
 		    granted_by = EXCLUDED.granted_by,
 		    granted_at = now()`
 
-	_, err := r.executor(tx).Exec(ctx, q, userID, projectID, int16(role), grantedBy)
+	dbRole, err := projectRoleToDB(role)
+	if err != nil {
+		return fmt.Errorf("storage.UserProjectRolesRepo.Grant: %w", err)
+	}
+	_, err = r.executor(tx).Exec(ctx, q, userID, projectID, dbRole, grantedBy)
 	if err != nil {
 		return fmt.Errorf("storage.UserProjectRolesRepo.Grant: %w", err)
 	}
@@ -61,7 +66,11 @@ func (r *UserProjectRolesRepo) Revoke(ctx context.Context, userID, projectID uui
 
 func (r *UserProjectRolesRepo) Update(ctx context.Context, userID, projectID uuid.UUID, role domain.ProjectRole) error {
 	const q = `UPDATE user_project_roles SET role = $1 WHERE user_id = $2 AND project_id = $3`
-	tag, err := r.pool.Exec(ctx, q, int16(role), userID, projectID)
+	dbRole, err := projectRoleToDB(role)
+	if err != nil {
+		return fmt.Errorf("storage.UserProjectRolesRepo.Update: %w", err)
+	}
+	tag, err := r.pool.Exec(ctx, q, dbRole, userID, projectID)
 	if err != nil {
 		return fmt.Errorf("storage.UserProjectRolesRepo.Update: %w", err)
 	}
@@ -69,6 +78,13 @@ func (r *UserProjectRolesRepo) Update(ctx context.Context, userID, projectID uui
 		return fmt.Errorf("storage.UserProjectRolesRepo.Update: role not found")
 	}
 	return nil
+}
+
+func projectRoleToDB(role domain.ProjectRole) (int16, error) {
+	if role < math.MinInt16 || role > math.MaxInt16 {
+		return 0, fmt.Errorf("project role %d is out of int16 range", role)
+	}
+	return int16(role), nil
 }
 
 func (r *UserProjectRolesRepo) GetRole(ctx context.Context, userID, projectID uuid.UUID) (domain.ProjectRole, bool, error) {
@@ -179,8 +195,12 @@ func (r *UserProjectRolesRepo) ListAllRolesForUser(ctx context.Context, userID u
 
 func (r *UserProjectRolesRepo) CountProjectAdmins(ctx context.Context, projectID uuid.UUID) (int, error) {
 	const q = `SELECT count(*) FROM user_project_roles WHERE project_id = $1 AND role = $2`
+	adminRole, err := projectRoleToDB(domain.RoleProjectAdmin)
+	if err != nil {
+		return 0, fmt.Errorf("storage.UserProjectRolesRepo.CountProjectAdmins: %w", err)
+	}
 	var count int
-	if err := r.pool.QueryRow(ctx, q, projectID, int16(domain.RoleProjectAdmin)).Scan(&count); err != nil {
+	if err := r.pool.QueryRow(ctx, q, projectID, adminRole).Scan(&count); err != nil {
 		return 0, fmt.Errorf("storage.UserProjectRolesRepo.CountProjectAdmins: %w", err)
 	}
 	return count, nil
