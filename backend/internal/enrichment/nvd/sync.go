@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -659,7 +660,7 @@ func parseResponse(resp *nvdResponse) []nvdRecord {
 		for _, w := range cve.Weaknesses {
 			for _, d := range w.Description {
 				id := parseCWEID(d.Value)
-				if id > 0 {
+				if id > 0 && id <= math.MaxInt32 {
 					rec.CWEIDs = append(rec.CWEIDs, int32(id))
 				}
 			}

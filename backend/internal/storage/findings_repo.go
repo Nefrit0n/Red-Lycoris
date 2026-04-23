@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -136,12 +137,16 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 	if f.TimesSeen == 0 {
 		f.TimesSeen = 1
 	}
+	kind, err := findingKindToDB(f.Kind)
+	if err != nil {
+		return false, fmt.Errorf("storage.FindingsRepo.Create: %w", err)
+	}
 
 	err = r.pool.QueryRow(ctx, q,
 		f.ID, f.Title, f.Description, f.Severity, f.Confidence, f.Status,
 		f.FilePath, f.LineStart, f.LineEnd, f.Component, f.ComponentVersion,
 		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint, f.FirstSeen, f.LastSeen,
-		f.TimesSeen, f.ProjectID, f.SourceType, int16(f.Kind),
+		f.TimesSeen, f.ProjectID, f.SourceType, kind,
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
@@ -190,12 +195,16 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 	if f.TimesSeen == 0 {
 		f.TimesSeen = 1
 	}
+	kind, err := findingKindToDB(f.Kind)
+	if err != nil {
+		return false, fmt.Errorf("storage.FindingsRepo.CreateTx: %w", err)
+	}
 
 	err = tx.QueryRow(ctx, q,
 		f.ID, f.Title, f.Description, f.Severity, f.Confidence, f.Status,
 		f.FilePath, f.LineStart, f.LineEnd, f.Component, f.ComponentVersion,
 		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint, f.FirstSeen, f.LastSeen,
-		f.TimesSeen, f.ProjectID, f.SourceType, int16(f.Kind),
+		f.TimesSeen, f.ProjectID, f.SourceType, kind,
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
@@ -362,11 +371,18 @@ func buildBaseWhere(filter *FindingsFilter, excludeField string, startArg int) (
 	if len(filter.Kinds) > 0 && excludeField != FacetKind {
 		kinds := make([]int16, 0, len(filter.Kinds))
 		for _, k := range filter.Kinds {
+			if k < math.MinInt16 || k > math.MaxInt16 {
+				conditions = append(conditions, "1 = 0")
+				kinds = nil
+				break
+			}
 			kinds = append(kinds, int16(k))
 		}
-		conditions = append(conditions, fmt.Sprintf("f.finding_kind = ANY($%d)", argN))
-		args = append(args, kinds)
-		argN++
+		if len(kinds) > 0 {
+			conditions = append(conditions, fmt.Sprintf("f.finding_kind = ANY($%d)", argN))
+			args = append(args, kinds)
+			argN++
+		}
 	}
 	if filter.HasCVE != nil && *filter.HasCVE && excludeField != FacetHasCVE {
 		conditions = append(conditions, "array_length(f.cve_ids, 1) > 0")
@@ -1133,4 +1149,11 @@ func (r *FindingsRepo) CountByProject(ctx context.Context, projectID uuid.UUID) 
 		counts[name] = cnt
 	}
 	return counts, rows.Err()
+}
+
+func findingKindToDB(kind domain.FindingKind) (int16, error) {
+	if kind < math.MinInt16 || kind > math.MaxInt16 {
+		return 0, fmt.Errorf("finding kind %d is out of int16 range", kind)
+	}
+	return int16(kind), nil
 }
