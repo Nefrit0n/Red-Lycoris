@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -492,6 +493,9 @@ func extractCWEIDs(entries []xmlCWEEntry) []int32 {
 			continue
 		}
 
+		if id > math.MaxInt32 {
+			continue
+		}
 		cweID := int32(id)
 		if _, exists := seen[cweID]; exists {
 			continue
