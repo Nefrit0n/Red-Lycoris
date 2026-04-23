@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -58,12 +59,14 @@ func LoadSessionMiddleware(svc *authsvc.Service, tokensRepo *storage.APITokensRe
 					ProjectID: token.ProjectID.String(),
 					Scopes:    token.Scopes,
 				})
-				go func(tokenID string) {
+				go func(ctx context.Context, tokenID string) {
 					id, parseErr := uuid.Parse(tokenID)
 					if parseErr == nil {
-						_ = tokensRepo.TouchLastUsed(context.Background(), id)
+						touchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+						defer cancel()
+						_ = tokensRepo.TouchLastUsed(touchCtx, id)
 					}
-				}(token.ID.String())
+				}(r.Context(), token.ID.String())
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}

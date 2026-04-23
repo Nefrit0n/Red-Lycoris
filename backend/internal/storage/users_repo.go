@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"sort"
 	"strings"
@@ -45,15 +46,27 @@ func (r *UsersRepo) Create(ctx context.Context, user *domain.User) error {
 		user.Status = domain.UserStatusActive
 	}
 
-	_, err := r.pool.Exec(ctx, q,
+	dbRole, err := globalRoleToDB(user.GlobalRole)
+	if err != nil {
+		return fmt.Errorf("storage.UsersRepo.Create: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, q,
 		user.ID, user.Email, user.PasswordHash, user.FullName, user.IsActive,
-		int16(user.GlobalRole), string(user.Status), user.IsSystemAccount, user.CreatedByUserID,
+		dbRole, string(user.Status), user.IsSystemAccount, user.CreatedByUserID,
 		user.CreatedAt, user.UpdatedAt, user.LastLoginAt,
 	)
 	if err != nil {
 		return fmt.Errorf("storage.UsersRepo.Create: %w", err)
 	}
 	return nil
+}
+
+func globalRoleToDB(role domain.GlobalRole) (int16, error) {
+	if role < math.MinInt16 || role > math.MaxInt16 {
+		return 0, fmt.Errorf("global role %d is out of int16 range", role)
+	}
+	return int16(role), nil
 }
 
 // selectUserCols — полный набор колонок для SELECT запросов по users.
