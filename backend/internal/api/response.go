@@ -2,15 +2,19 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
 func respondJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		slog.Warn("failed to encode json response", "error", sanitizeForLog(err.Error()))
+	}
 }
 
 func respondError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
@@ -50,4 +54,13 @@ func setPublicCacheHeaders(w http.ResponseWriter, ttl time.Duration) {
 	}
 	w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
 	w.Header().Set("Expires", time.Now().UTC().Add(time.Duration(seconds)*time.Second).Format(http.TimeFormat))
+}
+
+func sanitizeForLog(v string) string {
+	replacer := strings.NewReplacer(
+		"\r", "\\r",
+		"\n", "\\n",
+		"\t", "\\t",
+	)
+	return replacer.Replace(v)
 }

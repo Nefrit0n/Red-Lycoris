@@ -647,8 +647,12 @@ func runBenchmarks(cfg *config.Config) {
 			fmt.Printf("%-55s  SKIP (server not reachable)\n", b.name)
 			continue
 		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		if _, copyErr := io.Copy(io.Discard, resp.Body); copyErr != nil {
+			slog.Warn("benchmark warmup body discard failed", "name", b.name, "error", copyErr)
+		}
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Warn("benchmark warmup body close failed", "name", b.name, "error", closeErr)
+		}
 
 		// Actual measurement: average of 5 requests
 		var totalMs int64
@@ -663,8 +667,12 @@ func runBenchmarks(cfg *config.Config) {
 			}
 			// Verify response is valid JSON
 			var body map[string]any
-			json.NewDecoder(resp.Body).Decode(&body)
-			resp.Body.Close()
+			if decodeErr := json.NewDecoder(resp.Body).Decode(&body); decodeErr != nil {
+				slog.Warn("benchmark response decode failed", "name", b.name, "run", i, "error", decodeErr)
+			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				slog.Warn("benchmark response close failed", "name", b.name, "run", i, "error", closeErr)
+			}
 			totalMs += elapsed
 		}
 
