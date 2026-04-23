@@ -258,13 +258,13 @@ func parseXML(data []byte) ([]cweRecord, error) {
 
 	records := make([]cweRecord, 0, len(catalog.Weaknesses))
 	for _, w := range catalog.Weaknesses {
-		id, err := strconv.Atoi(strings.TrimSpace(w.ID))
-		if err != nil || id <= 0 {
+		id, ok := parsePositiveInt32(strings.TrimSpace(w.ID))
+		if !ok {
 			continue
 		}
 
 		rec := cweRecord{
-			ID:           int32(id),
+			ID:           id,
 			Name:         strings.TrimSpace(w.Name),
 			Description:  strings.TrimSpace(w.Description),
 			ExtendedDesc: extractXMLText(w.ExtendedDescription.Content),
@@ -278,12 +278,11 @@ func parseXML(data []byte) ([]cweRecord, error) {
 				continue
 			}
 
-			pid, err := strconv.Atoi(strings.TrimSpace(rel.CWEID))
-			if err != nil || pid <= 0 {
+			parentID, ok := parsePositiveInt32(strings.TrimSpace(rel.CWEID))
+			if !ok {
 				continue
 			}
 
-			parentID := int32(pid)
 			if _, ok := parentSeen[parentID]; ok {
 				continue
 			}
@@ -333,6 +332,14 @@ func parseXML(data []byte) ([]cweRecord, error) {
 	}
 
 	return records, nil
+}
+
+func parsePositiveInt32(raw string) (int32, bool) {
+	v, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || v <= 0 {
+		return 0, false
+	}
+	return int32(v), true
 }
 
 func collectImpacts(consequences []xmlConsequence) []string {
