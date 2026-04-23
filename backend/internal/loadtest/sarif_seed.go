@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 )
 
 func SeedSARIF(ctx context.Context, baseURL, token, projectID, filePath string) error {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filepath.Clean(filePath)) // #nosec G304 -- filePath comes from trusted loadtest operator input
 	if err != nil {
 		return err
 	}

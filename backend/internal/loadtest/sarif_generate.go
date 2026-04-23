@@ -123,13 +123,13 @@ func GenerateSARIF(output string, size int, seed int64) (string, error) {
 		outPath = filepath.Join(output, fmt.Sprintf("sarif_%d.json", size))
 	}
 	if err != nil && os.IsNotExist(err) {
-		if mkErr := os.MkdirAll(output, 0o755); mkErr != nil {
+		if mkErr := os.MkdirAll(output, 0o750); mkErr != nil {
 			return "", mkErr
 		}
 		outPath = filepath.Join(output, fmt.Sprintf("sarif_%d.json", size))
 	}
 
-	f, err := os.Create(outPath)
+	f, err := os.Create(filepath.Clean(outPath)) // #nosec G304 -- outPath is built from controlled loadtest parameters
 	if err != nil {
 		return "", err
 	}

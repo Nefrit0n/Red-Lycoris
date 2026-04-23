@@ -39,6 +39,7 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			respondError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "invalid api token")
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxScanSizeBytes())
 		if err := r.ParseMultipartForm(maxScanSizeBytes()); err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid multipart form")
 			return
