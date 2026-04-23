@@ -1,7 +1,6 @@
 # ── Stage 1: Build ──
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-alpine3.21 AS builder
 
-RUN sed -i 's#https://dl-cdn.alpinelinux.org#http://dl-cdn.alpinelinux.org#g' /etc/apk/repositories
 RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /build
@@ -26,10 +25,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -ldflags="-s -w" -o /build/admin ./cmd/admin
 
 # ── Stage 2: Run ──
-FROM alpine:3.19
+FROM alpine:3.21
 
-RUN sed -i 's#https://dl-cdn.alpinelinux.org#http://dl-cdn.alpinelinux.org#g' /etc/apk/repositories
-RUN apk add --no-cache ca-certificates tzdata curl
+RUN apk add --no-cache --upgrade ca-certificates tzdata curl nghttp2-libs musl musl-utils
 
 RUN addgroup -g 1000 app && adduser -u 1000 -G app -s /sbin/nologin -D app
 
