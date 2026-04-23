@@ -39,6 +39,7 @@ func NewSyncer(pool *pgxpool.Pool) *BDUSyncer {
 	if transport.TLSClientConfig == nil {
 		transport.TLSClientConfig = &tls.Config{}
 	}
+	transport.TLSClientConfig.MinVersion = tls.VersionTLS13
 	transport.TLSClientConfig.InsecureSkipVerify = insecureSkipVerify
 
 	client := &http.Client{
