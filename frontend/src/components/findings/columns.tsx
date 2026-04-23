@@ -68,12 +68,35 @@ function copyToClipboard(value: string) {
   void navigator.clipboard?.writeText(value);
 }
 
+function cutSuffixFold(value: string, suffix: string): string | null {
+  if (suffix.length === 0 || value.length < suffix.length) return null;
+  const tail = value.slice(value.length - suffix.length);
+  if (tail.toLowerCase() !== suffix.toLowerCase()) return null;
+  return value.slice(0, value.length - suffix.length);
+}
+
 function stripCveFromTitle(title: string, cveIds: string[], activeColumns: Set<ColumnKey>): string {
   if (!activeColumns.has("cve")) return title;
-  const known = cveIds.map((cve) => cve.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  if (known.length === 0) return title;
-  const pattern = new RegExp(`\\s*(?:\\[)?(?:${known.join("|")})(?:\\])?\\s*$`, "i");
-  return title.replace(pattern, "").trim();
+  let result = title.trimEnd();
+  const normalized = cveIds
+    .map((cve) => cve.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  if (normalized.length === 0) return title;
+
+  for (const cve of normalized) {
+    const bracketed = cutSuffixFold(result, `[${cve}]`);
+    if (bracketed !== null) {
+      result = bracketed.trimEnd();
+      break;
+    }
+    const plain = cutSuffixFold(result, cve);
+    if (plain !== null) {
+      result = plain.trimEnd();
+      break;
+    }
+  }
+  return result.trimEnd();
 }
 
 const CWE_NAME: Record<number, string> = {

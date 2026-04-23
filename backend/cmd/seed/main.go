@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"math"
-	"math/rand/v2"
+	"math/big"
 	"net/http"
 	"os"
 	"strconv"
@@ -258,7 +260,7 @@ func seedProjects(ctx context.Context, pool *pgxpool.Pool, rolesRepo *storage.Us
 
 func generateFinding(projectIDs []uuid.UUID, weights []float64) []any {
 	// Pick project by weight
-	r := rand.Float64()
+	r := randFloat64()
 	cumulative := 0.0
 	pidx := 0
 	for i, w := range weights {
@@ -271,20 +273,20 @@ func generateFinding(projectIDs []uuid.UUID, weights []float64) []any {
 	projectID := projectIDs[pidx]
 
 	// Timestamps: first_seen randomly within last 180 days
-	daysAgo := rand.IntN(180)
+	daysAgo := randIntN(180)
 	firstSeen := time.Now().AddDate(0, 0, -daysAgo)
-	lastSeen := firstSeen.Add(time.Duration(rand.IntN(daysAgo+1)) * 24 * time.Hour)
+	lastSeen := firstSeen.Add(time.Duration(randIntN(daysAgo+1)) * 24 * time.Hour)
 	if lastSeen.After(time.Now()) {
 		lastSeen = time.Now()
 	}
-	timesSeen := 1 + rand.IntN(20)
+	timesSeen := 1 + randIntN(20)
 
-	kindBucket := rand.Float64()
+	kindBucket := randFloat64()
 	f := domain.Finding{
 		ID:         uuid.New(),
 		ProjectID:  projectID,
 		Status:     pickWeighted([]int{0, 1, 2, 3, 4}, []float64{0.60, 0.15, 0.10, 0.10, 0.05}),
-		Confidence: rand.IntN(4),
+		Confidence: randIntN(4),
 		FirstSeen:  firstSeen,
 		LastSeen:   lastSeen,
 		TimesSeen:  timesSeen,
@@ -317,7 +319,7 @@ func generateFinding(projectIDs []uuid.UUID, weights []float64) []any {
 }
 
 func pickWeighted(values []int, weights []float64) int {
-	r := rand.Float64()
+	r := randFloat64()
 	cumulative := 0.0
 	for i, w := range weights {
 		cumulative += w
@@ -341,9 +343,9 @@ func seededFindingsCount() int {
 }
 
 func fillSCAFinding(f *domain.Finding) {
-	component := scaComponents[rand.IntN(len(scaComponents))]
+	component := scaComponents[randIntN(len(scaComponents))]
 	version := randomSemVer()
-	ecosystem := scaEcosystems[rand.IntN(len(scaEcosystems))]
+	ecosystem := scaEcosystems[randIntN(len(scaEcosystems))]
 	purl := fmt.Sprintf("pkg:%s/%s@%s", ecosystem, component, version)
 
 	f.Kind = domain.KindSCA
@@ -352,30 +354,30 @@ func fillSCAFinding(f *domain.Finding) {
 	f.Severity = pickWeighted([]int{1, 2, 3, 4}, []float64{0.20, 0.45, 0.25, 0.10})
 	f.Component = component
 	f.ComponentVersion = version
-	f.CVEIDs = []string{scaCVEPool[rand.IntN(len(scaCVEPool))]}
+	f.CVEIDs = []string{scaCVEPool[randIntN(len(scaCVEPool))]}
 	f.CWEIDs = []int{79, 89}
 	f.CPEURI = ""
 	f.SourceType = "trivy"
 	f.PackageEcosystem = &ecosystem
 	f.Purl = &purl
 
-	if rand.Float64() < 0.70 {
+	if randFloat64() < 0.70 {
 		fixed := incVersion(version)
 		f.FixedVersion = &fixed
 	}
 }
 
 func fillSASTFinding(f *domain.Finding) {
-	ruleID := sastRuleIDs[rand.IntN(len(sastRuleIDs))]
-	snippet := sastSnippets[rand.IntN(len(sastSnippets))]
-	lineStart := 10 + rand.IntN(491)
-	lineEnd := lineStart + rand.IntN(11)
+	ruleID := sastRuleIDs[randIntN(len(sastRuleIDs))]
+	snippet := sastSnippets[randIntN(len(sastSnippets))]
+	lineStart := 10 + randIntN(491)
+	lineEnd := lineStart + randIntN(11)
 
 	f.Kind = domain.KindSAST
 	f.Title = firstSentence(ruleID + " finding")
 	f.Description = fmt.Sprintf("Potential insecure code pattern matched by %s", ruleID)
 	f.Severity = pickWeighted([]int{1, 2, 3, 4}, []float64{0.15, 0.40, 0.35, 0.10})
-	f.FilePath = filePaths[rand.IntN(len(filePaths))]
+	f.FilePath = filePaths[randIntN(len(filePaths))]
 	f.LineStart = lineStart
 	f.LineEnd = lineEnd
 	f.RuleID = &ruleID
@@ -388,9 +390,9 @@ func fillSASTFinding(f *domain.Finding) {
 }
 
 func fillDASTFinding(f *domain.Finding) {
-	url := dastURLs[rand.IntN(len(dastURLs))]
-	method := dastHTTPMethods[rand.IntN(len(dastHTTPMethods))]
-	param := dastHTTPParams[rand.IntN(len(dastHTTPParams))]
+	url := dastURLs[randIntN(len(dastURLs))]
+	method := dastHTTPMethods[randIntN(len(dastHTTPMethods))]
+	param := dastHTTPParams[randIntN(len(dastHTTPParams))]
 
 	f.Kind = domain.KindDAST
 	f.Title = "Dynamic scan issue"
@@ -405,9 +407,9 @@ func fillDASTFinding(f *domain.Finding) {
 }
 
 func fillIaCFinding(f *domain.Finding) {
-	resource := iacResources[rand.IntN(len(iacResources))]
-	provider := iacProviders[rand.IntN(len(iacProviders))]
-	ruleID := fmt.Sprintf("CKV_%s_%02d", strings.ToUpper(provider), 1+rand.IntN(99))
+	resource := iacResources[randIntN(len(iacResources))]
+	provider := iacProviders[randIntN(len(iacProviders))]
+	ruleID := fmt.Sprintf("CKV_%s_%02d", strings.ToUpper(provider), 1+randIntN(99))
 	ruleName := "IaC misconfiguration"
 
 	f.Kind = domain.KindIaC
@@ -424,7 +426,7 @@ func fillIaCFinding(f *domain.Finding) {
 }
 
 func fillSecretsFinding(f *domain.Finding) {
-	secretKind := secretKinds[rand.IntN(len(secretKinds))]
+	secretKind := secretKinds[randIntN(len(secretKinds))]
 	commitSHA := randomHex(40)
 	ruleName := "Leaked secret pattern"
 
@@ -432,7 +434,7 @@ func fillSecretsFinding(f *domain.Finding) {
 	f.Title = "Potential secret leak"
 	f.Description = "Detected credential-like pattern in repository history"
 	f.Severity = domain.SeverityHigh
-	f.FilePath = secretFilePaths[rand.IntN(len(secretFilePaths))]
+	f.FilePath = secretFilePaths[randIntN(len(secretFilePaths))]
 	f.SecretKind = &secretKind
 	f.CommitSHA = &commitSHA
 	f.RuleID = &secretKind
@@ -443,9 +445,9 @@ func fillSecretsFinding(f *domain.Finding) {
 }
 
 func randomSemVer() string {
-	major := 1 + rand.IntN(2)
-	minor := rand.IntN(10)
-	patch := rand.IntN(10)
+	major := 1 + randIntN(2)
+	minor := randIntN(10)
+	patch := randIntN(10)
 	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
 }
 
@@ -466,9 +468,29 @@ func randomHex(length int) string {
 	const hexChars = "0123456789abcdef"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = hexChars[rand.IntN(len(hexChars))]
+		b[i] = hexChars[randIntN(len(hexChars))]
 	}
 	return string(b)
+}
+
+func randIntN(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	v, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	if err != nil {
+		panic(fmt.Errorf("crypto random int: %w", err))
+	}
+	return int(v.Int64())
+}
+
+func randFloat64() float64 {
+	var b [8]byte
+	if _, err := io.ReadFull(rand.Reader, b[:]); err != nil {
+		panic(fmt.Errorf("crypto random float: %w", err))
+	}
+	const denom = float64(uint64(1) << 53)
+	return float64(binary.BigEndian.Uint64(b[:])>>11) / denom
 }
 
 func firstSentence(s string) string {
@@ -533,7 +555,7 @@ func seedFindingScores(ctx context.Context, pool *pgxpool.Pool, batchSize int) (
 				return total, fmt.Errorf("seedFindingScores: scan: %w", err)
 			}
 			// Only ~70% get scores
-			if rand.Float64() < 0.70 {
+			if randFloat64() < 0.70 {
 				batch = append(batch, s)
 			}
 		}
@@ -545,17 +567,17 @@ func seedFindingScores(ctx context.Context, pool *pgxpool.Pool, batchSize int) (
 
 		scoreRows := make([][]any, 0, len(batch))
 		for _, s := range batch {
-			baseScore := float64(s.severity)*2.0 + rand.Float64()*2.0
+			baseScore := float64(s.severity)*2.0 + randFloat64()*2.0
 			if baseScore > 10.0 {
 				baseScore = 10.0
 			}
-			epssScore := rand.Float64() * 0.5
+			epssScore := randFloat64() * 0.5
 			if s.severity >= 3 {
-				epssScore = 0.1 + rand.Float64()*0.8
+				epssScore = 0.1 + randFloat64()*0.8
 			}
 			epssPercentile := epssScore * 100
-			isKEV := s.severity == 4 && rand.Float64() < 0.3
-			isBDU := rand.Float64() < 0.1
+			isKEV := s.severity == 4 && randFloat64() < 0.3
+			isBDU := randFloat64() < 0.1
 
 			daysOld := math.Max(0, time.Since(s.firstSeen).Hours()/24)
 			recency := 10.0 * math.Exp(-daysOld/365.0)
