@@ -51,6 +51,7 @@ import string
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass, field
@@ -1198,6 +1199,20 @@ class APIError(RuntimeError):
     pass
 
 
+def _validate_http_url(url: str) -> str:
+    """
+    Разрешаем только абсолютные HTTP(S) URL.
+    Это исключает схемы вроде file:// и другие локальные/неожиданные протоколы.
+    """
+    parsed = urllib.parse.urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"}:
+        raise APIError(f"Unsupported URL scheme: {parsed.scheme!r}")
+    if not parsed.netloc:
+        raise APIError(f"URL must be absolute and include host: {url!r}")
+    return url
+
+
 def http_request(
     method: str,
     url: str,
@@ -1207,6 +1222,7 @@ def http_request(
     max_retries: int = 4,
 ) -> Any:
     """POST/GET с retry и экспоненциальной задержкой."""
+    safe_url = _validate_http_url(url)
     data: Optional[bytes] = None
     req_headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if headers:
@@ -1217,7 +1233,7 @@ def http_request(
     last_err: Optional[Exception] = None
     for attempt in range(1, max_retries + 1):
         req = urllib.request.Request(
-            url=url, data=data, headers=req_headers, method=method
+            url=safe_url, data=data, headers=req_headers, method=method
         )
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -1237,7 +1253,7 @@ def http_request(
             # 4xx — не ретраим (кроме 429)
             if 400 <= e.code < 500 and e.code != 429:
                 raise APIError(
-                    f"HTTP {e.code} on {method} {url}: {body_txt[:400]}"
+                    f"HTTP {e.code} on {method} {safe_url}: {body_txt[:400]}"
                 ) from e
             last_err = APIError(f"HTTP {e.code}: {body_txt[:200]}")
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
@@ -1246,7 +1262,9 @@ def http_request(
         sleep_s = min(8.0, 0.5 * (2 ** (attempt - 1))) + random.uniform(0, 0.3)
         time.sleep(sleep_s)
 
-    raise APIError(f"Failed {method} {url} after {max_retries} retries: {last_err}")
+    raise APIError(
+        f"Failed {method} {safe_url} after {max_retries} retries: {last_err}"
+    )
 
 
 # =====================================================================
