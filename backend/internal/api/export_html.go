@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"runtime/debug"
 	"sort"
@@ -99,7 +101,8 @@ func (h *exportHandlers) handleHTML() http.HandlerFunc {
 			TopCVEs:        htmlexport.BuildTopCVEs(findings, 20, bduByCVE),
 			Components:     htmlexport.BuildComponents(findings, 100),
 		}
-		htmlBody, err := htmlexport.RenderHTMLReport(reportData, htmlexport.ReportOptions{
+		var htmlBody bytes.Buffer
+		err = htmlexport.ExecuteHTMLReport(&htmlBody, reportData, htmlexport.ReportOptions{
 			Title:             r.URL.Query().Get("title"),
 			GeneratedAt:       time.Now(),
 			AuthorEmail:       author,
@@ -120,7 +123,7 @@ func (h *exportHandlers) handleHTML() http.HandlerFunc {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
 		w.Header().Set("X-Export-Total", strconv.Itoa(total))
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(htmlBody)
+		_, _ = io.Copy(w, &htmlBody)
 		h.writeExportAudit(r, "html:"+includeRaw, filter, total)
 	}
 }
