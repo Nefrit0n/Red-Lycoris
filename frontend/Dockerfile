@@ -1,5 +1,5 @@
 # ── Stage: Development (Vite dev server) ──
-FROM node:20-alpine AS development
+FROM node:20-alpine3.21 AS development
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ EXPOSE 3000
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 
 # ── Stage: Production Build ──
-FROM node:20-alpine AS build
+FROM node:20-alpine3.21 AS build
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ COPY . .
 RUN npm run build
 
 # ── Stage: Production (nginx) ──
-FROM nginx:stable-alpine AS production
+FROM nginx:stable-alpine3.21 AS production
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
