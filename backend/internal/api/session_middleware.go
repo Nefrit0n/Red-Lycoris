@@ -77,7 +77,7 @@ func LoadSessionMiddleware(svc *authsvc.Service, tokensRepo *storage.APITokensRe
 			rawToken, ok := readAuthToken(r)
 			if !ok {
 				slog.Debug("load_session",
-					"request_id", GetRequestID(r.Context()),
+					"request_id", sanitizeForLog(GetRequestID(r.Context())),
 					"outcome", "absent",
 					"has_auth_header", hasAuthHeader,
 					"has_session_cookie", hasSessionCookie,
@@ -93,7 +93,7 @@ func LoadSessionMiddleware(svc *authsvc.Service, tokensRepo *storage.APITokensRe
 					r = r.WithContext(ctx)
 				}
 				slog.Warn("session validate failed",
-					"request_id", GetRequestID(r.Context()),
+					"request_id", sanitizeForLog(GetRequestID(r.Context())),
 					"outcome", "expired",
 					"error_type", classifySessionError(err),
 				)
@@ -102,7 +102,7 @@ func LoadSessionMiddleware(svc *authsvc.Service, tokensRepo *storage.APITokensRe
 			}
 
 			slog.Debug("load_session",
-				"request_id", GetRequestID(r.Context()),
+				"request_id", sanitizeForLog(GetRequestID(r.Context())),
 				"outcome", "loaded",
 				"session_id", session.ID,
 				"user_id", user.ID,

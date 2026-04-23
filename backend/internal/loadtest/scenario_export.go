@@ -3,6 +3,7 @@ package loadtest
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptrace"
 	"time"
@@ -29,8 +30,12 @@ func RunExport(ctx context.Context, cfg ExportConfig) (ScenarioReport, error) {
 
 	resp, st, total, ttfb, err := doExportWithTTFB(ctx, client, http.MethodPost, path)
 	if err == nil && resp != nil && resp.StatusCode == http.StatusMethodNotAllowed {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		if _, copyErr := io.Copy(io.Discard, resp.Body); copyErr != nil {
+			slog.Warn("loadtest export discard response failed", "error", copyErr)
+		}
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Warn("loadtest export close response failed", "error", closeErr)
+		}
 		resp, st, total, ttfb, err = doExportWithTTFB(ctx, client, http.MethodGet, path)
 	}
 
@@ -47,8 +52,12 @@ func RunExport(ctx context.Context, cfg ExportConfig) (ScenarioReport, error) {
 			ev.HasTTFB = true
 			ev.TTFBMS = ttfb.Milliseconds()
 		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		if _, copyErr := io.Copy(io.Discard, resp.Body); copyErr != nil {
+			slog.Warn("loadtest export discard response failed", "error", copyErr)
+		}
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Warn("loadtest export close response failed", "error", closeErr)
+		}
 		collector.Record(ev)
 	}
 

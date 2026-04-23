@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -214,12 +215,31 @@ func (h *exportHandlers) handleXLSX() http.HandlerFunc {
 		}
 		defer h.releaseExportSlot(r)
 		f := excelize.NewFile()
-		defer func() { _ = f.Close() }()
-		f.SetSheetName("Sheet1", "Summary")
-		_, _ = f.NewSheet("Findings")
-		_, _ = f.NewSheet("By CVE")
-		_, _ = f.NewSheet("By Component")
-		_, _ = f.NewSheet("About")
+		defer func() {
+			if err := f.Close(); err != nil {
+				slog.Warn("export xlsx close failed", "error", sanitizeForLog(err.Error()))
+			}
+		}()
+		if err := f.SetSheetName("Sheet1", "Summary"); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to prepare xlsx summary sheet")
+			return
+		}
+		if _, err := f.NewSheet("Findings"); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to prepare xlsx findings sheet")
+			return
+		}
+		if _, err := f.NewSheet("By CVE"); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to prepare xlsx cve sheet")
+			return
+		}
+		if _, err := f.NewSheet("By Component"); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to prepare xlsx component sheet")
+			return
+		}
+		if _, err := f.NewSheet("About"); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to prepare xlsx about sheet")
+			return
+		}
 
 		headers := []string{"id", "project_name", "severity", "status", "confidence", "title", "cve_ids", "cwe_ids", "component", "component_version", "fixed_version", "file_path", "line_start", "line_end", "url", "http_method", "priority_score", "epss_score", "is_kev", "is_bdu", "first_seen", "last_seen", "times_seen", "source_type", "rule_id", "assignee_email", "description", "extra_urls"}
 		stream, err := f.NewStreamWriter("Findings")
