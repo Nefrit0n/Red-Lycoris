@@ -38,4 +38,4 @@ trufflehog.json
 zap-full.json
 zap.json
 semgrep.sarif
-gosec
+gosec.json
