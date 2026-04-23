@@ -37,3 +37,5 @@ trivy.json
 trufflehog.json
 zap-full.json
 zap.json
+semgrep.sarif
+gosec
