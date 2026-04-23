@@ -3,6 +3,7 @@ package loadtest
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -48,8 +49,12 @@ func RunDashboard(ctx context.Context, cfg DashboardConfig) (ScenarioReport, err
 					b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 					ev.Error = string(b)
 				}
-				io.Copy(io.Discard, resp.Body)
-				resp.Body.Close()
+				if _, copyErr := io.Copy(io.Discard, resp.Body); copyErr != nil {
+					slog.Warn("loadtest dashboard discard response failed", "error", copyErr)
+				}
+				if closeErr := resp.Body.Close(); closeErr != nil {
+					slog.Warn("loadtest dashboard close response failed", "error", closeErr)
+				}
 				collector.Record(ev)
 			}
 		}()
