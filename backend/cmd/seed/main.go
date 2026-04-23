@@ -306,16 +306,27 @@ func generateFinding(projectIDs []uuid.UUID, weights []float64) []any {
 	}
 
 	f.Fingerprint = domain.CalculateFingerprint(&f)
+	kind, err := findingKindToDB(f.Kind)
+	if err != nil {
+		panic(fmt.Sprintf("seed: %v", err))
+	}
 
 	return []any{
 		f.ID, f.Title, f.Description, f.Severity, f.Confidence, f.Status,
 		f.FilePath, f.LineStart, f.LineEnd, f.Component, f.ComponentVersion,
 		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint,
-		f.FirstSeen, f.LastSeen, f.TimesSeen, f.ProjectID, f.SourceType, int16(f.Kind),
+		f.FirstSeen, f.LastSeen, f.TimesSeen, f.ProjectID, f.SourceType, kind,
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
 	}
+}
+
+func findingKindToDB(kind domain.FindingKind) (int16, error) {
+	if kind < math.MinInt16 || kind > math.MaxInt16 {
+		return 0, fmt.Errorf("finding kind %d is out of int16 range", kind)
+	}
+	return int16(kind), nil
 }
 
 func pickWeighted(values []int, weights []float64) int {
