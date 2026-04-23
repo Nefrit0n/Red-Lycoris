@@ -1,12 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -71,7 +73,7 @@ func (h *exportHandlers) handleCSV() http.HandlerFunc {
 		w.Header().Set("X-Export-Total", strconv.Itoa(total))
 		w.WriteHeader(http.StatusOK)
 
-		_, _ = w.Write([]byte{0xEF, 0xBB, 0xBF})
+		_, _ = io.Copy(w, bytes.NewReader([]byte{0xEF, 0xBB, 0xBF}))
 		cw := csv.NewWriter(w)
 		header := []string{"id", "project_name", "severity", "status", "confidence", "title", "cve_ids", "cwe_ids", "component", "component_version", "fixed_version", "file_path", "line_start", "line_end", "url", "http_method", "priority_score", "epss_score", "is_kev", "is_bdu", "first_seen", "last_seen", "times_seen", "source_type", "rule_id", "assignee_email"}
 		if err := cw.Write(header); err != nil {

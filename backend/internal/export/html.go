@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"io"
 	"html/template"
 	"sort"
 	"strings"
@@ -108,6 +109,14 @@ type reportView struct {
 }
 
 func RenderHTMLReport(data ReportData, opts ReportOptions) ([]byte, error) {
+	var out bytes.Buffer
+	if err := ExecuteHTMLReport(&out, data, opts); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func ExecuteHTMLReport(w io.Writer, data ReportData, opts ReportOptions) error {
 	tpl, err := template.New("report").Funcs(template.FuncMap{
 		"sevClass":    sevClass,
 		"sevLabel":    sevLabelRU,
@@ -120,7 +129,7 @@ func RenderHTMLReport(data ReportData, opts ReportOptions) ([]byte, error) {
 		"cleanText":   cleanText,
 	}).Parse(reportTemplate)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	view := reportView{
@@ -144,11 +153,10 @@ func RenderHTMLReport(data ReportData, opts ReportOptions) ([]byte, error) {
 		BDUByCVE:          opts.BDUByCVE,
 	}
 
-	var out bytes.Buffer
-	if err := tpl.Execute(&out, view); err != nil {
-		return nil, err
+	if err := tpl.Execute(w, view); err != nil {
+		return err
 	}
-	return out.Bytes(), nil
+	return nil
 }
 
 func BuildSummary(findings []domain.Finding) Summary {
