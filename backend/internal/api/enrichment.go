@@ -124,7 +124,7 @@ func handleEnrichFinding(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc
 
 		// Публикуем в Redis Stream для обработки воркером
 		if err := enrichment.PublishEnrichment(r.Context(), rdb, id); err != nil {
-			slog.Error("failed to publish enrichment", "finding_id", id, "error", err)
+			slog.Error("failed to publish enrichment", "finding_id", id.String(), "error", sanitizeForLog(err.Error()))
 
 			// Fallback: обогащаем синхронно
 			if err := enrichment.EnrichFinding(r.Context(), pool, id); err != nil {
