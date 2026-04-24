@@ -14,6 +14,7 @@ import {
 } from "@/lib/findings-filter";
 import type {
   Finding,
+  FindingEvent,
   FindingEnrichment,
   FindingGroup,
   FindingScore,
@@ -395,29 +396,34 @@ export function useBulkTriageAction() {
 export function useTriageAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, request }: { id: string; request: TriageRequest }) => {
+    mutationFn: async ({ id, request }: { id: string; request: TriageRequest }) => {
       if (request.action === "assign") {
-        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/assign`, {
+        await apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/assign`, {
           user_id: request.to_user_id,
         });
+        return;
       }
       if (request.action === "unassign") {
-        return apiDelete(`/api/v1/findings/${id}/assign`);
+        await apiDelete(`/api/v1/findings/${id}/assign`);
+        return;
       }
       if (request.action === "reopen") {
-        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/reopen`, {
+        await apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/reopen`, {
           note: request.note ?? "",
         });
+        return;
       }
       if (request.action === "close") {
-        return apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/close`, {
+        await apiPost<{ data: { status: string } }>(`/api/v1/findings/${id}/close`, {
           reason_code: request.reason_code,
           note: request.note ?? "",
         });
+        return;
       }
-      return apiPatch<{ data: { status: string } }>(`/api/v1/findings/${id}/status`, {
+      await apiPatch<{ data: { status: string } }>(`/api/v1/findings/${id}/status`, {
         status: request.status,
       });
+      return;
     },
     onSuccess: async (_result, vars) => {
       await Promise.all([
