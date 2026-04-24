@@ -14,7 +14,7 @@ services:
       - ../backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
       - ./loadtest/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-redlycoris}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_USER:-redlycoris} -d ${POSTGRES_DB:-redlycoris}"]
       interval: 10s
       timeout: 3s
       retries: 10
@@ -93,9 +93,10 @@ services:
     container_name: redlycoris-loadtest-frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "${FRONTEND_PORT:-3000}:8080"
     environment:
       VITE_API_URL: "http://localhost:${API_PORT:-8080}"
       VITE_PROXY_TARGET: "http://backend:8080"

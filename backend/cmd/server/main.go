@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,6 +40,33 @@ import (
 var version = "dev"
 var commit = "unknown"
 var date = "unknown"
+
+func waitForDependency(ctx context.Context, name string, attempts int, delay time.Duration, check func(context.Context) error) error {
+	for i := 1; i <= attempts; i++ {
+		if err := check(ctx); err == nil {
+			return nil
+		} else if i == attempts {
+			return fmt.Errorf("%s check failed after %d attempts: %w", name, attempts, err)
+		} else {
+			slog.Warn(
+				"dependency not ready, retrying",
+				"name", name,
+				"attempt", i,
+				"remaining_attempts", attempts-i,
+				"retry_in", delay.String(),
+				"error", err,
+			)
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%s check canceled: %w", name, ctx.Err())
+		case <-time.After(delay):
+		}
+	}
+
+	return fmt.Errorf("%s check failed", name)
+}
 
 func main() {
 	startTime := time.Now()
@@ -84,7 +112,9 @@ func main() {
 	}
 	defer pool.Close()
 
-	if err := pool.Ping(ctx); err != nil {
+	if err := waitForDependency(ctx, "postgres", 30, 2*time.Second, func(ctx context.Context) error {
+		return pool.Ping(ctx)
+	}); err != nil {
 		slog.Error("failed to ping database", "error", err)
 		os.Exit(1)
 	}
@@ -169,7 +199,9 @@ func main() {
 	rdb := redis.NewClient(redisOpts)
 	defer rdb.Close()
 
-	if err := rdb.Ping(ctx).Err(); err != nil {
+	if err := waitForDependency(ctx, "redis", 30, 2*time.Second, func(ctx context.Context) error {
+		return rdb.Ping(ctx).Err()
+	}); err != nil {
 		slog.Error("failed to ping redis", "error", err)
 		os.Exit(1)
 	}
