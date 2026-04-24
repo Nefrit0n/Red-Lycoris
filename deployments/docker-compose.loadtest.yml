@@ -92,6 +92,7 @@ services:
     pull_policy: never
     container_name: redlycoris-loadtest-frontend
     restart: unless-stopped
+    user: "0:0"
     depends_on:
       backend:
         condition: service_healthy
