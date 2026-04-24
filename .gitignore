@@ -25,7 +25,6 @@ backend/data/
 
 # Test coverage
 coverage/
-testdata/*
 *.log
 
 
