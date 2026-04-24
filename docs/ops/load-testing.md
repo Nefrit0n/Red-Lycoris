@@ -1,35 +1,35 @@
-# Load testing for release 0.1.0b
+# Нагрузочное тестирование для релиза 0.1.0b
 
-## Prerequisites
+## Предварительные требования
 
-- Host with at least 4 vCPU, 8 GB RAM, SSD storage (recommended for stable latency).
-- Docker Engine + Docker Compose plugin.
-- Built backend/frontend images (for example `redlycoris/backend:0.1.0b` and `redlycoris/frontend:0.1.0b`).
-- PAT token with scopes:
+- Хост как минимум с 4 vCPU, 8 ГБ RAM и SSD-диском (рекомендуется для стабильной задержки).
+- Docker Engine + плагин Docker Compose.
+- Собранные образы backend/frontend (например, `redlycoris/backend:0.1.0b` и `redlycoris/frontend:0.1.0b`).
+- PAT-токен со scope-правами:
   - `findings:read`
   - `findings:write`
-- Existing project UUID (created via UI after stack startup).
+- Существующий UUID проекта (создаётся через UI после запуска стека).
 
-> `loadtest` requires explicit `--url` to avoid accidental runs against a local dev instance.
+> Для `loadtest` обязательно требуется явный параметр `--url`, чтобы избежать случайного запуска против локального dev-инстанса.
 
-## Reproducible sequence
+## Воспроизводимая последовательность
 
-1. Start isolated loadtest stack:
+1. Запустите изолированный loadtest-стек:
 
    ```bash
    docker compose -f deployments/docker-compose.loadtest.yml up -d
    ```
 
-2. Create a project in UI and save project UUID.
-3. Create a PAT token with `findings:read` + `findings:write`.
-4. Generate fixture:
+2. Создайте проект в UI и сохраните UUID проекта.
+3. Создайте PAT-токен с `findings:read` + `findings:write`.
+4. Сгенерируйте фикстуру:
 
    ```bash
    cd backend
    go run ./cmd/loadtest generate --output=../testdata/fixtures --size=100000
    ```
 
-5. Seed findings:
+5. Загрузите findings:
 
    ```bash
    go run ./cmd/loadtest seed \
@@ -39,7 +39,7 @@
      --file=../testdata/fixtures/sarif_100000.json
    ```
 
-6. Run browse scenario:
+6. Запустите сценарий browse:
 
    ```bash
    go run ./cmd/loadtest browse \
@@ -51,7 +51,7 @@
      --report=report_browse.json
    ```
 
-7. Run dashboard scenario:
+7. Запустите сценарий dashboard:
 
    ```bash
    go run ./cmd/loadtest dashboard \
@@ -62,7 +62,7 @@
      --report=report_dashboard.json
    ```
 
-8. Optional export scenario:
+8. Необязательный сценарий export:
 
    ```bash
    go run ./cmd/loadtest export \
@@ -72,17 +72,17 @@
      --report=report_export.json
    ```
 
-## Scenarios summary
+## Краткое описание сценариев
 
-- `generate`: creates SARIF with N findings using curated real CVEs.
-- `seed`: uploads SARIF via `/api/v1/import?project_id=<uuid>`.
-- `browse`: random filters + cursor pagination + finding detail fetch.
-- `dashboard`: loops on `/api/v1/dashboard/stats`.
-- `export`: export endpoint test with TTFB + total duration.
+- `generate`: создаёт SARIF с N findings, используя подобранные реальные CVE.
+- `seed`: загружает SARIF через `/api/v1/import?project_id=<uuid>`.
+- `browse`: случайные фильтры + пагинация по курсору + запрос деталей finding.
+- `dashboard`: циклические запросы к `/api/v1/dashboard/stats`.
+- `export`: тест endpoint-а экспорта с TTFB + общей длительностью.
 
-## JSON report format
+## Формат JSON-отчёта
 
-Each scenario writes report like:
+Каждый сценарий пишет отчёт вида:
 
 ```json
 {
@@ -109,22 +109,22 @@ Each scenario writes report like:
 }
 ```
 
-## Metrics interpretation
+## Интерпретация метрик
 
-- `count`: total calls for endpoint.
-- `success_count`: HTTP 2xx responses.
-- `error_count`: non-2xx + transport/network failures.
-- `p50/p90/p95/p99`: end-to-end latency percentiles in milliseconds.
-- `rps`: endpoint throughput (`count / scenario_duration_seconds`).
-- `ttfb_*` (export): latency to first byte.
+- `count`: общее число вызовов endpoint-а.
+- `success_count`: HTTP-ответы 2xx.
+- `error_count`: не-2xx + транспортные/сетевые ошибки.
+- `p50/p90/p95/p99`: перцентили сквозной задержки в миллисекундах.
+- `rps`: пропускная способность endpoint-а (`count / scenario_duration_seconds`).
+- `ttfb_*` (export): задержка до первого байта.
 
-Use `jq` to validate report structure:
+Проверьте структуру отчёта через `jq`:
 
 ```bash
 jq . report_browse.json
 ```
 
-## Release notes table template
+## Шаблон таблицы для release notes
 
 | Build | Commit | Scenario | Concurrency | Duration | Findings volume | p50 | p95 | p99 | RPS | Error rate |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
