@@ -30,6 +30,9 @@ FROM nginx:stable-alpine3.21 AS production
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
+
+RUN mkdir -p /var/cache/nginx /var/cache/nginx/client_temp /var/cache/nginx/proxy_temp /var/cache/nginx/fastcgi_temp /var/cache/nginx/uwsgi_temp /var/cache/nginx/scgi_temp /var/run /var/log/nginx \
+    && chown -R nginx:nginx /var/cache/nginx /var/run /var/log/nginx /usr/share/nginx/html
 RUN printf 'server {\n\
     listen 8080;\n\
     root /usr/share/nginx/html;\n\
