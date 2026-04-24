@@ -30,21 +30,60 @@ FROM nginx:stable-alpine3.21 AS production
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
-RUN printf 'server {\n\
-    listen 8080;\n\
-    root /usr/share/nginx/html;\n\
-    index index.html;\n\
-    resolver 127.0.0.11 ipv6=off;\n\
-    set $backend_upstream redlycoris-loadtest-backend:8080;\n\
-    location /api/ {\n\
-    proxy_pass http://$backend_upstream;\n\
-    proxy_set_header Host $host;\n\
-    proxy_set_header X-Real-IP $remote_addr;\n\
-    }\n\
-    location / {\n\
-    try_files $uri $uri/ /index.html;\n\
-    }\n\
-    }\n' > /etc/nginx/conf.d/default.conf
+# Keep nginx writable paths away from /var/cache to support hardened/non-root runs.
+RUN mkdir -p /tmp/nginx/client_temp /tmp/nginx/proxy_temp /tmp/nginx/fastcgi_temp /tmp/nginx/uwsgi_temp /tmp/nginx/scgi_temp /var/run /var/log/nginx \
+    && chown -R nginx:nginx /tmp/nginx /var/run /var/log/nginx /usr/share/nginx/html
+
+RUN cat > /etc/nginx/nginx.conf <<'NGINXCONF'
+pid /tmp/nginx/nginx.pid;
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    access_log /dev/stdout;
+    error_log /dev/stderr warn;
+
+    sendfile on;
+    keepalive_timeout 65;
+
+    client_body_temp_path /tmp/nginx/client_temp;
+    proxy_temp_path /tmp/nginx/proxy_temp;
+    fastcgi_temp_path /tmp/nginx/fastcgi_temp;
+    uwsgi_temp_path /tmp/nginx/uwsgi_temp;
+    scgi_temp_path /tmp/nginx/scgi_temp;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+NGINXCONF
+
+RUN cat > /etc/nginx/conf.d/default.conf <<'SERVERCONF'
+server {
+    listen 8080;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    resolver 127.0.0.11 ipv6=off;
+    set $backend_upstream redlycoris-loadtest-backend:8080;
+
+    location /api/ {
+        proxy_pass http://$backend_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+SERVERCONF
+
+USER nginx
 
 EXPOSE 8080
 
