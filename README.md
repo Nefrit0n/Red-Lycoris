@@ -4,10 +4,15 @@
 
 Замена DefectDojo с фокусом на производительность при **1M+ findings**, поддержкой воздушных зазоров и русскоязычным интерфейсом.
 
-[![Version](https://img.shields.io/badge/version-0.1.0b-dc2626)](https://github.com/nefrit0n/red-lycoris/releases)
-[![Go](https://img.shields.io/badge/Go-1.24-00ADD8)](https://golang.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
+![DevSecOps](https://img.shields.io/badge/DevSecOps-platform-red)
+![Self Hosted](https://img.shields.io/badge/Self--Hosted-ready-success)
+![Status](https://img.shields.io/badge/status-active_development-orange)
 
 ---
 
