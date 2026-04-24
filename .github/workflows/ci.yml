@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: write      # создать tag и release
-  packages: write      # запушить image в ghcr.io
+  packages: write      # запушить images в ghcr.io
   deployments: write   # создать deployment
 
 env:
@@ -16,7 +16,6 @@ env:
 
 jobs:
   # 1. Автоматический bump тега по SemVer (0.1.1 -> 0.1.2 -> ...)
-  #    Без префикса "v" — под текущий формат тегов в репозитории
   tag:
     name: 🏷️  Version
     runs-on: ubuntu-latest
@@ -32,17 +31,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Последний SemVer-тег (поддерживаем и "v0.0.1", и "0.1.1")
           LATEST=$(git tag -l --sort=-version:refname \
                    | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
                    | head -n1 || true)
           LATEST=${LATEST:-0.0.0}
           echo "Latest tag: $LATEST"
 
-          # Нормализуем — убираем префикс "v" если есть
           VERSION=${LATEST#v}
-
-          # Bump patch
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           PATCH=$((PATCH + 1))
           NEW_TAG="${MAJOR}.${MINOR}.${PATCH}"
@@ -50,17 +45,25 @@ jobs:
           echo "New tag: $NEW_TAG"
           echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
 
-          # Создаём и пушим
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "$NEW_TAG"
           git push origin "$NEW_TAG"
 
-  # 2. Сборка Docker-образа и публикация в GHCR
+  # 2. Параллельная сборка backend и frontend
+  #    backend → ghcr.io/.../red-lycoris/backend:X.Y.Z
+  #    frontend → ghcr.io/.../red-lycoris/frontend:X.Y.Z
   build:
-    name: 🐳 Build & Push Image
+    name: 🐳 Build & Push — ${{ matrix.service }}
     needs: tag
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+          - service: frontend
+            context: ./frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -74,11 +77,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set build timestamp
+        id: ts
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
           tags: |
             type=raw,value=latest
             type=raw,value=${{ needs.tag.outputs.new_tag }}
@@ -87,14 +94,21 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Раздельный GHA-кэш для backend и frontend
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          # Build args из docker-compose.yml (только backend их использует, frontend проигнорирует)
+          build-args: |
+            VERSION=${{ needs.tag.outputs.new_tag }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.ts.outputs.date }}
 
   # 3. GitHub Release с автоматически сгенерированным changelog
+  #    Ждёт оба matrix-job'а из build
   release:
     name: 📦 Release
     needs: [tag, build]
@@ -127,8 +141,9 @@ jobs:
             echo ""
             echo "| | |"
             echo "|---|---|"
-            echo "| **Version** | \`${{ needs.tag.outputs.new_tag }}\` |"
-            echo "| **Image**   | \`ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.new_tag }}\` |"
-            echo "| **Release** | [View on GitHub](https://github.com/${{ github.repository }}/releases/tag/${{ needs.tag.outputs.new_tag }}) |"
-            echo "| **Commit**  | \`${{ github.sha }}\` |"
+            echo "| **Version**          | \`${{ needs.tag.outputs.new_tag }}\` |"
+            echo "| **Backend image**    | \`ghcr.io/${{ github.repository }}/backend:${{ needs.tag.outputs.new_tag }}\` |"
+            echo "| **Frontend image**   | \`ghcr.io/${{ github.repository }}/frontend:${{ needs.tag.outputs.new_tag }}\` |"
+            echo "| **Release**          | [View on GitHub](https://github.com/${{ github.repository }}/releases/tag/${{ needs.tag.outputs.new_tag }}) |"
+            echo "| **Commit**           | \`${{ github.sha }}\` |"
           } >> $GITHUB_STEP_SUMMARY
