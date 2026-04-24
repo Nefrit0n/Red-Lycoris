@@ -15,7 +15,8 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # 1. Автоматический bump тега по SemVer (v0.0.1 -> v0.0.2 -> ...)
+  # 1. Автоматический bump тега по SemVer (0.1.1 -> 0.1.2 -> ...)
+  #    Без префикса "v" — под текущий формат тегов в репозитории
   tag:
     name: 🏷️  Version
     runs-on: ubuntu-latest
@@ -26,13 +27,34 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Bump version and push tag
+      - name: Determine next version and push tag
         id: tag
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          default_bump: patch
-          tag_prefix: v
+        run: |
+          set -euo pipefail
+
+          # Последний SemVer-тег (поддерживаем и "v0.0.1", и "0.1.1")
+          LATEST=$(git tag -l --sort=-version:refname \
+                   | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+                   | head -n1 || true)
+          LATEST=${LATEST:-0.0.0}
+          echo "Latest tag: $LATEST"
+
+          # Нормализуем — убираем префикс "v" если есть
+          VERSION=${LATEST#v}
+
+          # Bump patch
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          PATCH=$((PATCH + 1))
+          NEW_TAG="${MAJOR}.${MINOR}.${PATCH}"
+
+          echo "New tag: $NEW_TAG"
+          echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+
+          # Создаём и пушим
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
 
   # 2. Сборка Docker-образа и публикация в GHCR
   build:
