@@ -98,20 +98,6 @@ function DetailRow({
   );
 }
 
-function TimelineItem({ label, date }: { label: string; date: string }) {
-  return (
-    <div className="relative flex items-start gap-3">
-      <div className="absolute -left-6 top-1 size-3.5 rounded-full border-2 border-red-700 bg-zinc-900" />
-      <div>
-        <div className="text-sm text-zinc-300">{label}</div>
-        <div className="mt-0.5 text-xs text-zinc-500">
-          {formatAbsoluteDate(date)} &middot; {formatRelativeDate(date)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Kind-specific overview cards. Each leads with the data that matters most
 // for triaging a finding of that kind — component/fix for SCA, file+snippet
 // for SAST/IaC, request shape for DAST, redacted secret metadata for Secrets.
