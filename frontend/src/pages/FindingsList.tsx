@@ -317,7 +317,7 @@ export default function FindingsList() {
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40">
       <div
         className={cn(
-          "transition-all duration-300",
+          "flex min-h-0 transition-all duration-300",
           highlightFilters && "ring-2 ring-amber-400",
         )}
       >
