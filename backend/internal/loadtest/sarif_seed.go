@@ -3,8 +3,10 @@ package loadtest
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,6 +24,10 @@ func SeedSARIF(ctx context.Context, baseURL, token, projectID, filePath string, 
 	path := "/api/v1/import?project_id=" + url.QueryEscape(projectID)
 	resp, _, _, err := client.Do(ctx, http.MethodPost, path, bytes.NewReader(data))
 	if err != nil {
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return fmt.Errorf("seed request timed out while waiting for /api/v1/import response; for large fixtures retry with a bigger --timeout (e.g. --timeout=30m) or disable client timeout with --timeout=0: %w", err)
+		}
 		return err
 	}
 	defer resp.Body.Close()
