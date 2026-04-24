@@ -1,8 +1,8 @@
-# RedLycoris
+<p align="center">
+  <img src="frontend/public/logo_full.svg" alt="Red Lycoris" width="360">
+</p>
 
 **On-premise ASOC-платформа** для централизованного хранения, дедупликации и приоритизации уязвимостей.
-
-Замена DefectDojo с фокусом на производительность при **1M+ findings**, поддержкой воздушных зазоров и русскоязычным интерфейсом.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/Nefrit0n/Red-Lycoris/actions/workflows/ci.yml/badge.svg)](https://github.com/Nefrit0n/Red-Lycoris/actions/workflows/ci.yml)
