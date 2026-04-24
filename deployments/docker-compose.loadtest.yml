@@ -11,8 +11,8 @@ services:
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     volumes:
       - redlycoris-loadtest-pgdata:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
-      - ./deployments/loadtest/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ../backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./loadtest/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-redlycoris}"]
       interval: 10s
@@ -43,7 +43,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ../backend
       dockerfile: Dockerfile
       args:
         VERSION: ${VERSION:-loadtest}
@@ -85,7 +85,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: Dockerfile
       target: ${FRONTEND_TARGET:-production}
     image: ${FRONTEND_IMAGE:-redlycoris/frontend:loadtest}
