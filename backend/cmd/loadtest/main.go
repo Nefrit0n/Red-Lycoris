@@ -49,7 +49,7 @@ func main() {
 func usage() {
 	fmt.Println(`Usage:
   loadtest generate --output=testdata/fixtures/ --size=10000
-  loadtest seed --url=http://localhost:8080 --token=<PAT> --project=<uuid> --file=testdata/fixtures/sarif_100k.json [--timeout=10m]
+  loadtest seed --url=http://localhost:8080 --token=<PAT> --project=<uuid> --file=testdata/fixtures/sarif_100k.json [--timeout=30m|0]
   loadtest browse --url=... --token=... --duration=5m --concurrency=10 --report=report_browse.json [--project=<uuid>]
   loadtest dashboard --url=... --token=... --duration=2m --concurrency=5 --report=report_dashboard.json
   loadtest export --url=... --token=... --format=csv --report=report_export.json`)
@@ -77,7 +77,7 @@ func runSeed(ctx context.Context) error {
 	token := fs.String("token", "", "PAT token (required)")
 	project := fs.String("project", "", "Project UUID (required)")
 	file := fs.String("file", "", "SARIF file path (required)")
-	timeout := fs.Duration("timeout", 10*time.Minute, "HTTP timeout for upload/import")
+	timeout := fs.Duration("timeout", 30*time.Minute, "HTTP timeout for upload/import (set 0 to disable)")
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		return err
 	}

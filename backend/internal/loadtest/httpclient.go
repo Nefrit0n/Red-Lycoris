@@ -19,7 +19,7 @@ func NewHTTPClient(baseURL, token string) *HTTPClient {
 }
 
 func NewHTTPClientWithTimeout(baseURL, token string, timeout time.Duration) *HTTPClient {
-	if timeout <= 0 {
+	if timeout < 0 {
 		timeout = 2 * time.Minute
 	}
 	return &HTTPClient{
