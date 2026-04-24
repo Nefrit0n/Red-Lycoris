@@ -11,8 +11,8 @@ services:
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     volumes:
       - redlycoris-loadtest-pgdata:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
-      - ./deployments/loadtest/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ../backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./loadtest/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-redlycoris}"]
       interval: 10s
@@ -42,7 +42,15 @@ services:
       - redlycoris-loadtest-net
 
   backend:
-    image: ${BACKEND_IMAGE:-redlycoris/backend:0.1.0b}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-loadtest}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    image: ${BACKEND_IMAGE:-redlycoris/backend:loadtest}
+    pull_policy: never
     container_name: redlycoris-loadtest-backend
     restart: unless-stopped
     depends_on:
@@ -76,7 +84,12 @@ services:
       - redlycoris-loadtest-net
 
   frontend:
-    image: ${FRONTEND_IMAGE:-redlycoris/frontend:0.1.0b}
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      target: ${FRONTEND_TARGET:-production}
+    image: ${FRONTEND_IMAGE:-redlycoris/frontend:loadtest}
+    pull_policy: never
     container_name: redlycoris-loadtest-frontend
     restart: unless-stopped
     depends_on:
