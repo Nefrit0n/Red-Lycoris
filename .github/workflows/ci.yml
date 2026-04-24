@@ -31,14 +31,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          LATEST=$(git tag -l --sort=-version:refname \
+          # Нормализуем все теги — убираем "v", сортируем как SemVer, берём максимальный
+          LATEST=$(git tag -l \
                    | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
-                   | head -n1 || true)
+                   | sed 's/^v//' \
+                   | sort -V \
+                   | tail -n1 || true)
           LATEST=${LATEST:-0.0.0}
-          echo "Latest tag: $LATEST"
+          echo "Latest tag (normalized): $LATEST"
 
-          VERSION=${LATEST#v}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST"
           PATCH=$((PATCH + 1))
           NEW_TAG="${MAJOR}.${MINOR}.${PATCH}"
 

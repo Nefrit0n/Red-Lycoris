@@ -5,7 +5,7 @@
 Замена DefectDojo с фокусом на производительность при **1M+ findings**, поддержкой воздушных зазоров и русскоязычным интерфейсом.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/Nefrit0n/Red-Lycoris/actions/workflows/ci.yml/badge.svg)](https://github.com/Nefrit0n/Red-Lycoris/actions/workflows/ci.yml)
 ![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
