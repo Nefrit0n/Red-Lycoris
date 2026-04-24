@@ -31,8 +31,10 @@ FROM nginx:stable-alpine3.21 AS production
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # Keep nginx writable paths away from /var/cache to support hardened/non-root runs.
-RUN mkdir -p /tmp/nginx/client_temp /tmp/nginx/proxy_temp /tmp/nginx/fastcgi_temp /tmp/nginx/uwsgi_temp /tmp/nginx/scgi_temp /var/run /var/log/nginx \
-    && chown -R nginx:nginx /tmp/nginx /var/run /var/log/nginx /usr/share/nginx/html
+RUN mkdir -p /tmp/nginx/client_temp /tmp/nginx/proxy_temp /tmp/nginx/fastcgi_temp /tmp/nginx/uwsgi_temp /tmp/nginx/scgi_temp \
+           /var/cache/nginx/client_temp /var/cache/nginx/proxy_temp /var/cache/nginx/fastcgi_temp /var/cache/nginx/uwsgi_temp /var/cache/nginx/scgi_temp \
+           /var/run /var/log/nginx \
+    && chown -R nginx:nginx /tmp/nginx /var/cache/nginx /var/run /var/log/nginx /usr/share/nginx/html
 
 RUN cat > /etc/nginx/nginx.conf <<'NGINXCONF'
 pid /tmp/nginx/nginx.pid;
