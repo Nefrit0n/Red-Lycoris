@@ -46,8 +46,11 @@ interface PreviewPanelProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: 0, label: "Открыта" },
-  { value: 1, label: "Подтверждена" },
+  { value: 0, label: "Открыто" },
+  { value: 1, label: "Подтверждено" },
+  { value: 2, label: "Ложное" },
+  { value: 3, label: "Исправлено" },
+  { value: 4, label: "Принят риск" },
 ];
 
 function formatAbsolute(value: string | null | undefined): string {
@@ -126,16 +129,16 @@ function KeyMetaBlock({ finding }: { finding: Finding }) {
     value: string;
     copyable?: boolean;
   }> = [
-    { key: "Fixed version", value: finding.fixed_version || "—", copyable: !!finding.fixed_version },
-    { key: "Status", value: statusMeta(finding.status).label },
-    { key: "Class", value: finding.rule_name || "—" },
-    { key: "Type", value: finding.kind.toUpperCase() },
-    { key: "Artifact", value: finding.component || finding.file_path || "—", copyable: !!(finding.component || finding.file_path) },
-    { key: "CVE", value: finding.cve_ids.length ? finding.cve_ids.join(", ") : "—", copyable: finding.cve_ids.length > 0 },
-    { key: "CWE", value: finding.cwe_ids.length ? finding.cwe_ids.map((id) => `CWE-${id}`).join(", ") : "—", copyable: finding.cwe_ids.length > 0 },
-    { key: "CVSS", value: typeof finding.max_cvss === "number" ? finding.max_cvss.toFixed(1) : "—" },
-    { key: "EPSS", value: typeof finding.max_epss === "number" ? `${(finding.max_epss * 100).toFixed(1)}%` : "—" },
-  ];
+      { key: "Fixed version", value: finding.fixed_version || "—", copyable: !!finding.fixed_version },
+      { key: "Status", value: statusMeta(finding.status).label },
+      { key: "Class", value: finding.rule_name || "—" },
+      { key: "Type", value: finding.kind.toUpperCase() },
+      { key: "Artifact", value: finding.component || finding.file_path || "—", copyable: !!(finding.component || finding.file_path) },
+      { key: "CVE", value: finding.cve_ids.length ? finding.cve_ids.join(", ") : "—", copyable: finding.cve_ids.length > 0 },
+      { key: "CWE", value: finding.cwe_ids.length ? finding.cwe_ids.map((id) => `CWE-${id}`).join(", ") : "—", copyable: finding.cwe_ids.length > 0 },
+      { key: "CVSS", value: typeof finding.max_cvss === "number" ? finding.max_cvss.toFixed(1) : "—" },
+      { key: "EPSS", value: typeof finding.max_epss === "number" ? `${(finding.max_epss * 100).toFixed(1)}%` : "—" },
+    ];
 
   return (
     <div className="rounded-md border border-zinc-800 bg-zinc-900/30 p-3">
@@ -606,85 +609,85 @@ export function PreviewPanel({
       >
         <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/95 px-4 py-3 shadow-sm">
           <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div
-              id="findings-preview-title"
-              className="max-h-[4.5rem] overflow-hidden text-sm font-semibold leading-snug text-zinc-100"
-            >
-              {finding?.title ?? "Загрузка…"}
-            </div>
-            {finding && (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <SeverityBadge severity={finding.severity} />
-                <KindBadge kind={finding.kind} />
-                <span
-                  className={cn(
-                    "inline-block rounded-md border px-2 py-0.5 text-xs",
-                    statusMeta(finding.status).badgeClass,
-                  )}
-                >
-                  {statusMeta(finding.status).label}
-                </span>
-                {finding.fixed_version && (
-                  <span className="rounded-md border border-emerald-700/50 px-2 py-0.5 text-xs text-emerald-300">
-                    Fix {finding.fixed_version}
-                  </span>
-                )}
+            <div className="min-w-0 flex-1">
+              <div
+                id="findings-preview-title"
+                className="max-h-[4.5rem] overflow-hidden text-sm font-semibold leading-snug text-zinc-100"
+              >
+                {finding?.title ?? "Загрузка…"}
               </div>
-            )}
-          </div>
+              {finding && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <SeverityBadge severity={finding.severity} />
+                  <KindBadge kind={finding.kind} />
+                  <span
+                    className={cn(
+                      "inline-block rounded-md border px-2 py-0.5 text-xs",
+                      statusMeta(finding.status).badgeClass,
+                    )}
+                  >
+                    {statusMeta(finding.status).label}
+                  </span>
+                  {finding.fixed_version && (
+                    <span className="rounded-md border border-emerald-700/50 px-2 py-0.5 text-xs text-emerald-300">
+                      Fix {finding.fixed_version}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
 
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={!canPrev}
-              onClick={onPrev}
-              className="text-zinc-400 hover:text-zinc-200"
-              aria-label="Предыдущая находка"
-            >
-              <ChevronUp className="size-4" />
-            </Button>
-            <span className="min-w-[52px] text-center text-xs text-zinc-500">
-              {currentIndex ? `${currentIndex} / ${totalCount}` : `— / ${totalCount}`}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={!canNext}
-              onClick={onNext}
-              className="text-zinc-400 hover:text-zinc-200"
-              aria-label="Следующая находка"
-            >
-              <ChevronDown className="size-4" />
-            </Button>
-            {finding && (
+            <div className="flex items-center gap-1">
               <Button
-                render={
-                  <Link
-                    to={`/findings/${finding.id}`}
-                    aria-label="Открыть полностью"
-                    target="_blank"
-                    rel="noreferrer"
-                  />
-                }
                 variant="ghost"
                 size="icon-sm"
+                disabled={!canPrev}
+                onClick={onPrev}
                 className="text-zinc-400 hover:text-zinc-200"
+                aria-label="Предыдущая находка"
               >
-                <ExternalLink className="size-4" />
+                <ChevronUp className="size-4" />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={onClose}
-              className="text-zinc-400 hover:text-zinc-200"
-              aria-label="Закрыть предпросмотр"
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
+              <span className="min-w-[52px] text-center text-xs text-zinc-500">
+                {currentIndex ? `${currentIndex} / ${totalCount}` : `— / ${totalCount}`}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={!canNext}
+                onClick={onNext}
+                className="text-zinc-400 hover:text-zinc-200"
+                aria-label="Следующая находка"
+              >
+                <ChevronDown className="size-4" />
+              </Button>
+              {finding && (
+                <Button
+                  render={
+                    <Link
+                      to={`/findings/${finding.id}`}
+                      aria-label="Открыть полностью"
+                      target="_blank"
+                      rel="noreferrer"
+                    />
+                  }
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-zinc-400 hover:text-zinc-200"
+                >
+                  <ExternalLink className="size-4" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onClose}
+                className="text-zinc-400 hover:text-zinc-200"
+                aria-label="Закрыть предпросмотр"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
           </div>
         </header>
 
