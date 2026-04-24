@@ -2,7 +2,6 @@ package loadtest
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,21 +46,25 @@ func RunBrowse(ctx context.Context, cfg BrowseConfig) (ScenarioReport, error) {
 	var wg sync.WaitGroup
 	for i := 0; i < cfg.Concurrency; i++ {
 		wg.Add(1)
-		go func(seed int64) {
+		go func() {
 			defer wg.Done()
-			rnd := rand.New(rand.NewSource(seed))
 			for time.Now().Before(deadline) {
-				ids, nextCursor := doFindingsPage(ctx, client, collector, "", cfg.ProjectID, rnd)
+				ids, nextCursor := doFindingsPage(ctx, client, collector, "", cfg.ProjectID)
 				cursor := nextCursor
 				for page := 0; page < 2 && cursor != "" && time.Now().Before(deadline); page++ {
-					_, cursor = doFindingsPage(ctx, client, collector, cursor, cfg.ProjectID, rnd)
+					_, cursor = doFindingsPage(ctx, client, collector, cursor, cfg.ProjectID)
 				}
 				if len(ids) > 0 {
-					id := ids[rnd.Intn(len(ids))]
+					idx, err := cryptoIntn(len(ids))
+					if err != nil {
+						collector.Record(callEvent{Endpoint: "GET /api/v1/findings", TS: time.Now(), Error: err.Error()})
+						continue
+					}
+					id := ids[idx]
 					doGetFinding(ctx, client, collector, id)
 				}
 			}
-		}(time.Now().UnixNano() + int64(i)*101)
+		}()
 	}
 	wg.Wait()
 
@@ -74,11 +77,22 @@ func RunBrowse(ctx context.Context, cfg BrowseConfig) (ScenarioReport, error) {
 	return report, nil
 }
 
-func doFindingsPage(ctx context.Context, client *HTTPClient, collector *Collector, cursor, projectID string, rnd *rand.Rand) ([]string, string) {
+func doFindingsPage(ctx context.Context, client *HTTPClient, collector *Collector, cursor, projectID string) ([]string, string) {
+	severityIdx, err := cryptoIntn(4)
+	if err != nil {
+		collector.Record(callEvent{Endpoint: "GET /api/v1/findings", TS: time.Now(), Error: err.Error()})
+		return nil, ""
+	}
+	statusIdx, err := cryptoIntn(3)
+	if err != nil {
+		collector.Record(callEvent{Endpoint: "GET /api/v1/findings", TS: time.Now(), Error: err.Error()})
+		return nil, ""
+	}
+
 	values := url.Values{}
 	values.Set("limit", "50")
-	values.Set("severity", fmt.Sprintf("%d", 1+rnd.Intn(4)))
-	values.Set("status", fmt.Sprintf("%d", rnd.Intn(3)))
+	values.Set("severity", fmt.Sprintf("%d", 1+severityIdx))
+	values.Set("status", fmt.Sprintf("%d", statusIdx))
 	if projectID != "" {
 		values.Set("project_id", projectID)
 	}
