@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/badge/version-0.1.0b-dc2626)](https://github.com/nefrit0n/red-lycoris/releases)
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8)](https://golang.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)](https://www.postgresql.org/)
-[![License](https://img.shields.io/badge/license-TBD-lightgrey)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 ---
 
