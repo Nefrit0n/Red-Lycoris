@@ -309,7 +309,7 @@ export function FiltersPanel({
   }
 
   return (
-    <aside className="themed-scrollbar flex min-h-0 w-[280px] shrink-0 flex-col overflow-y-auto border-r border-zinc-800">
+    <aside className="themed-scrollbar flex h-full min-h-0 w-[280px] shrink-0 flex-col overflow-y-auto border-r border-zinc-800">
       <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
