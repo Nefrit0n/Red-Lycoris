@@ -2,17 +2,21 @@
   <img src="frontend/public/logo_full.svg" alt="Red Lycoris" width="360">
 </p>
 
-**On-premise ASOC-платформа** для централизованного хранения, дедупликации и приоритизации уязвимостей.
+<p align="center"><b>On-premise ASOC-платформа</b> для централизованного хранения, дедупликации и приоритизации уязвимостей.</p>
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![CI](https://github.com/Nefrit0n/Red-Lycoris/actions/workflows/ci.yml/badge.svg)](https://github.com/Nefrit0n/Red-Lycoris/actions/workflows/ci.yml)
-![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
-![DevSecOps](https://img.shields.io/badge/DevSecOps-platform-red)
-![Self Hosted](https://img.shields.io/badge/Self--Hosted-ready-success)
-![Status](https://img.shields.io/badge/status-active_development-orange)
+<p align="center">
+  <img src="https://img.shields.io/badge/ASOC_PLATFORM-930000?style=for-the-badge&logoColor=white" alt="ASOC">
+  <img src="https://img.shields.io/badge/ON--PREMISE-930000?style=for-the-badge" alt="On-Premise">
+  <img src="https://img.shields.io/badge/AIR--GAPPED-930000?style=for-the-badge" alt="Air-Gapped">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/GO-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/REACT-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React">
+  <img src="https://img.shields.io/badge/POSTGRESQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/REDIS-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis">
+  <img src="https://img.shields.io/badge/DOCKER-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+</p>
 
 ---
 
@@ -68,7 +72,12 @@ docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml up -
 ---
 
 ## Поддерживаемые сканеры
-
+![SAST](https://img.shields.io/badge/SAST-supported-22c55e?style=flat-square)
+![SCA](https://img.shields.io/badge/SCA-supported-22c55e?style=flat-square)
+![DAST](https://img.shields.io/badge/DAST-supported-22c55e?style=flat-square)
+![IaC](https://img.shields.io/badge/IaC-supported-22c55e?style=flat-square)
+![Secrets](https://img.shields.io/badge/Secrets-supported-22c55e?style=flat-square)
+![SARIF](https://img.shields.io/badge/SARIF-2.1.0-930000?style=flat-square)
 | Сканер | Формат | Парсер |
 |--------|--------|--------|
 | Semgrep / OpenGrep | SARIF 2.1.0 | `SARIFParser` |
@@ -83,7 +92,13 @@ docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml up -
 ---
 
 ## Источники обогащения
-
+![NVD](https://img.shields.io/badge/NVD-mirror-003366?style=flat-square)
+![EPSS](https://img.shields.io/badge/EPSS-integrated-8B0000?style=flat-square)
+![CISA KEV](https://img.shields.io/badge/CISA_KEV-integrated-C8102E?style=flat-square)
+![БДУ ФСТЭК](https://img.shields.io/badge/%D0%91%D0%94%D0%A3_%D0%A4%D0%A1%D0%A2%D0%AD%D0%9A-integrated-FFB300?style=flat-square)
+![OSV](https://img.shields.io/badge/OSV-integrated-10B981?style=flat-square)
+![CWE](https://img.shields.io/badge/CWE-Top_25-06B6D4?style=flat-square)
+![OWASP](https://img.shields.io/badge/OWASP-Top_10-000000?style=flat-square&logo=owasp&logoColor=white)
 | База | Частота | Режим |
 |------|---------|-------|
 | NVD API 2.0 | 2 часа (инкремент) | online / зеркало |
