@@ -34,8 +34,10 @@ RUN printf 'server {\n\
     listen 8080;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
+    resolver 127.0.0.11 ipv6=off;\n\
+    set $backend_upstream redlycoris-loadtest-backend:8080;\n\
     location /api/ {\n\
-    proxy_pass http://backend:8080;\n\
+    proxy_pass http://$backend_upstream;\n\
     proxy_set_header Host $host;\n\
     proxy_set_header X-Real-IP $remote_addr;\n\
     }\n\
@@ -43,9 +45,6 @@ RUN printf 'server {\n\
     try_files $uri $uri/ /index.html;\n\
     }\n\
     }\n' > /etc/nginx/conf.d/default.conf
-
-# run nginx as non-root user
-USER nginx
 
 EXPOSE 8080
 
