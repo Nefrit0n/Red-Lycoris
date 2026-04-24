@@ -1,7 +1,6 @@
 package loadtest
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -74,7 +73,7 @@ func GenerateSARIF(output string, size int, seed int64) (string, error) {
 	if size <= 0 {
 		return "", fmt.Errorf("size must be > 0")
 	}
-	rnd := rand.New(rand.NewSource(seed))
+	_ = seed // Kept for CLI compatibility; generation now uses crypto/rand.
 
 	report := sarifReport{
 		Schema:  "https://json.schemastore.org/sarif-2.1.0.json",
@@ -90,7 +89,11 @@ func GenerateSARIF(output string, size int, seed int64) (string, error) {
 	}
 
 	for i := 0; i < size; i++ {
-		cve := RealCVEs[rnd.Intn(len(RealCVEs))]
+		idx, err := cryptoIntn(len(RealCVEs))
+		if err != nil {
+			return "", err
+		}
+		cve := RealCVEs[idx]
 		ruleID := fmt.Sprintf("RL-CVE-%05d", i+1)
 		report.Runs[0].Tool.Driver.Rules[i] = sarifRule{
 			ID:   ruleID,
