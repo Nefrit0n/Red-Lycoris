@@ -161,7 +161,7 @@ export default function ProjectScans({ projectId }: { projectId: string }) {
           onChange={(e) => { setBranch(e.target.value); setCursor(undefined); }}
           className="h-8 w-48 border-zinc-700 bg-zinc-800 text-sm"
         />
-        <Select value={scanner} onValueChange={(v) => { setScanner(v); setCursor(undefined); }}>
+        <Select value={scanner} onValueChange={(v) => { setScanner(v ?? "all"); setCursor(undefined); }}>
           <SelectTrigger className="h-8 w-36 border-zinc-700 bg-zinc-800 text-sm">
             <SelectValue placeholder="Сканер" />
           </SelectTrigger>
@@ -172,7 +172,7 @@ export default function ProjectScans({ projectId }: { projectId: string }) {
             ))}
           </SelectContent>
         </Select>
-        <Select value={status} onValueChange={(v) => { setStatus(v); setCursor(undefined); }}>
+        <Select value={status} onValueChange={(v) => { setStatus(v ?? "all"); setCursor(undefined); }}>
           <SelectTrigger className="h-8 w-36 border-zinc-700 bg-zinc-800 text-sm">
             <SelectValue placeholder="Статус" />
           </SelectTrigger>

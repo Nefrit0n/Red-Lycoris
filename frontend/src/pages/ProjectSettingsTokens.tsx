@@ -199,10 +199,7 @@ export default function ProjectSettingsTokens({ projectId }: { projectId: string
 
       {/* Одноразовая модалка с токеном */}
       <Dialog open={resultOpen} onOpenChange={() => {}}>
-        <DialogContent
-          className="border-zinc-800 bg-zinc-900"
-          onPointerDownOutside={(e) => e.preventDefault()}
-        >
+        <DialogContent className="border-zinc-800 bg-zinc-900">
           <DialogHeader>
             <DialogTitle>Сохраните токен</DialogTitle>
           </DialogHeader>
