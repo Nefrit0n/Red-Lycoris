@@ -388,8 +388,14 @@ export default function FindingDetail() {
       if (!finding || updateStatus.isPending || finding.status === status) {
         return;
       }
-
-      updateStatus.mutate({ id: finding.id, status });
+      let note = "";
+      if (status === 4) {
+        note = window.prompt("Укажите комментарий для статуса «Риск принят»", "")?.trim() ?? "";
+        if (!note) {
+          return;
+        }
+      }
+      updateStatus.mutate({ id: finding.id, status, note });
     },
     [finding, updateStatus],
   );
