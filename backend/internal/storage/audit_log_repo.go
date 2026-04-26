@@ -559,8 +559,6 @@ func (r *AuditLogRepo) Stats(ctx context.Context, from, to time.Time) (AuditStat
 	stats := AuditStats{From: from, To: to, Histogram: make([]AuditHourStat, 0, 24)}
 	prevFrom := from.Add(-(to.Sub(from)))
 	prevTo := from
-	fromHour := from.UTC().Truncate(time.Hour)
-	toHour := to.UTC().Truncate(time.Hour)
 
 	const totalsQ = `
 		SELECT
@@ -595,8 +593,8 @@ func (r *AuditLogRepo) Stats(ctx context.Context, from, to time.Time) (AuditStat
 		),
 		series AS (
 			SELECT generate_series(
-				$1::timestamptz,
-				$2::timestamptz,
+				date_trunc('hour', b.from_ts),
+				date_trunc('hour', b.to_ts),
 				interval '1 hour'
 			) AS bucket
 			FROM bounds b
@@ -614,10 +612,10 @@ func (r *AuditLogRepo) Stats(ctx context.Context, from, to time.Time) (AuditStat
 		CROSS JOIN bounds b
 		LEFT JOIN audit_log a
 			ON date_trunc('hour', a.created_at) = s.bucket
-		   AND a.created_at >= $3::timestamptz AND a.created_at <= $4::timestamptz
+		   AND a.created_at >= b.from_ts AND a.created_at <= b.to_ts
 		GROUP BY s.bucket
 		ORDER BY s.bucket`
-	rows, err := r.pool.Query(ctx, histogramQ, fromHour, toHour, from, to)
+	rows, err := r.pool.Query(ctx, histogramQ, from, to)
 	if err != nil {
 		return AuditStats{}, fmt.Errorf("storage.AuditLogRepo.Stats: histogram: %w", err)
 	}
