@@ -87,6 +87,14 @@ func TestCanModifyUser(t *testing.T) {
 			wantErr: errSelfModification,
 		},
 		{
+			name:    "self reset MFA → forbidden",
+			repo:    &stubAdminCounter{count: 5},
+			actorID: sameID,
+			target:  regularUser(sameID),
+			action:  ActionResetMFA,
+			wantErr: errSelfModification,
+		},
+		{
 			name:    "self activate → allowed (не деструктивное)",
 			repo:    &stubAdminCounter{count: 5},
 			actorID: sameID,

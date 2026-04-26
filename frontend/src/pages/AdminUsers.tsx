@@ -58,6 +58,7 @@ export default function AdminUsers() {
   const [confirmReason, setConfirmReason] = useState("");
   const [passwordResetUser, setPasswordResetUser] = useState<AdminUser | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [resetReason, setResetReason] = useState("");
 
   const usersQuery = useQuery({
     queryKey: ["admin-users"],
@@ -81,8 +82,8 @@ export default function AdminUsers() {
   });
 
   const changeRoleMutation = useMutation({
-    mutationFn: ({ id, isAdmin }: { id: string; isAdmin: boolean }) =>
-      apiPatch(`/api/v1/admin/users/${id}/role`, { is_admin: isAdmin }),
+    mutationFn: ({ id, isAdmin, reason }: { id: string; isAdmin: boolean; reason?: string }) =>
+      apiPatch(`/api/v1/admin/users/${id}/role`, { is_admin: isAdmin, reason }),
     onSuccess: async () => {
       setConfirmAction(null);
       setConfirmReason("");
@@ -91,7 +92,8 @@ export default function AdminUsers() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: (id: string) => apiPost(`/api/v1/admin/users/${id}/deactivate`, {}),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiPost(`/api/v1/admin/users/${id}/deactivate`, { reason }),
     onSuccess: async () => {
       setConfirmAction(null);
       setConfirmReason("");
@@ -109,7 +111,8 @@ export default function AdminUsers() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiDelete(`/api/v1/admin/users/${id}`),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiDelete(`/api/v1/admin/users/${id}`, { reason }),
     onSuccess: async () => {
       setConfirmAction(null);
       setConfirmReason("");
@@ -118,11 +121,12 @@ export default function AdminUsers() {
   });
 
   const resetPasswordMutation = useMutation({
-    mutationFn: ({ id, password }: { id: string; password: string }) =>
-      apiPost(`/api/v1/admin/users/${id}/reset-password`, { new_password: password }),
+    mutationFn: ({ id, password, reason }: { id: string; password: string; reason: string }) =>
+      apiPost(`/api/v1/admin/users/${id}/reset-password`, { new_password: password, reason }),
     onSuccess: () => {
       setPasswordResetUser(null);
       setNewPassword("");
+      setResetReason("");
     },
   });
 
@@ -132,10 +136,12 @@ export default function AdminUsers() {
   const handleConfirm = () => {
     if (!confirmAction) return;
     const { type, user } = confirmAction;
-    if (type === "deactivate") deactivateMutation.mutate(user.id);
+    if (type === "deactivate") deactivateMutation.mutate({ id: user.id, reason: confirmReason.trim() });
     else if (type === "activate") activateMutation.mutate(user.id);
-    else if (type === "delete") deleteMutation.mutate(user.id);
-    else if (type === "removeAdmin") changeRoleMutation.mutate({ id: user.id, isAdmin: false });
+    else if (type === "delete") deleteMutation.mutate({ id: user.id, reason: confirmReason.trim() });
+    else if (type === "removeAdmin") {
+      changeRoleMutation.mutate({ id: user.id, isAdmin: false, reason: confirmReason.trim() });
+    }
     else if (type === "makeAdmin") changeRoleMutation.mutate({ id: user.id, isAdmin: true });
   };
 
@@ -396,6 +402,7 @@ export default function AdminUsers() {
             if (!open) {
               setPasswordResetUser(null);
               setNewPassword("");
+              setResetReason("");
             }
           }}
         >
@@ -414,6 +421,11 @@ export default function AdminUsers() {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                 />
+                <Input
+                  placeholder="Причина (обязательно, не менее 10 символов)"
+                  value={resetReason}
+                  onChange={(e) => setResetReason(e.target.value)}
+                />
                 <p className="text-xs text-zinc-500">
                   Все активные сессии пользователя будут завершены.
                 </p>
@@ -425,16 +437,21 @@ export default function AdminUsers() {
                 onClick={() => {
                   setPasswordResetUser(null);
                   setNewPassword("");
+                  setResetReason("");
                 }}
               >
                 Отмена
               </Button>
               <Button
                 variant="outline"
-                disabled={!newPassword || resetPasswordMutation.isPending}
+                disabled={!newPassword || resetReason.trim().length < 10 || resetPasswordMutation.isPending}
                 onClick={() => {
                   if (!passwordResetUser) return;
-                  resetPasswordMutation.mutate({ id: passwordResetUser.id, password: newPassword });
+                  resetPasswordMutation.mutate({
+                    id: passwordResetUser.id,
+                    password: newPassword,
+                    reason: resetReason.trim(),
+                  });
                 }}
               >
                 Сохранить
