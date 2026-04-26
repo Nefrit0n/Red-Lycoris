@@ -588,12 +588,18 @@ func (r *AuditLogRepo) Stats(ctx context.Context, from, to time.Time) (AuditStat
 	}
 
 	const histogramQ = `
-		WITH series AS (
+		WITH bounds AS (
+			SELECT
+				$1::timestamptz AS from_ts,
+				$2::timestamptz AS to_ts
+		),
+		series AS (
 			SELECT generate_series(
 				$1::timestamptz,
 				$2::timestamptz,
 				interval '1 hour'
 			) AS bucket
+			FROM bounds b
 		)
 		SELECT
 			s.bucket,
@@ -605,6 +611,7 @@ func (r *AuditLogRepo) Stats(ctx context.Context, from, to time.Time) (AuditStat
 			COUNT(*) FILTER (WHERE a.status_code >= 400 AND a.status_code < 500)::int AS client_4xx,
 			COUNT(*) FILTER (WHERE a.status_code >= 500)::int AS server_5xx
 		FROM series s
+		CROSS JOIN bounds b
 		LEFT JOIN audit_log a
 			ON date_trunc('hour', a.created_at) = s.bucket
 		   AND a.created_at >= $3::timestamptz AND a.created_at <= $4::timestamptz
