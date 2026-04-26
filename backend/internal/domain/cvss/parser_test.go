@@ -9,6 +9,8 @@ func TestParseV31(t *testing.T) {
 	}{
 		{name: "log4shell-like", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"},
 		{name: "local-lpe", vector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"},
+		{name: "cvss3.0", vector: "CVSS:3.0/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"},
+		{name: "without-prefix", vector: "AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"},
 	}
 
 	for _, tt := range tests {
@@ -25,13 +27,19 @@ func TestParseV31(t *testing.T) {
 }
 
 func TestParseV40(t *testing.T) {
-	vector := "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
-	res, err := ParseV40(vector)
-	if err != nil {
-		t.Fatalf("ParseV40() error = %v", err)
+	vectors := []string{
+		"CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+		"AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
 	}
-	if res.Raw != vector || res.AT != "N" || res.VC != "H" || res.SA != "N" {
-		t.Fatalf("unexpected parse result: %#v", res)
+
+	for _, vector := range vectors {
+		res, err := ParseV40(vector)
+		if err != nil {
+			t.Fatalf("ParseV40(%q) error = %v", vector, err)
+		}
+		if res.Raw != vector || res.AT != "N" || res.VC != "H" || res.SA != "N" {
+			t.Fatalf("unexpected parse result: %#v", res)
+		}
 	}
 }
 
