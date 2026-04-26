@@ -134,12 +134,14 @@ export default function AdminAudit() {
   const [liveEnabled, setLiveEnabled] = useState<boolean>(false);
   const [liveItems, setLiveItems] = useState<AuditFeedItem[]>([]);
   const [pendingItems, setPendingItems] = useState<AuditEntry[]>([]);
+  const defaultFrom = useMemo(() => new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), []);
+  const defaultTo = useMemo(() => new Date().toISOString(), []);
 
   const eventId = params.get("event") ?? undefined;
 
   const filter: AuditFilter = useMemo(() => ({
-    from: params.get("from") || undefined,
-    to: params.get("to") || undefined,
+    from: params.get("from") || defaultFrom,
+    to: params.get("to") || defaultTo,
     user_id: params.get("user_id") || undefined,
     resource_type: params.get("resource_type") || undefined,
     resource_id: params.get("resource_id") || undefined,
@@ -153,7 +155,7 @@ export default function AdminAudit() {
     request_id: params.get("request_id") || undefined,
     grouped: "true",
     limit: "100",
-  }), [params]);
+  }), [defaultFrom, defaultTo, params]);
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useAuditLog(filter);
   const { data: selectedEvent } = useAuditEvent(eventId);
