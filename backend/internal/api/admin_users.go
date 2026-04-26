@@ -3,9 +3,11 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -15,6 +17,73 @@ import (
 	"redlycoris/internal/domain"
 	"redlycoris/internal/storage"
 )
+
+func decodeJSONAllowEmpty(r *http.Request, dst any) error {
+	if r.Body == nil {
+		return nil
+	}
+	err := json.NewDecoder(r.Body).Decode(dst)
+	if err != nil && errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
+}
+
+func writeAdminUserAudit(
+	r *http.Request,
+	auditWriter interface{ Submit(storage.AuditRecord) },
+	actorID uuid.UUID,
+	targetID uuid.UUID,
+	action string,
+	before map[string]any,
+	after map[string]any,
+	reason string,
+) {
+	if auditWriter == nil {
+		return
+	}
+
+	resourceType := "user"
+	resourceID := targetID.String()
+	changes := make([]storage.AuditChange, 0, 3)
+	if before != nil || after != nil {
+		changes = append(changes, storage.AuditChange{
+			Field:  "state",
+			Before: before,
+			After:  after,
+		})
+	}
+	if trimmedReason := strings.TrimSpace(reason); trimmedReason != "" {
+		changes = append(changes, storage.AuditChange{
+			Field:  "reason",
+			Before: nil,
+			After:  trimmedReason,
+		})
+	}
+
+	rec := storage.AuditRecord{
+		ID:           mustUUIDv7(),
+		RequestID:    GetRequestID(r.Context()),
+		TraceID:      strings.TrimSpace(r.Header.Get("X-Trace-Id")),
+		Method:       r.Method,
+		Path:         r.URL.Path,
+		FullPath:     r.URL.RequestURI(),
+		StatusCode:   http.StatusOK,
+		UserAgent:    r.UserAgent(),
+		CreatedAt:    time.Now().UTC(),
+		UserID:       &actorID,
+		ResourceType: &resourceType,
+		ResourceID:   &resourceID,
+		Action:       &action,
+		RiskLevel:    "high",
+		Changes:      changes,
+	}
+	if ip := extractIP(r); strings.TrimSpace(ip) != "" {
+		masked := maskIP(ip)
+		rec.IP = &masked
+	}
+	auditWriter.Submit(rec)
+}
 
 func handleListUsers(usersRepo *storage.UsersRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +113,7 @@ func handleListUsers(usersRepo *storage.UsersRepo) http.HandlerFunc {
 	}
 }
 
-func handleCreateUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
+func handleCreateUser(usersRepo *storage.UsersRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
 	type request struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -93,19 +162,28 @@ func handleCreateUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create user")
 			return
 		}
+		if actor != nil {
+			writeAdminUserAudit(
+				r, auditWriter, actor.ID, u.ID, "create",
+				nil,
+				map[string]any{"email": u.Email, "full_name": u.FullName, "global_role": int(u.GlobalRole), "status": string(u.Status)},
+				"",
+			)
+		}
 
 		u.PasswordHash = ""
 		respondJSON(w, http.StatusCreated, map[string]any{"data": u})
 	}
 }
 
-func handleUpdateUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
+func handleUpdateUser(usersRepo *storage.UsersRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
 	type request struct {
 		FullName *string `json:"full_name"`
 		Email    *string `json:"email"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		actor, _ := UserFromContext(r.Context())
 		userID, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid user id")
@@ -130,6 +208,12 @@ func handleUpdateUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
 			return
 		}
 
+		before, err := usersRepo.GetByID(r.Context(), userID)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch user")
+			return
+		}
+
 		if err := usersRepo.Update(r.Context(), userID, fields); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update user")
 			return
@@ -141,14 +225,23 @@ func handleUpdateUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
 			return
 		}
 		updated.PasswordHash = ""
+		if actor != nil {
+			writeAdminUserAudit(
+				r, auditWriter, actor.ID, updated.ID, "update",
+				map[string]any{"email": before.Email, "full_name": before.FullName},
+				map[string]any{"email": updated.Email, "full_name": updated.FullName},
+				"",
+			)
+		}
 		respondJSON(w, http.StatusOK, map[string]any{"data": updated})
 	}
 }
 
 // handleChangeUserRole меняет глобальную роль пользователя с проверками self-lockout.
-func handleChangeUserRole(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo) http.HandlerFunc {
+func handleChangeUserRole(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
 	type request struct {
-		IsAdmin bool `json:"is_admin"`
+		IsAdmin bool   `json:"is_admin"`
+		Reason  string `json:"reason"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -206,14 +299,29 @@ func handleChangeUserRole(usersRepo *storage.UsersRepo, sessionsRepo *storage.Se
 			return
 		}
 		updated.PasswordHash = ""
+		writeAdminUserAudit(
+			r, auditWriter, actor.ID, updated.ID, "role_change",
+			map[string]any{"global_role": int(target.GlobalRole)},
+			map[string]any{"global_role": int(updated.GlobalRole)},
+			req.Reason,
+		)
 		respondJSON(w, http.StatusOK, map[string]any{"data": updated})
 	}
 }
 
 // handleDeactivateUser деактивирует пользователя и завершает все его сессии.
-func handleDeactivateUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo) http.HandlerFunc {
+func handleDeactivateUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
+	type request struct {
+		Reason string `json:"reason"`
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, _ := UserFromContext(r.Context())
+		var req request
+		if err := decodeJSONAllowEmpty(r, &req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
 
 		userID, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
@@ -248,14 +356,30 @@ func handleDeactivateUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.Se
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to revoke sessions")
 			return
 		}
+		writeAdminUserAudit(
+			r, auditWriter, actor.ID, target.ID, "deactivate",
+			map[string]any{"status": string(target.Status), "is_active": target.IsActive},
+			map[string]any{"status": string(domain.UserStatusDisabled), "is_active": false},
+			req.Reason,
+		)
 
 		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]string{"status": "deactivated"}})
 	}
 }
 
 // handleActivateUser активирует ранее отключённого пользователя.
-func handleActivateUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
+func handleActivateUser(usersRepo *storage.UsersRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
+	type request struct {
+		Reason string `json:"reason"`
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
+		actor, _ := UserFromContext(r.Context())
+		var req request
+		if err := decodeJSONAllowEmpty(r, &req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
 		userID, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid user id")
@@ -285,6 +409,14 @@ func handleActivateUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to activate user")
 			return
 		}
+		if actor != nil {
+			writeAdminUserAudit(
+				r, auditWriter, actor.ID, target.ID, "activate",
+				map[string]any{"status": string(target.Status), "is_active": target.IsActive},
+				map[string]any{"status": string(domain.UserStatusActive), "is_active": true},
+				req.Reason,
+			)
+		}
 
 		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]string{"status": "activated"}})
 	}
@@ -292,9 +424,18 @@ func handleActivateUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
 
 // handleDeleteUser выполняет soft delete: деактивирует и обезличивает пользователя,
 // сохраняя запись для аудита.
-func handleDeleteUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo) http.HandlerFunc {
+func handleDeleteUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
+	type request struct {
+		Reason string `json:"reason"`
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, _ := UserFromContext(r.Context())
+		var req request
+		if err := decodeJSONAllowEmpty(r, &req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
 
 		userID, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
@@ -330,14 +471,21 @@ func handleDeleteUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.Sessio
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to revoke sessions")
 			return
 		}
+		writeAdminUserAudit(
+			r, auditWriter, actor.ID, target.ID, "delete",
+			map[string]any{"status": string(target.Status), "is_active": target.IsActive},
+			map[string]any{"status": string(domain.UserStatusDisabled), "is_active": false},
+			req.Reason,
+		)
 
 		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]string{"status": "deleted"}})
 	}
 }
 
-func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo) http.HandlerFunc {
+func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
 	type request struct {
 		NewPassword string `json:"new_password"`
+		Reason      string `json:"reason"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -389,6 +537,12 @@ func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to revoke sessions")
 			return
 		}
+		writeAdminUserAudit(
+			r, auditWriter, actor.ID, target.ID, "password_reset",
+			map[string]any{"password_changed": false},
+			map[string]any{"password_changed": true},
+			req.Reason,
+		)
 
 		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]string{"status": "password reset"}})
 	}
