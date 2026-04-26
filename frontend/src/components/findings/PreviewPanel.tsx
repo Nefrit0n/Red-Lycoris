@@ -574,9 +574,16 @@ export function PreviewPanel({
     if (!finding || updateStatus.isPending || finding.status === status) {
       return;
     }
+    let note = "";
+    if (status === 4) {
+      note = window.prompt("Укажите комментарий для статуса «Риск принят»", "")?.trim() ?? "";
+      if (!note) {
+        return;
+      }
+    }
     setStatusError(null);
     updateStatus.mutate(
-      { id: finding.id, status },
+      { id: finding.id, status, note },
       {
         onError: (e) => {
           setStatusError(
