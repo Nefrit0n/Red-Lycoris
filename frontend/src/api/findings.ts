@@ -326,9 +326,10 @@ export function useUpdateStatus() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: number }) =>
+    mutationFn: ({ id, status, note }: { id: string; status: number; note?: string }) =>
       apiPatch<{ data: { status: string } }>(`/api/v1/findings/${id}/status`, {
         status,
+        note: note ?? "",
       }),
 
     onSuccess: async (_result, variables) => {
