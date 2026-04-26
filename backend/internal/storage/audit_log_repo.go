@@ -587,7 +587,11 @@ func (r *AuditLogRepo) Stats(ctx context.Context, from, to time.Time) (AuditStat
 
 	const histogramQ = `
 		WITH series AS (
-			SELECT generate_series(date_trunc('hour', $1), date_trunc('hour', $2), interval '1 hour') AS bucket
+			SELECT generate_series(
+				date_trunc('hour', $1::timestamptz),
+				date_trunc('hour', $2::timestamptz),
+				interval '1 hour'
+			) AS bucket
 		)
 		SELECT
 			s.bucket,
