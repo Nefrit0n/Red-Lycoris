@@ -59,11 +59,18 @@ export default function CvssBreakdown({ label, block, dictionary, order, compact
         <h4 className={cn("font-medium text-zinc-100", compact ? "text-xs" : "text-sm")}>{label}</h4>
         <div className="flex items-center gap-2">
           <ScoreBadge score={block.score ?? null} />
-          {block.vector && (
-            <code className={cn("font-mono text-zinc-500", compact ? "text-[10px]" : "text-xs")}>{block.vector}</code>
-          )}
         </div>
       </div>
+      {block.vector && (
+        <code
+          className={cn(
+            "block w-full overflow-x-auto rounded border border-zinc-800 bg-zinc-950/70 px-2 py-1 font-mono text-zinc-400",
+            compact ? "text-[10px]" : "text-xs",
+          )}
+        >
+          {block.vector}
+        </code>
+      )}
       {block.metrics && (
         <div className={cn("grid gap-2", compact ? "grid-cols-2" : "grid-cols-2 md:grid-cols-4")}>
           {order.map((key) => {
