@@ -1,7 +1,7 @@
 # ── Stage 1: Build ──
-FROM golang:1.25-alpine3.21 AS builder
+FROM golang:1.25-bookworm AS builder
 
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
@@ -25,11 +25,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -ldflags="-s -w" -o /build/admin ./cmd/admin
 
 # ── Stage 2: Run ──
-FROM alpine:3.21
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache --upgrade ca-certificates tzdata curl nghttp2-libs musl musl-utils
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata curl && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup -g 1000 app && adduser -u 1000 -G app -s /sbin/nologin -D app
+RUN groupadd -g 1000 app && useradd -u 1000 -g app -M -d /app -s /usr/sbin/nologin app
 
 WORKDIR /app
 
