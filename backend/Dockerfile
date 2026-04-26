@@ -1,8 +1,6 @@
 # ── Stage 1: Build ──
 FROM golang:1.25-bookworm AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /build
 
 COPY go.mod go.sum ./
@@ -25,25 +23,14 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -ldflags="-s -w" -o /build/admin ./cmd/admin
 
 # ── Stage 2: Run ──
-FROM debian:bookworm-slim
-
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata curl && rm -rf /var/lib/apt/lists/*
-
-RUN groupadd -g 1000 app && useradd -u 1000 -g app -M -d /app -s /usr/sbin/nologin app
+# Distroless runtime avoids package-manager RUN steps and keeps the image minimal.
+FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-COPY --from=builder /build/redlycoris .
-COPY --from=builder /build/admin .
-COPY --from=builder /build/migrations ./migrations
-
-RUN chown -R app:app /app
-
-USER 1000:1000
+COPY --from=builder /build/redlycoris /app/redlycoris
+COPY --from=builder /build/admin /app/admin
+COPY --from=builder /build/migrations /app/migrations
 
 EXPOSE 8080
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
-
-ENTRYPOINT ["./redlycoris"]
+ENTRYPOINT ["/app/redlycoris"]
