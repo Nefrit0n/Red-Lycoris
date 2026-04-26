@@ -204,7 +204,7 @@ function BduEntryCard({ entry }: { entry: BduEntry }) {
           {entry.exploitation_way && <StatusPill label="Эксплуатация" value={entry.exploitation_way} tone="neutral" />}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
           {entry.cvss_v4 && (
             <CvssBreakdown
               label="CVSS 4.0"
