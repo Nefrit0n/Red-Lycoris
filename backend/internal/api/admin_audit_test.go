@@ -79,3 +79,42 @@ func TestDeriveAuditRisk(t *testing.T) {
 		t.Fatalf("expected risk signals")
 	}
 }
+
+func TestInferAuditChangesDelete(t *testing.T) {
+	resourceType := "finding-comment"
+	resourceID := "1bfe3-468a-8c24-efd14f00c5e9"
+	action := "delete"
+	rec := storage.AuditRecord{
+		ResourceType: &resourceType,
+		ResourceID:   &resourceID,
+		Action:       &action,
+		StatusCode:   204,
+	}
+
+	changes := inferAuditChanges(rec)
+	if len(changes) != 1 {
+		t.Fatalf("expected one inferred change, got %d", len(changes))
+	}
+	if changes[0].Field != "resource" {
+		t.Fatalf("expected field=resource, got %s", changes[0].Field)
+	}
+	if changes[0].Before == nil || changes[0].After != nil {
+		t.Fatalf("expected delete before set and after=nil")
+	}
+}
+
+func TestInferAuditChangesSkipsErrors(t *testing.T) {
+	resourceType := "finding"
+	resourceID := "7941dffa--948a-be44d798baa7"
+	action := "delete"
+	rec := storage.AuditRecord{
+		ResourceType: &resourceType,
+		ResourceID:   &resourceID,
+		Action:       &action,
+		StatusCode:   404,
+	}
+
+	if changes := inferAuditChanges(rec); len(changes) != 0 {
+		t.Fatalf("expected no inferred changes for error status, got %d", len(changes))
+	}
+}
