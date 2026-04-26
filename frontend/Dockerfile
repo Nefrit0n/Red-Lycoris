@@ -71,7 +71,7 @@ server {
     index index.html;
 
     resolver 127.0.0.11 ipv6=off;
-    set $backend_upstream redlycoris-loadtest-backend:8080;
+    set $backend_upstream backend:8080;
 
     location /api/ {
         proxy_pass http://$backend_upstream;
