@@ -388,12 +388,13 @@ export default function FindingDetail() {
       if (!finding || updateStatus.isPending || finding.status === status) {
         return;
       }
-      let note = "";
-      if (status === 4) {
-        note = window.prompt("Укажите комментарий для статуса «Риск принят»", "")?.trim() ?? "";
-        if (!note) {
-          return;
-        }
+      const targetStatus = statusOptions.find((option) => option.value === status);
+      const note = window.prompt(
+        `Укажите комментарий для статуса «${targetStatus?.label ?? "Выбранный статус"}»`,
+        "",
+      )?.trim() ?? "";
+      if (!note) {
+        return;
       }
       updateStatus.mutate({ id: finding.id, status, note });
     },
