@@ -153,7 +153,7 @@ services:
     container_name: redlycoris-frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:${FRONTEND_INTERNAL_PORT:-8080}"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
       VITE_API_URL: "http://localhost:${API_PORT:-8080}"
       VITE_PROXY_TARGET: "http://backend:8080"
