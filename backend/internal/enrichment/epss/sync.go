@@ -17,7 +17,35 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const urlTemplate = "https://epss.empiricalsecurity.com/epss_scores-%s.csv.gz"
+type urlSource struct {
+	name       string
+	urlForDate func(time.Time) string
+}
+
+var urlSources = []urlSource{
+	{
+		name: "cyentia",
+		urlForDate: func(d time.Time) string {
+			return fmt.Sprintf("https://epss.cyentia.com/epss_scores-%s.csv.gz", d.Format("2006-01-02"))
+		},
+	},
+	{
+		name: "empiricalsecurity",
+		urlForDate: func(d time.Time) string {
+			return fmt.Sprintf("https://epss.empiricalsecurity.com/epss_scores-%s.csv.gz", d.Format("2006-01-02"))
+		},
+	},
+	{
+		name: "github-empiricalsec",
+		urlForDate: func(d time.Time) string {
+			return fmt.Sprintf(
+				"https://raw.githubusercontent.com/empiricalsec/epss_scores/main/%s/epss_scores-%s.csv.gz",
+				d.Format("2006"),
+				d.Format("2006-01-02"),
+			)
+		},
+	},
+}
 
 type EPSSSyncer struct {
 	pool   *pgxpool.Pool
@@ -36,34 +64,49 @@ func (s *EPSSSyncer) Name() string { return "epss" }
 func (s *EPSSSyncer) Sync(ctx context.Context) error {
 	// Пробуем сегодня и вчера — файл публикуется с задержкой
 	now := time.Now().UTC()
-	dates := []string{
-		now.Format("2006-01-02"),
-		now.AddDate(0, 0, -1).Format("2006-01-02"),
+	dateCandidates := []time.Time{
+		now,
+		now.AddDate(0, 0, -1),
 	}
 
 	var gzBody []byte
 	var usedURL string
 
-	for _, date := range dates {
-		url := fmt.Sprintf(urlTemplate, date)
+	for _, source := range urlSources {
+		for _, date := range dateCandidates {
+			url := source.urlForDate(date)
 
-		body, err := s.downloadWithRetry(ctx, url)
-		if err != nil {
-			slog.Warn("EPSS download failed for date candidate", "url", url, "error", err)
-			continue
-		}
-		if len(body) == 0 {
-			slog.Warn("EPSS download returned empty body", "url", url)
-			continue
-		}
+			body, err := s.downloadWithRetry(ctx, url)
+			if err != nil {
+				slog.Warn("EPSS download failed for date candidate", "url", url, "error", err)
+				continue
+			}
+			if len(body) == 0 {
+				slog.Warn("EPSS download returned empty body", "url", url)
+				continue
+			}
 
-		gzBody = body
-		usedURL = url
-		break
+			gzBody = body
+			usedURL = url
+			break
+		}
+		if len(gzBody) > 0 {
+			break
+		}
 	}
 
 	if len(gzBody) == 0 {
-		return fmt.Errorf("epss.Sync: no EPSS file available for dates %v", dates)
+		attemptedDates := make([]string, 0, len(dateCandidates))
+		for _, d := range dateCandidates {
+			attemptedDates = append(attemptedDates, d.Format("2006-01-02"))
+		}
+
+		attemptedSources := make([]string, 0, len(urlSources))
+		for _, src := range urlSources {
+			attemptedSources = append(attemptedSources, src.name)
+		}
+
+		return fmt.Errorf("epss.Sync: no EPSS file available for sources=%v dates=%v", attemptedSources, attemptedDates)
 	}
 
 	slog.Info("EPSS downloading completed", "url", usedURL, "bytes", len(gzBody))
@@ -297,6 +340,9 @@ func (s *EPSSSyncer) upsert(ctx context.Context, records []epssRecord, scoreDate
 		    percentile = EXCLUDED.percentile,
 		    score_date = EXCLUDED.score_date,
 		    synced_at  = now()
+		WHERE epss_scores.epss_score IS DISTINCT FROM EXCLUDED.epss_score
+		   OR epss_scores.percentile IS DISTINCT FROM EXCLUDED.percentile
+		   OR epss_scores.score_date IS DISTINCT FROM EXCLUDED.score_date
 	`, scoreDate)
 	if err != nil {
 		return fmt.Errorf("upsert from staging: %w", err)
@@ -309,6 +355,8 @@ func (s *EPSSSyncer) upsert(ctx context.Context, records []epssRecord, scoreDate
 		ON CONFLICT (cve_id, score_date) DO UPDATE
 		SET epss_score = EXCLUDED.epss_score,
 		    percentile = EXCLUDED.percentile
+		WHERE epss_history.epss_score IS DISTINCT FROM EXCLUDED.epss_score
+		   OR epss_history.percentile IS DISTINCT FROM EXCLUDED.percentile
 	`, scoreDate)
 	if err != nil {
 		return fmt.Errorf("insert history: %w", err)
