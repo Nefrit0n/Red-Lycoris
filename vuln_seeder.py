@@ -1,44 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-vuln_seeder.py — генератор тестовых уязвимостей для ASOC/DefectDojo-like платформ.
+vuln_seeder_ru.py — генератор тестовых уязвимостей для Red Lycoris / ASOC.
 
-Назначение
-----------
-Наполнение проекта реалистичными findings всех типов (SCA / SAST / DAST / IaC /
-Secrets) с РЕАЛЬНЫМИ CVE и CWE — чтобы механизм enrichment (NVD, EPSS, CISA KEV,
-BDU/ФСТЭК, OSV, CWE) нашёл максимум совпадений при обогащении.
+Что делает:
+  - генерирует SCA/SAST/DAST/IaC/Secrets findings;
+  - сохраняет Generic JSON payload в файл;
+  - импортирует findings в Red Lycoris через API;
+  - умеет создавать тестовые проекты;
+  - поддерживает Bearer token и session cookie;
+  - имеет русифицированный help и логи.
 
-Целевой формат импорта — универсальный "Generic JSON":
-    {
-      "project_id": "<uuid>",
-      "source_type": "<scanner>",
-      "findings": [ { ... } ]
-    }
-
-Совместимость
--------------
-- Python >= 3.8
-- Только stdlib (urllib, argparse, json, uuid, random, time)
-- Проект-независимый: положил файл куда угодно и запустил
-
-Быстрый старт
--------------
-    # 1000 findings в локальный RedLycoris (создаст 5 проектов автоматически)
-    python vuln_seeder.py --api-url http://localhost:8080 --count 1000
-
-    # В конкретный проект, только SCA и SAST, батчи по 500
-    python vuln_seeder.py --count 5000 \
-        --project-id 11111111-2222-3333-4444-555555555555 \
-        --kinds sca,sast --batch-size 500
-
-    # Офлайн — сохранить JSON-файл без отправки
-    python vuln_seeder.py --count 200 --output findings.json --dry-run
-
-    # С авторизацией (Bearer) и нестандартным таймаутом
-    python vuln_seeder.py --count 10000 --auth-token eyJhbGciOi... --timeout 60
-
-Автор: AppSec / DevSecOps utility.
+Требования:
+  - Python >= 3.8
+  - Только stdlib
 """
 
 from __future__ import annotations
@@ -47,7 +22,6 @@ import argparse
 import json
 import os
 import random
-import string
 import sys
 import time
 import urllib.error
@@ -59,13 +33,107 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 
-# =====================================================================
-# 1. ПУЛЫ ДАННЫХ
-# =====================================================================
-# Всё что ниже — реально существующие CVE/CWE/правила сканеров/пакеты.
-# Это даёт высокий процент hit'ов при обогащении NVD/EPSS/KEV/BDU/OSV.
+APP_NAME = "Red Lycoris Vuln Seeder"
+APP_VERSION = "1.1.0"
 
-# ----- Проекты по умолчанию ------------------------------------------
+
+# =============================================================================
+# ЛОГИ / CLI
+# =============================================================================
+
+
+class Colors:
+    bold = ""
+    dim = ""
+    reset = ""
+    info = ""
+    ok = ""
+    warn = ""
+    error = ""
+
+
+def setup_colors() -> Colors:
+    colors = Colors()
+    if os.environ.get("NO_COLOR") or not sys.stderr.isatty():
+        return colors
+    colors.bold = "\033[1m"
+    colors.dim = "\033[2m"
+    colors.reset = "\033[0m"
+    colors.info = "\033[36m"
+    colors.ok = "\033[32m"
+    colors.warn = "\033[33m"
+    colors.error = "\033[31m"
+    return colors
+
+
+COLORS = setup_colors()
+
+
+def utc_now() -> str:
+    return (
+        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
+
+
+def log(level: str, message: str, *, quiet: bool = False) -> None:
+    if quiet and level in {"ИНФО", "ОК"}:
+        return
+    color = {
+        "ИНФО": COLORS.info,
+        "ОК": COLORS.ok,
+        "ВНИМАНИЕ": COLORS.warn,
+        "ОШИБКА": COLORS.error,
+    }.get(level, "")
+    print(f"{utc_now()} [{color}{level}{COLORS.reset}] {message}", file=sys.stderr)
+
+
+def die(message: str, exit_code: int = 1) -> None:
+    log("ОШИБКА", message)
+    raise SystemExit(exit_code)
+
+
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("ожидается целое число") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("значение должно быть больше 0")
+    return parsed
+
+
+def positive_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("ожидается число") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("значение должно быть больше 0")
+    return parsed
+
+
+def parse_header(value: str) -> Tuple[str, str]:
+    if ":" not in value:
+        raise argparse.ArgumentTypeError(
+            "заголовок должен быть в формате 'Name: Value'"
+        )
+    name, header_value = value.split(":", 1)
+    name = name.strip()
+    header_value = header_value.strip()
+    if not name or not header_value:
+        raise argparse.ArgumentTypeError(
+            "имя и значение заголовка не могут быть пустыми"
+        )
+    return name, header_value
+
+
+# =============================================================================
+# ПУЛЫ ДАННЫХ
+# =============================================================================
+# Пулы намеренно лежат в одном файле, чтобы скрипт можно было кинуть на любой стенд.
+# CVE/CWE/rule_id взяты из реальных классов уязвимостей и популярных сканеров.
+
+
 DEFAULT_PROJECTS: List[Dict[str, Any]] = [
     {
         "name": "platform-backend",
@@ -90,54 +158,41 @@ DEFAULT_PROJECTS: List[Dict[str, Any]] = [
     {
         "name": "data-pipeline",
         "description": "ETL and data processing services",
-        "tags": ["python", "spark", "etl"],
+        "tags": ["python", "etl"],
     },
     {
         "name": "billing-service",
-        "description": "Billing, subscriptions and payments",
-        "tags": ["go", "backend", "payments"],
+        "description": "Billing and payments",
+        "tags": ["backend", "payments"],
     },
     {
         "name": "identity-provider",
         "description": "SSO / OIDC identity broker",
-        "tags": ["java", "security", "iam"],
+        "tags": ["security", "iam"],
     },
     {
         "name": "ml-inference",
         "description": "Online model inference service",
-        "tags": ["python", "ml", "gpu"],
+        "tags": ["python", "ml"],
     },
 ]
 
 
-# ----- CVE пулы: только РЕАЛЬНЫЕ ID (есть в NVD, большинство и в KEV/EPSS) ---
-# Источники: CISA KEV, крупные публичные инциденты, CVE Top-50.
 KEV_CVES: List[str] = [
-    # 2024
     "CVE-2024-3094",
     "CVE-2024-21626",
     "CVE-2024-23897",
     "CVE-2024-27198",
     "CVE-2024-21887",
-    "CVE-2024-21412",
     "CVE-2024-3400",
     "CVE-2024-24919",
-    "CVE-2024-20353",
-    "CVE-2024-20359",
     "CVE-2024-6387",
     "CVE-2024-4577",
-    "CVE-2024-1709",
-    "CVE-2024-5806",
     "CVE-2024-1086",
-    "CVE-2024-4978",
     "CVE-2024-49138",
-    "CVE-2024-30088",
     "CVE-2024-38080",
-    "CVE-2024-38112",
-    # 2023
     "CVE-2023-4863",
     "CVE-2023-34362",
-    "CVE-2023-46805",
     "CVE-2023-44487",
     "CVE-2023-38545",
     "CVE-2023-22527",
@@ -145,21 +200,12 @@ KEV_CVES: List[str] = [
     "CVE-2023-50164",
     "CVE-2023-20198",
     "CVE-2023-27997",
-    "CVE-2023-0669",
     "CVE-2023-3519",
-    "CVE-2023-2868",
-    "CVE-2023-35078",
-    "CVE-2023-45133",
     "CVE-2023-22515",
     "CVE-2023-28252",
     "CVE-2023-23397",
     "CVE-2023-36884",
-    "CVE-2023-29357",
-    "CVE-2023-24489",
-    "CVE-2023-49103",
     "CVE-2023-4966",
-    "CVE-2023-20269",
-    # 2022
     "CVE-2022-22965",
     "CVE-2022-26134",
     "CVE-2022-30190",
@@ -168,15 +214,7 @@ KEV_CVES: List[str] = [
     "CVE-2022-47966",
     "CVE-2022-41040",
     "CVE-2022-41082",
-    "CVE-2022-26925",
-    "CVE-2022-29464",
-    "CVE-2022-47986",
-    "CVE-2022-0492",
-    "CVE-2022-22963",
     "CVE-2022-42889",
-    "CVE-2022-22947",
-    "CVE-2022-40684",
-    # 2021
     "CVE-2021-44228",
     "CVE-2021-45046",
     "CVE-2021-44832",
@@ -185,14 +223,10 @@ KEV_CVES: List[str] = [
     "CVE-2021-34527",
     "CVE-2021-34473",
     "CVE-2021-26855",
-    "CVE-2021-40539",
     "CVE-2021-22205",
-    "CVE-2021-21972",
     "CVE-2021-42013",
     "CVE-2021-41773",
     "CVE-2021-3156",
-    "CVE-2021-20028",
-    # 2020 и ранее (legacy, часто до сих пор живут в зависимостях)
     "CVE-2020-1472",
     "CVE-2020-0796",
     "CVE-2020-14882",
@@ -206,67 +240,53 @@ KEV_CVES: List[str] = [
     "CVE-2014-6271",
 ]
 
-# CVE для SCA-пула (популярные библиотеки) — часто встречается в Dependency-Check/Trivy
+
 SCA_CVES: List[str] = [
-    # log4j
     "CVE-2021-44228",
     "CVE-2021-45046",
     "CVE-2021-44832",
     "CVE-2021-45105",
-    # Spring
     "CVE-2022-22965",
     "CVE-2022-22963",
     "CVE-2022-22947",
     "CVE-2016-1000027",
-    # lodash
     "CVE-2019-10744",
     "CVE-2020-8203",
     "CVE-2018-16487",
     "CVE-2021-23337",
-    # Jackson
     "CVE-2019-12384",
     "CVE-2020-36518",
     "CVE-2022-42003",
     "CVE-2022-42004",
-    # requests / urllib3
     "CVE-2023-32681",
     "CVE-2023-43804",
     "CVE-2023-45803",
     "CVE-2024-35195",
-    # Django / Flask / Werkzeug / Jinja2
     "CVE-2023-43665",
     "CVE-2023-46136",
     "CVE-2023-30861",
     "CVE-2024-22195",
-    # Rails / Rack
     "CVE-2022-44572",
     "CVE-2023-27530",
     "CVE-2023-28362",
     "CVE-2024-26141",
-    # Node / Express / axios / ws / nth-check / semver / json5
-    "CVE-2022-24999",
     "CVE-2024-39338",
     "CVE-2024-37890",
-    "CVE-2020-7608",
     "CVE-2022-25883",
     "CVE-2022-46175",
-    # OpenSSL / curl / libwebp
     "CVE-2022-0778",
     "CVE-2023-0286",
     "CVE-2023-38545",
     "CVE-2023-4863",
-    # Apache Commons
     "CVE-2022-42889",
     "CVE-2021-40438",
-    # Tomcat / Netty
     "CVE-2022-42252",
     "CVE-2023-4586",
 ]
 
 
-# ----- CWE pool: OWASP Top 25 + CWE Top 25 ---------------------------
 CWE_POOL: List[Tuple[int, str]] = [
-    (79, "Cross-site Scripting (XSS)"),
+    (79, "Cross-site Scripting"),
     (89, "SQL Injection"),
     (78, "OS Command Injection"),
     (77, "Command Injection"),
@@ -274,44 +294,34 @@ CWE_POOL: List[Tuple[int, str]] = [
     (94, "Code Injection"),
     (502, "Deserialization of Untrusted Data"),
     (798, "Use of Hard-coded Credentials"),
-    (352, "Cross-Site Request Forgery (CSRF)"),
+    (352, "CSRF"),
     (287, "Improper Authentication"),
     (862, "Missing Authorization"),
     (863, "Incorrect Authorization"),
     (284, "Improper Access Control"),
     (639, "Authorization Bypass Through User-Controlled Key"),
-    (918, "Server-Side Request Forgery (SSRF)"),
-    (611, "XML External Entity (XXE)"),
+    (918, "SSRF"),
+    (611, "XXE"),
     (601, "Open Redirect"),
-    (434, "Unrestricted Upload of File with Dangerous Type"),
-    (327, "Use of a Broken or Risky Cryptographic Algorithm"),
-    (328, "Use of Weak Hash"),
-    (330, "Use of Insufficiently Random Values"),
+    (434, "Unrestricted Upload"),
+    (327, "Broken Cryptographic Algorithm"),
+    (328, "Weak Hash"),
+    (330, "Insufficiently Random Values"),
     (20, "Improper Input Validation"),
     (200, "Exposure of Sensitive Information"),
-    (532, "Insertion of Sensitive Information into Log File"),
-    (209, "Generation of Error Message Containing Sensitive Information"),
+    (532, "Sensitive Data in Logs"),
+    (209, "Error Message with Sensitive Information"),
     (1321, "Prototype Pollution"),
-    (400, "Uncontrolled Resource Consumption (DoS)"),
-    (732, "Incorrect Permission Assignment for Critical Resource"),
+    (400, "Uncontrolled Resource Consumption"),
+    (732, "Incorrect Permissions"),
     (276, "Incorrect Default Permissions"),
-    (89, "SQL Injection"),
-    (125, "Out-of-bounds Read"),
-    (787, "Out-of-bounds Write"),
-    (416, "Use After Free"),
-    (190, "Integer Overflow or Wraparound"),
-    (476, "NULL Pointer Dereference"),
-    (119, "Improper Restriction of Operations within Bounds of a Memory Buffer"),
     (295, "Improper Certificate Validation"),
-    (319, "Cleartext Transmission of Sensitive Information"),
-    (306, "Missing Authentication for Critical Function"),
+    (319, "Cleartext Transmission"),
+    (306, "Missing Authentication"),
     (522, "Insufficiently Protected Credentials"),
-    (798, "Hard-coded Credentials"),
-    (770, "Allocation of Resources Without Limits or Throttling"),
 ]
 
 
-# ----- SCA: компоненты по экосистемам --------------------------------
 SCA_COMPONENTS: Dict[str, List[str]] = {
     "npm": [
         "lodash",
@@ -324,14 +334,10 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
         "moment",
         "jquery",
         "bootstrap",
-        "chalk",
         "ws",
         "node-fetch",
         "serialize-javascript",
-        "underscore",
-        "async",
         "minimist",
-        "yargs-parser",
         "handlebars",
         "mongoose",
         "passport",
@@ -340,13 +346,10 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
         "debug",
         "ejs",
         "glob",
-        "http-proxy-middleware",
         "marked",
         "node-forge",
-        "pug",
         "qs",
         "tough-cookie",
-        "y18n",
         "immer",
         "nth-check",
         "postcss",
@@ -372,7 +375,6 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
         "numpy",
         "pandas",
         "tensorflow",
-        "scikit-learn",
         "boto3",
         "sqlalchemy",
         "pip",
@@ -384,7 +386,6 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
         "redis",
         "twisted",
         "pycryptodome",
-        "pytest",
     ],
     "maven": [
         "log4j-core",
@@ -402,8 +403,6 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
         "tomcat-catalina",
         "dom4j",
         "guava",
-        "junit",
-        "mockito-core",
         "xstream",
         "snakeyaml",
         "spring-security-core",
@@ -411,8 +410,6 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
     "go": [
         "github.com/gin-gonic/gin",
         "github.com/gorilla/mux",
-        "github.com/prometheus/client_golang",
-        "github.com/sirupsen/logrus",
         "golang.org/x/crypto",
         "golang.org/x/net",
         "golang.org/x/text",
@@ -423,17 +420,7 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
         "k8s.io/kubernetes",
         "github.com/hashicorp/consul",
     ],
-    "nuget": [
-        "Newtonsoft.Json",
-        "System.Text.Json",
-        "Microsoft.AspNetCore.App",
-        "Npgsql",
-        "Serilog",
-        "AutoMapper",
-        "EntityFramework",
-        "System.Net.Http",
-        "Microsoft.Identity.Client",
-    ],
+    "nuget": ["Newtonsoft.Json", "System.Text.Json", "Npgsql", "Serilog", "AutoMapper"],
     "rubygems": [
         "rails",
         "rack",
@@ -442,10 +429,6 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
         "redis",
         "sidekiq",
         "devise",
-        "json",
-        "actionpack",
-        "activerecord",
-        "openssl",
         "loofah",
     ],
     "cargo": [
@@ -457,13 +440,11 @@ SCA_COMPONENTS: Dict[str, List[str]] = {
         "reqwest",
         "rocket",
         "tower",
-        "rand",
         "h2",
-        "rustls",
     ],
 }
 
-# Отдельный маппинг "имя пакета -> CVE", чтобы связи были правдоподобные
+
 COMPONENT_TO_CVES: Dict[str, List[str]] = {
     "log4j-core": [
         "CVE-2021-44228",
@@ -497,7 +478,6 @@ COMPONENT_TO_CVES: Dict[str, List[str]] = {
     "rails": ["CVE-2023-28362", "CVE-2024-26141"],
     "rack": ["CVE-2022-44572", "CVE-2023-27530"],
     "openssl": ["CVE-2022-0778", "CVE-2023-0286"],
-    "curl": ["CVE-2023-38545"],
     "struts2-core": ["CVE-2017-5638", "CVE-2023-50164"],
     "netty-all": ["CVE-2023-4586"],
     "tomcat-catalina": ["CVE-2022-42252"],
@@ -519,9 +499,7 @@ COMPONENT_TO_CVES: Dict[str, List[str]] = {
 }
 
 
-# ----- SAST ----------------------------------------------------------
 SAST_RULES: List[Tuple[str, str, List[int]]] = [
-    # (rule_id, title, cwes)
     (
         "semgrep.python.django.security.audit.django-mark-safe",
         "Use of mark_safe() bypasses Django's XSS auto-escaping",
@@ -582,24 +560,14 @@ SAST_RULES: List[Tuple[str, str, List[int]]] = [
         "XMLInputFactory without disabling DTDs — XXE",
         [611],
     ),
-    (
-        "semgrep.java.lang.security.audit.ssti-velocity",
-        "User input rendered through Velocity template",
-        [94],
-    ),
     ("gosec.G101", "Hardcoded credentials detected", [798]),
-    ("gosec.G102", "Bind to all network interfaces", [200]),
-    ("gosec.G104", "Errors unhandled", [703]),
     ("gosec.G201", "SQL query construction using format string", [89]),
-    ("gosec.G301", "Poor file permissions used when creating directory", [732]),
     ("gosec.G304", "File path provided as taint input", [22]),
     ("gosec.G401", "Use of weak cryptographic primitive MD5", [327, 328]),
     ("gosec.G402", "TLS InsecureSkipVerify set true", [295]),
-    ("gosec.G501", "Blocklisted import crypto/md5", [327]),
     ("bandit.B102", "exec() usage", [94]),
     ("bandit.B301", "pickle — potential insecure deserialization", [502]),
     ("bandit.B307", "Use of possibly insecure function: eval", [94]),
-    ("bandit.B311", "Standard pseudo-random generator for security", [330]),
     ("bandit.B501", "requests call with verify=False", [295]),
     ("bandit.B602", "subprocess call with shell=True", [78]),
     ("bandit.B608", "Possible SQL injection via string-based query", [89]),
@@ -615,6 +583,7 @@ SAST_RULES: List[Tuple[str, str, List[int]]] = [
     ),
     ("brakeman.MassAssignment", "Mass assignment vulnerability in controller", [915]),
 ]
+
 
 SAST_FILE_PATHS: List[str] = [
     "src/api/users.py",
@@ -641,6 +610,7 @@ SAST_FILE_PATHS: List[str] = [
     "internal/xml/parser.go",
 ]
 
+
 SAST_SNIPPETS: List[str] = [
     'query = f"SELECT * FROM users WHERE id = {user_id}"',
     'os.system("ping " + request.args.get("host"))',
@@ -650,25 +620,18 @@ SAST_SNIPPETS: List[str] = [
     "render_template_string(user_input)",
     "res.redirect(req.query.next)",
     "res.send(`<h1>${req.query.name}</h1>`)",
-    'const q = "SELECT * FROM users WHERE id = \'" + req.params.id + "\'";',
     'db.Query(fmt.Sprintf("SELECT * FROM t WHERE id=%s", id))',
     "tls.Config{InsecureSkipVerify: true}",
     "md5.New().Sum(password)",
     "RestTemplate.getForObject(userUrl, String.class)",
     "DocumentBuilderFactory.newInstance() // DTDs not disabled",
     "requests.get(url, verify=False)",
-    'Runtime.getRuntime().exec("sh -c " + input)',
-    'System.setProperty("java.naming.provider.url", userInput);',
-    'var userHtml = $.parseHTML(input); $("#out").append(userHtml);',
-    'document.getElementById("msg").innerHTML = location.hash;',
 ]
 
 
-# ----- DAST ----------------------------------------------------------
 DAST_ENDPOINTS: List[Tuple[str, str, List[str], str, List[int]]] = [
-    # (path, method, params, issue, cwes)
     ("/api/v1/users", "GET", ["id", "filter"], "Reflected XSS", [79]),
-    ("/api/v1/search", "GET", ["q"], "SQL Injection (time-based)", [89]),
+    ("/api/v1/search", "GET", ["q"], "SQL Injection time-based", [89]),
     ("/api/v1/orders", "GET", ["id"], "IDOR — Broken Access Control", [639, 284]),
     ("/api/v1/profile", "GET", ["email"], "User enumeration", [200]),
     ("/login", "POST", ["username", "password"], "No rate limiting on login", [307]),
@@ -676,13 +639,10 @@ DAST_ENDPOINTS: List[Tuple[str, str, List[str], str, List[int]]] = [
     ("/redirect", "GET", ["url", "next"], "Open Redirect", [601]),
     ("/api/graphql", "POST", ["query"], "GraphQL introspection enabled", [200]),
     ("/admin/panel", "GET", [], "Admin panel accessible without auth", [306]),
-    ("/api/v1/products", "GET", ["filter", "sort"], "SQL Injection (UNION)", [89]),
     ("/download", "GET", ["file"], "Path Traversal", [22]),
     ("/api/v1/fetch", "POST", ["url"], "Server-Side Request Forgery", [918]),
-    ("/api/v1/webhook", "POST", ["callback"], "SSRF via webhook callback", [918]),
     ("/api/v1/xml", "POST", ["payload"], "XXE via SOAP endpoint", [611]),
     ("/logout", "GET", [], "Missing CSRF token", [352]),
-    ("/api/v1/export", "GET", ["format", "path"], "Arbitrary File Read", [22, 200]),
     (
         "/api/v1/invite",
         "POST",
@@ -690,19 +650,10 @@ DAST_ENDPOINTS: List[Tuple[str, str, List[str], str, List[int]]] = [
         "Privilege escalation via role param",
         [269],
     ),
-    (
-        "/api/v1/token/refresh",
-        "POST",
-        ["refresh_token"],
-        "Weak JWT signing algorithm (HS256 allowed)",
-        [327],
-    ),
 ]
 
 
-# ----- IaC -----------------------------------------------------------
 IAC_RULES: List[Tuple[str, str, str, str, int]] = [
-    # (rule_id, title, resource, provider, severity 1..4)
     ("CKV_AWS_20", "S3 Bucket has public ACL", "aws_s3_bucket.public_assets", "aws", 3),
     (
         "CKV_AWS_21",
@@ -710,14 +661,6 @@ IAC_RULES: List[Tuple[str, str, str, str, int]] = [
         "aws_s3_bucket.backups",
         "aws",
         2,
-    ),
-    ("CKV_AWS_18", "S3 Bucket access logging disabled", "aws_s3_bucket.logs", "aws", 2),
-    (
-        "CKV_AWS_53",
-        "S3 Bucket does not block public ACLs",
-        "aws_s3_bucket.data",
-        "aws",
-        3,
     ),
     (
         "CKV_AWS_40",
@@ -727,27 +670,12 @@ IAC_RULES: List[Tuple[str, str, str, str, int]] = [
         4,
     ),
     (
-        "CKV_AWS_61",
-        "IAM role trust policy is overly permissive",
-        "aws_iam_role.lambda_exec",
-        "aws",
-        3,
-    ),
-    (
         "CKV_AWS_23",
         "Security group allows 0.0.0.0/0 on port 22",
         "aws_security_group.public_ssh",
         "aws",
         4,
     ),
-    (
-        "CKV_AWS_24",
-        "Security group allows 0.0.0.0/0 on port 3389",
-        "aws_security_group.public_rdp",
-        "aws",
-        4,
-    ),
-    ("CKV_AWS_145", "KMS key rotation disabled", "aws_kms_key.backups", "aws", 2),
     (
         "CKV_AWS_16",
         "RDS instance not encrypted at rest",
@@ -756,32 +684,11 @@ IAC_RULES: List[Tuple[str, str, str, str, int]] = [
         3,
     ),
     (
-        "CKV_AZURE_33",
-        "Storage Account logging is disabled",
-        "azurerm_storage_account.data",
-        "azure",
-        2,
-    ),
-    (
-        "CKV_AZURE_1",
-        "Linux VM doesn't use SSH key authentication",
-        "azurerm_linux_virtual_machine.app",
-        "azure",
-        3,
-    ),
-    (
         "CKV_AZURE_50",
         "NSG has SSH open to Internet",
         "azurerm_network_security_group.default",
         "azure",
         4,
-    ),
-    (
-        "CKV_GCP_39",
-        "Compute instance has project-wide SSH keys",
-        "google_compute_instance.api",
-        "gcp",
-        2,
     ),
     (
         "CKV_GCP_2",
@@ -800,35 +707,19 @@ IAC_RULES: List[Tuple[str, str, str, str, int]] = [
         3,
     ),
     (
-        "CKV_K8S_21",
-        "Default namespace should not be used",
-        "Pod/worker",
-        "kubernetes",
-        1,
-    ),
-    ("CKV_K8S_29", "Memory limits not defined", "Deployment/cache", "kubernetes", 2),
-    (
         "CKV_K8S_37",
-        "Minimize the admission of containers with CAP_SYS_ADMIN",
+        "Containers admitted with CAP_SYS_ADMIN",
         "DaemonSet/node-agent",
         "kubernetes",
         4,
     ),
     ("CKV_K8S_43", "Image should use digest", "Deployment/checkout", "kubernetes", 2),
-    (
-        "CKV_DOCKER_3",
-        "Ensure that a user for the container has been created",
-        "Dockerfile",
-        "docker",
-        3,
-    ),
+    ("CKV_DOCKER_3", "Container should not run as root", "Dockerfile", "docker", 3),
     ("CKV_DOCKER_7", "Latest tag should not be used", "Dockerfile", "docker", 1),
 ]
 
 
-# ----- Secrets -------------------------------------------------------
 SECRET_TYPES: List[Tuple[str, str, str]] = [
-    # (kind, rule_name, regex-looking fake token)
     ("aws_access_key", "AWS Access Key ID", "AKIAIOSFODNN7EXAMPLE"),
     (
         "aws_secret_key",
@@ -853,9 +744,7 @@ SECRET_TYPES: List[Tuple[str, str, str]] = [
         "xoxb-1234567890-1234567890-XXXXXXXXXXXXXXXXXXXXXXXX",
     ),
     ("stripe_key", "Stripe Live Secret Key", "sk_live_XXXXXXXXXXXXXXXXXXXXXXXX"),
-    ("twilio_api", "Twilio API Key", "SKXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
     ("google_api_key", "Google API Key", "AIzaSyA-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
-    ("mailgun_api_key", "Mailgun API Key", "key-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
     (
         "sendgrid_key",
         "SendGrid API Key",
@@ -863,7 +752,7 @@ SECRET_TYPES: List[Tuple[str, str, str]] = [
     ),
     (
         "private_key",
-        "Private Key (PEM)",
+        "Private Key PEM",
         "-----BEGIN REDACTED TEST KEY-----\\nMIIEpAIBAAKCAQEA...",
     ),
     ("jwt_secret", "JWT Signing Secret", "super-secret-jwt-signing-key-do-not-commit"),
@@ -881,6 +770,7 @@ SECRET_TYPES: List[Tuple[str, str, str]] = [
     ),
     ("ssh_private_key", "SSH Private Key", "-----BEGIN REDACTED TEST KEY-----"),
 ]
+
 
 SECRET_FILES: List[str] = [
     ".env",
@@ -902,9 +792,9 @@ SECRET_FILES: List[str] = [
 ]
 
 
-# =====================================================================
-# 2. УТИЛИТЫ
-# =====================================================================
+# =============================================================================
+# ГЕНЕРАЦИЯ
+# =============================================================================
 
 
 def pick_weighted(items: Sequence[Any], weights: Sequence[float]) -> Any:
@@ -912,41 +802,44 @@ def pick_weighted(items: Sequence[Any], weights: Sequence[float]) -> Any:
 
 
 def rand_hex(n: int) -> str:
-    return "".join(random.choices(string.hexdigits.lower(), k=n))
+    return "".join(random.choices("0123456789abcdef", k=n))
 
 
 def rand_semver() -> str:
     return f"{random.randint(0, 4)}.{random.randint(0, 30)}.{random.randint(0, 60)}"
 
 
-def bump_version(v: str) -> str:
-    parts = v.split(".")
+def bump_version(version: str) -> str:
+    parts = version.split(".")
     if len(parts) != 3:
-        return v + ".1"
+        return version + ".1"
     try:
         parts[-1] = str(int(parts[-1]) + random.randint(1, 5))
     except ValueError:
-        return v + ".1"
+        return version + ".1"
     return ".".join(parts)
 
 
-def random_datetime_within(days: int) -> str:
-    delta = timedelta(days=random.uniform(0, days), seconds=random.uniform(0, 86400))
-    dt = datetime.now(timezone.utc) - delta
-    return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+def weighted_int(weights: Dict[int, float]) -> int:
+    return int(pick_weighted(list(weights.keys()), list(weights.values())))
 
 
-def weighted_severity(weights: Dict[int, float]) -> int:
-    keys = list(weights.keys())
-    vals = list(weights.values())
-    return int(pick_weighted(keys, vals))
+def random_seen_pair(max_first_seen_days: int = 180) -> Tuple[str, str]:
+    now = datetime.now(timezone.utc)
+    first_delta = timedelta(
+        days=random.uniform(0, max_first_seen_days), seconds=random.uniform(0, 86400)
+    )
+    first_seen_dt = now - first_delta
+    span_seconds = max(0.0, (now - first_seen_dt).total_seconds())
+    last_seen_dt = first_seen_dt + timedelta(seconds=random.uniform(0, span_seconds))
+    return (
+        first_seen_dt.isoformat(timespec="seconds").replace("+00:00", "Z"),
+        last_seen_dt.isoformat(timespec="seconds").replace("+00:00", "Z"),
+    )
 
 
-# =====================================================================
-# 3. ГЕНЕРАТОРЫ FINDINGS
-# =====================================================================
-# Все генераторы возвращают готовый dict под generic JSON импорт.
-# Поля соответствуют structure в backend/internal/parser/generic.go.
+def purl_component(component: str) -> str:
+    return component.replace("/", "%2F")
 
 
 def make_sca_finding() -> Dict[str, Any]:
@@ -954,63 +847,50 @@ def make_sca_finding() -> Dict[str, Any]:
     component = random.choice(SCA_COMPONENTS[ecosystem])
     version = rand_semver()
 
-    # Подбираем CVE: сперва ищем маппинг по компоненту, иначе — общий SCA-пул
     specific_cves = COMPONENT_TO_CVES.get(component)
     if specific_cves:
-        # 1–3 CVE из маппинга
-        k = random.randint(1, min(3, len(specific_cves)))
-        cves = random.sample(specific_cves, k=k)
+        cves = random.sample(
+            specific_cves, k=random.randint(1, min(3, len(specific_cves)))
+        )
     else:
         cves = [random.choice(SCA_CVES)]
 
-    # С небольшой вероятностью добавим KEV-CVE — повышает enrichment coverage
     if random.random() < 0.25:
         cves.append(random.choice(KEV_CVES))
-        cves = list(dict.fromkeys(cves))  # dedup с сохранением порядка
+        cves = list(dict.fromkeys(cves))
 
     cwe_id, _ = random.choice(CWE_POOL)
-    purl = f"pkg:{ecosystem}/{component.replace('/', '%2F')}@{version}"
 
     finding: Dict[str, Any] = {
         "kind": "sca",
         "title": f"Vulnerable dependency: {component}@{version}",
         "description": (
             f"Known vulnerability detected in {component} version {version}. "
-            f"Fixed versions are available upstream. "
-            f"Rated {random.choice(['High', 'Critical', 'Medium'])} by upstream advisory."
+            "Fixed versions are available upstream."
         ),
-        "severity": weighted_severity({1: 0.15, 2: 0.35, 3: 0.35, 4: 0.15}),
-        "confidence": weighted_severity({1: 0.2, 2: 0.5, 3: 0.3}),
+        "severity": weighted_int({1: 0.15, 2: 0.35, 3: 0.35, 4: 0.15}),
+        "confidence": weighted_int({1: 0.2, 2: 0.5, 3: 0.3}),
         "component": component,
         "component_version": version,
         "cve_ids": cves,
         "cwe_ids": [cwe_id],
         "cpe_uri": f"cpe:2.3:a:*:{component}:{version}:*:*:*:*:*:*:*",
         "package_ecosystem": ecosystem,
-        "purl": purl,
+        "purl": f"pkg:{ecosystem}/{purl_component(component)}@{version}",
         "rule_id": f"{ecosystem.upper()}-SCA-{cves[0]}",
         "rule_name": f"Vulnerable {ecosystem} package",
+        "source_type": random.choice(["trivy", "grype", "snyk", "dependency-check"]),
     }
     if random.random() < 0.75:
         finding["fixed_version"] = bump_version(version)
-    finding["source_type"] = random.choice(
-        ["trivy", "grype", "snyk", "dependency-check"]
-    )
     return finding
 
 
 def make_sast_finding() -> Dict[str, Any]:
     rule_id, title, cwes = random.choice(SAST_RULES)
     file_path = random.choice(SAST_FILE_PATHS)
-    snippet = random.choice(SAST_SNIPPETS)
     line_start = random.randint(10, 900)
     line_end = line_start + random.randint(0, 15)
-
-    # С вероятностью ~10% привяжем SAST к какой-нибудь реальной CVE
-    # (характерно, например, для SAST-правил против уязвимых API log4j)
-    cves: List[str] = []
-    if random.random() < 0.10:
-        cves.append(random.choice(SCA_CVES))
 
     source = "semgrep"
     if rule_id.startswith("gosec."):
@@ -1022,13 +902,16 @@ def make_sast_finding() -> Dict[str, Any]:
     elif rule_id.startswith("brakeman"):
         source = "brakeman"
 
+    cves: List[str] = []
+    if random.random() < 0.10:
+        cves.append(random.choice(SCA_CVES))
+
     return {
         "kind": "sast",
         "title": title,
-        "description": f"Rule '{rule_id}' matched at {file_path}:{line_start}. "
-        f"Review for potential impact on security invariants.",
-        "severity": weighted_severity({1: 0.15, 2: 0.40, 3: 0.35, 4: 0.10}),
-        "confidence": weighted_severity({0: 0.05, 1: 0.25, 2: 0.55, 3: 0.15}),
+        "description": f"Rule '{rule_id}' matched at {file_path}:{line_start}. Review security impact.",
+        "severity": weighted_int({1: 0.15, 2: 0.40, 3: 0.35, 4: 0.10}),
+        "confidence": weighted_int({0: 0.05, 1: 0.25, 2: 0.55, 3: 0.15}),
         "file_path": file_path,
         "line_start": line_start,
         "line_end": line_end,
@@ -1036,7 +919,7 @@ def make_sast_finding() -> Dict[str, Any]:
         "cwe_ids": cwes,
         "rule_id": rule_id,
         "rule_name": title,
-        "code_snippet": snippet,
+        "code_snippet": random.choice(SAST_SNIPPETS),
         "source_type": source,
     }
 
@@ -1044,36 +927,27 @@ def make_sast_finding() -> Dict[str, Any]:
 def make_dast_finding() -> Dict[str, Any]:
     path, method, params, issue, cwes = random.choice(DAST_ENDPOINTS)
     host = random.choice(
-        [
-            "https://app.local",
-            "https://staging.example.com",
-            "https://api.example.com",
-            "https://qa.internal.example.org",
-        ]
+        ["https://app.local", "https://staging.example.com", "https://api.example.com"]
     )
     param = random.choice(params) if params else ""
     query = f"?{param}=FUZZ" if param and method == "GET" else ""
     url = f"{host}{path}{query}"
 
-    http_evidence = {
-        "request": f"{method} {path}{query} HTTP/1.1\nHost: {host.split('//')[1]}\n"
-        f"User-Agent: ASOC-Seeder/1.0\n\n",
-        "response": "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<reflected>FUZZ</reflected>",
-    }
-
     return {
         "kind": "dast",
         "title": issue,
-        "description": f"{issue} identified while fuzzing {method} {path}. "
-        f"Manual verification is recommended.",
-        "severity": weighted_severity({1: 0.20, 2: 0.45, 3: 0.30, 4: 0.05}),
-        "confidence": weighted_severity({0: 0.05, 1: 0.20, 2: 0.50, 3: 0.25}),
+        "description": f"{issue} identified while fuzzing {method} {path}. Manual verification is recommended.",
+        "severity": weighted_int({1: 0.20, 2: 0.45, 3: 0.30, 4: 0.05}),
+        "confidence": weighted_int({0: 0.05, 1: 0.20, 2: 0.50, 3: 0.25}),
         "cve_ids": [],
         "cwe_ids": cwes,
         "url": url,
         "http_method": method,
         "http_param": param or None,
-        "http_evidence": http_evidence,
+        "http_evidence": {
+            "request": f"{method} {path}{query} HTTP/1.1\nHost: {host.split('//')[1]}\nUser-Agent: RedLycoris-Seeder/{APP_VERSION}\n\n",
+            "response": "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<reflected>FUZZ</reflected>",
+        },
         "rule_id": f"DAST-{cwes[0]}",
         "rule_name": issue,
         "source_type": random.choice(["zap", "burp", "nuclei", "acunetix"]),
@@ -1081,9 +955,8 @@ def make_dast_finding() -> Dict[str, Any]:
 
 
 def make_iac_finding() -> Dict[str, Any]:
-    rule_id, title, resource, provider, base_sev = random.choice(IAC_RULES)
-    cwe_id, _ = random.choice([(732, ""), (284, ""), (16, ""), (200, ""), (306, "")])
-
+    rule_id, title, resource, provider, severity = random.choice(IAC_RULES)
+    cwe_id = random.choice([732, 284, 16, 200, 306])
     file_path_map = {
         "aws": random.choice(
             ["terraform/main.tf", "infra/aws/s3.tf", "infra/aws/iam.tf"]
@@ -1095,18 +968,16 @@ def make_iac_finding() -> Dict[str, Any]:
         ),
         "docker": "Dockerfile",
     }
-
     return {
         "kind": "iac",
         "title": title,
-        "description": f"Infrastructure misconfiguration: {title}. "
-        f"Policy {rule_id} failed for resource {resource}.",
-        "severity": base_sev,
+        "description": f"Infrastructure misconfiguration: {title}. Policy {rule_id} failed for resource {resource}.",
+        "severity": severity,
         "confidence": 3,
         "file_path": file_path_map.get(provider, "iac/unknown.tf"),
         "line_start": random.randint(1, 120),
         "cve_ids": [],
-        "cwe_ids": [cwe_id] if cwe_id else [],
+        "cwe_ids": [cwe_id],
         "iac_resource": resource,
         "iac_provider": provider,
         "rule_id": rule_id,
@@ -1118,23 +989,20 @@ def make_iac_finding() -> Dict[str, Any]:
 def make_secret_finding() -> Dict[str, Any]:
     kind, rule_name, _example = random.choice(SECRET_TYPES)
     file_path = random.choice(SECRET_FILES)
-    commit_sha = rand_hex(40)
     line = random.randint(1, 200)
-
     return {
         "kind": "secrets",
         "title": f"Potential leak: {rule_name}",
-        "description": f"Detected credential-like pattern ({kind}) in {file_path}. "
-        f"Verify if committed to the repository and rotate the secret.",
-        "severity": weighted_severity({2: 0.15, 3: 0.55, 4: 0.30}),
-        "confidence": weighted_severity({1: 0.1, 2: 0.4, 3: 0.5}),
+        "description": f"Detected credential-like pattern ({kind}) in {file_path}. Verify and rotate the secret.",
+        "severity": weighted_int({2: 0.15, 3: 0.55, 4: 0.30}),
+        "confidence": weighted_int({1: 0.1, 2: 0.4, 3: 0.5}),
         "file_path": file_path,
         "line_start": line,
         "line_end": line,
         "cve_ids": [],
         "cwe_ids": [798, 522],
         "secret_kind": kind,
-        "commit_sha": commit_sha,
+        "commit_sha": rand_hex(40),
         "rule_id": f"gitleaks.{kind}",
         "rule_name": rule_name,
         "source_type": random.choice(["gitleaks", "trufflehog", "detect-secrets"]),
@@ -1149,6 +1017,7 @@ KIND_GENERATORS: Dict[str, Callable[[], Dict[str, Any]]] = {
     "secrets": make_secret_finding,
 }
 
+
 DEFAULT_DISTRIBUTION: Dict[str, float] = {
     "sca": 0.45,
     "sast": 0.25,
@@ -1158,58 +1027,88 @@ DEFAULT_DISTRIBUTION: Dict[str, float] = {
 }
 
 
-def generate_findings(
-    total: int,
-    kinds: Sequence[str],
-    distribution: Dict[str, float],
-) -> List[Dict[str, Any]]:
-    """Генерирует список findings согласно взвешенному распределению."""
-    # Нормализуем распределение по выбранным kinds
-    filtered = {k: distribution.get(k, 0.0) for k in kinds}
-    total_w = sum(filtered.values())
-    if total_w <= 0:
-        # Равномерно
-        filtered = {k: 1.0 for k in kinds}
-        total_w = len(kinds)
-    norm = {k: v / total_w for k, v in filtered.items()}
-
-    out: List[Dict[str, Any]] = []
-    keys = list(norm.keys())
-    weights = list(norm.values())
-    for _ in range(total):
-        k = pick_weighted(keys, weights)
-        finding = KIND_GENERATORS[k]()
-
-        # Общие поля
-        finding.setdefault("first_seen", random_datetime_within(days=180))
-        finding.setdefault("last_seen", random_datetime_within(days=14))
-        finding["status"] = weighted_severity(
-            {0: 0.70, 1: 0.10, 2: 0.05, 3: 0.10, 4: 0.05}
+def parse_kinds(value: str) -> List[str]:
+    kinds = [k.strip().lower() for k in value.split(",") if k.strip()]
+    if not kinds:
+        raise argparse.ArgumentTypeError("список типов findings не может быть пустым")
+    unknown = [k for k in kinds if k not in KIND_GENERATORS]
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"неизвестные типы: {', '.join(unknown)}. Поддерживаются: {', '.join(sorted(KIND_GENERATORS))}"
         )
-        out.append(finding)
-    return out
+    return kinds
 
 
-# =====================================================================
-# 4. HTTP-КЛИЕНТ (stdlib, без requests)
-# =====================================================================
+def parse_distribution(value: Optional[str]) -> Dict[str, float]:
+    if not value:
+        return dict(DEFAULT_DISTRIBUTION)
+    out: Dict[str, float] = {}
+    for pair in value.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        if "=" not in pair:
+            raise argparse.ArgumentTypeError(
+                f"некорректный элемент distribution: {pair!r}"
+            )
+        key, raw_weight = pair.split("=", 1)
+        key = key.strip().lower()
+        if key not in KIND_GENERATORS:
+            raise argparse.ArgumentTypeError(f"неизвестный тип в distribution: {key}")
+        try:
+            weight = float(raw_weight)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(
+                f"некорректный вес для {key}: {raw_weight}"
+            ) from exc
+        if weight < 0:
+            raise argparse.ArgumentTypeError(
+                f"вес для {key} не может быть отрицательным"
+            )
+        out[key] = weight
+    return out or dict(DEFAULT_DISTRIBUTION)
+
+
+def generate_findings(
+    total: int, kinds: Sequence[str], distribution: Dict[str, float]
+) -> List[Dict[str, Any]]:
+    filtered = {kind: distribution.get(kind, 0.0) for kind in kinds}
+    total_weight = sum(filtered.values())
+    if total_weight <= 0:
+        filtered = {kind: 1.0 for kind in kinds}
+        total_weight = float(len(kinds))
+
+    normalized = {kind: weight / total_weight for kind, weight in filtered.items()}
+    keys = list(normalized.keys())
+    weights = list(normalized.values())
+
+    findings: List[Dict[str, Any]] = []
+    for _ in range(total):
+        kind = pick_weighted(keys, weights)
+        finding = KIND_GENERATORS[kind]()
+        first_seen, last_seen = random_seen_pair(180)
+        finding.setdefault("first_seen", first_seen)
+        finding.setdefault("last_seen", last_seen)
+        finding["status"] = weighted_int({0: 0.70, 1: 0.10, 2: 0.05, 3: 0.10, 4: 0.05})
+        findings.append(finding)
+    return findings
+
+
+# =============================================================================
+# HTTP / API
+# =============================================================================
 
 
 class APIError(RuntimeError):
     pass
 
 
-def _validate_http_url(url: str) -> str:
-    """
-    Разрешаем только абсолютные HTTP(S) URL.
-    Это исключает схемы вроде file:// и другие локальные/неожиданные протоколы.
-    """
+def validate_http_url(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
-    scheme = parsed.scheme.lower()
-    if scheme not in {"http", "https"}:
-        raise APIError(f"Unsupported URL scheme: {parsed.scheme!r}")
+    if parsed.scheme.lower() not in {"http", "https"}:
+        raise APIError(f"неподдерживаемая схема URL: {parsed.scheme!r}")
     if not parsed.netloc:
-        raise APIError(f"URL must be absolute and include host: {url!r}")
+        raise APIError(f"URL должен быть абсолютным и содержать host: {url!r}")
     return url
 
 
@@ -1220,82 +1119,95 @@ def http_request(
     headers: Optional[Dict[str, str]] = None,
     timeout: float = 30.0,
     max_retries: int = 4,
+    verbose: bool = False,
 ) -> Any:
-    """POST/GET с retry и экспоненциальной задержкой."""
-    safe_url = _validate_http_url(url)
-    data: Optional[bytes] = None
-    req_headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    safe_url = validate_http_url(url)
+    req_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": f"RedLycoris-VulnSeeder/{APP_VERSION}",
+    }
     if headers:
         req_headers.update(headers)
+
+    data = None
     if body is not None:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
 
-    last_err: Optional[Exception] = None
+    last_error: Optional[Exception] = None
+
     for attempt in range(1, max_retries + 1):
-        req = urllib.request.Request(
+        request = urllib.request.Request(
             url=safe_url, data=data, headers=req_headers, method=method
         )
+        if verbose:
+            log("ИНФО", f"HTTP {method} {safe_url}, попытка {attempt}/{max_retries}")
+
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read()
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                raw = response.read()
                 if not raw:
                     return None
+                text = raw.decode("utf-8", errors="replace")
                 try:
-                    return json.loads(raw.decode("utf-8"))
+                    return json.loads(text)
                 except json.JSONDecodeError:
-                    return raw.decode("utf-8", errors="replace")
-        except urllib.error.HTTPError as e:
-            body_txt = ""
+                    return text
+
+        except urllib.error.HTTPError as exc:
+            body_text = ""
             try:
-                body_txt = e.read().decode("utf-8", errors="replace")
+                body_text = exc.read().decode("utf-8", errors="replace")
             except Exception:
                 pass
-            # 4xx — не ретраим (кроме 429)
-            if 400 <= e.code < 500 and e.code != 429:
+            if 400 <= exc.code < 500 and exc.code != 429:
                 raise APIError(
-                    f"HTTP {e.code} on {method} {safe_url}: {body_txt[:400]}"
-                ) from e
-            last_err = APIError(f"HTTP {e.code}: {body_txt[:200]}")
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-            last_err = e
+                    f"HTTP {exc.code} при {method} {safe_url}: {body_text[:500]}"
+                ) from exc
+            last_error = APIError(f"HTTP {exc.code}: {body_text[:300]}")
 
-        sleep_s = min(8.0, 0.5 * (2 ** (attempt - 1))) + random.uniform(0, 0.3)
-        time.sleep(sleep_s)
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+            last_error = exc
+
+        sleep_seconds = min(8.0, 0.5 * (2 ** (attempt - 1))) + random.uniform(0, 0.3)
+        if verbose:
+            log(
+                "ВНИМАНИЕ",
+                f"Запрос не удался, повтор через {sleep_seconds:.1f} сек: {last_error}",
+            )
+        time.sleep(sleep_seconds)
 
     raise APIError(
-        f"Failed {method} {safe_url} after {max_retries} retries: {last_err}"
+        f"Не удалось выполнить {method} {safe_url} после {max_retries} попыток: {last_error}"
     )
 
 
-# =====================================================================
-# 5. ОПЕРАЦИИ С API
-# =====================================================================
-
-
 def create_project(
-    api_url: str, definition: Dict[str, Any], headers: Dict[str, str], timeout: float
+    api_url: str,
+    definition: Dict[str, Any],
+    headers: Dict[str, str],
+    timeout: float,
+    verbose: bool,
 ) -> str:
-    """Создаёт проект через POST /api/v1/projects → возвращает UUID."""
-    # Уникализируем имя, чтобы не конфликтовать с уже существующими
-    suffix = "-" + rand_hex(4)
     payload = {
-        "name": definition["name"] + suffix,
+        "name": definition["name"] + "-" + rand_hex(4),
         "description": definition.get("description", ""),
         "tags": definition.get("tags", []),
     }
-    resp = http_request(
+    response = http_request(
         "POST",
         api_url.rstrip("/") + "/api/v1/projects",
         body=payload,
         headers=headers,
         timeout=timeout,
+        verbose=verbose,
     )
-    if not isinstance(resp, dict) or "data" not in resp:
-        raise APIError(f"Unexpected response when creating project: {resp!r}")
-    pid = resp["data"].get("id")
-    if not pid:
-        raise APIError(f"Missing id in project response: {resp!r}")
-    return pid
+    if not isinstance(response, dict) or "data" not in response:
+        raise APIError(f"неожиданный ответ при создании проекта: {response!r}")
+    project_id = response["data"].get("id")
+    if not project_id:
+        raise APIError(f"в ответе создания проекта нет data.id: {response!r}")
+    return project_id
 
 
 def import_batch(
@@ -1304,25 +1216,26 @@ def import_batch(
     findings: List[Dict[str, Any]],
     headers: Dict[str, str],
     timeout: float,
-    source_type: str = "generic",
+    verbose: bool,
 ) -> Dict[str, Any]:
-    """Отправляет батч findings на POST /api/v1/import?project_id=..."""
     payload = {
         "project_id": project_id,
-        "source_type": source_type,
+        "source_type": "generic",
         "findings": findings,
     }
     url = f"{api_url.rstrip('/')}/api/v1/import?project_id={project_id}"
-    resp = http_request("POST", url, body=payload, headers=headers, timeout=timeout)
-    return resp if isinstance(resp, dict) else {"raw": resp}
+    response = http_request(
+        "POST", url, body=payload, headers=headers, timeout=timeout, verbose=verbose
+    )
+    return response if isinstance(response, dict) else {"raw": response}
 
 
-# =====================================================================
-# 6. ПРОГРЕСС-БАР (stdlib)
-# =====================================================================
+# =============================================================================
+# ПРОГРЕСС
+# =============================================================================
 
 
-def _term_width(default: int = 80) -> int:
+def term_width(default: int = 80) -> int:
     try:
         return max(40, os.get_terminal_size().columns)
     except OSError:
@@ -1330,8 +1243,7 @@ def _term_width(default: int = 80) -> int:
 
 
 def progress(done: int, total: int, prefix: str = "") -> None:
-    width = _term_width() - len(prefix) - 30
-    width = max(10, width)
+    width = max(10, term_width() - len(prefix) - 30)
     frac = 0.0 if total == 0 else min(1.0, done / total)
     filled = int(frac * width)
     bar = "█" * filled + "░" * (width - filled)
@@ -1341,9 +1253,9 @@ def progress(done: int, total: int, prefix: str = "") -> None:
         sys.stdout.write("\n")
 
 
-# =====================================================================
-# 7. CLI
-# =====================================================================
+# =============================================================================
+# CLI / ОСНОВНАЯ ЛОГИКА
+# =============================================================================
 
 
 @dataclass
@@ -1358,170 +1270,221 @@ class Config:
     output: Optional[str]
     seed: Optional[int]
     auth_token: Optional[str]
+    auth_cookie: Optional[str]
     timeout: float
     dry_run: bool
+    yes: bool
+    fail_on_import_errors: bool
+    quiet: bool
     verbose: bool
     extra_headers: Dict[str, str] = field(default_factory=dict)
 
 
-def parse_distribution(s: Optional[str]) -> Dict[str, float]:
-    if not s:
-        return dict(DEFAULT_DISTRIBUTION)
-    out: Dict[str, float] = {}
-    for pair in s.split(","):
-        if "=" not in pair:
-            raise argparse.ArgumentTypeError(f"Bad distribution entry: {pair!r}")
-        k, v = pair.split("=", 1)
-        k = k.strip().lower()
-        if k not in KIND_GENERATORS:
-            raise argparse.ArgumentTypeError(f"Unknown kind in distribution: {k}")
-        try:
-            out[k] = float(v)
-        except ValueError as e:
-            raise argparse.ArgumentTypeError(f"Bad weight for {k}: {v}") from e
-    if not out:
-        return dict(DEFAULT_DISTRIBUTION)
-    return out
-
-
 def parse_args(argv: Optional[Sequence[str]] = None) -> Config:
-    p = argparse.ArgumentParser(
+    epilog = """
+Примеры:
+
+  Сгенерировать 1000 findings и отправить в локальный Red Lycoris:
+    python vuln_seeder_ru.py --api-url http://localhost:8080 --count 1000 --yes
+
+  Сгенерировать findings только в файл, без отправки в API:
+    python vuln_seeder_ru.py --count 200 --output findings.json --dry-run
+
+  Отправить findings в конкретный проект:
+    python vuln_seeder_ru.py \\
+      --api-url http://localhost:8080 \\
+      --project-id 11111111-2222-3333-4444-555555555555 \\
+      --count 5000 \\
+      --batch-size 500 \\
+      --kinds sca,sast \\
+      --yes
+
+  Задать распределение типов findings:
+    python vuln_seeder_ru.py \\
+      --count 10000 \\
+      --distribution sca=0.55,sast=0.25,dast=0.10,iac=0.07,secrets=0.03 \\
+      --yes
+
+  Использовать Bearer token:
+    python vuln_seeder_ru.py --auth-token eyJhbGciOi... --count 1000 --yes
+
+  Использовать session cookie:
+    python vuln_seeder_ru.py --auth-cookie 'rl_session=...' --count 1000 --yes
+
+Безопасность:
+  Онлайн-импорт по умолчанию требует --yes или ручное подтверждение словом seed.
+  Это защита от случайной заливки тестовых данных в живую среду.
+"""
+    parser = argparse.ArgumentParser(
+        prog="vuln_seeder_ru.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Generate and push realistic test vulnerabilities into an ASOC platform.",
+        description=f"{APP_NAME} — генератор тестовых уязвимостей для ASOC-платформы.",
+        epilog=epilog,
     )
-    p.add_argument(
+    parser.add_argument(
         "--api-url",
         default=os.environ.get("ASOC_API_URL", "http://localhost:8080"),
-        help="Base URL of the ASOC API (default: %(default)s)",
+        help="Base URL API. По умолчанию: %(default)s. Env: ASOC_API_URL",
     )
-    p.add_argument(
+    parser.add_argument(
         "--count",
-        type=int,
+        type=positive_int,
         default=1000,
-        help="Total number of findings to generate (default: %(default)s)",
+        help="Сколько findings сгенерировать. По умолчанию: %(default)s",
     )
-    p.add_argument(
+    parser.add_argument(
         "--batch-size",
-        type=int,
+        type=positive_int,
         default=500,
-        help="Findings per import batch (default: %(default)s)",
+        help="Размер батча при импорте. По умолчанию: %(default)s",
     )
-    p.add_argument(
+    parser.add_argument(
         "--project-id",
         default=None,
-        help="Push all findings into this existing project UUID (skips project creation)",
+        help="UUID существующего проекта. Если указан — проекты автоматически не создаются.",
     )
-    p.add_argument(
+    parser.add_argument(
         "--project-count",
-        type=int,
+        type=positive_int,
         default=5,
-        help="If --project-id not set, auto-create this many projects (default: %(default)s)",
+        help="Сколько проектов создать автоматически, если не указан --project-id. По умолчанию: %(default)s",
     )
-    p.add_argument(
+    parser.add_argument(
         "--kinds",
-        default="sca,sast,dast,iac,secrets",
-        help="Comma-separated finding kinds to include (default: all)",
+        type=parse_kinds,
+        default=parse_kinds("sca,sast,dast,iac,secrets"),
+        help="Типы findings через запятую: sca,sast,dast,iac,secrets. По умолчанию: все",
     )
-    p.add_argument(
+    parser.add_argument(
         "--distribution",
         default=None,
-        help="Weighted distribution, e.g. 'sca=0.5,sast=0.3,dast=0.2'",
+        help="Веса типов findings. Пример: sca=0.5,sast=0.3,dast=0.2",
     )
-    p.add_argument(
-        "--output",
-        help="Write the generated JSON payload to file instead of POSTing "
-        "(can be combined with --dry-run)",
+    parser.add_argument(
+        "--output", help="Сохранить сгенерированный Generic JSON payload в файл."
     )
-    p.add_argument(
-        "--seed", type=int, default=None, help="PRNG seed for reproducible datasets"
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed для воспроизводимой генерации dataset.",
     )
-    p.add_argument(
+    parser.add_argument(
         "--auth-token",
         default=os.environ.get("ASOC_AUTH_TOKEN"),
-        help="Bearer token for API auth (env: ASOC_AUTH_TOKEN)",
+        help="Bearer token для API. Env: ASOC_AUTH_TOKEN",
     )
-    p.add_argument(
+    parser.add_argument(
+        "--auth-cookie",
+        default=os.environ.get("ASOC_AUTH_COOKIE"),
+        help="Cookie для API, например 'rl_session=...'. Env: ASOC_AUTH_COOKIE",
+    )
+    parser.add_argument(
         "--header",
         action="append",
+        type=parse_header,
         default=[],
-        help="Extra HTTP header 'Name: Value'. Can be passed multiple times.",
+        help="Дополнительный HTTP-заголовок в формате 'Name: Value'. Можно указать несколько раз.",
     )
-    p.add_argument(
+    parser.add_argument(
         "--timeout",
-        type=float,
+        type=positive_float,
         default=30.0,
-        help="HTTP timeout in seconds (default: %(default)s)",
+        help="HTTP timeout в секундах. По умолчанию: %(default)s",
     )
-    p.add_argument(
-        "--dry-run", action="store_true", help="Generate but do NOT send to API"
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Только сгенерировать данные. Ничего не отправлять в API.",
     )
-    p.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Подтвердить онлайн-импорт без интерактивного вопроса.",
+    )
+    parser.add_argument(
+        "--fail-on-import-errors",
+        action="store_true",
+        help="Завершить скрипт с ошибкой, если API вернул ошибки импорта.",
+    )
+    parser.add_argument("-q", "--quiet", action="store_true", help="Минимум логов.")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Подробные HTTP/diagnostic логи."
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"{APP_NAME} {APP_VERSION}"
+    )
 
-    args = p.parse_args(argv)
-
-    kinds = [k.strip().lower() for k in args.kinds.split(",") if k.strip()]
-    unknown = [k for k in kinds if k not in KIND_GENERATORS]
-    if unknown:
-        p.error(f"Unknown kinds: {unknown}. Supported: {list(KIND_GENERATORS)}")
-
+    args = parser.parse_args(argv)
     extra_headers: Dict[str, str] = {}
-    for h in args.header:
-        if ":" not in h:
-            p.error(f"Bad header: {h!r}. Expected 'Name: Value'")
-        name, value = h.split(":", 1)
-        extra_headers[name.strip()] = value.strip()
+    for name, value in args.header:
+        extra_headers[name] = value
 
     return Config(
         api_url=args.api_url,
         count=args.count,
-        batch_size=max(1, args.batch_size),
+        batch_size=args.batch_size,
         project_id=args.project_id,
-        project_count=max(1, args.project_count),
-        kinds=kinds,
+        project_count=args.project_count,
+        kinds=args.kinds,
         distribution=parse_distribution(args.distribution),
         output=args.output,
         seed=args.seed,
         auth_token=args.auth_token,
+        auth_cookie=args.auth_cookie,
         timeout=args.timeout,
         dry_run=args.dry_run,
+        yes=args.yes,
+        fail_on_import_errors=args.fail_on_import_errors,
+        quiet=args.quiet,
         verbose=args.verbose,
         extra_headers=extra_headers,
     )
 
 
-# =====================================================================
-# 8. ГЛАВНАЯ ЛОГИКА
-# =====================================================================
-
-
-def validate_uuid(s: str) -> str:
+def validate_uuid(value: str) -> str:
     try:
-        return str(uuid.UUID(s))
-    except ValueError as e:
-        raise SystemExit(f"[error] Invalid project UUID: {s}") from e
+        return str(uuid.UUID(value))
+    except ValueError as exc:
+        raise SystemExit(f"[ОШИБКА] Некорректный UUID проекта: {value}") from exc
 
 
 def build_headers(cfg: Config) -> Dict[str, str]:
     headers = dict(cfg.extra_headers)
     if cfg.auth_token:
         headers["Authorization"] = f"Bearer {cfg.auth_token}"
+    if cfg.auth_cookie:
+        headers["Cookie"] = cfg.auth_cookie
     return headers
 
 
+def confirm_online_import(cfg: Config) -> None:
+    if cfg.dry_run or cfg.yes:
+        return
+    log("ВНИМАНИЕ", "Скрипт сейчас отправит тестовые findings в API.")
+    log("ВНИМАНИЕ", f"API: {cfg.api_url}")
+    log("ВНИМАНИЕ", f"Количество findings: {cfg.count}")
+    log("ВНИМАНИЕ", f"Типы: {', '.join(cfg.kinds)}")
+    if cfg.project_id:
+        log("ВНИМАНИЕ", f"Проект: {cfg.project_id}")
+    else:
+        log("ВНИМАНИЕ", f"Будет создано проектов: {cfg.project_count}")
+    answer = input("Для подтверждения введи 'seed': ").strip()
+    if answer != "seed":
+        die("Импорт отменён пользователем.", exit_code=130)
+
+
 def ensure_projects(cfg: Config, headers: Dict[str, str]) -> List[str]:
-    """Возвращает список project_id, по которым будут распределены findings."""
     if cfg.project_id:
         return [validate_uuid(cfg.project_id)]
     if cfg.dry_run:
-        # В dry-run сеть нам не доступна — генерим случайные UUID
         return [str(uuid.uuid4()) for _ in range(cfg.project_count)]
 
-    wanted = min(cfg.project_count, len(DEFAULT_PROJECTS))
-    # Если нужно больше проектов, чем в пуле — дублируем с постфиксом
-    defs: List[Dict[str, Any]] = []
-    for i in range(cfg.project_count):
-        base = DEFAULT_PROJECTS[i % len(DEFAULT_PROJECTS)]
-        defs.append(
+    definitions: List[Dict[str, Any]] = []
+    for index in range(cfg.project_count):
+        base = DEFAULT_PROJECTS[index % len(DEFAULT_PROJECTS)]
+        definitions.append(
             {
                 "name": base["name"],
                 "description": base["description"],
@@ -1530,38 +1493,50 @@ def ensure_projects(cfg: Config, headers: Dict[str, str]) -> List[str]:
         )
 
     ids: List[str] = []
-    print(f"[i] Creating {len(defs)} project(s)...")
-    for d in defs:
+    log("ИНФО", f"Создаю тестовые проекты: {len(definitions)}", quiet=cfg.quiet)
+    for definition in definitions:
         try:
-            pid = create_project(cfg.api_url, d, headers, cfg.timeout)
-            if cfg.verbose:
-                print(f"    + {d['name']!r} → {pid}")
-            ids.append(pid)
-        except APIError as e:
-            print(
-                f"    [!] Failed to create project {d['name']!r}: {e}", file=sys.stderr
+            project_id = create_project(
+                cfg.api_url, definition, headers, cfg.timeout, cfg.verbose
             )
+            if cfg.verbose:
+                log("ОК", f"Проект создан: {definition['name']!r} → {project_id}")
+            ids.append(project_id)
+        except APIError as exc:
+            log("ОШИБКА", f"Не удалось создать проект {definition['name']!r}: {exc}")
+
     if not ids:
-        raise SystemExit("[error] No projects available. Aborting.")
+        die("Нет доступных проектов для импорта. Завершаю работу.")
     return ids
 
 
 def save_offline(
     cfg: Config, project_ids: List[str], findings: List[Dict[str, Any]]
 ) -> None:
+    if not cfg.output:
+        return
+
     payload = {
         "project_id": project_ids[0],
         "source_type": "generic",
         "findings": findings,
     }
-    with open(cfg.output, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-    print(f"[✓] Wrote {len(findings)} findings to {cfg.output}")
+    output_path = os.path.abspath(str(cfg.output))
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    tmp_path = output_path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as file:
+        json.dump(payload, file, ensure_ascii=False, indent=2)
+        file.write("\n")
+    os.replace(tmp_path, output_path)
+    log("ОК", f"Generic JSON сохранён: {output_path} findings={len(findings)}")
 
 
 def push_online(
     cfg: Config, project_ids: List[str], findings: List[Dict[str, Any]]
-) -> None:
+) -> Tuple[int, int, int]:
     headers = build_headers(cfg)
     total = len(findings)
     done = 0
@@ -1569,108 +1544,121 @@ def push_online(
     updated_total = 0
     errors_total = 0
 
-    # Равномерно раскладываем findings по проектам, сохраняя общий порядок
-    per_project: Dict[str, List[Dict[str, Any]]] = {pid: [] for pid in project_ids}
-    for i, f in enumerate(findings):
-        pid = project_ids[i % len(project_ids)]
-        per_project[pid].append(f)
+    per_project: Dict[str, List[Dict[str, Any]]] = {
+        project_id: [] for project_id in project_ids
+    }
+    for index, finding in enumerate(findings):
+        project_id = project_ids[index % len(project_ids)]
+        per_project[project_id].append(finding)
 
-    t0 = time.monotonic()
-    for pid, items in per_project.items():
+    started_at = time.monotonic()
+    for project_id, items in per_project.items():
+        if not items:
+            continue
+        if cfg.verbose:
+            log("ИНФО", f"Импорт в проект {project_id}: findings={len(items)}")
         for start in range(0, len(items), cfg.batch_size):
             batch = items[start : start + cfg.batch_size]
             try:
-                resp = import_batch(
-                    cfg.api_url, pid, batch, headers, cfg.timeout, source_type="generic"
+                response = import_batch(
+                    cfg.api_url, project_id, batch, headers, cfg.timeout, cfg.verbose
                 )
-                imported_total += int(resp.get("imported", 0) or 0)
-                updated_total += int(resp.get("updated", 0) or 0)
-                errs = resp.get("errors") or []
-                errors_total += len(errs)
-                if cfg.verbose and errs:
-                    for err in errs[:5]:
-                        print(
-                            f"    [!] import error idx={err.get('index')}: {err.get('message')}",
-                            file=sys.stderr,
+                imported_total += int(response.get("imported", 0) or 0)
+                updated_total += int(response.get("updated", 0) or 0)
+                errors = response.get("errors") or []
+                errors_total += len(errors)
+                if cfg.verbose and errors:
+                    for error in errors[:10]:
+                        log(
+                            "ВНИМАНИЕ",
+                            f"Ошибка импорта: index={error.get('index')} message={error.get('message')}",
                         )
-            except APIError as e:
-                print(f"\n    [!] batch failed for project {pid}: {e}", file=sys.stderr)
+            except APIError as exc:
+                log("ОШИБКА", f"Батч не импортирован project={project_id}: {exc}")
                 errors_total += len(batch)
-
             done += len(batch)
-            progress(done, total, prefix="    Import")
+            if not cfg.quiet:
+                progress(done, total, prefix="    Импорт")
 
-    elapsed = time.monotonic() - t0
+    elapsed = time.monotonic() - started_at
     rate = total / elapsed if elapsed > 0 else 0.0
-    print(
-        f"[✓] Done in {elapsed:5.1f}s  "
-        f"({rate:6.0f} findings/s)  "
-        f"imported={imported_total}  updated={updated_total}  errors={errors_total}"
+    log(
+        "ОК" if errors_total == 0 else "ВНИМАНИЕ",
+        f"Импорт завершён за {elapsed:.1f} сек ({rate:.0f} findings/sec), imported={imported_total}, updated={updated_total}, errors={errors_total}",
     )
+    return imported_total, updated_total, errors_total
 
 
-def print_stats(findings: List[Dict[str, Any]]) -> None:
+def print_stats(findings: List[Dict[str, Any]], *, quiet: bool = False) -> None:
+    if quiet:
+        return
     by_kind: Dict[str, int] = {}
-    by_sev: Dict[int, int] = {}
-    cve_unique: set = set()
+    by_severity: Dict[int, int] = {}
+    unique_cves = set()
     with_cve = 0
-    for f in findings:
-        by_kind[f["kind"]] = by_kind.get(f["kind"], 0) + 1
-        by_sev[f["severity"]] = by_sev.get(f["severity"], 0) + 1
-        cves = f.get("cve_ids") or []
+    for finding in findings:
+        by_kind[finding["kind"]] = by_kind.get(finding["kind"], 0) + 1
+        by_severity[finding["severity"]] = by_severity.get(finding["severity"], 0) + 1
+        cves = finding.get("cve_ids") or []
         if cves:
             with_cve += 1
-            cve_unique.update(cves)
+            unique_cves.update(cves)
+
+    severity_names = {0: "info", 1: "low", 2: "medium", 3: "high", 4: "critical"}
+    print("Статистика dataset:")
     print(
-        "    by kind:     " + ", ".join(f"{k}={v}" for k, v in sorted(by_kind.items()))
-    )
-    sev_names = {0: "info", 1: "low", 2: "med", 3: "high", 4: "crit"}
-    print(
-        "    by severity: "
-        + ", ".join(f"{sev_names.get(k, k)}={v}" for k, v in sorted(by_sev.items()))
+        "  По типам:       "
+        + ", ".join(f"{key}={value}" for key, value in sorted(by_kind.items()))
     )
     print(
-        f"    with CVE:    {with_cve}/{len(findings)}  "
-        f"(unique CVE IDs: {len(cve_unique)})"
+        "  По severity:    "
+        + ", ".join(
+            f"{severity_names.get(key, str(key))}={value}"
+            for key, value in sorted(by_severity.items())
+        )
     )
+    print(f"  С CVE:          {with_cve}/{len(findings)}")
+    print(f"  Уникальных CVE: {len(unique_cves)}")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     cfg = parse_args(argv)
+
     if cfg.seed is not None:
         random.seed(cfg.seed)
+        log("ИНФО", f"Использую seed={cfg.seed}", quiet=cfg.quiet)
 
-    print(
-        f"[i] Generating {cfg.count} findings "
-        f"(kinds={cfg.kinds}, batch={cfg.batch_size})..."
+    validate_http_url(cfg.api_url)
+    confirm_online_import(cfg)
+
+    log(
+        "ИНФО",
+        f"Генерирую findings: count={cfg.count}, kinds={','.join(cfg.kinds)}, batch_size={cfg.batch_size}",
+        quiet=cfg.quiet,
     )
     findings = generate_findings(cfg.count, cfg.kinds, cfg.distribution)
-    print(f"[✓] Generated {len(findings)} findings")
-    print_stats(findings)
+    log("ОК", f"Findings сгенерированы: {len(findings)}", quiet=cfg.quiet)
+    print_stats(findings, quiet=cfg.quiet)
 
     if cfg.output:
-        # Для оффлайн-сохранения project_id не важен — берём случайный
-        pid = cfg.project_id or str(uuid.uuid4())
-        save_offline(cfg, [pid], findings)
-        if cfg.dry_run:
-            return 0
-        # Если указан --output без --dry-run — всё равно сохранили файл,
-        # но также попробуем заимпортить
-        project_ids = (
-            [validate_uuid(cfg.project_id)]
-            if cfg.project_id
-            else ensure_projects(cfg, build_headers(cfg))
-        )
-        push_online(cfg, project_ids, findings)
-        return 0
+        offline_project_id = cfg.project_id or str(uuid.uuid4())
+        save_offline(cfg, [offline_project_id], findings)
 
     if cfg.dry_run:
-        print("[i] --dry-run set, nothing was sent.")
+        log("ИНФО", "Режим --dry-run: отправка в API пропущена.", quiet=cfg.quiet)
         return 0
 
     headers = build_headers(cfg)
     project_ids = ensure_projects(cfg, headers)
-    push_online(cfg, project_ids, findings)
+    imported_total, updated_total, errors_total = push_online(
+        cfg, project_ids, findings
+    )
+
+    if cfg.fail_on_import_errors and errors_total > 0:
+        die(
+            f"Импорт завершился с ошибками: imported={imported_total}, updated={updated_total}, errors={errors_total}",
+            exit_code=2,
+        )
     return 0
 
 
@@ -1678,5 +1666,7 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        print("\n[!] Interrupted by user", file=sys.stderr)
+        log("ВНИМАНИЕ", "Остановлено пользователем.")
         sys.exit(130)
+    except APIError as exc:
+        die(str(exc))
