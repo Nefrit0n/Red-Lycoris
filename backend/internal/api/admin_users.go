@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -87,38 +86,44 @@ func writeAdminUserAudit(
 
 func handleListUsers(usersRepo *storage.UsersRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		limit := 50
-		offset := 0
-		if v := r.URL.Query().Get("limit"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil {
-				limit = n
-			}
-		}
-		if v := r.URL.Query().Get("offset"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil {
-				offset = n
-			}
-		}
-
-		users, total, err := usersRepo.List(r.Context(), limit, offset)
+		f := parseUserListFilter(r)
+		users, total, hasMore, nextCursor, err := usersRepo.ListV2(r.Context(), f)
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list users")
 			return
 		}
-
 		respondJSON(w, http.StatusOK, map[string]any{
 			"data": users,
-			"meta": map[string]any{"total": total},
+			"meta": map[string]any{
+				"total":       total,
+				"has_more":    hasMore,
+				"next_cursor": nextCursor,
+			},
 		})
 	}
 }
 
+// validRoleKeys is the set of allowed role keys for user creation.
+var validRoleKeys = map[string]bool{
+	"admin": true, "auditor": true, "member": true, "viewer": true,
+}
+
+// commonPasswords is a minimal list used for backend password strength check.
+var commonPasswords = map[string]bool{
+	"password123456": true, "qwerty123456": true, "123456789012": true,
+	"iloveyou1234": true, "admin123456!": true, "letmein12345": true,
+	"welcome12345": true, "monkey123456": true, "dragon123456": true,
+	"master123456": true, "passw0rd1234": true, "abc123456789": true,
+}
+
 func handleCreateUser(usersRepo *storage.UsersRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
 	type request struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		FullName string `json:"full_name"`
-		IsAdmin  bool   `json:"is_admin"`
+		Email                string   `json:"email"`
+		DisplayName          string   `json:"display_name"`
+		Password             string   `json:"password"`
+		RoleKey              string   `json:"role_key"`
+		GroupIDs             []string `json:"group_ids"`
+		SendCredentialsEmail bool     `json:"send_credentials_email"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -130,10 +135,62 @@ func handleCreateUser(usersRepo *storage.UsersRepo, auditWriter interface{ Submi
 			return
 		}
 
-		email := strings.TrimSpace(req.Email)
-		if email == "" || req.Password == "" {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "email and password are required")
+		email := strings.ToLower(strings.TrimSpace(req.Email))
+		if email == "" {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "email is required")
 			return
+		}
+		if req.Password == "" {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "password is required")
+			return
+		}
+		if len([]rune(req.Password)) < 12 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "password must be at least 12 characters")
+			return
+		}
+		if strings.EqualFold(req.Password, email) {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "password must not match email")
+			return
+		}
+		if commonPasswords[strings.ToLower(req.Password)] {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "password is too common")
+			return
+		}
+
+		roleKey := req.RoleKey
+		if roleKey == "" {
+			roleKey = "member"
+		}
+		if !validRoleKeys[roleKey] {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid role_key")
+			return
+		}
+
+		// Validate group UUIDs
+		groupIDs := make([]uuid.UUID, 0, len(req.GroupIDs))
+		for _, rawID := range req.GroupIDs {
+			gid, err := uuid.Parse(rawID)
+			if err != nil {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group_id: "+rawID)
+				return
+			}
+			groupIDs = append(groupIDs, gid)
+		}
+
+		// Check email uniqueness
+		available, err := usersRepo.CheckEmailAvailable(r.Context(), email)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check email")
+			return
+		}
+		if !available {
+			respondError(w, r, http.StatusConflict, "EMAIL_TAKEN", "this email is already in use")
+			return
+		}
+
+		globalRole := domain.RoleUser
+		if roleKey == "admin" {
+			globalRole = domain.RoleAdmin
 		}
 
 		hash, err := auth.Hash(req.Password)
@@ -142,37 +199,69 @@ func handleCreateUser(usersRepo *storage.UsersRepo, auditWriter interface{ Submi
 			return
 		}
 
-		role := domain.RoleUser
-		if req.IsAdmin {
-			role = domain.RoleAdmin
-		}
-
 		u := &domain.User{
 			Email:        email,
 			PasswordHash: hash,
-			FullName:     strings.TrimSpace(req.FullName),
+			FullName:     strings.TrimSpace(req.DisplayName),
 			IsActive:     true,
-			GlobalRole:   role,
-			Status:       domain.UserStatusActive,
+			GlobalRole:   globalRole,
+			Status:       domain.UserStatusPending,
 		}
 		if actor != nil {
 			u.CreatedByUserID = &actor.ID
 		}
+
 		if err := usersRepo.Create(r.Context(), u); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create user")
 			return
 		}
+
+		var actorID *uuid.UUID
+		if actor != nil {
+			actorID = &actor.ID
+		}
+
+		// Assign role (triggers sync to global_role)
+		if err := usersRepo.AssignUserRole(r.Context(), u.ID, roleKey, actorID); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to assign role")
+			return
+		}
+
+		// Ensure local identity
+		if err := usersRepo.EnsureLocalIdentity(r.Context(), u.ID); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to set identity")
+			return
+		}
+
+		// Set must change password
+		if err := usersRepo.SetMustChangePassword(r.Context(), u.ID, true, "initial"); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to set password flag")
+			return
+		}
+
+		// Assign groups
+		if len(groupIDs) > 0 {
+			if err := usersRepo.AssignUserGroups(r.Context(), u.ID, groupIDs, actorID); err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to assign groups")
+				return
+			}
+		}
+
 		if actor != nil {
 			writeAdminUserAudit(
 				r, auditWriter, actor.ID, u.ID, "create",
 				nil,
-				map[string]any{"email": u.Email, "full_name": u.FullName, "global_role": int(u.GlobalRole), "status": string(u.Status)},
+				map[string]any{"email": u.Email, "display_name": u.FullName, "role_key": roleKey, "status": string(u.Status)},
 				"",
 			)
 		}
 
-		u.PasswordHash = ""
-		respondJSON(w, http.StatusCreated, map[string]any{"data": u})
+		created, err := usersRepo.GetAdminUserByID(r.Context(), u.ID)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch created user")
+			return
+		}
+		respondJSON(w, http.StatusCreated, map[string]any{"data": created})
 	}
 }
 
