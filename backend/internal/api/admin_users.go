@@ -272,6 +272,10 @@ func handleChangeUserRole(usersRepo *storage.UsersRepo, sessionsRepo *storage.Se
 		// Если снимаем admin — применяем защиту
 		removingAdmin := target.IsAdmin() && !req.IsAdmin
 		if removingAdmin {
+			if len([]rune(strings.TrimSpace(req.Reason))) < 10 {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "reason must be at least 10 characters")
+				return
+			}
 			if err := canModifyUser(r.Context(), usersRepo, actor.ID, target, ActionRemoveRoleAdmin); err != nil {
 				respondGuardError(w, r, err)
 				return
@@ -336,6 +340,11 @@ func handleDeactivateUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.Se
 				return
 			}
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch user")
+			return
+		}
+
+		if len([]rune(strings.TrimSpace(req.Reason))) < 10 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "reason must be at least 10 characters")
 			return
 		}
 
@@ -453,6 +462,11 @@ func handleDeleteUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.Sessio
 			return
 		}
 
+		if len([]rune(strings.TrimSpace(req.Reason))) < 10 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "reason must be at least 10 characters")
+			return
+		}
+
 		if err := canModifyUser(r.Context(), usersRepo, actor.ID, target, ActionDelete); err != nil {
 			respondGuardError(w, r, err)
 			return
@@ -506,6 +520,10 @@ func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "new_password is required")
 			return
 		}
+		if len([]rune(strings.TrimSpace(req.Reason))) < 10 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "reason must be at least 10 characters")
+			return
+		}
 
 		target, err := usersRepo.GetByID(r.Context(), userID)
 		if err != nil {
@@ -533,6 +551,12 @@ func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage
 			return
 		}
 
+		// Mark user as must change password on next login.
+		if err := usersRepo.SetMustChangePassword(r.Context(), userID, true, "admin_reset"); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to set password change requirement")
+			return
+		}
+
 		if err := sessionsRepo.RevokeAllForUserWithReason(r.Context(), userID, "password_changed"); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to revoke sessions")
 			return
@@ -540,11 +564,13 @@ func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage
 		writeAdminUserAudit(
 			r, auditWriter, actor.ID, target.ID, "password_reset",
 			map[string]any{"password_changed": false},
-			map[string]any{"password_changed": true},
+			map[string]any{"password_changed": true, "must_change": true},
 			req.Reason,
 		)
 
-		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]string{"status": "password reset"}})
+		respondJSON(w, http.StatusOK, map[string]any{
+			"data": map[string]string{"status": "password reset", "temp_password": req.NewPassword},
+		})
 	}
 }
 
