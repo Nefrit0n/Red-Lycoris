@@ -174,3 +174,37 @@ func RequireProjectRole(rolesRepo *storage.UserProjectRolesRepo, minRole domain.
 		})
 	}
 }
+
+func RequireProjectOwnerOrGlobalAdmin(projectsRepo *storage.ProjectsRepo, extractor ProjectIDExtractor) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := UserFromContext(r.Context())
+			if !ok {
+				respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
+				return
+			}
+			if user.IsAdmin() {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			projectID, err := extractor(r)
+			if err != nil {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project id")
+				return
+			}
+			project, err := projectsRepo.GetByID(r.Context(), projectID)
+			if err != nil {
+				respondError(w, r, http.StatusNotFound, "NOT_FOUND", "project not found")
+				return
+			}
+
+			if project.Owner.ID != user.ID {
+				respondError(w, r, http.StatusForbidden, "PROJECT_OWNER_REQUIRED", "project owner or admin required")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
