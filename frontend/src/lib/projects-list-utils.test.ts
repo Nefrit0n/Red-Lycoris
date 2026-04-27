@@ -38,6 +38,7 @@ describe("projects list utils", () => {
       hasProjectsFilters({
         view: "list",
         status: [],
+        coverage: [],
         tag: [],
         sort: "critical-desc",
       }),
@@ -47,6 +48,7 @@ describe("projects list utils", () => {
       hasProjectsFilters({
         view: "list",
         status: ["active"],
+        coverage: [],
         tag: [],
         sort: "critical-desc",
       }),
