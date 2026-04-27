@@ -226,7 +226,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 					Put("/", handleUpdateProject(projectsRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Patch("/pinned", handlePatchProjectPinned(projectsRepo))
-				r.With(RequireGlobalAdmin).Delete("/", handleDeleteProject(projectsRepo))
+				r.With(RequireProjectOwnerOrGlobalAdmin(projectsRepo, ProjectIDFromURL("id"))).
+					Delete("/", handleDeleteProject(projectsRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Post("/ingest-token", handleGetIngestToken())
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
