@@ -274,8 +274,15 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 		r.Route("/api/v1/admin", func(r chi.Router) {
 			r.Use(RequireGlobalAdmin)
+
+			// Exact paths before /{id} wildcard
 			r.Get("/users", handleListUsers(usersRepo))
 			r.Post("/users", handleCreateUser(usersRepo, auditWriter))
+			r.Get("/users/check-email", handleCheckEmailAvailable(usersRepo))
+			r.Get("/users/export.csv", handleExportUsersCSV(usersRepo))
+			r.Post("/users/bulk-deactivate", handleBulkDeactivateUsers(usersRepo, sessionsRepo, auditWriter))
+			r.Post("/users/bulk-reset-password", handleBulkResetPassword(usersRepo, sessionsRepo, auditWriter))
+
 			r.Patch("/users/{id}", handleUpdateUser(usersRepo, auditWriter))
 			r.Patch("/users/{id}/role", handleChangeUserRole(usersRepo, sessionsRepo, auditWriter))
 			r.Post("/users/{id}/reset-password", handleResetUserPassword(usersRepo, sessionsRepo, auditWriter))
@@ -283,6 +290,10 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Post("/users/{id}/activate", handleActivateUser(usersRepo, auditWriter))
 			r.Delete("/users/{id}", handleDeleteUser(usersRepo, sessionsRepo, auditWriter))
 			r.Get("/users/{id}/roles", handleGetUserRoles(userProjectRolesRepo))
+
+			r.Get("/groups", handleListGroups(usersRepo))
+			r.Get("/access/counts", handleGetAccessCounts(usersRepo))
+
 			r.Get("/audit", handleListAuditLog(auditLogRepo))
 			r.Get("/audit/stats", handleAuditStats(auditLogRepo))
 			r.Get("/audit/stream", handleAuditStream(auditLogRepo))
