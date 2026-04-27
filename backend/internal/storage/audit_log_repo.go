@@ -138,6 +138,9 @@ func (r *AuditLogRepo) Create(ctx context.Context, rec *AuditRecord) error {
 	if rec.CreatedAt.IsZero() {
 		rec.CreatedAt = time.Now().UTC()
 	}
+	if rec.RiskSignals == nil {
+		rec.RiskSignals = []string{}
+	}
 
 	var uaBrowser, uaOS, uaCountry string
 	var uaIsTor, uaIsVPN, uaIsDatacenter bool
