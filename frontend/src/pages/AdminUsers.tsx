@@ -56,6 +56,7 @@ export default function AdminUsers() {
   const [createForm, setCreateForm] = useState({ email: "", password: "", full_name: "", is_admin: false });
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [confirmReason, setConfirmReason] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
   const [passwordResetUser, setPasswordResetUser] = useState<AdminUser | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [resetReason, setResetReason] = useState("");
@@ -87,6 +88,7 @@ export default function AdminUsers() {
     onSuccess: async () => {
       setConfirmAction(null);
       setConfirmReason("");
+      setConfirmEmail("");
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
@@ -97,6 +99,7 @@ export default function AdminUsers() {
     onSuccess: async () => {
       setConfirmAction(null);
       setConfirmReason("");
+      setConfirmEmail("");
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
@@ -106,6 +109,7 @@ export default function AdminUsers() {
     onSuccess: async () => {
       setConfirmAction(null);
       setConfirmReason("");
+      setConfirmEmail("");
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
@@ -116,6 +120,7 @@ export default function AdminUsers() {
     onSuccess: async () => {
       setConfirmAction(null);
       setConfirmReason("");
+      setConfirmEmail("");
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
@@ -343,6 +348,7 @@ export default function AdminUsers() {
             if (!open) {
               setConfirmAction(null);
               setConfirmReason("");
+              setConfirmEmail("");
             }
           }}
         >
@@ -357,14 +363,27 @@ export default function AdminUsers() {
                 </p>
                 <p>{confirmDescriptions[confirmAction.type]}</p>
                 {isDestructiveConfirm && (
-                  <div className="space-y-1">
-                    <label className="text-zinc-400 text-xs">Причина (обязательно, не менее 10 символов)</label>
-                    <Input
-                      placeholder="Укажите причину..."
-                      value={confirmReason}
-                      onChange={(e) => setConfirmReason(e.target.value)}
-                    />
-                  </div>
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-zinc-400 text-xs">Причина (обязательно, не менее 10 символов)</label>
+                      <Input
+                        placeholder="Укажите причину..."
+                        value={confirmReason}
+                        onChange={(e) => setConfirmReason(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-zinc-400 text-xs">
+                        Введите email пользователя для подтверждения
+                      </label>
+                      <Input
+                        placeholder={confirmAction.user.email}
+                        value={confirmEmail}
+                        onChange={(e) => setConfirmEmail(e.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                  </>
                 )}
               </div>
               <DialogFooter>
@@ -373,6 +392,7 @@ export default function AdminUsers() {
                   onClick={() => {
                     setConfirmAction(null);
                     setConfirmReason("");
+                    setConfirmEmail("");
                   }}
                 >
                   Отмена
@@ -380,7 +400,10 @@ export default function AdminUsers() {
                 <Button
                   variant={isDestructiveConfirm ? "destructive" : "outline"}
                   disabled={
-                    (isDestructiveConfirm && confirmReason.trim().length < 10) ||
+                    (isDestructiveConfirm && (
+                      confirmReason.trim().length < 10 ||
+                      confirmEmail.trim().toLowerCase() !== confirmAction.user.email.toLowerCase()
+                    )) ||
                     deactivateMutation.isPending ||
                     activateMutation.isPending ||
                     deleteMutation.isPending ||

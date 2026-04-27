@@ -9,6 +9,7 @@ import ProjectDetail from "@/pages/ProjectDetail";
 import Import from "@/pages/Import";
 import EnrichmentStatus from "@/pages/EnrichmentStatus";
 import Login from "@/pages/Login";
+import ChangePassword from "@/pages/ChangePassword";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminAudit from "@/pages/AdminAudit";
 
@@ -17,6 +18,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/auth/change-password" element={<ChangePassword />} />
         <Route element={<RequireAuth />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	authsvc "redlycoris/internal/auth"
@@ -204,6 +206,75 @@ func handleRefresh(svc *authsvc.Service) http.HandlerFunc {
 		respondJSON(w, http.StatusOK, map[string]any{
 			"data": map[string]any{"user": user},
 		})
+	}
+}
+
+func handleChangePassword(svc *authsvc.Service, usersRepo interface {
+	Update(ctx context.Context, id uuid.UUID, fields map[string]any) error
+	SetMustChangePassword(ctx context.Context, userID uuid.UUID, mustChange bool, reason string) error
+}, sessionsRepo interface {
+	RevokeAllForUserWithReason(ctx context.Context, userID uuid.UUID, reason string) error
+}) http.HandlerFunc {
+	type request struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, ok := UserFromContext(r.Context())
+		if !ok || user == nil {
+			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
+			return
+		}
+		var req request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
+		if strings.TrimSpace(req.NewPassword) == "" {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "new_password is required")
+			return
+		}
+		if len([]rune(strings.TrimSpace(req.NewPassword))) < 8 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "new password must be at least 8 characters")
+			return
+		}
+		ok2, err := authsvc.Verify(req.CurrentPassword, user.PasswordHash)
+		if err != nil || !ok2 {
+			respondError(w, r, http.StatusForbidden, "INVALID_CURRENT_PASSWORD", "Текущий пароль неверен")
+			return
+		}
+		hash, err := authsvc.Hash(req.NewPassword)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to hash password")
+			return
+		}
+		if err := usersRepo.Update(r.Context(), user.ID, map[string]any{"password_hash": hash}); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update password")
+			return
+		}
+		if err := usersRepo.SetMustChangePassword(r.Context(), user.ID, false, ""); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to clear password change requirement")
+			return
+		}
+		if err := sessionsRepo.RevokeAllForUserWithReason(r.Context(), user.ID, "password_changed"); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to revoke sessions")
+			return
+		}
+		rawToken, err := svc.CreateSessionForUser(r.Context(), user.ID, r.UserAgent(), extractIP(r))
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create session")
+			return
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     "rl_session",
+			Value:    rawToken,
+			HttpOnly: true,
+			Secure:   shouldUseSecureCookie(r),
+			SameSite: http.SameSiteLaxMode,
+			Path:     "/",
+			MaxAge:   int(authSessionMaxAge.Seconds()),
+		})
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]string{"status": "password changed"}})
 	}
 }
 
