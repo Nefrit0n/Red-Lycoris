@@ -25,8 +25,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useProjects, usePatchProjectPinned } from "@/api/projects";
+import { useProjects, usePatchProjectPinned, useCreateProject, useDeleteProject, useUpdateProject } from "@/api/projects";
 import { apiGet } from "@/api/client";
+import { useCurrentUser } from "@/api/auth";
 import {
   parseProjectsUrlParams,
   serializeProjectsUrlParams,
@@ -176,6 +177,7 @@ export default function ProjectsList() {
   );
 
   const { data, isLoading } = useProjects(projectsQuery);
+  const { data: currentUser } = useCurrentUser();
   const projects = useMemo(() => data?.data ?? [], [data]);
 
   useEffect(() => {
@@ -211,6 +213,9 @@ export default function ProjectsList() {
 
   const [showCreate, setShowCreate] = useState(false);
   const patchPinned = usePatchProjectPinned();
+  const updateProject = useUpdateProject();
+  const createProject = useCreateProject();
+  const deleteProject = useDeleteProject();
   const [trendCache, setTrendCache] = useState<Record<string, { points: TrendPoint[]; fetchedAt: number }>>({});
   const [loadingTrendIds, setLoadingTrendIds] = useState<Set<string>>(new Set());
   const [queuedTrendIds, setQueuedTrendIds] = useState<string[]>([]);
@@ -361,6 +366,83 @@ export default function ProjectsList() {
       });
     },
     [patchPinned],
+  );
+
+  const canDeleteProject = useCallback(
+    (project: Project) =>
+      Boolean(currentUser) &&
+      (currentUser?.global_role === 1 || currentUser?.id === project.owner.id),
+    [currentUser],
+  );
+
+  const handleRenameProject = useCallback(
+    (project: Project) => {
+      const nextName = window.prompt("Новое имя проекта", project.name)?.trim();
+      if (!nextName || nextName === project.name) return;
+      updateProject.mutate({
+        id: project.id,
+        body: {
+          ...project,
+          name: nextName,
+        },
+      });
+    },
+    [updateProject],
+  );
+
+  const handleDuplicateProject = useCallback(
+    (project: Project) => {
+      const fallbackName = `${project.name} (copy)`;
+      const nextName = window.prompt("Название копии проекта", fallbackName)?.trim();
+      if (!nextName) return;
+      createProject.mutate(
+        {
+          name: nextName,
+          description: project.description ?? "",
+          icon_color: project.icon_color,
+          repo_url: project.repo_url ?? "",
+          repo_provider: project.repo_provider ?? "other",
+          tags: project.tags,
+          status: "active",
+          visibility: "workspace",
+          owner_id: project.owner.id,
+        },
+        {
+          onSuccess: (created) => {
+            if (created.data?.id) {
+              navigate(`/projects/${created.data.id}`);
+            }
+          },
+        },
+      );
+    },
+    [createProject, navigate],
+  );
+
+  const handleArchiveProject = useCallback(
+    (project: Project) => {
+      if (project.status === "archived") return;
+      updateProject.mutate({
+        id: project.id,
+        body: {
+          ...project,
+          status: "archived",
+        },
+      });
+    },
+    [updateProject],
+  );
+
+  const handleDeleteProject = useCallback(
+    (project: Project) => {
+      if (!canDeleteProject(project)) return;
+      const confirmed = window.confirm(
+        `Удалить проект «${project.name}»?\nЭто действие безвозвратно удалит проект и все его уязвимости.`,
+      );
+      if (!confirmed) return;
+      deleteProject.mutate(project.id);
+    },
+    [canDeleteProject, deleteProject],
   );
 
   const applyUrlState = useCallback(
@@ -984,13 +1066,21 @@ export default function ProjectsList() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>Переименовать</DropdownMenuItem>
-                    <DropdownMenuItem>Дублировать</DropdownMenuItem>
-                    <DropdownMenuItem>Архивировать</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleRenameProject(project)}>Переименовать</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleDuplicateProject(project)}>Дублировать</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleArchiveProject(project)}>Архивировать</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => navigate(`/projects/${project.id}?tab=tokens`)}>
                       Настройки
                     </DropdownMenuItem>
-                    <DropdownMenuItem>Экспорт</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => navigate(`/findings?project_id=${project.id}`)}>Экспорт</DropdownMenuItem>
+                    {canDeleteProject(project) && (
+                      <DropdownMenuItem
+                        onSelect={() => handleDeleteProject(project)}
+                        className="text-red-400 focus:bg-red-500/10 focus:text-red-300"
+                      >
+                        Удалить проект
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
                 </div>

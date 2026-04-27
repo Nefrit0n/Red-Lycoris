@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPatch, apiPost } from "@/api/client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/api/client";
 import type { Project, PaginatedResponse } from "@/types";
 
 export interface ProjectsQueryParams {
@@ -65,6 +65,27 @@ export function usePatchProjectPinned() {
         `/api/v1/projects/${payload.id}/pinned`,
         { pinned: payload.pinned },
       ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+export function useUpdateProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; body: Record<string, unknown> }) =>
+      apiPut<{ data: Project }>(`/api/v1/projects/${payload.id}`, payload.body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+export function useDeleteProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/api/v1/projects/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
     },
