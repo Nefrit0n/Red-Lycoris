@@ -646,6 +646,10 @@ func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*Find
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
+	// Avoid flooding Postgres with too many concurrent full-table aggregates.
+	// Facets still execute in parallel, but with a bounded fan-out to keep tail
+	// latency predictable under load.
+	g.SetLimit(4)
 
 	g.Go(func() error {
 		conds, args, _ := buildBaseWhere(&filter, FacetSeverity, 1)
