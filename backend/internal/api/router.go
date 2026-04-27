@@ -141,11 +141,13 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		r.Post("/logout", handleLogout(authService))
 		r.Post("/refresh", handleRefresh(authService))
 		r.Get("/me", handleMe())
+		r.Post("/change-password", handleChangePassword(authService, usersRepo, sessionsRepo))
 	})
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(RequireAuth)
+		r.Use(RequirePasswordChangeCompleted)
 
 		r.Route("/api/v1/findings", func(r chi.Router) {
 			r.Get("/", handleListFindings(findingsRepo, userProjectRolesRepo))
