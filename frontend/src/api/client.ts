@@ -65,7 +65,9 @@ async function request<T>(
     }
     const err = new ApiClientError(res.status, apiErr);
     if (res.status === 401 && !originPath.startsWith("/login")) {
-      if (err.code === "SESSION_EXPIRED") {
+      if (err.code === "FORCE_PASSWORD_CHANGE" && !originPath.startsWith("/auth/change-password")) {
+        window.location.replace("/auth/change-password");
+      } else if (err.code === "SESSION_EXPIRED") {
         window.location.replace("/login?expired=1");
       } else if (err.code === "AUTHENTICATION_REQUIRED") {
         window.location.replace("/login");

@@ -88,6 +88,19 @@ func RequireGlobalAdmin(next http.Handler) http.Handler {
 	})
 }
 
+// RequirePasswordChangeCompleted blocks access for users with MustChangePassword=true.
+// Applied to all /api/v1/* protected routes; excluded: /api/v1/auth/* (login, me, change-password).
+func RequirePasswordChangeCompleted(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := UserFromContext(r.Context())
+		if ok && user != nil && user.MustChangePassword {
+			respondError(w, r, http.StatusUnauthorized, "FORCE_PASSWORD_CHANGE", "Необходимо сменить пароль")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func ProjectIDFromURL(param string) ProjectIDExtractor {
 	return func(r *http.Request) (uuid.UUID, error) {
 		return uuid.Parse(chi.URLParam(r, param))
