@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useProjects, usePatchProjectPinned, useCreateProject, useDeleteProject, useUpdateProject } from "@/api/projects";
-import { apiGet } from "@/api/client";
+import { ApiClientError, apiGet } from "@/api/client";
 import { useCurrentUser } from "@/api/auth";
 import {
   parseProjectsUrlParams,
@@ -115,6 +115,27 @@ function buildSparkline(points: TrendPoint[], width = 58, height = 24): string {
       return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
     })
     .join(" ");
+}
+
+function projectUpdatePayload(project: Project): Record<string, unknown> {
+  return {
+    name: project.name,
+    slug: project.slug,
+    description: project.description ?? "",
+    icon_color: project.icon_color,
+    repo_url: project.repo_url ?? "",
+    repo_provider: project.repo_provider ?? "",
+    tags: project.tags,
+    status: project.status,
+    setup_completed: project.setup_completed,
+    visibility: "workspace",
+    team: project.team ?? null,
+    sla_critical_days: null,
+    sla_high_days: null,
+    sla_medium_days: null,
+    sla_low_days: null,
+    sla_notify_before_days: 3,
+  };
 }
 
 export default function ProjectsList() {
@@ -379,11 +400,17 @@ export default function ProjectsList() {
     (project: Project) => {
       const nextName = window.prompt("Новое имя проекта", project.name)?.trim();
       if (!nextName || nextName === project.name) return;
+      const body = projectUpdatePayload(project);
       updateProject.mutate({
         id: project.id,
         body: {
-          ...project,
+          ...body,
           name: nextName,
+        },
+      }, {
+        onError: (error) => {
+          const message = error instanceof ApiClientError ? error.message : "Не удалось переименовать проект";
+          window.alert(message);
         },
       });
     },
@@ -405,7 +432,7 @@ export default function ProjectsList() {
           tags: project.tags,
           status: "active",
           visibility: "workspace",
-          owner_id: project.owner.id,
+          owner_id: currentUser?.id ?? project.owner.id,
         },
         {
           onSuccess: (created) => {
@@ -413,20 +440,30 @@ export default function ProjectsList() {
               navigate(`/projects/${created.data.id}`);
             }
           },
+          onError: (error) => {
+            const message = error instanceof ApiClientError ? error.message : "Не удалось дублировать проект";
+            window.alert(message);
+          },
         },
       );
     },
-    [createProject, navigate],
+    [createProject, currentUser?.id, navigate],
   );
 
   const handleArchiveProject = useCallback(
     (project: Project) => {
       if (project.status === "archived") return;
+      const body = projectUpdatePayload(project);
       updateProject.mutate({
         id: project.id,
         body: {
-          ...project,
+          ...body,
           status: "archived",
+        },
+      }, {
+        onError: (error) => {
+          const message = error instanceof ApiClientError ? error.message : "Не удалось архивировать проект";
+          window.alert(message);
         },
       });
     },
@@ -440,7 +477,12 @@ export default function ProjectsList() {
         `Удалить проект «${project.name}»?\nЭто действие безвозвратно удалит проект и все его уязвимости.`,
       );
       if (!confirmed) return;
-      deleteProject.mutate(project.id);
+      deleteProject.mutate(project.id, {
+        onError: (error) => {
+          const message = error instanceof ApiClientError ? error.message : "Не удалось удалить проект";
+          window.alert(message);
+        },
+      });
     },
     [canDeleteProject, deleteProject],
   );
@@ -1066,16 +1108,16 @@ export default function ProjectsList() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => handleRenameProject(project)}>Переименовать</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleDuplicateProject(project)}>Дублировать</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleArchiveProject(project)}>Архивировать</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => navigate(`/projects/${project.id}?tab=tokens`)}>
+                    <DropdownMenuItem onClick={() => handleRenameProject(project)}>Переименовать</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDuplicateProject(project)}>Дублировать</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleArchiveProject(project)}>Архивировать</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}?tab=tokens`)}>
                       Настройки
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => navigate(`/findings?project_id=${project.id}`)}>Экспорт</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(`/findings?project_id=${project.id}`)}>Экспорт</DropdownMenuItem>
                     {canDeleteProject(project) && (
                       <DropdownMenuItem
-                        onSelect={() => handleDeleteProject(project)}
+                        onClick={() => handleDeleteProject(project)}
                         className="text-red-400 focus:bg-red-500/10 focus:text-red-300"
                       >
                         Удалить проект
