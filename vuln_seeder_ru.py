@@ -1347,7 +1347,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> Config:
         "--project-count",
         type=positive_int,
         default=5,
-        help="Сколько проектов создать автоматически, если не указан --project-id. По умолчанию: %(default)s",
+        help="Сколько проектов создать автоматически (не более 150), если не указан --project-id. По умолчанию: %(default)s",
     )
     parser.add_argument(
         "--kinds",
