@@ -149,3 +149,20 @@ func TestMatchCPEEscapedCharactersInProduct(t *testing.T) {
 		t.Fatalf("expected affected for escaped chars in CPE, got %+v", got)
 	}
 }
+
+func TestMatchCPEVendorPrefixedComponent(t *testing.T) {
+	fixture := json.RawMessage(`[
+	  {
+	    "operator":"OR",
+	    "nodes":[
+	      {"operator":"OR","cpeMatch":[
+	        {"vulnerable": true, "criteria":"cpe:2.3:a:fortinet:fortiproxy:*:*:*:*:*:*:*:*", "versionEndExcluding":"1.2.9"}
+	      ]}
+	    ]
+	  }
+	]`)
+
+	if got := MatchCPE("Fortinet: FortiProxy", "1.2.8", fixture); got.Verdict != "affected" {
+		t.Fatalf("expected affected for vendor-prefixed component, got %+v", got)
+	}
+}
