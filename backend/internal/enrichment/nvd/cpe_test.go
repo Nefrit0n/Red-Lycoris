@@ -115,3 +115,37 @@ func TestMatchCPENormalizeComponentName(t *testing.T) {
 		t.Fatalf("expected affected with normalized component, got %+v", got)
 	}
 }
+
+func TestMatchCPEFirmwareSuffixAlias(t *testing.T) {
+	fixture := json.RawMessage(`[
+	  {
+	    "operator":"OR",
+	    "nodes":[
+	      {"operator":"OR","cpeMatch":[
+	        {"vulnerable": true, "criteria":"cpe:2.3:o:vendor:device_firmware:*:*:*:*:*:*:*:*", "versionEndExcluding":"2.7.0"}
+	      ]}
+	    ]
+	  }
+	]`)
+
+	if got := MatchCPE("device", "2.6.9", fixture); got.Verdict != "affected" {
+		t.Fatalf("expected affected for firmware alias, got %+v", got)
+	}
+}
+
+func TestMatchCPEEscapedCharactersInProduct(t *testing.T) {
+	fixture := json.RawMessage(`[
+	  {
+	    "operator":"OR",
+	    "nodes":[
+	      {"operator":"OR","cpeMatch":[
+	        {"vulnerable": true, "criteria":"cpe:2.3:a:siemens:logo\\!_soft_comfort:*:*:*:*:*:*:*:*", "versionEndExcluding":"9.0.0"}
+	      ]}
+	    ]
+	  }
+	]`)
+
+	if got := MatchCPE("logo! soft comfort", "8.5.0", fixture); got.Verdict != "affected" {
+		t.Fatalf("expected affected for escaped chars in CPE, got %+v", got)
+	}
+}
