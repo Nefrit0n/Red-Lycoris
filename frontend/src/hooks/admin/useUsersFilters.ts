@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { UserListParams } from "@/api/admin-users";
+import type { UserListParams } from "@/api/admin-users";
 
 export interface UsersFilters {
   q: string;
