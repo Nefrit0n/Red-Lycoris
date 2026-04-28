@@ -188,6 +188,11 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Post("/bulk/close", handleBulkClose(findingsRepo, userProjectRolesRepo))
 			r.Post("/bulk/assign", handleBulkAssign(findingsRepo, usersRepo, userProjectRolesRepo))
 			r.Post("/bulk/unassign", handleBulkUnassign(findingsRepo, userProjectRolesRepo))
+
+			// Group-level bulk operations: resolve IDs by group key, then apply action.
+			r.Post("/groups/bulk/close", handleGroupBulkClose(findingsRepo, userProjectRolesRepo))
+			r.Post("/groups/bulk/assign", handleGroupBulkAssign(findingsRepo, usersRepo, userProjectRolesRepo))
+			r.Post("/groups/bulk/status", handleGroupBulkStatus(findingsRepo, userProjectRolesRepo))
 		})
 		r.Route("/api/v1/finding-comments/{event_id}", func(r chi.Router) {
 			r.Use(RequireAuth)
