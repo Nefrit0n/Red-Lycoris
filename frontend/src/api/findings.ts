@@ -553,3 +553,45 @@ export function useBulkAssign() {
     },
   });
 }
+
+export function useBulkCloseGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<{ data: { succeeded: string[]; failed: Record<string, string> } }>("/api/v1/findings/groups/bulk/close", payload),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: findingsListKeys.all }),
+        qc.invalidateQueries({ queryKey: findingsListKeys.all }),
+      ]);
+    },
+  });
+}
+
+export function useBulkAssignGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<{ data: { succeeded: string[]; failed: Record<string, string> } }>("/api/v1/findings/groups/bulk/assign", payload),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: findingsListKeys.all }),
+        qc.invalidateQueries({ queryKey: findingsListKeys.all }),
+      ]);
+    },
+  });
+}
+
+export function useBulkStatusGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<{ data: { succeeded: string[]; failed: Record<string, string> } }>("/api/v1/findings/groups/bulk/status", payload),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: findingsListKeys.all }),
+        qc.invalidateQueries({ queryKey: findingsListKeys.all }),
+      ]);
+    },
+  });
+}

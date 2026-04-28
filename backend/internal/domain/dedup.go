@@ -7,6 +7,16 @@ import (
 	"strings"
 )
 
+func computeSecretFingerprint(kind, value string) string {
+	input := strings.ToLower(strings.TrimSpace(kind)) + ":" + strings.TrimSpace(value)
+	h := sha256.Sum256([]byte(input))
+	return fmt.Sprintf("%x", h)
+}
+
+func ComputeSecretFingerprint(kind, value string) string {
+	return computeSecretFingerprint(kind, value)
+}
+
 func CalculateFingerprint(f *Finding) string {
 	var cveID string
 	if len(f.CVEIDs) > 0 {

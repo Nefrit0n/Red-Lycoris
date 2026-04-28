@@ -82,6 +82,14 @@ func (p *GitleaksParser) Parse(ctx context.Context, data []byte) ([]domain.Findi
 			CWEIDs:     []int{},
 			SourceType: "gitleaks",
 		}
+		secretValue := strings.TrimSpace(item.Secret)
+		if secretValue == "" {
+			secretValue = strings.TrimSpace(item.Match)
+		}
+		if secretKind != nil && secretValue != "" {
+			fp := domain.ComputeSecretFingerprint(*secretKind, secretValue)
+			f.SecretFingerprint = &fp
+		}
 		f.Fingerprint = domain.CalculateFingerprint(&f)
 		findings = append(findings, f)
 	}

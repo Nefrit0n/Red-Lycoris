@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- `group_by=secret` для группировки findings с `kind=secrets` по `secret_fingerprint`.
+- Group-level bulk операции: `/api/v1/findings/groups/bulk/close|assign|status`.
+- Smart defaults группировки по табам (Secrets→secret, SCA→component, SAST/IaC→rule).
+- URL-deeplink раскрытых групп через параметр `expanded=mode:key1,mode:key2`.
+
 ## [0.1.0b] — 2026-04-22
 
 Первый публичный бета-релиз.

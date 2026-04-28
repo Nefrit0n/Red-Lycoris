@@ -61,6 +61,14 @@ paths:
           schema: { type: string }
           description: Фильтр по CVE.
         - in: query
+          name: group_by
+          schema: { type: string, enum: [cve, component, rule, secret] }
+          description: Режим группировки findings.
+        - in: query
+          name: secret_fingerprint
+          schema: { type: string }
+          description: Фильтр по отпечатку секрета.
+        - in: query
           name: cursor
           schema: { type: string }
           description: Курсор пагинации.
@@ -930,6 +938,7 @@ components:
         times_seen: { type: integer, description: Сколько раз finding встречался. }
         project_id: { type: string, format: uuid, description: UUID проекта-владельца. }
         source_type: { type: string, description: Источник импорта finding (sarif/trivy/generic). }
+        secret_fingerprint: { type: string, description: SHA256-отпечаток для секретов (без хранения значения секрета). }
         priority_score: { type: number, format: double, description: Расчитанный приоритет устранения. }
       required:
         - id

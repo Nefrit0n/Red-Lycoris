@@ -141,6 +141,11 @@ func (p *TruffleHogParser) Parse(ctx context.Context, data []byte) ([]domain.Fin
 			CVEIDs:      []string{},
 			CWEIDs:      []int{},
 		}
+		secretValue := firstNonEmpty(strings.TrimSpace(item.RawV2), strings.TrimSpace(item.Raw), strings.TrimSpace(item.Redacted))
+		if f.SecretKind != nil && secretValue != "" {
+			fp := domain.ComputeSecretFingerprint(*f.SecretKind, secretValue)
+			f.SecretFingerprint = &fp
+		}
 		f.Fingerprint = domain.CalculateFingerprint(&f)
 		findings = append(findings, f)
 	}

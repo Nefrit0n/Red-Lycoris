@@ -80,6 +80,7 @@ type sarifResult struct {
 	Message             sarifMessage                 `json:"message"`
 	Locations           []sarifLocation              `json:"locations"`
 	PartialFingerprints map[string]string            `json:"partialFingerprints"`
+	Fingerprints        map[string]string            `json:"fingerprints"`
 	WebRequest          *sarifWebRequest             `json:"webRequest"`
 	WebResponse         *sarifWebResponse            `json:"webResponse"`
 }
@@ -265,6 +266,15 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 			if snippet := extractBestSnippet(loc); snippet != "" {
 				f.CodeSnippet = &snippet
 			}
+			if kind == domain.KindSecrets {
+				secretKind := strings.TrimSpace(firstNonEmpty(rule.Name, result.RuleID, rule.ID))
+				if secretKind != "" {
+					f.SecretKind = &secretKind
+				}
+				if fp := extractSARIFSecretFingerprint(result, f.RuleID, f.CommitSHA, filePath); fp != "" {
+					f.SecretFingerprint = &fp
+				}
+			}
 
 			f.Fingerprint = domain.CalculateFingerprint(&f)
 			findings = append(findings, f)
@@ -272,6 +282,30 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 	}
 
 	return findings, nil
+}
+
+func extractSARIFSecretFingerprint(result sarifResult, ruleID, commitSHA *string, filePath string) string {
+	for _, bucket := range []map[string]string{result.Fingerprints, result.PartialFingerprints} {
+		for k, v := range bucket {
+			key := strings.ToLower(strings.TrimSpace(k))
+			val := strings.TrimSpace(v)
+			if val == "" {
+				continue
+			}
+			if strings.Contains(key, "secret") || strings.Contains(key, "credential") || strings.Contains(key, "token") || strings.Contains(key, "leak") {
+				return val
+			}
+		}
+	}
+	rule := ""
+	if ruleID != nil {
+		rule = *ruleID
+	}
+	commit := ""
+	if commitSHA != nil {
+		commit = *commitSHA
+	}
+	return domain.ComputeSecretFingerprint(rule, rule+":"+commit+":"+filePath)
 }
 
 // extractCVEs собирает CVE-идентификаторы из всех вероятных мест

@@ -11,6 +11,7 @@ import KindTabs from "@/components/findings/KindTabs";
 import SavedViewsBar from "@/components/findings/SavedViewsBar";
 import FindingsToolbar from "@/components/findings/FindingsToolbar";
 import FlatFindingsTable from "@/components/findings/FlatFindingsTable";
+import GroupedFindingsTable from "@/components/findings/GroupedFindingsTable";
 import PreviewPanel from "@/components/findings/PreviewPanel";
 import ColumnChooser from "@/components/findings/ColumnChooser";
 import BulkStatusCommentDialog, {
@@ -190,6 +191,7 @@ export default function FindingsList() {
     filter.iacProviders.length > 0 ||
     filter.secretKinds.length > 0 ||
     filter.query.trim().length > 0 ||
+    filter.secretFingerprint.trim().length > 0 ||
     filter.hasCVE ||
     filter.hasFix ||
     filter.inKEV ||
@@ -332,7 +334,7 @@ export default function FindingsList() {
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <KindTabs filter={filter} onChange={updateFilter} facets={facets} />
+        <KindTabs filter={filter} onChange={updateFilter} facets={facets} hasExplicitGroupBy={searchParams.has("group_by")} />
 
         <SavedViewsBar
           filter={filter}
@@ -362,24 +364,41 @@ export default function FindingsList() {
 
         <div className="flex min-h-0 min-w-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
-            <FlatFindingsTable
-              filter={filter}
-              rowHeight={rowHeight}
-              columnKeys={columnKeys}
-              onRowClick={openPreview}
-              activeRowId={previewId}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
-              onSelectRange={addManyToSelection}
-              onCountChange={handleCountChange}
-              onVisibleIdsChange={setVisibleIds}
-              hasActiveFilters={hasActiveFilters}
-              onResetFilters={() =>
-                setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
-                  replace: true,
-                })
-              }
-            />
+            {filter.groupBy === "" ? (
+              <FlatFindingsTable
+                filter={filter}
+                rowHeight={rowHeight}
+                columnKeys={columnKeys}
+                onRowClick={openPreview}
+                activeRowId={previewId}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+                onSelectRange={addManyToSelection}
+                onCountChange={handleCountChange}
+                onVisibleIdsChange={setVisibleIds}
+                hasActiveFilters={hasActiveFilters}
+                onResetFilters={() =>
+                  setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
+                    replace: true,
+                  })
+                }
+              />
+            ) : (
+              <GroupedFindingsTable
+                filter={filter}
+                rowHeight={rowHeight}
+                columnKeys={columnKeys}
+                onRowClick={openPreview}
+                onPickProject={(id) => updateFilter({ projectIds: [id] })}
+                onCountChange={handleCountChange}
+                onResetFilters={() =>
+                  setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
+                    replace: true,
+                  })
+                }
+                hasActiveFilters={hasActiveFilters}
+              />
+            )}
           </div>
 
         </div>

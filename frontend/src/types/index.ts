@@ -40,6 +40,7 @@ export interface Finding {
   iac_resource?: string;
   iac_provider?: string;
   secret_kind?: string;
+  secret_fingerprint?: string;
   commit_sha?: string;
   rule_id?: string;
   rule_name?: string;
@@ -60,13 +61,20 @@ export interface Finding {
 
 export interface FindingGroup {
   group_key: string;
+  group_title?: string;
   findings_count: number;
   projects_count: number;
   max_severity: number;
   first_seen: string;
+  last_seen: string;
   project_ids: string[];
   sample_ids: string[];
+  secret_kind?: string;
+  ecosystem?: string;
+  fixed_version?: string;
   in_kev: boolean;
+  in_bdu: boolean;
+  bdu_ids?: string[];
   max_epss?: number;
   max_cvss?: number;
 }

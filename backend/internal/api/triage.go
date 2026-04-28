@@ -17,6 +17,43 @@ import (
 	"redlycoris/internal/storage"
 )
 
+type groupBulkFilter struct {
+	ProjectID         *uuid.UUID `json:"project_id"`
+	Severities        []int      `json:"severities"`
+	Statuses          []int      `json:"statuses"`
+	Kinds             []string   `json:"kinds"`
+	CVE               string     `json:"cve"`
+	Component         string     `json:"component"`
+	ComponentVersion  string     `json:"component_version"`
+	RuleID            string     `json:"rule_id"`
+	SecretFingerprint string     `json:"secret_fingerprint"`
+	Query             string     `json:"q"`
+}
+
+func toStorageFilter(raw groupBulkFilter) storage.FindingsFilter {
+	out := storage.FindingsFilter{
+		Severities:        raw.Severities,
+		Statuses:          raw.Statuses,
+		CVE:               raw.CVE,
+		ComponentVersion:  raw.ComponentVersion,
+		RuleID:            raw.RuleID,
+		SecretFingerprint: raw.SecretFingerprint,
+		Query:             raw.Query,
+	}
+	if raw.Component != "" {
+		out.Components = []string{raw.Component}
+	}
+	if raw.ProjectID != nil {
+		out.ProjectID = *raw.ProjectID
+	}
+	for _, k := range raw.Kinds {
+		if parsed, ok := domain.ParseFindingKind(k); ok {
+			out.Kinds = append(out.Kinds, parsed)
+		}
+	}
+	return out
+}
+
 func checkBulkProjectAccess(w http.ResponseWriter, r *http.Request, repo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo, findingIDs []uuid.UUID) bool {
 	user, _ := UserFromContext(r.Context())
 	if user.IsAdmin() {
@@ -395,6 +432,131 @@ func handleBulkUnassign(findingsRepo *storage.FindingsRepo, rolesRepo *storage.U
 		})
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to bulk unassign findings")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"succeeded": result.Succeeded, "failed": result.Failed}})
+	}
+}
+
+func handleBulkCloseGroup(findingsRepo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
+	type reqBody struct {
+		GroupBy  string          `json:"group_by"`
+		GroupKey string          `json:"group_key"`
+		Filter   groupBulkFilter `json:"filter"`
+		Action   struct {
+			ReasonCode string `json:"reason_code"`
+			Note       string `json:"note"`
+		} `json:"action"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
+		filter := toStorageFilter(req.Filter)
+		ids, total, err := findingsRepo.ListIDsByGroup(r.Context(), filter, req.GroupBy, req.GroupKey)
+		if err != nil {
+			if errors.Is(err, storage.ErrBulkLimitExceeded) {
+				respondError(w, r, http.StatusBadRequest, "BULK_LIMIT_EXCEEDED", fmt.Sprintf("group has %d findings", total))
+				return
+			}
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+			return
+		}
+		if !checkBulkProjectAccess(w, r, findingsRepo, rolesRepo, ids) {
+			return
+		}
+		user, _ := UserFromContext(r.Context())
+		result, err := findingsRepo.ApplyBulkTriageAction(r.Context(), user.ID, ids, func(_ uuid.UUID) domain.TriageAction {
+			return &domain.CloseAction{ReasonCode: req.Action.ReasonCode, Note: req.Action.Note, UserID: user.ID}
+		})
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to bulk close findings")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"succeeded": result.Succeeded, "failed": result.Failed}})
+	}
+}
+
+func handleBulkAssignGroup(findingsRepo *storage.FindingsRepo, usersRepo *storage.UsersRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
+	type reqBody struct {
+		GroupBy  string          `json:"group_by"`
+		GroupKey string          `json:"group_key"`
+		Filter   groupBulkFilter `json:"filter"`
+		Action   struct {
+			UserID uuid.UUID `json:"user_id"`
+		} `json:"action"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
+		target, err := usersRepo.GetByID(r.Context(), req.Action.UserID)
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "target user not found")
+			return
+		}
+		ids, total, err := findingsRepo.ListIDsByGroup(r.Context(), toStorageFilter(req.Filter), req.GroupBy, req.GroupKey)
+		if err != nil {
+			if errors.Is(err, storage.ErrBulkLimitExceeded) {
+				respondError(w, r, http.StatusBadRequest, "BULK_LIMIT_EXCEEDED", fmt.Sprintf("group has %d findings", total))
+				return
+			}
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+			return
+		}
+		if !checkBulkProjectAccess(w, r, findingsRepo, rolesRepo, ids) {
+			return
+		}
+		user, _ := UserFromContext(r.Context())
+		result, err := findingsRepo.ApplyBulkTriageAction(r.Context(), user.ID, ids, func(_ uuid.UUID) domain.TriageAction {
+			return &domain.AssignAction{ToUserID: req.Action.UserID, ToEmail: target.Email}
+		})
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to bulk assign findings")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"succeeded": result.Succeeded, "failed": result.Failed}})
+	}
+}
+
+func handleBulkStatusGroup(findingsRepo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
+	type reqBody struct {
+		GroupBy  string          `json:"group_by"`
+		GroupKey string          `json:"group_key"`
+		Filter   groupBulkFilter `json:"filter"`
+		Action   struct {
+			Status int    `json:"status"`
+			Note   string `json:"note"`
+		} `json:"action"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
+		ids, total, err := findingsRepo.ListIDsByGroup(r.Context(), toStorageFilter(req.Filter), req.GroupBy, req.GroupKey)
+		if err != nil {
+			if errors.Is(err, storage.ErrBulkLimitExceeded) {
+				respondError(w, r, http.StatusBadRequest, "BULK_LIMIT_EXCEEDED", fmt.Sprintf("group has %d findings", total))
+				return
+			}
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+			return
+		}
+		if !checkBulkProjectAccess(w, r, findingsRepo, rolesRepo, ids) {
+			return
+		}
+		user, _ := UserFromContext(r.Context())
+		result, err := findingsRepo.ApplyBulkTriageAction(r.Context(), user.ID, ids, func(_ uuid.UUID) domain.TriageAction {
+			return &domain.ChangeStatusAction{NewStatus: req.Action.Status, Note: req.Action.Note}
+		})
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to bulk update status")
 			return
 		}
 		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"succeeded": result.Succeeded, "failed": result.Failed}})
