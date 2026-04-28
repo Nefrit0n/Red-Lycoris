@@ -59,11 +59,6 @@ const SOURCE_OPTIONS = [
 export function FilterPopover({ open, onClose, filters, onApply }: Props) {
   const [selectedField, setSelectedField] = useState<FilterField>("role");
 
-  function handleApply() {
-    // Applied inline via checkboxes/radio changes
-    onClose();
-  }
-
   function toggleMulti(
     field: "roles" | "statuses",
     value: string,

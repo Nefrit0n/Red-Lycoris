@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   createAdminUser,
   checkEmailAvailable,
@@ -59,14 +58,14 @@ export function CreateUserModal({ open, onClose }: Props) {
 
   // Email check
   const [emailStatus, setEmailStatus] = useState<"idle" | "checking" | "ok" | "taken">("idle");
-  const emailDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const emailDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // HIBP check
   const [hibpResult, setHibpResult] = useState<{
     pwned: boolean;
     unavailable: boolean;
   } | null>(null);
-  const hibpDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const hibpDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const strength = usePasswordStrength(password);
 
