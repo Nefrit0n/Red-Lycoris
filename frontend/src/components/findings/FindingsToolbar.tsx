@@ -46,6 +46,14 @@ const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: "priority_score", label: "Приоритет" },
 ];
 
+const GROUP_OPTIONS: { value: FindingsFilter["groupBy"]; label: string }[] = [
+  { value: "", label: "Без группировки" },
+  { value: "component", label: "По компоненту" },
+  { value: "rule", label: "По правилу" },
+  { value: "cve", label: "По CVE" },
+  { value: "secret", label: "По секрету" },
+];
+
 export function FindingsToolbar({
   filter,
   onChange,
@@ -78,6 +86,25 @@ export function FindingsToolbar({
         {selectedCount > 0 && (
           <span className="text-red-400">{selectedCount} выбрано</span>
         )}
+        <div className="flex items-center gap-1 pl-2">
+          <span className="mr-1 text-xs text-zinc-500">Группировка:</span>
+          {GROUP_OPTIONS.map((opt) => (
+            <Button
+              key={opt.label}
+              variant={filter.groupBy === opt.value ? "outline" : "ghost"}
+              size="sm"
+              onClick={() => onChange({ groupBy: opt.value })}
+              className={cn(
+                "h-8 shrink-0 px-2 text-xs",
+                filter.groupBy === opt.value
+                  ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                  : "text-zinc-400 hover:text-zinc-200",
+              )}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-1.5">
