@@ -60,13 +60,20 @@ export interface Finding {
 
 export interface FindingGroup {
   group_key: string;
+  group_title?: string;    // CVE description / rule_name / secret_kind
+  secret_kind?: string;   // secret mode only
+  ecosystem?: string;     // component mode only
+  fixed_version?: string; // component mode only
   findings_count: number;
   projects_count: number;
   max_severity: number;
   first_seen: string;
+  last_seen: string;
   project_ids: string[];
   sample_ids: string[];
   in_kev: boolean;
+  in_bdu: boolean;
+  bdu_ids?: string[];
   max_epss?: number;
   max_cvss?: number;
 }
