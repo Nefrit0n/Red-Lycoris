@@ -79,6 +79,7 @@ type FindingsFilter struct {
 	Components           []string
 	ComponentVersion     string
 	RuleID               string
+	SecretFingerprint    string // exact match for secret-group overlay
 	AssigneeUserIDs      []uuid.UUID
 	AssigneeMeUserID     *uuid.UUID
 	Unassigned           bool
@@ -109,7 +110,8 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 			times_seen, project_id, source_type, finding_kind,
 			fixed_version, package_ecosystem, purl, code_snippet, code_flow,
 			url, http_method, http_param, http_evidence, iac_resource,
-			iac_provider, secret_kind, commit_sha, rule_id, rule_name
+			iac_provider, secret_kind, commit_sha, rule_id, rule_name,
+			secret_fingerprint
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11,
@@ -117,11 +119,13 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 			$18, $19, $20, $21,
 			$22, $23, $24, $25, $26,
 			$27, $28, $29, $30, $31,
-			$32, $33, $34, $35, $36
+			$32, $33, $34, $35, $36,
+			$37
 		)
 		ON CONFLICT (fingerprint) DO UPDATE SET
-			last_seen  = EXCLUDED.last_seen,
-			times_seen = findings.times_seen + 1
+			last_seen          = EXCLUDED.last_seen,
+			times_seen         = findings.times_seen + 1,
+			secret_fingerprint = COALESCE(EXCLUDED.secret_fingerprint, findings.secret_fingerprint)
 		RETURNING id, (xmax = 0) AS inserted`
 
 	if f.ID == uuid.Nil {
@@ -150,6 +154,7 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
+		f.SecretFingerprint,
 	).Scan(&f.ID, &inserted)
 	if err != nil {
 		return false, fmt.Errorf("storage.FindingsRepo.Create: %w", err)
@@ -167,7 +172,8 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 			times_seen, project_id, source_type, finding_kind,
 			fixed_version, package_ecosystem, purl, code_snippet, code_flow,
 			url, http_method, http_param, http_evidence, iac_resource,
-			iac_provider, secret_kind, commit_sha, rule_id, rule_name
+			iac_provider, secret_kind, commit_sha, rule_id, rule_name,
+			secret_fingerprint
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11,
@@ -175,11 +181,13 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 			$18, $19, $20, $21,
 			$22, $23, $24, $25, $26,
 			$27, $28, $29, $30, $31,
-			$32, $33, $34, $35, $36
+			$32, $33, $34, $35, $36,
+			$37
 		)
 		ON CONFLICT (fingerprint) DO UPDATE SET
-			last_seen  = EXCLUDED.last_seen,
-			times_seen = findings.times_seen + 1
+			last_seen          = EXCLUDED.last_seen,
+			times_seen         = findings.times_seen + 1,
+			secret_fingerprint = COALESCE(EXCLUDED.secret_fingerprint, findings.secret_fingerprint)
 		RETURNING id, (xmax = 0) AS inserted`
 
 	if f.ID == uuid.Nil {
@@ -208,6 +216,7 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
+		f.SecretFingerprint,
 	).Scan(&f.ID, &inserted)
 	if err != nil {
 		return false, fmt.Errorf("storage.FindingsRepo.CreateTx: %w", err)
@@ -222,7 +231,7 @@ var findingColumns = `
 	f.times_seen, f.project_id, f.source_type, f.fixed_version, f.package_ecosystem,
 	f.purl, f.code_snippet, f.code_flow, f.url, f.http_method, f.http_param,
 	f.http_evidence, f.iac_resource, f.iac_provider, f.secret_kind, f.commit_sha,
-	f.rule_id, f.rule_name, fs.priority_score,
+	f.rule_id, f.rule_name, f.secret_fingerprint, fs.priority_score,
 	f.closure_reason_id, f.closure_note, f.closed_at, f.closed_by, f.assigned_to`
 
 // Extra columns joined only for list queries (KEV/BDU flags, max EPSS/CVSS
@@ -259,7 +268,7 @@ func scanFinding(row pgx.Row) (*domain.Finding, error) {
 		&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
 		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
 		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
-		&f.RuleID, &f.RuleName, &f.PriorityScore,
+		&f.RuleID, &f.RuleName, &f.SecretFingerprint, &f.PriorityScore,
 		&f.ClosureReasonID, &f.ClosureNote, &f.ClosedAt, &f.ClosedBy, &f.AssignedTo,
 	)
 	if err != nil {
@@ -286,7 +295,7 @@ func scanFindingListItem(row pgx.Row) (*domain.Finding, error) {
 		&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
 		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
 		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
-		&f.RuleID, &f.RuleName, &f.PriorityScore,
+		&f.RuleID, &f.RuleName, &f.SecretFingerprint, &f.PriorityScore,
 		&f.ClosureReasonID, &f.ClosureNote, &f.ClosedAt, &f.ClosedBy, &f.AssignedTo,
 		&f.InKEV, &f.MaxEPSS, &f.MaxCVSS, &f.InBDU, &projectName, &f.AssigneeEmail,
 	)
@@ -478,6 +487,11 @@ func buildBaseWhere(filter *FindingsFilter, excludeField string, startArg int) (
 	if filter.CWE > 0 {
 		conditions = append(conditions, fmt.Sprintf("f.cwe_ids @> ARRAY[$%d]::int[]", argN))
 		args = append(args, filter.CWE)
+		argN++
+	}
+	if filter.SecretFingerprint != "" {
+		conditions = append(conditions, fmt.Sprintf("f.secret_fingerprint = $%d", argN))
+		args = append(args, filter.SecretFingerprint)
 		argN++
 	}
 
@@ -849,34 +863,99 @@ func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*Find
 	return out, nil
 }
 
-// ListGroups aggregates findings by a grouping axis (cve|component|rule) and
-// returns up to 200 groups ordered by max severity + findings count. Cursor
+// ListGroups aggregates findings by a grouping axis (cve|component|rule|secret)
+// and returns up to 200 groups ordered by max severity + findings count. Cursor
 // pagination is not supported — groups are bounded and cheap compared to the
 // flat list.
 func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, groupBy string) ([]domain.FindingGroup, int, error) {
 	const groupLimit = 200
 
-	var groupKeyExpr, fromExpr string
-	var extraConds []string
+	// Shared enrichment expressions for modes that aggregate across finding CVE arrays.
+	const (
+		sharedKEV  = "bool_or(EXISTS (SELECT 1 FROM kev_catalog k WHERE f.cve_ids IS NOT NULL AND k.cve_id = ANY(f.cve_ids)))"
+		sharedBDU  = "bool_or(EXISTS (SELECT 1 FROM bdu_fstec b WHERE f.cve_ids IS NOT NULL AND b.cve_ids && f.cve_ids))"
+		sharedEPSS = "MAX((SELECT MAX(e.epss_score) FROM epss_scores e WHERE f.cve_ids IS NOT NULL AND e.cve_id = ANY(f.cve_ids)))"
+		sharedCVSS = "MAX((SELECT MAX(n.cvss_v31_score) FROM nvd_cves n WHERE f.cve_ids IS NOT NULL AND n.cve_id = ANY(f.cve_ids)))"
+	)
+
+	var (
+		groupKeyExpr   string
+		groupTitleExpr string
+		secretKindExpr string
+		ecosystemExpr  string
+		fixedVerExpr   string
+		inKEVExpr      string
+		inBDUExpr      string
+		bduIDsExpr     string
+		epssExpr       string
+		cvssExpr       string
+		fromExpr       string
+		extraConds     []string
+	)
 
 	switch groupBy {
 	case "cve":
-		// Unnest CVE arrays so each (finding, cve) pair contributes once. Only
-		// findings that actually carry a CVE participate.
+		// Unnest CVE arrays so each (finding, cve) pair contributes once. The
+		// LEFT JOIN to nvd_cves provides description and CVSS without an extra
+		// correlated subquery per row.
 		groupKeyExpr = "cve_key"
-		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cve_ids) AS c(cve_key)"
+		groupTitleExpr = "MAX(n.description)"
+		secretKindExpr = "NULL::text"
+		ecosystemExpr = "NULL::text"
+		fixedVerExpr = "NULL::text"
+		inKEVExpr = "bool_or(EXISTS (SELECT 1 FROM kev_catalog k WHERE k.cve_id = cve_key))"
+		inBDUExpr = "bool_or(EXISTS (SELECT 1 FROM bdu_fstec b WHERE b.cve_ids @> ARRAY[cve_key]))"
+		// Correlated subquery runs once per GROUP ROW (~200 max) — acceptable.
+		bduIDsExpr = "(SELECT array_agg(DISTINCT b2.bdu_id) FROM bdu_fstec b2 WHERE b2.cve_ids @> ARRAY[cve_key])"
+		epssExpr = "MAX((SELECT e.epss_score FROM epss_scores e WHERE e.cve_id = cve_key))"
+		cvssExpr = "MAX(n.cvss_v31_score)" // from the LEFT JOIN
+		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cve_ids) AS c(cve_key) LEFT JOIN nvd_cves n ON n.cve_id = cve_key"
 		extraConds = []string{"f.cve_ids IS NOT NULL", "array_length(f.cve_ids, 1) > 0"}
 	case "component":
 		groupKeyExpr = "f.component || '@' || COALESCE(f.component_version, '')"
+		groupTitleExpr = "NULL::text"
+		secretKindExpr = "NULL::text"
+		ecosystemExpr = "MAX(f.package_ecosystem)"
+		fixedVerExpr = "MIN(CASE WHEN f.fixed_version IS NOT NULL THEN f.fixed_version END)"
+		inKEVExpr = sharedKEV
+		inBDUExpr = sharedBDU
+		bduIDsExpr = "NULL::text[]"
+		epssExpr = sharedEPSS
+		cvssExpr = sharedCVSS
 		fromExpr = "findings f"
 		extraConds = []string{"f.component IS NOT NULL"}
 	case "rule":
 		// Unit separator (E'\x1f') is the join byte — safe because rule_id /
-		// rule_name are human-readable strings that never contain control
-		// characters.
+		// rule_name are human-readable strings that never contain control chars.
 		groupKeyExpr = `COALESCE(f.rule_id, '') || E'\x1f' || COALESCE(f.rule_name, '')`
+		groupTitleExpr = "MAX(f.rule_name)"
+		secretKindExpr = "NULL::text"
+		ecosystemExpr = "NULL::text"
+		fixedVerExpr = "NULL::text"
+		inKEVExpr = sharedKEV
+		inBDUExpr = sharedBDU
+		bduIDsExpr = "NULL::text[]"
+		epssExpr = sharedEPSS
+		cvssExpr = sharedCVSS
 		fromExpr = "findings f"
 		extraConds = []string{"f.rule_id IS NOT NULL"}
+	case "secret":
+		groupKeyExpr = "f.secret_fingerprint"
+		groupTitleExpr = "MAX(f.secret_kind)"
+		secretKindExpr = "MAX(f.secret_kind)"
+		ecosystemExpr = "NULL::text"
+		fixedVerExpr = "NULL::text"
+		// Secrets don't carry CVE IDs, so KEV/BDU/EPSS/CVSS are always null.
+		inKEVExpr = "FALSE"
+		inBDUExpr = "FALSE"
+		bduIDsExpr = "NULL::text[]"
+		epssExpr = "NULL::real"
+		cvssExpr = "NULL::real"
+		fromExpr = "findings f"
+		extraConds = []string{
+			"f.secret_fingerprint IS NOT NULL",
+			fmt.Sprintf("f.finding_kind = %d", int(domain.KindSecrets)),
+		}
 	default:
 		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: unknown group_by %q", groupBy)
 	}
@@ -884,30 +963,23 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 	conds, args, _ := buildBaseWhere(&filter, "", 1)
 	conds = append(conds, extraConds...)
 
-	// KEV/EPSS/CVSS per-group aggregates. For CVE grouping we can look them up
-	// directly by cve_key. For component/rule grouping we reduce across each
-	// finding's CVE set with bool_or / MAX of the per-row max.
-	var kevExpr, epssExpr, cvssExpr string
-	if groupBy == "cve" {
-		kevExpr = "bool_or(EXISTS (SELECT 1 FROM kev_catalog k WHERE k.cve_id = cve_key))"
-		epssExpr = "MAX((SELECT e.epss_score FROM epss_scores e WHERE e.cve_id = cve_key))"
-		cvssExpr = "MAX((SELECT n.cvss_v31_score FROM nvd_cves n WHERE n.cve_id = cve_key))"
-	} else {
-		kevExpr = "bool_or(EXISTS (SELECT 1 FROM kev_catalog k WHERE f.cve_ids IS NOT NULL AND k.cve_id = ANY(f.cve_ids)))"
-		epssExpr = "MAX((SELECT MAX(e.epss_score) FROM epss_scores e WHERE f.cve_ids IS NOT NULL AND e.cve_id = ANY(f.cve_ids)))"
-		cvssExpr = "MAX((SELECT MAX(n.cvss_v31_score) FROM nvd_cves n WHERE f.cve_ids IS NOT NULL AND n.cve_id = ANY(f.cve_ids)))"
-	}
-
 	q := fmt.Sprintf(`
 		SELECT
 			%s AS group_key,
+			%s AS group_title,
+			%s AS secret_kind,
+			%s AS ecosystem,
+			%s AS fixed_version,
 			count(*) AS findings_count,
 			count(DISTINCT f.project_id) AS projects_count,
 			max(f.severity) AS max_severity,
 			min(f.first_seen) AS first_seen,
+			max(f.last_seen) AS last_seen,
 			array_agg(DISTINCT f.project_id) AS project_ids,
 			(array_agg(f.id ORDER BY f.first_seen DESC))[1:3] AS sample_ids,
 			%s AS in_kev,
+			%s AS in_bdu,
+			%s AS bdu_ids,
 			%s AS max_epss,
 			%s AS max_cvss
 		FROM %s
@@ -915,8 +987,9 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		GROUP BY %s
 		ORDER BY max_severity DESC, findings_count DESC
 		LIMIT %d`,
-		groupKeyExpr, kevExpr, epssExpr, cvssExpr, fromExpr,
-		whereClause(conds), groupKeyExpr, groupLimit)
+		groupKeyExpr, groupTitleExpr, secretKindExpr, ecosystemExpr, fixedVerExpr,
+		inKEVExpr, inBDUExpr, bduIDsExpr, epssExpr, cvssExpr,
+		fromExpr, whereClause(conds), groupKeyExpr, groupLimit)
 
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -927,13 +1000,24 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 	groups := make([]domain.FindingGroup, 0)
 	for rows.Next() {
 		var g domain.FindingGroup
+		var groupTitle, secretKind, ecosystem, fixedVersion *string
 		if err := rows.Scan(
-			&g.GroupKey, &g.FindingsCount, &g.ProjectsCount,
-			&g.MaxSeverity, &g.FirstSeen, &g.ProjectIDs, &g.SampleIDs,
-			&g.InKEV, &g.MaxEPSS, &g.MaxCVSS,
+			&g.GroupKey, &groupTitle, &secretKind, &ecosystem, &fixedVersion,
+			&g.FindingsCount, &g.ProjectsCount,
+			&g.MaxSeverity, &g.FirstSeen, &g.LastSeen,
+			&g.ProjectIDs, &g.SampleIDs,
+			&g.InKEV, &g.InBDU, &g.BDUIDs,
+			&g.MaxEPSS, &g.MaxCVSS,
 		); err != nil {
 			return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: scan: %w", err)
 		}
+		if groupTitle != nil {
+			g.GroupTitle = *groupTitle
+		}
+		g.SecretKind = secretKind
+		g.Ecosystem = ecosystem
+		g.FixedVersion = fixedVersion
+
 		if groupBy == "rule" {
 			// Unit-separator (\x1f) splits rule_id from rule_name; present as
 			// "rule_id — rule_name" for display.
@@ -952,12 +1036,105 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		if g.SampleIDs == nil {
 			g.SampleIDs = []uuid.UUID{}
 		}
+		if g.BDUIDs == nil {
+			g.BDUIDs = []string{}
+		}
 		groups = append(groups, g)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: rows: %w", err)
 	}
 	return groups, len(groups), nil
+}
+
+// BulkLimitExceededError is returned by ListIDsByGroup when a group has more
+// than the hard-coded 5000-finding ceiling for a single bulk operation.
+type BulkLimitExceededError struct {
+	Count int
+}
+
+func (e *BulkLimitExceededError) Error() string {
+	return fmt.Sprintf("group contains %d findings, exceeds bulk limit of 5000", e.Count)
+}
+
+// ListIDsByGroup resolves the set of finding IDs belonging to a specific group
+// key. It honours the base FindingsFilter (RBAC/project scoping) and refuses to
+// return more than 5000 IDs in one call.
+func (r *FindingsRepo) ListIDsByGroup(ctx context.Context, filter FindingsFilter, groupBy, groupKey string) ([]uuid.UUID, int, error) {
+	const hardLimit = 5000
+
+	// Clear overlay fields so we can set them precisely to the group key.
+	filter.CVE = ""
+	filter.Components = nil
+	filter.ComponentVersion = ""
+	filter.RuleID = ""
+	filter.SecretFingerprint = ""
+
+	conds, args, argN := buildBaseWhere(&filter, "", 1)
+
+	switch groupBy {
+	case "cve":
+		conds = append(conds, fmt.Sprintf("f.cve_ids @> ARRAY[$%d]::text[]", argN))
+		args = append(args, groupKey)
+	case "component":
+		at := strings.LastIndex(groupKey, "@")
+		if at >= 0 {
+			comp, ver := groupKey[:at], groupKey[at+1:]
+			conds = append(conds, fmt.Sprintf("f.component = $%d", argN))
+			args = append(args, comp)
+			argN++
+			conds = append(conds, fmt.Sprintf("COALESCE(f.component_version, '') = $%d", argN))
+			args = append(args, ver)
+		} else {
+			conds = append(conds, fmt.Sprintf("f.component = $%d", argN))
+			args = append(args, groupKey)
+		}
+	case "rule":
+		// Accept both internal (\x1f) and display (" — ") formats from client.
+		ruleID := groupKey
+		if idx := strings.Index(groupKey, "\x1f"); idx >= 0 {
+			ruleID = groupKey[:idx]
+		} else if idx := strings.Index(groupKey, " — "); idx >= 0 {
+			ruleID = groupKey[:idx]
+		}
+		conds = append(conds, fmt.Sprintf("f.rule_id = $%d", argN))
+		args = append(args, ruleID)
+	case "secret":
+		conds = append(conds, fmt.Sprintf("f.secret_fingerprint = $%d", argN))
+		args = append(args, groupKey)
+	default:
+		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListIDsByGroup: unknown group_by %q", groupBy)
+	}
+
+	where := whereClause(conds)
+
+	var total int
+	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM findings f "+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListIDsByGroup: count: %w", err)
+	}
+	if total > hardLimit {
+		return nil, total, &BulkLimitExceededError{Count: total}
+	}
+
+	q := fmt.Sprintf("SELECT f.id FROM findings f %s LIMIT %d", where, hardLimit)
+	idRows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListIDsByGroup: query: %w", err)
+	}
+	defer idRows.Close()
+
+	ids := make([]uuid.UUID, 0, total)
+	for idRows.Next() {
+		var id uuid.UUID
+		if err := idRows.Scan(&id); err != nil {
+			return nil, 0, fmt.Errorf("storage.FindingsRepo.ListIDsByGroup: scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := idRows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListIDsByGroup: rows: %w", err)
+	}
+	return ids, total, nil
 }
 
 func (r *FindingsRepo) getForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*domain.Finding, error) {
@@ -1090,6 +1267,32 @@ func (r *FindingsRepo) GetProjectID(ctx context.Context, id string) (uuid.UUID, 
 		return uuid.Nil, fmt.Errorf("storage.FindingsRepo.GetProjectID: %w", err)
 	}
 	return projectID, nil
+}
+
+// GetProjectIDsForFindings returns a map from finding ID to its project ID for
+// the given set of finding IDs. Used by group-level bulk RBAC checks.
+func (r *FindingsRepo) GetProjectIDsForFindings(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	if len(ids) == 0 {
+		return map[uuid.UUID]uuid.UUID{}, nil
+	}
+	const q = `SELECT id, project_id FROM findings WHERE id = ANY($1)`
+	rows, err := r.pool.Query(ctx, q, ids)
+	if err != nil {
+		return nil, fmt.Errorf("storage.FindingsRepo.GetProjectIDsForFindings: %w", err)
+	}
+	defer rows.Close()
+	result := make(map[uuid.UUID]uuid.UUID, len(ids))
+	for rows.Next() {
+		var fID, pID uuid.UUID
+		if err := rows.Scan(&fID, &pID); err != nil {
+			return nil, fmt.Errorf("storage.FindingsRepo.GetProjectIDsForFindings: scan: %w", err)
+		}
+		result[fID] = pID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("storage.FindingsRepo.GetProjectIDsForFindings: rows: %w", err)
+	}
+	return result, nil
 }
 
 func (r *FindingsRepo) ListDistinctProjectIDs(ctx context.Context, findingIDs []uuid.UUID) ([]uuid.UUID, error) {
