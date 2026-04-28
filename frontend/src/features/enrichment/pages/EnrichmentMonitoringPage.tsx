@@ -10,6 +10,7 @@ import { KpiStrip } from '../components/KpiStrip';
 import { SortDropdown, type SortKey } from '../components/SortDropdown';
 import { SourceCard } from '../components/SourceCard';
 import { SourceCardSkeleton } from '../components/SourceCardSkeleton';
+import { SyncActionBadges } from '../components/SyncActionBadges';
 
 export default function EnrichmentMonitoringPage() {
   const [chip, setChip] = useState<Chip>('all');
@@ -50,8 +51,16 @@ export default function EnrichmentMonitoringPage() {
       <SortDropdown value={sort} onChange={setSort} />
     </div>
 
+    <SyncActionBadges />
+
     <div className='grid gap-3 md:grid-cols-2'>
       {isLoading ? Array.from({ length: 6 }).map((_, i) => <SourceCardSkeleton key={i} />) : filtered.map(({ s, ui }) => <article key={s.source_code} aria-label={`Источник ${s.source_code}, статус ${ui}`}><SourceCard s={s} status={ui} /></article>)}
     </div>
+
+    {!isLoading && filtered.length === 0 && (
+      <div className='rounded-[10px] border border-white/10 bg-white/[0.025] p-4 text-sm text-zinc-400'>
+        Нет карточек по выбранному фильтру. Используй бейджи выше, чтобы запустить синк источников вручную.
+      </div>
+    )}
   </div>;
 }
