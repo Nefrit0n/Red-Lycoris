@@ -145,3 +145,38 @@ func (r *SessionsRepo) UpdateExpiresAt(ctx context.Context, sessionID uuid.UUID,
 	}
 	return nil
 }
+
+func (r *SessionsRepo) ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]domain.AdminUserSession, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, user_agent, COALESCE(ip::text, ''), created_at, last_used_at, expires_at
+		FROM sessions
+		WHERE user_id = $1
+		  AND revoked_at IS NULL
+		  AND expires_at > now()
+		ORDER BY last_used_at DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("storage.SessionsRepo.ListActiveByUser: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]domain.AdminUserSession, 0)
+	for rows.Next() {
+		var s domain.AdminUserSession
+		if err := rows.Scan(&s.ID, &s.UserAgent, &s.IP, &s.IssuedAt, &s.LastActive, &s.ExpiresAt); err != nil {
+			return nil, fmt.Errorf("storage.SessionsRepo.ListActiveByUser scan: %w", err)
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func (r *SessionsRepo) RevokeSessionByID(ctx context.Context, sessionID uuid.UUID, reason string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE sessions
+		SET revoked_at = now(), revoked_reason = NULLIF($2, '')
+		WHERE id = $1 AND revoked_at IS NULL`, sessionID, reason)
+	if err != nil {
+		return fmt.Errorf("storage.SessionsRepo.RevokeSessionByID: %w", err)
+	}
+	return nil
+}

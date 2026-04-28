@@ -14,9 +14,11 @@ import AdminUsers from "@/pages/AdminUsers";
 import AdminAudit from "@/pages/AdminAudit";
 import { AccessPageShell } from "@/pages/admin/access/AccessPageShell";
 import UsersListView from "@/pages/admin/access/UsersListView";
-import UserDetailPlaceholder from "@/pages/admin/access/UserDetailPlaceholder";
-import GroupsPlaceholder from "@/pages/admin/access/GroupsPlaceholder";
-import RolesPlaceholder from "@/pages/admin/access/RolesPlaceholder";
+import UserDetailPage from "@/pages/admin/access/UserDetailPage";
+import GroupsListView from "@/pages/admin/access/GroupsListView";
+import GroupDetailPage from "@/pages/admin/access/GroupDetailPage";
+import RolesListView from "@/pages/admin/access/RolesListView";
+import RoleDetailPage from "@/pages/admin/access/RoleDetailPage";
 
 export default function App() {
   return (
@@ -54,13 +56,13 @@ export default function App() {
             />
             <Route
               path="/admin/access/users/:id"
-              element={<UserDetailPlaceholder />}
+              element={<UserDetailPage />}
             />
             <Route
               path="/admin/access/groups"
               element={
                 <AccessPageShell>
-                  <GroupsPlaceholder />
+                  <GroupsListView />
                 </AccessPageShell>
               }
             />
@@ -68,9 +70,17 @@ export default function App() {
               path="/admin/access/roles"
               element={
                 <AccessPageShell>
-                  <RolesPlaceholder />
+                  <RolesListView />
                 </AccessPageShell>
               }
+            />
+            <Route
+              path="/admin/access/groups/:id"
+              element={<GroupDetailPage />}
+            />
+            <Route
+              path="/admin/access/roles/:id"
+              element={<RoleDetailPage />}
             />
           </Route>
         </Route>
