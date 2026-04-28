@@ -29,6 +29,14 @@ import { useFindingsSelection } from "@/store/findings-selection";
 import type { ColumnKey, FindingsPreset, FindingsTabKey } from "@/components/findings/findingsTableConfig";
 import { presetColumns, rowHeightForPreset, sanitizeColumns } from "@/components/findings/findingsTableConfig";
 
+const GROUP_OPTIONS: { value: FindingsFilter["groupBy"]; label: string }[] = [
+  { value: "", label: "Без группировки" },
+  { value: "component", label: "По компоненту" },
+  { value: "rule", label: "По правилу" },
+  { value: "cve", label: "По CVE" },
+  { value: "secret", label: "По секрету" },
+];
+
 function activeTab(filter: FindingsFilter): FindingsTabKey {
   return filter.kinds.length === 1 ? filter.kinds[0] : "all";
 }

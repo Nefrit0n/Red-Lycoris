@@ -30,6 +30,14 @@ interface SavedViewsBarProps {
   onChange: (update: Partial<FindingsFilter>) => void;
 }
 
+const GROUP_OPTIONS: { value: FindingsFilter["groupBy"]; label: string }[] = [
+  { value: "", label: "Без группировки" },
+  { value: "component", label: "По компоненту" },
+  { value: "rule", label: "По правилу" },
+  { value: "cve", label: "По CVE" },
+  { value: "secret", label: "По секрету" },
+];
+
 // Saved views are stored as a frozen URLSearchParams payload (a flat
 // {key:value} dict). We materialize them through filterFromSearchParams so
 // the shape stays consistent with the URL round-trip. Applying a view
@@ -163,6 +171,27 @@ export function SavedViewsBar({ filter, onChange }: SavedViewsBarProps) {
       </span>
 
       <div className="scrollbar-thin flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+        <span className="shrink-0 text-[11px] uppercase tracking-wide text-zinc-600">
+          Группировка
+        </span>
+        {GROUP_OPTIONS.map((opt) => (
+          <button
+            key={`group-${opt.value || "none"}`}
+            type="button"
+            onClick={() => applyFilter({ ...filter, groupBy: opt.value })}
+            className={cn(
+              "shrink-0 rounded-full border px-2.5 py-1 text-xs transition-colors",
+              filter.groupBy === opt.value
+                ? "border-red-700/60 bg-red-950/40 text-red-200"
+                : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+
+        <div className="h-4 shrink-0 border-l border-zinc-800" />
+
         {BUILT_IN_VIEWS.map((view) => {
           const Icon = view.icon;
           const isActive = filterCacheKey(view.filter) === activeKey;
