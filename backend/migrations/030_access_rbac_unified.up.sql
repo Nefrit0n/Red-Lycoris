@@ -9,6 +9,8 @@ ALTER TABLE groups
 ALTER TABLE user_groups
   RENAME COLUMN added_by TO added_by_user_id;
 
+DROP TRIGGER IF EXISTS trg_project_access_validate_subject ON project_access;
+
 ALTER TABLE project_access
   ALTER COLUMN subject_kind TYPE VARCHAR(8),
   ALTER COLUMN access_level TYPE VARCHAR(8);
@@ -54,6 +56,11 @@ SELECT r.id, p.key
 FROM roles r
 JOIN permissions p ON p.key IN ('findings.read', 'projects.read', 'reports.read')
 WHERE r.key = 'viewer';
+
+CREATE TRIGGER trg_project_access_validate_subject
+BEFORE INSERT OR UPDATE OF subject_kind, subject_id ON project_access
+FOR EACH ROW
+EXECUTE FUNCTION validate_project_access_subject();
 
 CREATE INDEX IF NOT EXISTS idx_project_access_project_subject ON project_access(project_id, subject_kind, subject_id);
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(role_id);

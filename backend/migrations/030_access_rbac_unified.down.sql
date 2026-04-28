@@ -38,6 +38,8 @@ ON CONFLICT DO NOTHING;
 
 DELETE FROM permissions WHERE key IN ('audit.read', 'reports.read');
 
+DROP TRIGGER IF EXISTS trg_project_access_validate_subject ON project_access;
+
 ALTER TABLE project_access
   ALTER COLUMN subject_kind TYPE TEXT,
   ALTER COLUMN access_level TYPE TEXT;
@@ -50,3 +52,8 @@ ALTER TABLE groups
   ALTER COLUMN description TYPE TEXT,
   ALTER COLUMN color_key TYPE TEXT,
   ALTER COLUMN source TYPE TEXT;
+
+CREATE TRIGGER trg_project_access_validate_subject
+BEFORE INSERT OR UPDATE OF subject_kind, subject_id ON project_access
+FOR EACH ROW
+EXECUTE FUNCTION validate_project_access_subject();
