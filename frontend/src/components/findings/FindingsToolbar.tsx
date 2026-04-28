@@ -226,6 +226,34 @@ export function FindingsToolbar({
               <Button
                 variant="outline"
                 size="sm"
+                className="border-zinc-700 bg-zinc-900 text-zinc-300"
+              >
+                Группировка: {groupLabel}
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="border-zinc-700 bg-zinc-900">
+            {GROUP_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt.label}
+                onClick={() => onChange({ groupBy: opt.value })}
+                className={cn(
+                  "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
+                  filter.groupBy === opt.value && "bg-zinc-800/60",
+                )}
+              >
+                {opt.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={exportDisabled || exportLoading}
                 className="border-zinc-700 bg-zinc-900 text-zinc-300"
               >
