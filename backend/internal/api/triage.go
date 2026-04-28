@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -438,5 +439,278 @@ func handleAssignableUsers(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 		respondJSON(w, http.StatusOK, map[string]any{"data": result})
+	}
+}
+
+// splitIDsByTriagerAccess partitions finding IDs into those where the user has
+// at least RoleTriager and those where they don't. Admin users pass everything.
+// Results are cached by project ID to avoid N+1 role queries.
+func splitIDsByTriagerAccess(
+	ctx context.Context,
+	findingsRepo *storage.FindingsRepo,
+	rolesRepo *storage.UserProjectRolesRepo,
+	user *domain.User,
+	ids []uuid.UUID,
+) (allowed []uuid.UUID, forbidden map[uuid.UUID]string, err error) {
+	forbidden = make(map[uuid.UUID]string)
+	if user.IsAdmin() {
+		return ids, forbidden, nil
+	}
+
+	// Batch-fetch all distinct project IDs for the given finding IDs.
+	projectIDs, err := findingsRepo.ListDistinctProjectIDs(ctx, ids)
+	if err != nil {
+		return nil, nil, fmt.Errorf("splitIDsByTriagerAccess: list projects: %w", err)
+	}
+
+	// Build allowed-project set.
+	allowedProjects := make(map[uuid.UUID]bool, len(projectIDs))
+	for _, pid := range projectIDs {
+		role, has, roleErr := rolesRepo.GetRole(ctx, user.ID, pid)
+		if roleErr != nil {
+			return nil, nil, fmt.Errorf("splitIDsByTriagerAccess: get role: %w", roleErr)
+		}
+		allowedProjects[pid] = has && role >= domain.RoleTriager
+	}
+
+	// We need the project ID for each finding to partition. Re-use a small query.
+	findingProjects, queryErr := findingsRepo.GetProjectIDsForFindings(ctx, ids)
+	if queryErr != nil {
+		return nil, nil, fmt.Errorf("splitIDsByTriagerAccess: get finding projects: %w", queryErr)
+	}
+
+	allowed = make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		pid := findingProjects[id]
+		if allowedProjects[pid] {
+			allowed = append(allowed, id)
+		} else {
+			forbidden[id] = "access denied"
+		}
+	}
+	return allowed, forbidden, nil
+}
+
+// groupBulkRequest is the shared body for all group-level bulk endpoints.
+type groupBulkRequest struct {
+	GroupBy string `json:"group_by"`
+	GroupKey string `json:"group_key"`
+}
+
+func (req *groupBulkRequest) validate(w http.ResponseWriter, r *http.Request) bool {
+	if req.GroupKey == "" {
+		respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "group_key is required")
+		return false
+	}
+	switch req.GroupBy {
+	case "cve", "component", "rule", "secret":
+		return true
+	default:
+		respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group_by value")
+		return false
+	}
+}
+
+// resolveGroupIDs fetches IDs for the group, checking the bulk size limit, and
+// writes an error response on failure. Returns nil ids on error (caller should
+// return immediately).
+func resolveGroupIDs(
+	w http.ResponseWriter,
+	r *http.Request,
+	findingsRepo *storage.FindingsRepo,
+	groupBy, groupKey string,
+) ([]uuid.UUID, int, bool) {
+	ids, total, err := findingsRepo.ListIDsByGroup(r.Context(), storage.FindingsFilter{}, groupBy, groupKey)
+	if err != nil {
+		var limitErr *storage.BulkLimitExceededError
+		if errors.As(err, &limitErr) {
+			respondJSON(w, http.StatusBadRequest, map[string]any{
+				"error": map[string]any{
+					"code":    "BULK_LIMIT_EXCEEDED",
+					"message": fmt.Sprintf("too many findings in group (%d > 5000), use manual filtering", limitErr.Count),
+					"details": map[string]any{"count": limitErr.Count},
+				},
+			})
+			return nil, 0, false
+		}
+		respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list findings in group")
+		return nil, 0, false
+	}
+	return ids, total, true
+}
+
+func handleGroupBulkClose(findingsRepo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
+	type reqBody struct {
+		groupBulkRequest
+		ReasonCode string `json:"reason_code"`
+		Note       string `json:"note"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
+		if !req.validate(w, r) {
+			return
+		}
+
+		user, _ := UserFromContext(r.Context())
+		ids, total, ok := resolveGroupIDs(w, r, findingsRepo, req.GroupBy, req.GroupKey)
+		if !ok {
+			return
+		}
+		if len(ids) == 0 {
+			respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+				"succeeded": []uuid.UUID{}, "failed": map[uuid.UUID]string{},
+				"group_by": req.GroupBy, "group_key": req.GroupKey, "total": total,
+			}})
+			return
+		}
+
+		allowed, forbidden, err := splitIDsByTriagerAccess(r.Context(), findingsRepo, rolesRepo, user, ids)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check permissions")
+			return
+		}
+
+		result := storage.BulkResult{Succeeded: []uuid.UUID{}, Failed: forbidden}
+		if len(allowed) > 0 {
+			r2, err := findingsRepo.ApplyBulkTriageAction(r.Context(), user.ID, allowed, func(_ uuid.UUID) domain.TriageAction {
+				return &domain.CloseAction{ReasonCode: req.ReasonCode, Note: req.Note, UserID: user.ID}
+			})
+			if err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to bulk close findings")
+				return
+			}
+			result.Succeeded = r2.Succeeded
+			for id, reason := range r2.Failed {
+				result.Failed[id] = reason
+			}
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+			"succeeded": result.Succeeded, "failed": result.Failed,
+			"group_by": req.GroupBy, "group_key": req.GroupKey, "total": total,
+		}})
+	}
+}
+
+func handleGroupBulkAssign(findingsRepo *storage.FindingsRepo, usersRepo *storage.UsersRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
+	type reqBody struct {
+		groupBulkRequest
+		UserID uuid.UUID `json:"user_id"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
+		if !req.validate(w, r) {
+			return
+		}
+		target, err := usersRepo.GetByID(r.Context(), req.UserID)
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "target user not found")
+			return
+		}
+
+		user, _ := UserFromContext(r.Context())
+		ids, total, ok := resolveGroupIDs(w, r, findingsRepo, req.GroupBy, req.GroupKey)
+		if !ok {
+			return
+		}
+		if len(ids) == 0 {
+			respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+				"succeeded": []uuid.UUID{}, "failed": map[uuid.UUID]string{},
+				"group_by": req.GroupBy, "group_key": req.GroupKey, "total": total,
+			}})
+			return
+		}
+
+		allowed, forbidden, err := splitIDsByTriagerAccess(r.Context(), findingsRepo, rolesRepo, user, ids)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check permissions")
+			return
+		}
+
+		result := storage.BulkResult{Succeeded: []uuid.UUID{}, Failed: forbidden}
+		if len(allowed) > 0 {
+			r2, err := findingsRepo.ApplyBulkTriageAction(r.Context(), user.ID, allowed, func(_ uuid.UUID) domain.TriageAction {
+				return &domain.AssignAction{ToUserID: req.UserID, ToEmail: target.Email}
+			})
+			if err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to bulk assign findings")
+				return
+			}
+			result.Succeeded = r2.Succeeded
+			for id, reason := range r2.Failed {
+				result.Failed[id] = reason
+			}
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+			"succeeded": result.Succeeded, "failed": result.Failed,
+			"group_by": req.GroupBy, "group_key": req.GroupKey, "total": total,
+		}})
+	}
+}
+
+func handleGroupBulkStatus(findingsRepo *storage.FindingsRepo, rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
+	type reqBody struct {
+		groupBulkRequest
+		Status int    `json:"status"`
+		Note   string `json:"note"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
+			return
+		}
+		if !req.validate(w, r) {
+			return
+		}
+		if req.Status != domain.StatusOpen && req.Status != domain.StatusConfirmed {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "use /groups/bulk/close for closure statuses")
+			return
+		}
+
+		user, _ := UserFromContext(r.Context())
+		ids, total, ok := resolveGroupIDs(w, r, findingsRepo, req.GroupBy, req.GroupKey)
+		if !ok {
+			return
+		}
+		if len(ids) == 0 {
+			respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+				"succeeded": []uuid.UUID{}, "failed": map[uuid.UUID]string{},
+				"group_by": req.GroupBy, "group_key": req.GroupKey, "total": total,
+			}})
+			return
+		}
+
+		allowed, forbidden, err := splitIDsByTriagerAccess(r.Context(), findingsRepo, rolesRepo, user, ids)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to check permissions")
+			return
+		}
+
+		result := storage.BulkResult{Succeeded: []uuid.UUID{}, Failed: forbidden}
+		if len(allowed) > 0 {
+			r2, err := findingsRepo.ApplyBulkTriageAction(r.Context(), user.ID, allowed, func(_ uuid.UUID) domain.TriageAction {
+				return &domain.ChangeStatusAction{NewStatus: req.Status, Note: req.Note}
+			})
+			if err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to bulk update status")
+				return
+			}
+			result.Succeeded = r2.Succeeded
+			for id, reason := range r2.Failed {
+				result.Failed[id] = reason
+			}
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+			"succeeded": result.Succeeded, "failed": result.Failed,
+			"group_by": req.GroupBy, "group_key": req.GroupKey, "total": total,
+		}})
 	}
 }
