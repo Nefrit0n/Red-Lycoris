@@ -334,7 +334,7 @@ export default function FindingsList() {
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <KindTabs filter={filter} onChange={updateFilter} facets={facets} hasExplicitGroupBy={searchParams.has("group_by")} />
+        <KindTabs filter={filter} onChange={updateFilter} facets={facets} />
 
         <SavedViewsBar
           filter={filter}
@@ -345,7 +345,6 @@ export default function FindingsList() {
             );
           }}
         />
-
         <FindingsToolbar
           filter={filter}
           onChange={updateFilter}
