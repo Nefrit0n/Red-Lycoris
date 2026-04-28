@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { formatDistanceToNow, isValid } from "date-fns";
 import { ru } from "date-fns/locale";
 import {
@@ -9,6 +9,7 @@ import {
   Package,
   ShieldAlert,
   SearchX,
+  KeyRound,
 } from "lucide-react";
 
 import EnrichmentBadges from "@/components/findings/EnrichmentBadges";
@@ -21,6 +22,8 @@ import type { FindingsFilter, GroupBy } from "@/lib/findings-filter";
 import type { Finding, FindingKind } from "@/types";
 import { cn } from "@/lib/utils";
 import type { ColumnKey } from "@/components/findings/findingsTableConfig";
+import { useExpandedGroups } from "@/components/findings/useExpandedGroups";
+import { GroupActionsMenu } from "@/components/findings/GroupActionsMenu";
 
 interface GroupedFindingsTableProps {
   filter: FindingsFilter;
@@ -64,6 +67,12 @@ const GROUP_META: Record<
     empty: "Без правила",
     format: (k) => k || "Без правила",
   },
+  secret: {
+    icon: KeyRound,
+    label: "Секрет",
+    empty: "Без отпечатка",
+    format: (k) => (k ? `Секрет ${k.slice(0, 12)}…` : "Без отпечатка"),
+  },
 };
 
 function formatRelative(value: string | null | undefined): string {
@@ -89,6 +98,7 @@ function buildOverlayFilter(
     component: "",
     componentVersion: "",
     ruleId: "",
+    secretFingerprint: "",
     query: "",
   };
   switch (groupBy) {
@@ -107,6 +117,9 @@ function buildOverlayFilter(
       overlay.ruleId = i >= 0 ? groupKey.slice(0, i) : groupKey;
       break;
     }
+    case "secret":
+      overlay.secretFingerprint = groupKey;
+      break;
   }
   return overlay;
 }
@@ -238,28 +251,15 @@ export function GroupedFindingsTable({
   // Expanded group keys: Set makes toggling O(1) and the memo keeps hover
   // handlers stable. Expansion state is local — nothing about it lives in the
   // URL, so changing groupBy naturally resets expansions via unmount.
-  const [expandedByMode, setExpandedByMode] = useState<
-    Partial<Record<Exclude<GroupBy, "">, Set<string>>>
-  >({});
-
   useEffect(() => {
     onCountChange?.(total, isFetching);
   }, [total, isFetching, onCountChange]);
-
-  const toggle = (mode: Exclude<GroupBy, "">, key: string) => {
-    setExpandedByMode((prev) => {
-      const modeSet = new Set(prev[mode] ?? []);
-      if (modeSet.has(key)) modeSet.delete(key);
-      else modeSet.add(key);
-      return { ...prev, [mode]: modeSet };
-    });
-  };
 
   // groupBy === "" is handled by the flat table — but defend anyway so this
   // component can be dropped in without guessing the caller's state.
   const effectiveGroupBy: Exclude<GroupBy, ""> =
     filter.groupBy === "" ? "cve" : filter.groupBy;
-  const expanded = expandedByMode[effectiveGroupBy] ?? new Set<string>();
+  const { expanded, toggle } = useExpandedGroups(effectiveGroupBy);
   const meta = GROUP_META[effectiveGroupBy];
   const Icon = meta.icon;
 
@@ -329,7 +329,7 @@ export function GroupedFindingsTable({
                   disabled={!canExpand}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (canExpand) toggle(effectiveGroupBy, key);
+                    if (canExpand) toggle(key);
                   }}
                   className={cn(
                     "mt-0.5 shrink-0 rounded p-0.5 text-zinc-500 transition-colors",
@@ -360,9 +360,21 @@ export function GroupedFindingsTable({
                 >
                   <div className="flex items-center gap-2">
                     <span className="truncate font-mono text-sm text-zinc-200">
-                      {meta.format(group.group_key)}
+                      {group.group_title || meta.format(group.group_key)}
                     </span>
                     <SeverityBadge severity={group.max_severity} short />
+                    {group.secret_kind && (
+                      <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300">{group.secret_kind}</span>
+                    )}
+                    {group.ecosystem && (
+                      <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300">{group.ecosystem}</span>
+                    )}
+                    {group.fixed_version && (
+                      <span className="rounded border border-emerald-700/50 px-1.5 py-0.5 text-[10px] text-emerald-300">fix: {group.fixed_version}</span>
+                    )}
+                    {group.bdu_ids?.slice(0, 2).map((id) => (
+                      <span key={id} className="rounded border border-amber-700/50 px-1.5 py-0.5 text-[10px] text-amber-300">{id}</span>
+                    ))}
                   </div>
 
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
@@ -375,6 +387,7 @@ export function GroupedFindingsTable({
                       {group.projects_count.toLocaleString("ru-RU")} проектов
                     </span>
                     <span>Впервые {formatRelative(group.first_seen)}</span>
+                    <span>Последний раз {formatRelative(group.last_seen)}</span>
                   </div>
                 </div>
 
@@ -384,6 +397,18 @@ export function GroupedFindingsTable({
                   maxCvss={group.max_cvss}
                   className="hidden shrink-0 md:flex"
                 />
+                {group.group_key && (
+                  <GroupActionsMenu
+                    groupBy={effectiveGroupBy}
+                    groupKey={group.group_key}
+                    findingsCount={group.findings_count}
+                    projectsCount={group.projects_count}
+                    filter={filter}
+                    onDone={() => {
+                      if (expanded.has(key)) toggle(key);
+                    }}
+                  />
+                )}
               </div>
 
               {isExpanded && canExpand && (

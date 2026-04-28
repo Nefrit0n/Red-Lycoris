@@ -79,6 +79,7 @@ type FindingsFilter struct {
 	Components           []string
 	ComponentVersion     string
 	RuleID               string
+	SecretFingerprint    string
 	AssigneeUserIDs      []uuid.UUID
 	AssigneeMeUserID     *uuid.UUID
 	Unassigned           bool
@@ -109,7 +110,7 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 			times_seen, project_id, source_type, finding_kind,
 			fixed_version, package_ecosystem, purl, code_snippet, code_flow,
 			url, http_method, http_param, http_evidence, iac_resource,
-			iac_provider, secret_kind, commit_sha, rule_id, rule_name
+			iac_provider, secret_kind, secret_fingerprint, commit_sha, rule_id, rule_name
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11,
@@ -117,7 +118,7 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 			$18, $19, $20, $21,
 			$22, $23, $24, $25, $26,
 			$27, $28, $29, $30, $31,
-			$32, $33, $34, $35, $36
+			$32, $33, $34, $35, $36, $37
 		)
 		ON CONFLICT (fingerprint) DO UPDATE SET
 			last_seen  = EXCLUDED.last_seen,
@@ -149,7 +150,7 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 		f.TimesSeen, f.ProjectID, f.SourceType, kind,
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
-		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
+		f.IacProvider, f.SecretKind, f.SecretFingerprint, f.CommitSHA, f.RuleID, f.RuleName,
 	).Scan(&f.ID, &inserted)
 	if err != nil {
 		return false, fmt.Errorf("storage.FindingsRepo.Create: %w", err)
@@ -167,7 +168,7 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 			times_seen, project_id, source_type, finding_kind,
 			fixed_version, package_ecosystem, purl, code_snippet, code_flow,
 			url, http_method, http_param, http_evidence, iac_resource,
-			iac_provider, secret_kind, commit_sha, rule_id, rule_name
+			iac_provider, secret_kind, secret_fingerprint, commit_sha, rule_id, rule_name
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11,
@@ -175,7 +176,7 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 			$18, $19, $20, $21,
 			$22, $23, $24, $25, $26,
 			$27, $28, $29, $30, $31,
-			$32, $33, $34, $35, $36
+			$32, $33, $34, $35, $36, $37
 		)
 		ON CONFLICT (fingerprint) DO UPDATE SET
 			last_seen  = EXCLUDED.last_seen,
@@ -207,7 +208,7 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 		f.TimesSeen, f.ProjectID, f.SourceType, kind,
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
 		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
-		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
+		f.IacProvider, f.SecretKind, f.SecretFingerprint, f.CommitSHA, f.RuleID, f.RuleName,
 	).Scan(&f.ID, &inserted)
 	if err != nil {
 		return false, fmt.Errorf("storage.FindingsRepo.CreateTx: %w", err)
@@ -221,7 +222,7 @@ var findingColumns = `
 	f.cve_ids, f.cwe_ids, f.cpe_uri, f.fingerprint, f.first_seen, f.last_seen,
 	f.times_seen, f.project_id, f.source_type, f.fixed_version, f.package_ecosystem,
 	f.purl, f.code_snippet, f.code_flow, f.url, f.http_method, f.http_param,
-	f.http_evidence, f.iac_resource, f.iac_provider, f.secret_kind, f.commit_sha,
+	f.http_evidence, f.iac_resource, f.iac_provider, f.secret_kind, f.secret_fingerprint, f.commit_sha,
 	f.rule_id, f.rule_name, fs.priority_score,
 	f.closure_reason_id, f.closure_note, f.closed_at, f.closed_by, f.assigned_to`
 
@@ -258,7 +259,7 @@ func scanFinding(row pgx.Row) (*domain.Finding, error) {
 		&f.CVEIDs, &f.CWEIDs, &f.CPEURI, &f.Fingerprint, &f.FirstSeen, &f.LastSeen,
 		&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
 		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
-		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
+		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.SecretFingerprint, &f.CommitSHA,
 		&f.RuleID, &f.RuleName, &f.PriorityScore,
 		&f.ClosureReasonID, &f.ClosureNote, &f.ClosedAt, &f.ClosedBy, &f.AssignedTo,
 	)
@@ -463,6 +464,11 @@ func buildBaseWhere(filter *FindingsFilter, excludeField string, startArg int) (
 	if filter.RuleID != "" {
 		conditions = append(conditions, fmt.Sprintf("f.rule_id = $%d", argN))
 		args = append(args, filter.RuleID)
+		argN++
+	}
+	if filter.SecretFingerprint != "" {
+		conditions = append(conditions, fmt.Sprintf("f.secret_fingerprint = $%d", argN))
+		args = append(args, filter.SecretFingerprint)
 		argN++
 	}
 	if filter.Query != "" {
@@ -849,7 +855,7 @@ func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*Find
 	return out, nil
 }
 
-// ListGroups aggregates findings by a grouping axis (cve|component|rule) and
+// ListGroups aggregates findings by a grouping axis (cve|component|rule|secret) and
 // returns up to 200 groups ordered by max severity + findings count. Cursor
 // pagination is not supported — groups are bounded and cheap compared to the
 // flat list.
@@ -877,6 +883,10 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		groupKeyExpr = `COALESCE(f.rule_id, '') || E'\x1f' || COALESCE(f.rule_name, '')`
 		fromExpr = "findings f"
 		extraConds = []string{"f.rule_id IS NOT NULL"}
+	case "secret":
+		groupKeyExpr = "f.secret_fingerprint"
+		fromExpr = "findings f"
+		extraConds = []string{"f.secret_fingerprint IS NOT NULL", "f.finding_kind = 4"}
 	default:
 		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: unknown group_by %q", groupBy)
 	}
@@ -898,24 +908,59 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		cvssExpr = "MAX((SELECT MAX(n.cvss_v31_score) FROM nvd_cves n WHERE f.cve_ids IS NOT NULL AND n.cve_id = ANY(f.cve_ids)))"
 	}
 
+	groupTitleExpr := "''"
+	secretKindExpr := "NULL::text"
+	ecosystemExpr := "NULL::text"
+	fixedVersionExpr := "NULL::text"
+	inBDUExpr := "bool_or(EXISTS (SELECT 1 FROM bdu_fstec b WHERE f.cve_ids IS NOT NULL AND b.cve_ids && f.cve_ids))"
+	bduIDsExpr := "ARRAY[]::text[]"
+	if groupBy == "cve" {
+		groupTitleExpr = "MAX(n.description)"
+		inBDUExpr = "bool_or(EXISTS (SELECT 1 FROM bdu_fstec b WHERE b.cve_ids @> ARRAY[cve_key]::text[]))"
+		bduIDsExpr = "COALESCE(array_remove(array_agg(DISTINCT b.bdu_id), NULL), ARRAY[]::text[])"
+	} else if groupBy == "component" {
+		groupTitleExpr = "MAX(f.component)"
+		ecosystemExpr = "MAX(f.package_ecosystem)"
+		fixedVersionExpr = "MIN(f.fixed_version) FILTER (WHERE f.fixed_version IS NOT NULL)"
+	} else if groupBy == "rule" {
+		groupTitleExpr = "MAX(f.rule_name)"
+	} else if groupBy == "secret" {
+		groupTitleExpr = "MAX(f.secret_kind)"
+		secretKindExpr = "MAX(f.secret_kind)"
+	}
+
+	extraJoins := ""
+	if groupBy == "cve" {
+		extraJoins = "LEFT JOIN nvd_cves n ON n.cve_id = cve_key LEFT JOIN bdu_fstec b ON b.cve_ids @> ARRAY[cve_key]::text[]"
+	}
+
 	q := fmt.Sprintf(`
 		SELECT
 			%s AS group_key,
-			count(*) AS findings_count,
+			%s AS group_title,
+			count(DISTINCT f.id) AS findings_count,
 			count(DISTINCT f.project_id) AS projects_count,
 			max(f.severity) AS max_severity,
 			min(f.first_seen) AS first_seen,
+			max(f.last_seen) AS last_seen,
 			array_agg(DISTINCT f.project_id) AS project_ids,
 			(array_agg(f.id ORDER BY f.first_seen DESC))[1:3] AS sample_ids,
+			%s AS secret_kind,
+			%s AS ecosystem,
+			%s AS fixed_version,
 			%s AS in_kev,
+			%s AS in_bdu,
+			%s AS bdu_ids,
 			%s AS max_epss,
 			%s AS max_cvss
 		FROM %s
 		%s
+		%s
 		GROUP BY %s
 		ORDER BY max_severity DESC, findings_count DESC
 		LIMIT %d`,
-		groupKeyExpr, kevExpr, epssExpr, cvssExpr, fromExpr,
+		groupKeyExpr, groupTitleExpr, secretKindExpr, ecosystemExpr, fixedVersionExpr,
+		kevExpr, inBDUExpr, bduIDsExpr, epssExpr, cvssExpr, fromExpr, extraJoins,
 		whereClause(conds), groupKeyExpr, groupLimit)
 
 	rows, err := r.pool.Query(ctx, q, args...)
@@ -928,9 +973,10 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 	for rows.Next() {
 		var g domain.FindingGroup
 		if err := rows.Scan(
-			&g.GroupKey, &g.FindingsCount, &g.ProjectsCount,
-			&g.MaxSeverity, &g.FirstSeen, &g.ProjectIDs, &g.SampleIDs,
-			&g.InKEV, &g.MaxEPSS, &g.MaxCVSS,
+			&g.GroupKey, &g.GroupTitle, &g.FindingsCount, &g.ProjectsCount,
+			&g.MaxSeverity, &g.FirstSeen, &g.LastSeen, &g.ProjectIDs, &g.SampleIDs,
+			&g.SecretKind, &g.Ecosystem, &g.FixedVersion,
+			&g.InKEV, &g.InBDU, &g.BDUIDs, &g.MaxEPSS, &g.MaxCVSS,
 		); err != nil {
 			return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: scan: %w", err)
 		}
@@ -951,6 +997,9 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		}
 		if g.SampleIDs == nil {
 			g.SampleIDs = []uuid.UUID{}
+		}
+		if g.BDUIDs == nil {
+			g.BDUIDs = []string{}
 		}
 		groups = append(groups, g)
 	}
@@ -1029,6 +1078,61 @@ func (r *FindingsRepo) ApplyTriageAction(
 type BulkResult struct {
 	Succeeded []uuid.UUID          `json:"succeeded"`
 	Failed    map[uuid.UUID]string `json:"failed"`
+}
+
+var ErrBulkLimitExceeded = fmt.Errorf("BULK_LIMIT_EXCEEDED")
+
+func (r *FindingsRepo) ListIDsByGroup(ctx context.Context, filter FindingsFilter, groupBy, groupKey string) ([]uuid.UUID, int, error) {
+	const hardLimit = 5000
+	if strings.TrimSpace(groupKey) == "" {
+		return nil, 0, fmt.Errorf("empty group key")
+	}
+
+	conds, args, argN := buildBaseWhere(&filter, "", 1)
+	fromExpr := "findings f"
+	matchExpr := ""
+	switch groupBy {
+	case "cve":
+		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cve_ids) AS c(cve_key)"
+		conds = append(conds, "f.cve_ids IS NOT NULL", "array_length(f.cve_ids, 1) > 0")
+		matchExpr = fmt.Sprintf("cve_key = $%d", argN)
+	case "component":
+		matchExpr = fmt.Sprintf("f.component || '@' || COALESCE(f.component_version, '') = $%d", argN)
+	case "rule":
+		matchExpr = fmt.Sprintf("COALESCE(f.rule_id, '') || E'\\x1f' || COALESCE(f.rule_name, '') = $%d", argN)
+	case "secret":
+		conds = append(conds, "f.secret_fingerprint IS NOT NULL", "f.finding_kind = 4")
+		matchExpr = fmt.Sprintf("f.secret_fingerprint = $%d", argN)
+	default:
+		return nil, 0, fmt.Errorf("unknown group_by %q", groupBy)
+	}
+	args = append(args, groupKey)
+	conds = append(conds, matchExpr)
+
+	countQuery := `SELECT count(*) FROM ` + fromExpr + " " + whereClause(conds)
+	var total int
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if total > hardLimit {
+		return nil, total, ErrBulkLimitExceeded
+	}
+
+	q := `SELECT DISTINCT f.id FROM ` + fromExpr + " " + whereClause(conds) + " ORDER BY f.id LIMIT 5000"
+	rows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, total, err
+	}
+	defer rows.Close()
+	ids := make([]uuid.UUID, 0, min(total, hardLimit))
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, total, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, total, rows.Err()
 }
 
 func (r *FindingsRepo) ApplyBulkTriageAction(

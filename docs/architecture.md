@@ -7,7 +7,7 @@ flowchart TD
     Scanner["Сканер\n(Semgrep / Trivy / Gitleaks / ...)"]
     Import["POST /api/v1/import"]
     Parser["Парсер\nSARIF · Trivy · TruffleHog · Checkov · Gitleaks · Generic"]
-    Dedup{"Дедупликация\nfingerprint = SHA256(\n  cve_id + file_path +\n  cwe_id + component + version\n)"}
+    Dedup{"Дедупликация\nfingerprint = SHA256(...)\nsecret_fingerprint = SHA256(secret_kind:secret_value)"}
     Insert["INSERT findings"]
     Update["UPDATE last_seen\ntimes_seen++"]
     Stream["Redis Streams\nfindings:enrich"]

@@ -134,6 +134,7 @@ RedLycoris/
 ### Go Backend
 
 - **Нет ORM.** Только raw SQL через `pgx/v5`. Запросы пишем руками, никакого GORM/Ent.
+- Для findings вида `secrets` дедупликация и группировка используют `secret_fingerprint` (SHA256), фактические значения секретов в БД не храним.
 - **Нет генерации кода** типа sqlc на первом этапе. Проще руками — меньше магии.
 - **Chi router** — минимальный, совместим с stdlib.
 - **Структура хендлера:** принимает `http.ResponseWriter, *http.Request`, парсит input, вызывает domain/storage, возвращает JSON.

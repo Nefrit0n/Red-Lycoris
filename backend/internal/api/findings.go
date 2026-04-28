@@ -22,14 +22,15 @@ func parseFindingsFilter(w http.ResponseWriter, r *http.Request, rolesRepo *stor
 	q := r.URL.Query()
 
 	filter := storage.FindingsFilter{
-		Query:            q.Get("q"),
-		CVE:              q.Get("cve"),
-		RuleID:           q.Get("rule_id"),
-		ComponentVersion: q.Get("component_version"),
-		Cursor:           q.Get("cursor"),
-		SortField:        q.Get("sort"),
-		SortDir:          q.Get("dir"),
-		GroupBy:          q.Get("group_by"),
+		Query:             q.Get("q"),
+		CVE:               q.Get("cve"),
+		RuleID:            q.Get("rule_id"),
+		ComponentVersion:  q.Get("component_version"),
+		SecretFingerprint: q.Get("secret_fingerprint"),
+		Cursor:            q.Get("cursor"),
+		SortField:         q.Get("sort"),
+		SortDir:           q.Get("dir"),
+		GroupBy:           q.Get("group_by"),
 	}
 	if component := strings.TrimSpace(q.Get("component")); component != "" {
 		filter.Components = []string{component}
@@ -186,7 +187,7 @@ func handleListFindings(repo *storage.FindingsRepo, rolesRepo *storage.UserProje
 		// Grouped listing: return aggregated buckets instead of flat findings.
 		if filter.GroupBy != "" {
 			switch filter.GroupBy {
-			case "cve", "component", "rule":
+			case "cve", "component", "rule", "secret":
 			default:
 				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group_by value")
 				return

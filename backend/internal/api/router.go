@@ -188,6 +188,9 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Post("/bulk/close", handleBulkClose(findingsRepo, userProjectRolesRepo))
 			r.Post("/bulk/assign", handleBulkAssign(findingsRepo, usersRepo, userProjectRolesRepo))
 			r.Post("/bulk/unassign", handleBulkUnassign(findingsRepo, userProjectRolesRepo))
+			r.Post("/groups/bulk/close", handleBulkCloseGroup(findingsRepo, userProjectRolesRepo))
+			r.Post("/groups/bulk/assign", handleBulkAssignGroup(findingsRepo, usersRepo, userProjectRolesRepo))
+			r.Post("/groups/bulk/status", handleBulkStatusGroup(findingsRepo, userProjectRolesRepo))
 		})
 		r.Route("/api/v1/finding-comments/{event_id}", func(r chi.Router) {
 			r.Use(RequireAuth)
@@ -257,11 +260,20 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 		r.Route("/api/v1/enrichment", func(r chi.Router) {
 			r.Get("/status", handleEnrichmentStatus(pool, rdb))
+			r.Get("/sources", handleEnrichmentSources(pool))
+			r.Get("/summary", handleEnrichmentSummary(pool))
+			r.Get("/timeline", handleEnrichmentTimeline(pool))
 			r.Get("/epss/history", handleGetEPSSHistory(pool))
 			r.With(RequireGlobalAdmin).Post("/enrich-all", handleEnrichAll(pool))
 			if cfg.scheduler != nil {
 				r.With(RequireGlobalAdmin).Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
 			}
+		})
+
+		r.Route("/api/enrichment", func(r chi.Router) {
+			r.Get("/sources", handleEnrichmentSources(pool))
+			r.Get("/summary", handleEnrichmentSummary(pool))
+			r.Get("/timeline", handleEnrichmentTimeline(pool))
 		})
 
 		r.Route("/api/v1/saved-views", func(r chi.Router) {
@@ -284,15 +296,15 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Post("/users/bulk-deactivate", handleBulkDeactivateUsers(usersRepo, sessionsRepo, auditWriter))
 			r.Post("/users/bulk-reset-password", handleBulkResetPassword(usersRepo, sessionsRepo, auditWriter))
 
-				r.Get("/users/{id}", handleGetAdminUserDetail(usersRepo))
-				r.Patch("/users/{id}", handleUpdateUser(usersRepo, auditWriter))
-				r.Patch("/users/{id}/role", handleChangeUserRole(usersRepo, sessionsRepo, auditWriter))
-				r.Get("/users/{id}/projects", handleGetUserProjectsEffective(usersRepo))
-				r.Put("/users/{id}/projects/{pid}", handlePutUserProjectOverride(usersRepo, auditWriter))
-				r.Delete("/users/{id}/projects/{pid}", handleDeleteUserProjectOverride(usersRepo, auditWriter))
-				r.Get("/users/{id}/sessions", handleListUserSessions(sessionsRepo))
-				r.Delete("/users/{id}/sessions/{sid}", handleRevokeUserSession(sessionsRepo, auditWriter))
-				r.Post("/users/{id}/sessions/revoke-all", handleRevokeAllUserSessions(sessionsRepo, auditWriter))
+			r.Get("/users/{id}", handleGetAdminUserDetail(usersRepo))
+			r.Patch("/users/{id}", handleUpdateUser(usersRepo, auditWriter))
+			r.Patch("/users/{id}/role", handleChangeUserRole(usersRepo, sessionsRepo, auditWriter))
+			r.Get("/users/{id}/projects", handleGetUserProjectsEffective(usersRepo))
+			r.Put("/users/{id}/projects/{pid}", handlePutUserProjectOverride(usersRepo, auditWriter))
+			r.Delete("/users/{id}/projects/{pid}", handleDeleteUserProjectOverride(usersRepo, auditWriter))
+			r.Get("/users/{id}/sessions", handleListUserSessions(sessionsRepo))
+			r.Delete("/users/{id}/sessions/{sid}", handleRevokeUserSession(sessionsRepo, auditWriter))
+			r.Post("/users/{id}/sessions/revoke-all", handleRevokeAllUserSessions(sessionsRepo, auditWriter))
 			r.Post("/users/{id}/reset-password", handleResetUserPassword(usersRepo, sessionsRepo, auditWriter))
 			r.Post("/users/{id}/deactivate", handleDeactivateUser(usersRepo, sessionsRepo, auditWriter))
 			r.Post("/users/{id}/activate", handleActivateUser(usersRepo, auditWriter))
