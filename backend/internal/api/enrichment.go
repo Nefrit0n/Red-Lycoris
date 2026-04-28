@@ -38,6 +38,50 @@ func handleEnrichmentStatus(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerF
 	}
 }
 
+func handleEnrichmentSources(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sources, err := enrichment.GetEnrichmentSources(r.Context(), pool)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load enrichment sources")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": sources})
+	}
+}
+
+func handleEnrichmentSummary(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		summary, err := enrichment.GetEnrichmentSummary(r.Context(), pool)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load enrichment summary")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": summary})
+	}
+}
+
+func handleEnrichmentTimeline(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		window := strings.TrimSpace(r.URL.Query().Get("window"))
+		if window == "" {
+			window = "2h"
+		}
+		dur, err := time.ParseDuration(window)
+		if err != nil || dur <= 0 {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid window")
+			return
+		}
+		if dur > 24*time.Hour {
+			dur = 24 * time.Hour
+		}
+		events, err := enrichment.GetEnrichmentTimeline(r.Context(), pool, dur)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load enrichment timeline")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": events})
+	}
+}
 func handleGetFindingEnrichments(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(r, "id"))

@@ -7,7 +7,7 @@ import FindingDetail from "@/pages/FindingDetail";
 import ProjectsList from "@/pages/ProjectsList";
 import ProjectDetail from "@/pages/ProjectDetail";
 import Import from "@/pages/Import";
-import EnrichmentStatus from "@/pages/EnrichmentStatus";
+import EnrichmentMonitoringPage from "@/features/enrichment/pages/EnrichmentMonitoringPage";
 import Login from "@/pages/Login";
 import ChangePassword from "@/pages/ChangePassword";
 import AdminUsers from "@/pages/AdminUsers";
@@ -34,7 +34,7 @@ export default function App() {
             <Route path="/projects" element={<ProjectsList />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/import" element={<Import />} />
-            <Route path="/enrichment" element={<EnrichmentStatus />} />
+            <Route path="/enrichment" element={<EnrichmentMonitoringPage />} />
 
             {/* Old URL → redirect */}
             <Route path="/admin/users" element={<AdminUsers />} />
