@@ -144,6 +144,26 @@ export function FindingsToolbar({
           </DropdownMenu>
         )}
 
+        <div className="flex items-center gap-1 pr-1">
+          <span className="mr-1 text-xs text-zinc-500">Группировка:</span>
+          {GROUP_OPTIONS.map((opt) => (
+            <Button
+              key={opt.label}
+              variant={filter.groupBy === opt.value ? "outline" : "ghost"}
+              size="sm"
+              onClick={() => onChange({ groupBy: opt.value })}
+              className={cn(
+                "h-8 shrink-0 px-2 text-xs",
+                filter.groupBy === opt.value
+                  ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                  : "text-zinc-400 hover:text-zinc-200",
+              )}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
+
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
