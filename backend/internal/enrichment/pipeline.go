@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -45,6 +46,11 @@ func RunSync(ctx context.Context, syncer Syncer, pool *pgxpool.Pool) error {
 	}
 
 	start := time.Now()
+	jobID := uuid.New()
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO enrichment_jobs (job_id, source_code, started_at, status, retry_count, max_retries, occurred_at)
+		VALUES ($1, $2, now(), 'running', 0, 5, now())
+	`, jobID, name)
 	syncErr := syncer.Sync(ctx)
 	duration := int(time.Since(start).Seconds())
 
@@ -55,6 +61,11 @@ func RunSync(ctx context.Context, syncer Syncer, pool *pgxpool.Pool) error {
 			SET status = 'error', error_message = $2, duration_seconds = $3, updated_at = now()
 			WHERE source = $1
 		`, name, syncErr.Error(), duration)
+		_, _ = pool.Exec(ctx, `
+			UPDATE enrichment_jobs
+			SET status = 'failed', message = $2, finished_at = now(), occurred_at = now(), retry_count = 1, max_retries = 5, next_retry_at = now() + interval '2 minutes'
+			WHERE job_id = $1
+		`, jobID, syncErr.Error())
 		if dbErr != nil {
 			slog.Error("failed to update sync_status after error", "source", name, "error", dbErr)
 		}
@@ -70,6 +81,16 @@ func RunSync(ctx context.Context, syncer Syncer, pool *pgxpool.Pool) error {
 		    duration_seconds = $3, error_message = NULL, updated_at = now()
 		WHERE source = $1
 	`, name, count, duration)
+	_, _ = pool.Exec(ctx, `
+		UPDATE enrichment_jobs
+		SET status = 'success', finished_at = now(), occurred_at = now()
+		WHERE job_id = $1
+	`, jobID)
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO enrichment_source_stats (source_code, snapshot_at, record_count)
+		VALUES ($1, now(), $2)
+		ON CONFLICT (source_code, snapshot_at) DO NOTHING
+	`, name, count)
 	if err != nil {
 		slog.Error("failed to update sync_status after success", "source", name, "error", err)
 	}
