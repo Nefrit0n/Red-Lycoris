@@ -7,6 +7,15 @@ import (
 	"strings"
 )
 
+// ComputeSecretFingerprint hashes the secret value so the raw secret is never
+// persisted while still giving secrets a stable group key. The kind prefix
+// keeps fingerprints for different detector types from colliding.
+func ComputeSecretFingerprint(kind, value string) string {
+	input := strings.ToLower(strings.TrimSpace(kind)) + ":" + value
+	h := sha256.Sum256([]byte(input))
+	return fmt.Sprintf("%x", h)
+}
+
 func CalculateFingerprint(f *Finding) string {
 	var cveID string
 	if len(f.CVEIDs) > 0 {
