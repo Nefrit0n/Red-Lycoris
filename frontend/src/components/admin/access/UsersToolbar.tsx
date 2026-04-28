@@ -42,7 +42,7 @@ export function UsersToolbar({
 }: Props) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [localQ, setLocalQ] = useState(filters.q);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Keep localQ in sync if filters.q changes externally (e.g. URL navigation)
   useEffect(() => {

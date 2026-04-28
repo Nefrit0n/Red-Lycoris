@@ -1,5 +1,5 @@
-import { AdminUser } from "@/api/admin-users";
-import { CurrentUser } from "@/api/auth";
+import type { AdminUser } from "@/api/admin-users";
+import type { CurrentUser } from "@/api/auth";
 
 export interface UserActionAvailability {
   canDeactivate: boolean;
