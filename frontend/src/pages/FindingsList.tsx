@@ -29,6 +29,14 @@ import { useFindingsSelection } from "@/store/findings-selection";
 import type { ColumnKey, FindingsPreset, FindingsTabKey } from "@/components/findings/findingsTableConfig";
 import { presetColumns, rowHeightForPreset, sanitizeColumns } from "@/components/findings/findingsTableConfig";
 
+const GROUP_OPTIONS: { value: FindingsFilter["groupBy"]; label: string }[] = [
+  { value: "", label: "Без группировки" },
+  { value: "component", label: "По компоненту" },
+  { value: "rule", label: "По правилу" },
+  { value: "cve", label: "По CVE" },
+  { value: "secret", label: "По секрету" },
+];
+
 function activeTab(filter: FindingsFilter): FindingsTabKey {
   return filter.kinds.length === 1 ? filter.kinds[0] : "all";
 }
@@ -345,6 +353,28 @@ export default function FindingsList() {
             );
           }}
         />
+        <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/20 px-4 py-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Группировка
+          </span>
+          <div className="flex flex-wrap items-center gap-1">
+            {GROUP_OPTIONS.map((opt) => (
+              <button
+                key={`group-${opt.value || "none"}`}
+                type="button"
+                onClick={() => updateFilter({ groupBy: opt.value })}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                  filter.groupBy === opt.value
+                    ? "border-red-700/60 bg-red-950/40 text-red-200"
+                    : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <FindingsToolbar
           filter={filter}
