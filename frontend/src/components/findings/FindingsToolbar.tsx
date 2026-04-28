@@ -90,25 +90,33 @@ export function FindingsToolbar({
         {selectedCount > 0 && (
           <span className="text-red-400">{selectedCount} выбрано</span>
         )}
-        <div className="flex items-center gap-1 pl-2">
-          <span className="mr-1 text-xs text-zinc-500">Группировка:</span>
-          {GROUP_OPTIONS.map((opt) => (
-            <Button
-              key={opt.label}
-              variant={filter.groupBy === opt.value ? "outline" : "ghost"}
-              size="sm"
-              onClick={() => onChange({ groupBy: opt.value })}
-              className={cn(
-                "h-8 shrink-0 px-2 text-xs",
-                filter.groupBy === opt.value
-                  ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-                  : "text-zinc-400 hover:text-zinc-200",
-              )}
-            >
-              {opt.label}
-            </Button>
-          ))}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-zinc-400 hover:text-zinc-200"
+              >
+                Группировка: {groupLabel}
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="start" className="border-zinc-700 bg-zinc-900">
+            {GROUP_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt.label}
+                onClick={() => onChange({ groupBy: opt.value })}
+                className={cn(
+                  "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
+                  filter.groupBy === opt.value && "bg-zinc-800/60",
+                )}
+              >
+                {opt.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-1.5">
