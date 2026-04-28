@@ -60,6 +60,14 @@ func (p *GitleaksParser) Parse(ctx context.Context, data []byte) ([]domain.Findi
 		secretKind := emptyToNil(ruleID)
 		commitSHA := emptyToNil(commit)
 
+		// Compute secret fingerprint from the actual secret value so secrets
+		// with the same value collapse into one group regardless of location.
+		var secretFP *string
+		if secretVal := strings.TrimSpace(item.Secret); secretVal != "" {
+			fp := domain.ComputeSecretFingerprint(ruleID, secretVal)
+			secretFP = &fp
+		}
+
 		f := domain.Finding{
 			Kind:  domain.KindSecrets,
 			Title: description,
@@ -68,19 +76,20 @@ func (p *GitleaksParser) Parse(ctx context.Context, data []byte) ([]domain.Findi
 				strings.TrimSpace(item.Author),
 				maskSecret(item.Match),
 			),
-			Severity:   domain.SeverityHigh,
-			Confidence: 2,
-			Status:     domain.StatusOpen,
-			FilePath:   strings.TrimSpace(item.File),
-			LineStart:  item.StartLine,
-			LineEnd:    item.EndLine,
-			RuleID:     ruleIDPtr,
-			RuleName:   ruleNamePtr,
-			SecretKind: secretKind,
-			CommitSHA:  commitSHA,
-			CVEIDs:     []string{},
-			CWEIDs:     []int{},
-			SourceType: "gitleaks",
+			Severity:          domain.SeverityHigh,
+			Confidence:        2,
+			Status:            domain.StatusOpen,
+			FilePath:          strings.TrimSpace(item.File),
+			LineStart:         item.StartLine,
+			LineEnd:           item.EndLine,
+			RuleID:            ruleIDPtr,
+			RuleName:          ruleNamePtr,
+			SecretKind:        secretKind,
+			CommitSHA:         commitSHA,
+			SecretFingerprint: secretFP,
+			CVEIDs:            []string{},
+			CWEIDs:            []int{},
+			SourceType:        "gitleaks",
 		}
 		f.Fingerprint = domain.CalculateFingerprint(&f)
 		findings = append(findings, f)

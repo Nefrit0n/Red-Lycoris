@@ -59,9 +59,10 @@ type Finding struct {
 	IacProvider      *string         `json:"iac_provider,omitempty"`
 	SecretKind       *string         `json:"secret_kind,omitempty"`
 	CommitSHA        *string         `json:"commit_sha,omitempty"`
-	RuleID           *string         `json:"rule_id,omitempty"`
-	RuleName         *string         `json:"rule_name,omitempty"`
-	PriorityScore    *float64        `json:"priority_score,omitempty"`
+	RuleID              *string         `json:"rule_id,omitempty"`
+	RuleName            *string         `json:"rule_name,omitempty"`
+	SecretFingerprint   *string         `json:"secret_fingerprint,omitempty"`
+	PriorityScore       *float64        `json:"priority_score,omitempty"`
 	ClosureReasonID  *int16          `json:"closure_reason_id,omitempty"`
 	ClosureNote      *string         `json:"closure_note,omitempty"`
 	ClosedAt         *time.Time      `json:"closed_at,omitempty"`
@@ -103,16 +104,23 @@ func (f *Finding) Validate() error {
 }
 
 // FindingGroup is an aggregate bucket produced by grouped list queries
-// (group_by = cve | component | rule).
+// (group_by = cve | component | rule | secret).
 type FindingGroup struct {
 	GroupKey      string      `json:"group_key"`
+	GroupTitle    string      `json:"group_title,omitempty"`   // CVE description / rule_name / secret_kind
+	SecretKind    *string     `json:"secret_kind,omitempty"`   // secret mode only
+	Ecosystem     *string     `json:"ecosystem,omitempty"`     // component mode only
+	FixedVersion  *string     `json:"fixed_version,omitempty"` // component mode only
 	FindingsCount int         `json:"findings_count"`
 	ProjectsCount int         `json:"projects_count"`
 	MaxSeverity   int         `json:"max_severity"`
 	FirstSeen     time.Time   `json:"first_seen"`
+	LastSeen      time.Time   `json:"last_seen"`
 	ProjectIDs    []uuid.UUID `json:"project_ids"`
 	SampleIDs     []uuid.UUID `json:"sample_ids"`
 	InKEV         bool        `json:"in_kev"`
+	InBDU         bool        `json:"in_bdu"`
+	BDUIDs        []string    `json:"bdu_ids,omitempty"` // cve mode only
 	MaxEPSS       *float64    `json:"max_epss,omitempty"`
 	MaxCVSS       *float64    `json:"max_cvss,omitempty"`
 }
