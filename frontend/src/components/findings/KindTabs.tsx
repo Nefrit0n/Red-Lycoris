@@ -9,7 +9,6 @@ interface KindTabsProps {
   filter: FindingsFilter;
   onChange: (update: Partial<FindingsFilter>) => void;
   facets?: FindingsFacets;
-  hasExplicitGroupBy?: boolean;
 }
 
 // KindTabs renders the top-of-page tab strip that scopes the list to a
@@ -17,7 +16,7 @@ interface KindTabsProps {
 // kinds filter entirely — when the user narrows into a kind we overwrite
 // the array instead of adding, because the visual model is "one tab at a
 // time", even though the filter itself can still hold several values.
-export function KindTabs({ filter, onChange, facets, hasExplicitGroupBy = false }: KindTabsProps) {
+export function KindTabs({ filter, onChange, facets }: KindTabsProps) {
   const counts = useMemo(() => {
     const m = new Map<string, number>();
     facets?.by_kind?.forEach((b) => m.set(b.kind, b.count));
@@ -36,14 +35,9 @@ export function KindTabs({ filter, onChange, facets, hasExplicitGroupBy = false 
     filter.kinds.length === 1 ? filter.kinds[0] : null;
 
   const selectKind = (kind: FindingKind | null) => {
-    const update: Partial<FindingsFilter> = { kinds: kind ? [kind] : [] };
-    if (!hasExplicitGroupBy) {
-      if (kind === "secrets") update.groupBy = "secret";
-      else if (kind === "sca") update.groupBy = "component";
-      else if (kind === "sast" || kind === "iac") update.groupBy = "rule";
-      else update.groupBy = "";
-    }
-    onChange(update);
+    // Kind tabs are a scope switch; always reset grouping to flat list so
+    // users don't end up in an unexpected grouped mode after tab changes.
+    onChange({ kinds: kind ? [kind] : [], groupBy: "" });
   };
 
   return (
