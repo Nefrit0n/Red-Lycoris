@@ -46,6 +46,14 @@ const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: "priority_score", label: "Приоритет" },
 ];
 
+const GROUP_OPTIONS: { value: FindingsFilter["groupBy"]; label: string }[] = [
+  { value: "", label: "Без группировки" },
+  { value: "component", label: "По компоненту" },
+  { value: "rule", label: "По правилу" },
+  { value: "cve", label: "По CVE" },
+  { value: "secret", label: "По секрету" },
+];
+
 export function FindingsToolbar({
   filter,
   onChange,
@@ -64,6 +72,9 @@ export function FindingsToolbar({
   const sortLabel =
     SORT_OPTIONS.find((o) => o.value === filter.sortField)?.label ??
     "Обнаружено";
+  const groupLabel =
+    GROUP_OPTIONS.find((o) => o.value === filter.groupBy)?.label ??
+    "Без группировки";
   return (
     <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/20 px-4 py-2">
       <div className="flex min-w-0 items-center gap-3 text-sm text-zinc-400">
@@ -78,6 +89,33 @@ export function FindingsToolbar({
         {selectedCount > 0 && (
           <span className="text-red-400">{selectedCount} выбрано</span>
         )}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-zinc-400 hover:text-zinc-200"
+              >
+                Группировка: {groupLabel}
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="start" className="border-zinc-700 bg-zinc-900">
+            {GROUP_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt.label}
+                onClick={() => onChange({ groupBy: opt.value })}
+                className={cn(
+                  "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
+                  filter.groupBy === opt.value && "bg-zinc-800/60",
+                )}
+              >
+                {opt.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-1.5">
