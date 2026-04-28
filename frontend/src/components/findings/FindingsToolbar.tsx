@@ -2,7 +2,6 @@ import {
   ArrowDownUp,
   Columns3,
   Download,
-  Layers3,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -73,9 +72,6 @@ export function FindingsToolbar({
   const sortLabel =
     SORT_OPTIONS.find((o) => o.value === filter.sortField)?.label ??
     "Обнаружено";
-  const groupLabel =
-    GROUP_OPTIONS.find((o) => o.value === filter.groupBy)?.label ??
-    "Без группировки";
   return (
     <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/20 px-4 py-2">
       <div className="flex min-w-0 items-center gap-3 text-sm text-zinc-400">
@@ -144,34 +140,25 @@ export function FindingsToolbar({
           </DropdownMenu>
         )}
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 border-zinc-700 bg-zinc-900 text-zinc-300"
-              >
-                <Layers3 className="size-4" />
-                Группировка: {groupLabel}
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="border-zinc-700 bg-zinc-900">
-            {GROUP_OPTIONS.map((opt) => (
-              <DropdownMenuItem
-                key={opt.label}
-                onClick={() => onChange({ groupBy: opt.value })}
-                className={cn(
-                  "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
-                  filter.groupBy === opt.value && "bg-zinc-800/60",
-                )}
-              >
-                {opt.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-1 pr-1">
+          <span className="mr-1 text-xs text-zinc-500">Группировка:</span>
+          {GROUP_OPTIONS.map((opt) => (
+            <Button
+              key={opt.label}
+              variant={filter.groupBy === opt.value ? "outline" : "ghost"}
+              size="sm"
+              onClick={() => onChange({ groupBy: opt.value })}
+              className={cn(
+                "h-8 shrink-0 px-2 text-xs",
+                filter.groupBy === opt.value
+                  ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                  : "text-zinc-400 hover:text-zinc-200",
+              )}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger
