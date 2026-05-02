@@ -27,6 +27,17 @@ func maxScanSizeBytes() int64 {
 	return int64(mb) << 20
 }
 
+
+
+func maxScanFormMemoryBytes() int64 {
+	// Keep in-memory multipart form usage bounded to avoid memory exhaustion.
+	const defaultFormMemory = int64(8 << 20)
+	mb, err := strconv.Atoi(strings.TrimSpace(os.Getenv("RL_MAX_SCAN_FORM_MEMORY_MB")))
+	if err != nil || mb <= 0 {
+		return defaultFormMemory
+	}
+	return int64(mb) << 20
+}
 func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.FindingsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tok, ok := APITokenFromContext(r.Context())
@@ -40,10 +51,18 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxScanSizeBytes())
-		if err := r.ParseMultipartForm(maxScanSizeBytes()); err != nil {
+		mr, err := r.MultipartReader()
+		if err != nil {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid multipart form")
 			return
 		}
+		form, err := mr.ReadForm(maxScanFormMemoryBytes())
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid multipart form")
+			return
+		}
+		defer func() { _ = form.RemoveAll() }()
+		r.MultipartForm = form
 		if r.URL.Query().Get("project_id") != "" {
 			slog.Warn("scans: project_id query ignored for PAT request", "request_id", GetRequestID(r.Context()))
 		}
@@ -58,9 +77,15 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			return
 		}
 
-		file, hdr, err := r.FormFile("report")
-		if err != nil {
+		files := r.MultipartForm.File["report"]
+		if len(files) == 0 {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "report is required")
+			return
+		}
+		hdr := files[0]
+		file, err := hdr.Open()
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "failed to open report")
 			return
 		}
 		defer file.Close()
