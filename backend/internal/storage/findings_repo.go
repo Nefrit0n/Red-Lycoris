@@ -941,7 +941,9 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		fromExpr = "findings f"
 		extraConds = []string{"f.rule_id IS NOT NULL"}
 	case "secret":
-		groupKeyExpr = "f.secret_fingerprint"
+		// Use fingerprint when available; fall back to rule_id + file_path so that
+		// secrets imported before the fingerprint migration still get grouped.
+		groupKeyExpr = "COALESCE(f.secret_fingerprint, COALESCE(f.rule_id, '') || ':' || COALESCE(f.file_path, ''))"
 		groupTitleExpr = "MAX(f.secret_kind)"
 		secretKindExpr = "MAX(f.secret_kind)"
 		ecosystemExpr = "NULL::text"
@@ -954,7 +956,6 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		cvssExpr = "NULL::real"
 		fromExpr = "findings f"
 		extraConds = []string{
-			"f.secret_fingerprint IS NOT NULL",
 			fmt.Sprintf("f.finding_kind = %d", int(domain.KindSecrets)),
 		}
 	case "cwe":
