@@ -476,7 +476,7 @@ func sameText(a, b string) bool {
 func kindFromSARIFTool(toolName string) domain.FindingKind {
 	name := strings.ToLower(strings.TrimSpace(toolName))
 	switch {
-	case strings.Contains(name, "semgrep"):
+	case strings.Contains(name, "semgrep"), strings.Contains(name, "gosec"), strings.Contains(name, "codeql"):
 		return domain.KindSAST
 	case strings.Contains(name, "zap"), strings.Contains(name, "burp"):
 		return domain.KindDAST
