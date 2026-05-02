@@ -945,7 +945,7 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		// secrets imported before the fingerprint migration still get grouped.
 		groupKeyExpr = "COALESCE(f.secret_fingerprint, COALESCE(f.rule_id, '') || ':' || COALESCE(f.file_path, ''))"
 		groupTitleExpr = "MAX(f.secret_kind)"
-		secretKindExpr = "MAX(f.secret_kind)"
+		secretKindExpr = "MAX(f.secret_kind)" // #nosec G101 -- aggregates classification labels, not credentials
 		ecosystemExpr = "NULL::text"
 		fixedVerExpr = "NULL::text"
 		// Secrets don't carry CVE IDs, so KEV/BDU/EPSS/CVSS are always null.
