@@ -186,7 +186,7 @@ func handleListFindings(repo *storage.FindingsRepo, rolesRepo *storage.UserProje
 		// Grouped listing: return aggregated buckets instead of flat findings.
 		if filter.GroupBy != "" {
 			switch filter.GroupBy {
-			case "cve", "component", "rule":
+			case "cve", "component", "rule", "cwe":
 			default:
 				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group_by value")
 				return

@@ -2,6 +2,7 @@ import {
   ArrowDownUp,
   Columns3,
   Download,
+  Layers,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -20,7 +21,7 @@ import type {
 } from "@/components/findings/findingsTableConfig";
 import type { BulkStatusOption } from "@/components/findings/BulkStatusCommentDialog";
 import { PRESET_LABEL } from "@/components/findings/findingsTableConfig";
-import type { FindingsFilter, SortField } from "@/lib/findings-filter";
+import type { FindingsFilter, GroupBy, SortField } from "@/lib/findings-filter";
 import { cn } from "@/lib/utils";
 
 interface FindingsToolbarProps {
@@ -38,6 +39,22 @@ interface FindingsToolbarProps {
   exportDisabled?: boolean;
   exportLoading?: boolean;
 }
+
+const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: "cve", label: "CVE" },
+  { value: "cwe", label: "CWE" },
+  { value: "component", label: "Компонент" },
+  { value: "rule", label: "Правило" },
+  { value: "", label: "Без группировки" },
+];
+
+const GROUP_LABEL: Record<GroupBy, string> = {
+  cve: "CVE",
+  cwe: "CWE",
+  component: "Компонент",
+  rule: "Правило",
+  "": "Группировка",
+};
 
 const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: "first_seen", label: "Обнаружено" },
@@ -179,6 +196,42 @@ export function FindingsToolbar({
               HTML отчёт
               <span className="ml-auto text-xs text-zinc-500">для чтения/печати</span>
             </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "text-zinc-400 hover:text-zinc-200",
+                  filter.groupBy && "text-zinc-200",
+                )}
+              >
+                <Layers className="size-4" />
+                {GROUP_LABEL[filter.groupBy]}
+                {filter.groupBy && " ✓"}
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="border-zinc-700 bg-zinc-900">
+            {GROUP_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt.value || "none"}
+                onClick={() => onChange({ groupBy: opt.value })}
+                className={cn(
+                  "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
+                  filter.groupBy === opt.value && "bg-zinc-800/60",
+                )}
+              >
+                {opt.label}
+                {filter.groupBy === opt.value && (
+                  <span className="ml-auto text-xs text-zinc-400">✓</span>
+                )}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 

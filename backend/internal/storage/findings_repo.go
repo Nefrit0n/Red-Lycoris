@@ -852,7 +852,7 @@ func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*Find
 func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, groupBy string) ([]domain.FindingGroup, int, error) {
 	const groupLimit = 200
 
-	var groupKeyExpr, fromExpr string
+	var groupKeyExpr, fromExpr, descExpr string
 	var extraConds []string
 
 	switch groupBy {
@@ -862,10 +862,12 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		groupKeyExpr = "cve_key"
 		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cve_ids) AS c(cve_key)"
 		extraConds = []string{"f.cve_ids IS NOT NULL", "array_length(f.cve_ids, 1) > 0"}
+		descExpr = "(SELECT COALESCE(LEFT(n.description, 300), '') FROM nvd_cves n WHERE n.cve_id = cve_key)"
 	case "component":
 		groupKeyExpr = "f.component || '@' || COALESCE(f.component_version, '')"
 		fromExpr = "findings f"
 		extraConds = []string{"f.component IS NOT NULL"}
+		descExpr = "''"
 	case "rule":
 		// Unit separator (E'\x1f') is the join byte — safe because rule_id /
 		// rule_name are human-readable strings that never contain control
@@ -873,6 +875,14 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		groupKeyExpr = `COALESCE(f.rule_id, '') || E'\x1f' || COALESCE(f.rule_name, '')`
 		fromExpr = "findings f"
 		extraConds = []string{"f.rule_id IS NOT NULL"}
+		descExpr = "''"
+	case "cwe":
+		// Unnest CWE integer arrays; group_key is the numeric ID as text so the
+		// frontend can format it as "CWE-<n>".
+		groupKeyExpr = "c.cwe_id::text"
+		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cwe_ids) AS c(cwe_id)"
+		extraConds = []string{"f.cwe_ids IS NOT NULL", "array_length(f.cwe_ids, 1) > 0"}
+		descExpr = "(SELECT COALESCE(cw.name, '') FROM cwe_catalog cw WHERE cw.cwe_id = c.cwe_id)"
 	default:
 		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: unknown group_by %q", groupBy)
 	}
@@ -881,7 +891,7 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 	conds = append(conds, extraConds...)
 
 	// KEV/EPSS/CVSS per-group aggregates. For CVE grouping we can look them up
-	// directly by cve_key. For component/rule grouping we reduce across each
+	// directly by cve_key. For component/rule/cwe grouping we reduce across each
 	// finding's CVE set with bool_or / MAX of the per-row max.
 	var kevExpr, epssExpr, cvssExpr string
 	if groupBy == "cve" {
@@ -897,6 +907,7 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 	q := fmt.Sprintf(`
 		SELECT
 			%s AS group_key,
+			%s AS description,
 			count(*) AS findings_count,
 			count(DISTINCT f.project_id) AS projects_count,
 			max(f.severity) AS max_severity,
@@ -911,7 +922,7 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		GROUP BY %s
 		ORDER BY max_severity DESC, findings_count DESC
 		LIMIT %d`,
-		groupKeyExpr, kevExpr, epssExpr, cvssExpr, fromExpr,
+		groupKeyExpr, descExpr, kevExpr, epssExpr, cvssExpr, fromExpr,
 		whereClause(conds), groupKeyExpr, groupLimit)
 
 	rows, err := r.pool.Query(ctx, q, args...)
@@ -924,7 +935,7 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 	for rows.Next() {
 		var g domain.FindingGroup
 		if err := rows.Scan(
-			&g.GroupKey, &g.FindingsCount, &g.ProjectsCount,
+			&g.GroupKey, &g.Description, &g.FindingsCount, &g.ProjectsCount,
 			&g.MaxSeverity, &g.FirstSeen, &g.ProjectIDs, &g.SampleIDs,
 			&g.InKEV, &g.MaxEPSS, &g.MaxCVSS,
 		); err != nil {
