@@ -69,6 +69,12 @@ const GROUP_META: Record<
     empty: "Без отпечатка",
     format: (k) => (k ? `Секрет ${k.slice(0, 12)}…` : "Без отпечатка"),
   },
+  cwe: {
+    icon: Bug,
+    label: "CWE",
+    empty: "Без CWE",
+    format: (k) => (k ? `CWE-${k}` : "Без CWE"),
+  },
 };
 
 function formatRelative(value: string | null | undefined): string {
@@ -111,6 +117,9 @@ function buildOverlayFilter(
     }
     case "secret":
       overlay.secretFingerprint = groupKey;
+      break;
+    case "cwe":
+      overlay.cwe = parseInt(groupKey, 10) || null;
       break;
   }
   return overlay;
@@ -335,10 +344,11 @@ export function GroupedFindingsTable({
             <div key={key}>
               <div
                 className={cn(
-                  "flex items-start gap-2 border-l-4 px-3 py-3 transition-colors",
+                  "flex items-center gap-2 border-l-4 px-3 py-2 transition-colors hover:bg-zinc-900/30",
                   sev.borderClass,
                 )}
               >
+                {/* Expand toggle */}
                 <button
                   type="button"
                   disabled={!canExpand}
@@ -347,7 +357,7 @@ export function GroupedFindingsTable({
                     if (canExpand) toggle(key);
                   }}
                   className={cn(
-                    "mt-0.5 shrink-0 rounded p-0.5 text-zinc-500 transition-colors",
+                    "shrink-0 rounded p-0.5 text-zinc-500 transition-colors",
                     canExpand
                       ? "hover:bg-zinc-800 hover:text-zinc-200"
                       : "cursor-default opacity-30",
@@ -362,11 +372,12 @@ export function GroupedFindingsTable({
                   )}
                 </button>
 
-                <Icon className="mt-0.5 size-4 shrink-0 text-zinc-500" />
+                <Icon className="size-4 shrink-0 text-zinc-500" />
 
+                {/* Title + severity + mode badges — takes remaining space, truncates */}
                 <div
                   className={cn(
-                    "min-w-0 flex-1",
+                    "flex min-w-0 flex-1 items-center gap-2 overflow-hidden",
                     interactive && "cursor-pointer",
                   )}
                   onClick={
@@ -375,25 +386,24 @@ export function GroupedFindingsTable({
                       : undefined
                   }
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-mono text-sm text-zinc-200">
-                      {title}
-                    </span>
-                    <SeverityBadge severity={group.max_severity} short />
-                    <GroupModeBadges group={group} groupBy={effectiveGroupBy} />
-                  </div>
+                  <span className="truncate font-mono text-sm text-zinc-200">
+                    {title}
+                  </span>
+                  <SeverityBadge severity={group.max_severity} short />
+                  <GroupModeBadges group={group} groupBy={effectiveGroupBy} />
+                </div>
 
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                    <span className="flex items-center gap-1">
-                      <Bug className="size-3" />
-                      {group.findings_count.toLocaleString("ru-RU")} находок
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Package className="size-3" />
-                      {group.projects_count.toLocaleString("ru-RU")} проектов
-                    </span>
-                    <span>Обновлено {formatRelative(group.last_seen)}</span>
-                  </div>
+                {/* Stats — right-aligned, hidden on narrow viewports */}
+                <div className="hidden shrink-0 items-center gap-3 text-xs text-zinc-500 lg:flex">
+                  <span className="flex items-center gap-1">
+                    <Bug className="size-3" />
+                    {group.findings_count.toLocaleString("ru-RU")} находок
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Package className="size-3" />
+                    {group.projects_count.toLocaleString("ru-RU")} проектов
+                  </span>
+                  <span>{formatRelative(group.last_seen)}</span>
                 </div>
 
                 <EnrichmentBadges
@@ -401,7 +411,7 @@ export function GroupedFindingsTable({
                   inBdu={group.in_bdu}
                   maxEpss={group.max_epss}
                   maxCvss={group.max_cvss}
-                  className="hidden shrink-0 md:flex"
+                  className="w-[180px] shrink-0"
                 />
 
                 <GroupActionsMenu
