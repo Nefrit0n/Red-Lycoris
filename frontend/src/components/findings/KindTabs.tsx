@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { FINDING_KINDS, findingKindMeta } from "@/lib/finding-kind";
-import type { FindingsFilter, GroupBy } from "@/lib/findings-filter";
+import type { FindingsFilter } from "@/lib/findings-filter";
 import type { FindingKind, FindingsFacets } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -10,21 +10,6 @@ interface KindTabsProps {
   onChange: (update: Partial<FindingsFilter>) => void;
   facets?: FindingsFacets;
 }
-
-type TabKey = FindingKind | "all";
-
-// Default group_by for each tab. Applied when the user switches tabs and
-// hasn't manually overridden group_by (i.e. it still matches the previous
-// tab's default or is empty).
-const TAB_DEFAULT_GROUPBY: Record<TabKey, GroupBy> = {
-  secrets: "secret",
-  sca: "component",
-  sast: "rule",
-  dast: "",
-  iac: "rule",
-  other: "",
-  all: "",
-};
 
 // KindTabs renders the top-of-page tab strip that scopes the list to a
 // specific finding kind (SCA, SAST, DAST, …). The "Все" tab clears the
@@ -48,24 +33,9 @@ export function KindTabs({ filter, onChange, facets }: KindTabsProps) {
 
   const activeKind: FindingKind | null =
     filter.kinds.length === 1 ? filter.kinds[0] : null;
-  const currentTab: TabKey = activeKind ?? "all";
 
   const selectKind = (kind: FindingKind | null) => {
-    const newTab: TabKey = kind ?? "all";
-    const currentDefault = TAB_DEFAULT_GROUPBY[currentTab];
-    const newDefault = TAB_DEFAULT_GROUPBY[newTab];
-
-    // Apply new tab's default group_by only when the current group_by was not
-    // manually chosen (i.e. it still matches the current tab's default or is "").
-    const shouldApplyDefault =
-      filter.groupBy === currentDefault || filter.groupBy === "";
-
-    const update: Partial<FindingsFilter> = { kinds: kind ? [kind] : [] };
-    if (shouldApplyDefault) {
-      update.groupBy = newDefault;
-    }
-
-    onChange(update);
+    onChange({ kinds: kind ? [kind] : [] });
   };
 
   return (
