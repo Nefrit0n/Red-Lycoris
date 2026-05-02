@@ -8,6 +8,7 @@ import {
   FileCode,
   Package,
   ShieldAlert,
+  ShieldQuestion,
   SearchX,
 } from "lucide-react";
 
@@ -36,7 +37,7 @@ interface GroupedFindingsTableProps {
 // Group-mode metadata: what icon to render, how to label the group title,
 // what placeholder to show for empty keys. The backend sends the same
 // `group_key` field regardless of mode, so the page knows it came from
-// cve/component/rule only via `filter.groupBy`.
+// cve/component/rule/cwe only via `filter.groupBy`.
 const GROUP_META: Record<
   Exclude<GroupBy, "">,
   {
@@ -63,6 +64,13 @@ const GROUP_META: Record<
     label: "Правило",
     empty: "Без правила",
     format: (k) => k || "Без правила",
+  },
+  cwe: {
+    icon: ShieldQuestion,
+    label: "CWE",
+    empty: "Без CWE",
+    // group_key is the numeric CWE ID as a string, e.g. "798"
+    format: (k) => (k ? `CWE-${k}` : "Без CWE"),
   },
 };
 
@@ -105,6 +113,11 @@ function buildOverlayFilter(
       const sep = " — ";
       const i = groupKey.indexOf(sep);
       overlay.ruleId = i >= 0 ? groupKey.slice(0, i) : groupKey;
+      break;
+    }
+    case "cwe": {
+      const n = parseInt(groupKey, 10);
+      overlay.cwe = Number.isNaN(n) ? null : n;
       break;
     }
   }
@@ -359,11 +372,17 @@ export function GroupedFindingsTable({
                   }
                 >
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-mono text-sm text-zinc-200">
+                    <span className="font-mono text-sm text-zinc-200">
                       {meta.format(group.group_key)}
                     </span>
                     <SeverityBadge severity={group.max_severity} short />
                   </div>
+
+                  {group.description && (
+                    <div className="mt-0.5 line-clamp-1 max-w-2xl text-xs text-zinc-500">
+                      {group.description}
+                    </div>
+                  )}
 
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
                     <span className="flex items-center gap-1">
