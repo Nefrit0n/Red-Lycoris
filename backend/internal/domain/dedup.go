@@ -39,6 +39,8 @@ func CalculateFingerprint(f *Finding) string {
 		strings.ToLower(ruleID),
 		strings.ToLower(cveID),
 		strings.ToLower(f.FilePath),
+		strconv.Itoa(f.LineStart),
+		strconv.Itoa(f.LineEnd),
 		cweID,
 		strings.ToLower(f.Component),
 		strings.ToLower(f.ComponentVersion),
