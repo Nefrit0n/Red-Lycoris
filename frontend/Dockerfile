@@ -2,6 +2,8 @@
 FROM node:20-bookworm-slim AS development
 
 WORKDIR /app
+RUN chown -R node:node /app
+USER node
 
 COPY package.json package-lock.json* ./
 ENV NPM_CONFIG_INCLUDE=optional
@@ -17,6 +19,8 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
+RUN chown -R node:node /app
+USER node
 
 COPY package.json package-lock.json* ./
 ENV NPM_CONFIG_INCLUDE=optional
