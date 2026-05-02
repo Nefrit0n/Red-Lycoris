@@ -18,7 +18,7 @@ export type SortField =
 
 export type SortDir = "asc" | "desc";
 
-export type GroupBy = "cve" | "component" | "rule" | "";
+export type GroupBy = "cve" | "component" | "rule" | "cwe" | "";
 
 export interface FindingsFilter {
   // Free-text search (mapped to ?q=)
@@ -50,6 +50,7 @@ export interface FindingsFilter {
   component: string;
   componentVersion: string;
   ruleId: string;
+  secretFingerprint: string;
   cwe: number | null;
 
   // Enrichment toggles.
@@ -86,6 +87,7 @@ export const DEFAULT_FINDINGS_FILTER: FindingsFilter = {
   component: "",
   componentVersion: "",
   ruleId: "",
+  secretFingerprint: "",
   cwe: null,
   hasCVE: false,
   hasFix: false,
@@ -154,6 +156,13 @@ export function filterFromSearchParams(
   const rawDir = params.get("dir") ?? "";
   const sortDir: SortDir = rawDir === "asc" ? "asc" : "desc";
 
+  const rawGroupBy = params.get("group_by") ?? "";
+  const groupBy: GroupBy = (["cve", "component", "rule", "cwe", ""] as const).includes(
+    rawGroupBy as GroupBy,
+  )
+    ? (rawGroupBy as GroupBy)
+    : "";
+
   const epssMin = parseFloatOrNull(params.get("epss_min"));
   const cvssMin = parseFloatOrNull(params.get("cvss_min"));
   const ageMaxDays = parseIntOrNull(params.get("age_max_days"));
@@ -175,6 +184,7 @@ export function filterFromSearchParams(
     component: params.get("component") ?? "",
     componentVersion: params.get("component_version") ?? "",
     ruleId: params.get("rule_id") ?? "",
+    secretFingerprint: params.get("secret_fingerprint") ?? "",
     cwe: parseIntOrNull(params.get("cwe")),
     hasCVE: parseBool(params.get("has_cve")),
     hasFix: parseBool(params.get("has_fix")),
@@ -185,7 +195,7 @@ export function filterFromSearchParams(
     ageMaxDays: ageMaxDays !== null && ageMaxDays > 0 ? ageMaxDays : null,
     sortField,
     sortDir,
-    groupBy: "",
+    groupBy,
   };
 }
 
@@ -229,6 +239,7 @@ export function filterToSearchParams(filter: FindingsFilter): URLSearchParams {
     p.set("component_version", filter.componentVersion.trim());
   }
   if (filter.ruleId.trim()) p.set("rule_id", filter.ruleId.trim());
+  if (filter.secretFingerprint.trim()) p.set("secret_fingerprint", filter.secretFingerprint.trim());
   if (filter.cwe !== null) p.set("cwe", String(filter.cwe));
   if (filter.hasCVE) p.set("has_cve", "true");
   if (filter.hasFix) p.set("has_fix", "true");
@@ -245,6 +256,9 @@ export function filterToSearchParams(filter: FindingsFilter): URLSearchParams {
   if (filter.sortDir !== DEFAULT_FINDINGS_FILTER.sortDir) {
     p.set("dir", filter.sortDir);
   }
+  if (filter.groupBy !== DEFAULT_FINDINGS_FILTER.groupBy) {
+    p.set("group_by", filter.groupBy);
+  }
   return p;
 }
 
@@ -260,6 +274,9 @@ export function buildQueryString(
   params.forEach((value, key) => {
     out[key] = value;
   });
+  // group_by is always sent when set (even if it matches default "") so the
+  // API receives the explicit mode.
+  if (filter.groupBy) out.group_by = filter.groupBy;
   if (extras.cursor) out.cursor = extras.cursor;
   if (extras.limit !== undefined) out.limit = String(extras.limit);
   return out;

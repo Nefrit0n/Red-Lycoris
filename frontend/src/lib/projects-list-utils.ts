@@ -13,6 +13,7 @@ export function groupPinnedFirst(projects: Project[]): Project[] {
 export function hasProjectsFilters(state: ProjectsUrlState): boolean {
   return Boolean(state.q) ||
     state.status.length > 0 ||
+    state.coverage.length > 0 ||
     state.tag.length > 0 ||
     Boolean(state.team) ||
     Boolean(state.sla) ||
