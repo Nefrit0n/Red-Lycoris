@@ -244,14 +244,12 @@ func handleAuditStream(auditRepo *storage.AuditLogRepo) http.HandlerFunc {
 					if marshalErr != nil {
 						continue
 					}
-					_, _ = w.Write([]byte("id: " + item.ID.String() + "\n"))
-					_, _ = w.Write([]byte("event: audit\n"))
-					_, _ = w.Write([]byte("data: " + string(payload) + "\n\n"))
+					_, _ = fmt.Fprintf(w, "id: %s\nevent: audit\ndata: %s\n\n", item.ID.String(), payload)
 					flusher.Flush()
 					lastCreatedAt = item.CreatedAt
 					lastID = item.ID
 				}
-				_, _ = w.Write([]byte(": heartbeat\n\n"))
+				_, _ = fmt.Fprint(w, ": heartbeat\n\n")
 				flusher.Flush()
 			}
 		}

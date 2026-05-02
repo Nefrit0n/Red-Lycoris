@@ -88,6 +88,19 @@ func RequireGlobalAdmin(next http.Handler) http.Handler {
 	})
 }
 
+// RequirePasswordChangeCompleted blocks access for users with MustChangePassword=true.
+// Applied to all /api/v1/* protected routes; excluded: /api/v1/auth/* (login, me, change-password).
+func RequirePasswordChangeCompleted(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := UserFromContext(r.Context())
+		if ok && user != nil && user.MustChangePassword {
+			respondError(w, r, http.StatusUnauthorized, "FORCE_PASSWORD_CHANGE", "Необходимо сменить пароль")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func ProjectIDFromURL(param string) ProjectIDExtractor {
 	return func(r *http.Request) (uuid.UUID, error) {
 		return uuid.Parse(chi.URLParam(r, param))
@@ -154,6 +167,40 @@ func RequireProjectRole(rolesRepo *storage.UserProjectRolesRepo, minRole domain.
 			}
 			if !ok || role < minRole {
 				respondError(w, r, http.StatusForbidden, "INSUFFICIENT_PROJECT_ROLE", "insufficient project role")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func RequireProjectOwnerOrGlobalAdmin(projectsRepo *storage.ProjectsRepo, extractor ProjectIDExtractor) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := UserFromContext(r.Context())
+			if !ok {
+				respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required")
+				return
+			}
+			if user.IsAdmin() {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			projectID, err := extractor(r)
+			if err != nil {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid project id")
+				return
+			}
+			project, err := projectsRepo.GetByID(r.Context(), projectID)
+			if err != nil {
+				respondError(w, r, http.StatusNotFound, "NOT_FOUND", "project not found")
+				return
+			}
+
+			if project.Owner.ID != user.ID {
+				respondError(w, r, http.StatusForbidden, "PROJECT_OWNER_REQUIRED", "project owner or admin required")
 				return
 			}
 

@@ -229,6 +229,23 @@ func (r *UsersRepo) CountActiveAdmins(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// SetMustChangePassword sets or clears the must_change flag on user_credentials.
+// When mustChange=true, reason must be one of: "initial", "admin_reset", "expiry".
+// When mustChange=false, reason is ignored and stored as NULL (DB constraint requires it).
+func (r *UsersRepo) SetMustChangePassword(ctx context.Context, userID uuid.UUID, mustChange bool, reason string) error {
+	const q = `
+		INSERT INTO user_credentials (user_id, must_change, must_change_reason, password_set_at)
+		VALUES ($1, $2, NULLIF($3, ''), now())
+		ON CONFLICT (user_id) DO UPDATE
+			SET must_change        = EXCLUDED.must_change,
+			    must_change_reason = CASE WHEN $2 THEN NULLIF($3, '') ELSE NULL END`
+	_, err := r.pool.Exec(ctx, q, userID, mustChange, reason)
+	if err != nil {
+		return fmt.Errorf("storage.UsersRepo.SetMustChangePassword: %w", err)
+	}
+	return nil
+}
+
 func (r *UsersRepo) Deactivate(ctx context.Context, id uuid.UUID) error {
 	const q = `
 		UPDATE users

@@ -6,6 +6,7 @@ describe("projects query serialization", () => {
     const params = serializeProjectsUrlParams({
       view: "list",
       status: ["active", "paused"],
+      coverage: ["no-sast"],
       team: "backend",
       sla: "breached",
       tag: ["api", "go"],
@@ -19,6 +20,7 @@ describe("projects query serialization", () => {
 
     expect(parsed.view).toBe("list");
     expect(parsed.status).toEqual(["active", "paused"]);
+    expect(parsed.coverage).toEqual(["no-sast"]);
     expect(parsed.team).toBe("backend");
     expect(parsed.sla).toBe("breached");
     expect(parsed.tag).toEqual(["api", "go"]);
