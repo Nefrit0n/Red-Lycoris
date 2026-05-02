@@ -52,7 +52,6 @@ const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "cve", label: "CVE" },
   { value: "cwe", label: "CWE" },
   { value: "rule", label: "Правило" },
-  { value: "secret", label: "Секрет" },
 ];
 
 export function FindingsToolbar({
