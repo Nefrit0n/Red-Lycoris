@@ -60,6 +60,7 @@ export interface Finding {
 
 export interface FindingGroup {
   group_key: string;
+  description?: string;
   findings_count: number;
   projects_count: number;
   max_severity: number;
