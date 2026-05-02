@@ -18,7 +18,7 @@ export type SortField =
 
 export type SortDir = "asc" | "desc";
 
-export type GroupBy = "cve" | "component" | "rule" | "secret" | "";
+export type GroupBy = "cve" | "component" | "rule" | "secret" | "cwe" | "";
 
 export interface FindingsFilter {
   // Free-text search (mapped to ?q=)
@@ -157,7 +157,7 @@ export function filterFromSearchParams(
   const sortDir: SortDir = rawDir === "asc" ? "asc" : "desc";
 
   const rawGroupBy = params.get("group_by") ?? "";
-  const groupBy: GroupBy = (["cve", "component", "rule", "secret", ""] as const).includes(
+  const groupBy: GroupBy = (["cve", "component", "rule", "secret", "cwe", ""] as const).includes(
     rawGroupBy as GroupBy,
   )
     ? (rawGroupBy as GroupBy)
