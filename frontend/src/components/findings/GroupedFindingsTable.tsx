@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronRight,
   FileCode,
-  KeyRound,
   Package,
   ShieldAlert,
   SearchX,
@@ -63,12 +62,6 @@ const GROUP_META: Record<
     empty: "Без правила",
     format: (k) => k || "Без правила",
   },
-  secret: {
-    icon: KeyRound,
-    label: "Секрет",
-    empty: "Без отпечатка",
-    format: (k) => (k ? `Секрет ${k.slice(0, 12)}…` : "Без отпечатка"),
-  },
   cwe: {
     icon: Bug,
     label: "CWE",
@@ -115,9 +108,6 @@ function buildOverlayFilter(
       overlay.ruleId = i >= 0 ? groupKey.slice(0, i) : groupKey;
       break;
     }
-    case "secret":
-      overlay.secretFingerprint = groupKey;
-      break;
     case "cwe":
       overlay.cwe = parseInt(groupKey, 10) || null;
       break;
@@ -253,13 +243,6 @@ function GroupModeBadges({
       </>
     );
   }
-  if (groupBy === "secret" && group.secret_kind) {
-    return (
-      <span className="inline-flex h-4 items-center rounded border border-zinc-600 px-1.5 text-[10px] text-zinc-400">
-        {group.secret_kind}
-      </span>
-    );
-  }
   return null;
 }
 
@@ -338,13 +321,13 @@ export function GroupedFindingsTable({
           const key = group.group_key || `${effectiveGroupBy}-empty`;
           const isExpanded = expanded.has(key);
           const canExpand = !!group.group_key;
-          // For CVE mode the group_key IS the CVE ID — always show it as
-          // primary label. group_title holds the NVD description (secondary).
-          const isCveMode = effectiveGroupBy === "cve";
-          const primaryTitle = isCveMode
+          // For CVE and CWE mode the group_key is the identifier — always show
+          // it as primary. group_title holds the description (secondary).
+          const isKeyedMode = effectiveGroupBy === "cve" || effectiveGroupBy === "cwe";
+          const primaryTitle = isKeyedMode
             ? meta.format(group.group_key)
             : (group.group_title || meta.format(group.group_key));
-          const subtitle = isCveMode ? group.group_title : undefined;
+          const subtitle = isKeyedMode ? group.group_title : undefined;
 
           return (
             <div key={key}>
