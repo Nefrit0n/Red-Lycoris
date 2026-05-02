@@ -266,6 +266,34 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 				f.CodeSnippet = &snippet
 			}
 
+			// For secrets-kind findings: derive a stable fingerprint from the
+			// partialFingerprints map if available, otherwise fall back to
+			// sha256(rule_id + commit_sha + file_path).
+			if kind == domain.KindSecrets {
+				ruleIDStr := ""
+				if f.RuleID != nil {
+					ruleIDStr = *f.RuleID
+				}
+				var fpVal string
+				for k, v := range result.PartialFingerprints {
+					if strings.Contains(strings.ToLower(k), "secret") || strings.Contains(strings.ToLower(k), "value") {
+						fpVal = v
+						break
+					}
+				}
+				commitStr := ""
+				if f.CommitSHA != nil {
+					commitStr = *f.CommitSHA
+				}
+				if fpVal == "" {
+					// Fallback: hash of rule_id + commit + file_path (deterministic)
+					fpVal = ruleIDStr + ":" + commitStr + ":" + f.FilePath
+				}
+				fp := domain.ComputeSecretFingerprint(ruleIDStr, fpVal)
+				f.SecretFingerprint = &fp
+				f.SecretKind = f.RuleID
+			}
+
 			f.Fingerprint = domain.CalculateFingerprint(&f)
 			findings = append(findings, f)
 		}
@@ -448,7 +476,7 @@ func sameText(a, b string) bool {
 func kindFromSARIFTool(toolName string) domain.FindingKind {
 	name := strings.ToLower(strings.TrimSpace(toolName))
 	switch {
-	case strings.Contains(name, "semgrep"):
+	case strings.Contains(name, "semgrep"), strings.Contains(name, "gosec"), strings.Contains(name, "codeql"):
 		return domain.KindSAST
 	case strings.Contains(name, "zap"), strings.Contains(name, "burp"):
 		return domain.KindDAST

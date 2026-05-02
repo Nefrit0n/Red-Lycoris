@@ -77,9 +77,40 @@ func AuditMiddleware(writer *audit.Writer) func(http.Handler) http.Handler {
 				rec.ResourceID = ptrOrNil(rid)
 				rec.Action = ptrOrNil(act)
 			}
+			rec.Changes = inferAuditChanges(rec)
 
 			writer.Submit(rec)
 		})
+	}
+}
+
+func inferAuditChanges(rec storage.AuditRecord) []storage.AuditChange {
+	if len(rec.Changes) > 0 {
+		return rec.Changes
+	}
+	if rec.Action == nil || rec.ResourceType == nil || rec.ResourceID == nil {
+		return nil
+	}
+	if rec.StatusCode >= 400 {
+		return nil
+	}
+
+	resource := map[string]string{
+		"type": *rec.ResourceType,
+		"id":   *rec.ResourceID,
+	}
+
+	switch *rec.Action {
+	case "create":
+		return []storage.AuditChange{
+			{Field: "resource", Before: nil, After: resource},
+		}
+	case "delete":
+		return []storage.AuditChange{
+			{Field: "resource", Before: resource, After: nil},
+		}
+	default:
+		return nil
 	}
 }
 

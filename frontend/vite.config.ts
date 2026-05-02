@@ -11,6 +11,8 @@ export default defineConfig({
     },
   },
   server: {
+    host: "0.0.0.0",
+    allowedHosts: ["red-lycoris.cloudpub.ru"],
     proxy: {
       "/api": {
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8080",

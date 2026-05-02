@@ -43,7 +43,7 @@ type V2Metrics struct {
 }
 
 func ParseV31(vector string) (V31Metrics, error) {
-	values, err := splitVector(vector, "CVSS:3.1")
+	values, err := splitVector(vector, "CVSS:3.1", "CVSS:3.0")
 	if err != nil {
 		return V31Metrics{}, err
 	}
@@ -136,18 +136,36 @@ func ParseV2(vector string) (V2Metrics, error) {
 	return res, nil
 }
 
-func splitVector(vector, expectedPrefix string) (map[string]string, error) {
+func splitVector(vector string, expectedPrefixes ...string) (map[string]string, error) {
 	if strings.TrimSpace(vector) == "" {
 		return nil, fmt.Errorf("invalid vector %q: empty vector", vector)
 	}
 
 	parts := strings.Split(vector, "/")
-	if len(parts) == 0 || parts[0] != expectedPrefix {
-		return nil, fmt.Errorf("invalid vector %q: expected prefix %s", vector, expectedPrefix)
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("invalid vector %q", vector)
 	}
 
-	values := make(map[string]string, len(parts)-1)
-	for _, part := range parts[1:] {
+	startIdx := 0
+	if len(expectedPrefixes) > 0 {
+		matched := false
+		for _, prefix := range expectedPrefixes {
+			if parts[0] == prefix {
+				matched = true
+				startIdx = 1
+				break
+			}
+		}
+
+		if !matched {
+			if _, _, ok := strings.Cut(parts[0], ":"); !ok {
+				return nil, fmt.Errorf("invalid vector %q: expected prefix %s", vector, strings.Join(expectedPrefixes, " or "))
+			}
+		}
+	}
+
+	values := make(map[string]string, len(parts)-startIdx)
+	for _, part := range parts[startIdx:] {
 		if part == "" {
 			continue
 		}

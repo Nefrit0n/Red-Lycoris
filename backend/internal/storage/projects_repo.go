@@ -551,13 +551,29 @@ func (r *ProjectsRepo) Update(ctx context.Context, p *domain.Project) error {
 }
 
 func (r *ProjectsRepo) Delete(ctx context.Context, id uuid.UUID) error {
-	const q = `DELETE FROM projects WHERE id = $1`
-	tag, err := r.pool.Exec(ctx, q, id)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("storage.ProjectsRepo.Delete: %w", err)
+		return fmt.Errorf("storage.ProjectsRepo.Delete: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `DELETE FROM raw_findings WHERE project_id = $1`, id); err != nil {
+		return fmt.Errorf("storage.ProjectsRepo.Delete: delete raw findings: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM findings WHERE project_id = $1`, id); err != nil {
+		return fmt.Errorf("storage.ProjectsRepo.Delete: delete findings: %w", err)
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM projects WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("storage.ProjectsRepo.Delete: delete project: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("storage.ProjectsRepo.Delete: project %s not found", id)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("storage.ProjectsRepo.Delete: commit: %w", err)
 	}
 	return nil
 }

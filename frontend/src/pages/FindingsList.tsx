@@ -11,6 +11,7 @@ import KindTabs from "@/components/findings/KindTabs";
 import SavedViewsBar from "@/components/findings/SavedViewsBar";
 import FindingsToolbar from "@/components/findings/FindingsToolbar";
 import FlatFindingsTable from "@/components/findings/FlatFindingsTable";
+import GroupedFindingsTable from "@/components/findings/GroupedFindingsTable";
 import PreviewPanel from "@/components/findings/PreviewPanel";
 import ColumnChooser from "@/components/findings/ColumnChooser";
 import BulkStatusCommentDialog, {
@@ -362,24 +363,41 @@ export default function FindingsList() {
 
         <div className="flex min-h-0 min-w-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
-            <FlatFindingsTable
-              filter={filter}
-              rowHeight={rowHeight}
-              columnKeys={columnKeys}
-              onRowClick={openPreview}
-              activeRowId={previewId}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
-              onSelectRange={addManyToSelection}
-              onCountChange={handleCountChange}
-              onVisibleIdsChange={setVisibleIds}
-              hasActiveFilters={hasActiveFilters}
-              onResetFilters={() =>
-                setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
-                  replace: true,
-                })
-              }
-            />
+            {filter.groupBy ? (
+              <GroupedFindingsTable
+                filter={filter}
+                rowHeight={rowHeight}
+                columnKeys={columnKeys}
+                onRowClick={openPreview}
+                onPickProject={(projectId) => updateFilter({ projectIds: [projectId] })}
+                onCountChange={handleCountChange}
+                hasActiveFilters={hasActiveFilters}
+                onResetFilters={() =>
+                  setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
+                    replace: true,
+                  })
+                }
+              />
+            ) : (
+              <FlatFindingsTable
+                filter={filter}
+                rowHeight={rowHeight}
+                columnKeys={columnKeys}
+                onRowClick={openPreview}
+                activeRowId={previewId}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+                onSelectRange={addManyToSelection}
+                onCountChange={handleCountChange}
+                onVisibleIdsChange={setVisibleIds}
+                hasActiveFilters={hasActiveFilters}
+                onResetFilters={() =>
+                  setSearchParams(filterToSearchParams(DEFAULT_FINDINGS_FILTER), {
+                    replace: true,
+                  })
+                }
+              />
+            )}
           </div>
 
         </div>
