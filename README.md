@@ -74,7 +74,7 @@ RedLycoris принимает результаты SAST/SCA/DAST/IaC/Secrets-с�
 - Graceful shutdown: SIGTERM → drain HTTP (15 с) → XACK текущего сообщения → закрытие пулов
 
 **UI**
-- React 19 + TypeScript strict + TanStack Table/Query/Virtual + shadcn/ui + Tailwind 4
+- React 18 + TypeScript strict + TanStack Table/Query/Virtual + shadcn/ui + Tailwind CSS
 - Виртуализированные списки на 100k+ строк
 - Полностью русскоязычный интерфейс
 
@@ -117,10 +117,10 @@ RedLycoris принимает результаты SAST/SCA/DAST/IaC/Secrets-с�
 
 | Слой | Технологии |
 |------|------------|
-| Backend | Go 1.25, chi router, pgx/v5, golang-migrate, slog, argon2id, go-redis |
+| Backend | Go 1.22+, chi router, pgx/v5, golang-migrate, slog, bcrypt, go-redis |
 | База | PostgreSQL 16 (партиционирование, materialized views) |
 | Кэш / очередь | Redis 7 (Streams + AOF) |
-| Frontend | React 19, TypeScript, Vite 8, Tailwind 4, TanStack Table/Query/Virtual, Zustand, shadcn/ui |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, TanStack Table/Query/Virtual, Zustand, shadcn/ui |
 | Деплой | Docker Compose (multi-stage builds, non-root user) |
 
 ---
@@ -356,8 +356,8 @@ cd frontend && npm install && npm run dev
 │   │   ├── export/           # CSV/XLSX/NDJSON/HTML
 │   │   ├── observability/    # health + Prometheus metrics
 │   │   └── version/          # build-info
-│   └── migrations/           # 027 SQL-миграций (golang-migrate)
-├── frontend/                 # React 19 + TS + Vite 8
+│   └── migrations/           # 030 SQL-миграций (golang-migrate)
+├── frontend/                 # React 18 + TS + Vite
 │   └── src/{api,pages,components,store,hooks,types}/
 ├── docs/                     # архитектура, deployment, ops, релиз-ноты
 ├── deployments/              # альтернативный prod-overlay
