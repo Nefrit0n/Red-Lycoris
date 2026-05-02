@@ -960,8 +960,9 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		}
 	case "cwe":
 		// Unnest CWE int arrays so each (finding, cwe) pair contributes once.
+		// LEFT JOIN to cwe_catalog provides the short name as group_title.
 		groupKeyExpr = "cwe_key::text"
-		groupTitleExpr = "NULL::text"
+		groupTitleExpr = "MAX(cw.name)"
 		secretKindExpr = "NULL::text"
 		ecosystemExpr = "NULL::text"
 		fixedVerExpr = "NULL::text"
@@ -970,7 +971,7 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 		bduIDsExpr = "NULL::text[]"
 		epssExpr = sharedEPSS
 		cvssExpr = sharedCVSS
-		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cwe_ids) AS c(cwe_key)"
+		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cwe_ids) AS c(cwe_key) LEFT JOIN cwe_catalog cw ON cw.cwe_id = cwe_key"
 		extraConds = []string{"f.cwe_ids IS NOT NULL", "array_length(f.cwe_ids, 1) > 0"}
 	default:
 		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: unknown group_by %q", groupBy)
