@@ -18,7 +18,7 @@ export type SortField =
 
 export type SortDir = "asc" | "desc";
 
-export type GroupBy = "cve" | "component" | "rule" | "cwe" | "";
+export type GroupBy = "cve" | "component" | "rule" | "";
 
 export interface FindingsFilter {
   // Free-text search (mapped to ?q=)
@@ -185,9 +185,7 @@ export function filterFromSearchParams(
     ageMaxDays: ageMaxDays !== null && ageMaxDays > 0 ? ageMaxDays : null,
     sortField,
     sortDir,
-    groupBy: (["cve", "component", "rule", "cwe"].includes(params.get("group_by") ?? "")
-      ? (params.get("group_by") as GroupBy)
-      : ""),
+    groupBy: "",
   };
 }
 
@@ -247,7 +245,6 @@ export function filterToSearchParams(filter: FindingsFilter): URLSearchParams {
   if (filter.sortDir !== DEFAULT_FINDINGS_FILTER.sortDir) {
     p.set("dir", filter.sortDir);
   }
-  if (filter.groupBy) p.set("group_by", filter.groupBy);
   return p;
 }
 
