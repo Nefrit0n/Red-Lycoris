@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -956,6 +957,20 @@ func (r *FindingsRepo) ListGroups(ctx context.Context, filter FindingsFilter, gr
 			"f.secret_fingerprint IS NOT NULL",
 			fmt.Sprintf("f.finding_kind = %d", int(domain.KindSecrets)),
 		}
+	case "cwe":
+		// Unnest CWE int arrays so each (finding, cwe) pair contributes once.
+		groupKeyExpr = "cwe_key::text"
+		groupTitleExpr = "NULL::text"
+		secretKindExpr = "NULL::text"
+		ecosystemExpr = "NULL::text"
+		fixedVerExpr = "NULL::text"
+		inKEVExpr = sharedKEV
+		inBDUExpr = sharedBDU
+		bduIDsExpr = "NULL::text[]"
+		epssExpr = sharedEPSS
+		cvssExpr = sharedCVSS
+		fromExpr = "findings f CROSS JOIN LATERAL unnest(f.cwe_ids) AS c(cwe_key)"
+		extraConds = []string{"f.cwe_ids IS NOT NULL", "array_length(f.cwe_ids, 1) > 0"}
 	default:
 		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListGroups: unknown group_by %q", groupBy)
 	}
@@ -1102,6 +1117,13 @@ func (r *FindingsRepo) ListIDsByGroup(ctx context.Context, filter FindingsFilter
 	case "secret":
 		conds = append(conds, fmt.Sprintf("f.secret_fingerprint = $%d", argN))
 		args = append(args, groupKey)
+	case "cwe":
+		cweID, err := strconv.Atoi(groupKey)
+		if err != nil || cweID <= 0 {
+			return nil, 0, fmt.Errorf("storage.FindingsRepo.ListIDsByGroup: invalid cwe group_key %q", groupKey)
+		}
+		conds = append(conds, fmt.Sprintf("f.cwe_ids @> ARRAY[$%d]::int[]", argN))
+		args = append(args, cweID)
 	default:
 		return nil, 0, fmt.Errorf("storage.FindingsRepo.ListIDsByGroup: unknown group_by %q", groupBy)
 	}
