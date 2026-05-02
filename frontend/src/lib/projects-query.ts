@@ -9,6 +9,7 @@ export type ProjectsSortMode =
 export interface ProjectsUrlState {
   view?: ProjectsViewMode;
   status: string[];
+  coverage: string[];
   team?: string;
   sla?: string;
   tag: string[];
@@ -52,6 +53,7 @@ export function parseProjectsUrlParams(params: URLSearchParams): ProjectsUrlStat
   return {
     view,
     status: parseCsv(params.get("status")),
+    coverage: parseCsv(params.get("coverage")),
     team,
     sla,
     tag: parseCsv(params.get("tag")),
@@ -70,6 +72,9 @@ export function serializeProjectsUrlParams(
   if (state.view) next.set("view", state.view);
   if (state.status && state.status.length > 0) {
     next.set("status", state.status.join(","));
+  }
+  if (state.coverage && state.coverage.length > 0) {
+    next.set("coverage", state.coverage.join(","));
   }
   if (state.team) next.set("team", state.team);
   if (state.sla) next.set("sla", state.sla);

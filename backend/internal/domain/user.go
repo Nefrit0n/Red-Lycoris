@@ -38,7 +38,8 @@ type User struct {
 	LastLoginIP     net.IP     `json:"last_login_ip,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
-	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`
+	LastLoginAt           *time.Time `json:"last_login_at,omitempty"`
+	MustChangePassword    bool       `json:"must_change_password,omitempty"`
 }
 
 func (u *User) IsAdmin() bool {

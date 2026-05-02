@@ -25,8 +25,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useProjects, usePatchProjectPinned } from "@/api/projects";
-import { apiGet } from "@/api/client";
+import { useProjects, usePatchProjectPinned, useCreateProject, useDeleteProject, useUpdateProject } from "@/api/projects";
+import { ApiClientError, apiGet } from "@/api/client";
+import { useCurrentUser } from "@/api/auth";
 import {
   parseProjectsUrlParams,
   serializeProjectsUrlParams,
@@ -116,6 +117,27 @@ function buildSparkline(points: TrendPoint[], width = 58, height = 24): string {
     .join(" ");
 }
 
+function projectUpdatePayload(project: Project): Record<string, unknown> {
+  return {
+    name: project.name,
+    slug: project.slug,
+    description: project.description ?? "",
+    icon_color: project.icon_color,
+    repo_url: project.repo_url ?? "",
+    repo_provider: project.repo_provider ?? "",
+    tags: project.tags,
+    status: project.status,
+    setup_completed: project.setup_completed,
+    visibility: "workspace",
+    team: project.team ?? null,
+    sla_critical_days: null,
+    sla_high_days: null,
+    sla_medium_days: null,
+    sla_low_days: null,
+    sla_notify_before_days: 3,
+  };
+}
+
 export default function ProjectsList() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -176,6 +198,7 @@ export default function ProjectsList() {
   );
 
   const { data, isLoading } = useProjects(projectsQuery);
+  const { data: currentUser } = useCurrentUser();
   const projects = useMemo(() => data?.data ?? [], [data]);
 
   useEffect(() => {
@@ -211,6 +234,9 @@ export default function ProjectsList() {
 
   const [showCreate, setShowCreate] = useState(false);
   const patchPinned = usePatchProjectPinned();
+  const updateProject = useUpdateProject();
+  const createProject = useCreateProject();
+  const deleteProject = useDeleteProject();
   const [trendCache, setTrendCache] = useState<Record<string, { points: TrendPoint[]; fetchedAt: number }>>({});
   const [loadingTrendIds, setLoadingTrendIds] = useState<Set<string>>(new Set());
   const [queuedTrendIds, setQueuedTrendIds] = useState<string[]>([]);
@@ -363,6 +389,104 @@ export default function ProjectsList() {
     [patchPinned],
   );
 
+  const canDeleteProject = useCallback(
+    (project: Project) =>
+      Boolean(currentUser) &&
+      (currentUser?.global_role === 1 || currentUser?.id === project.owner.id),
+    [currentUser],
+  );
+
+  const handleRenameProject = useCallback(
+    (project: Project) => {
+      const nextName = window.prompt("Новое имя проекта", project.name)?.trim();
+      if (!nextName || nextName === project.name) return;
+      const body = projectUpdatePayload(project);
+      updateProject.mutate({
+        id: project.id,
+        body: {
+          ...body,
+          name: nextName,
+        },
+      }, {
+        onError: (error) => {
+          const message = error instanceof ApiClientError ? error.message : "Не удалось переименовать проект";
+          window.alert(message);
+        },
+      });
+    },
+    [updateProject],
+  );
+
+  const handleDuplicateProject = useCallback(
+    (project: Project) => {
+      const fallbackName = `${project.name} (copy)`;
+      const nextName = window.prompt("Название копии проекта", fallbackName)?.trim();
+      if (!nextName) return;
+      createProject.mutate(
+        {
+          name: nextName,
+          description: project.description ?? "",
+          icon_color: project.icon_color,
+          repo_url: project.repo_url ?? "",
+          repo_provider: project.repo_provider ?? "other",
+          tags: project.tags,
+          status: "active",
+          visibility: "workspace",
+          owner_id: currentUser?.id ?? project.owner.id,
+        },
+        {
+          onSuccess: (created) => {
+            if (created.data?.id) {
+              navigate(`/projects/${created.data.id}`);
+            }
+          },
+          onError: (error) => {
+            const message = error instanceof ApiClientError ? error.message : "Не удалось дублировать проект";
+            window.alert(message);
+          },
+        },
+      );
+    },
+    [createProject, currentUser?.id, navigate],
+  );
+
+  const handleArchiveProject = useCallback(
+    (project: Project) => {
+      if (project.status === "archived") return;
+      const body = projectUpdatePayload(project);
+      updateProject.mutate({
+        id: project.id,
+        body: {
+          ...body,
+          status: "archived",
+        },
+      }, {
+        onError: (error) => {
+          const message = error instanceof ApiClientError ? error.message : "Не удалось архивировать проект";
+          window.alert(message);
+        },
+      });
+    },
+    [updateProject],
+  );
+
+  const handleDeleteProject = useCallback(
+    (project: Project) => {
+      if (!canDeleteProject(project)) return;
+      const confirmed = window.confirm(
+        `Удалить проект «${project.name}»?\nЭто действие безвозвратно удалит проект и все его уязвимости.`,
+      );
+      if (!confirmed) return;
+      deleteProject.mutate(project.id, {
+        onError: (error) => {
+          const message = error instanceof ApiClientError ? error.message : "Не удалось удалить проект";
+          window.alert(message);
+        },
+      });
+    },
+    [canDeleteProject, deleteProject],
+  );
+
   const applyUrlState = useCallback(
     (nextState: Partial<typeof urlState>) => {
       setPendingUrlPatch({
@@ -376,7 +500,7 @@ export default function ProjectsList() {
   );
 
   const toggleMultiFilter = useCallback(
-    (key: "status" | "tag", value: string) => {
+    (key: "status" | "tag" | "coverage", value: string) => {
       const current = urlState[key];
       const nextValues = current.includes(value)
         ? current.filter((item) => item !== value)
@@ -397,6 +521,7 @@ export default function ProjectsList() {
     let slaBreached = 0;
     let slaOnTime = 0;
     let noDast = 0;
+    let noSast = 0;
     let noSca = 0;
     let noSecrets = 0;
     let fullCoverage = 0;
@@ -412,13 +537,15 @@ export default function ProjectsList() {
       if (project.sla_breached_count > 0) slaBreached += 1;
       else slaOnTime += 1;
 
+      const hasSast = project.scanners.sast === "ok";
       const hasDast = project.scanners.dast === "ok";
       const hasSca = project.scanners.sca === "ok";
       const hasSecrets = project.scanners.secrets === "ok";
+      if (!hasSast) noSast += 1;
       if (!hasDast) noDast += 1;
       if (!hasSca) noSca += 1;
       if (!hasSecrets) noSecrets += 1;
-      if (hasDast && hasSca && hasSecrets) fullCoverage += 1;
+      if (hasSast && hasDast && hasSca && hasSecrets) fullCoverage += 1;
     });
 
     return {
@@ -427,6 +554,7 @@ export default function ProjectsList() {
       tags: Array.from(byTag.entries()).sort((a, b) => b[1] - a[1]),
       slaBreached,
       slaOnTime,
+      noSast,
       noDast,
       noSca,
       noSecrets,
@@ -441,6 +569,13 @@ export default function ProjectsList() {
         key: `status:${status}`,
         label: `Статус: ${status}`,
         onRemove: () => toggleMultiFilter("status", status),
+      }),
+    );
+    urlState.coverage.forEach((coverage) =>
+      chips.push({
+        key: `coverage:${coverage}`,
+        label: `Покрытие: ${coverage}`,
+        onRemove: () => toggleMultiFilter("coverage", coverage),
       }),
     );
     urlState.tag.forEach((tag) =>
@@ -472,11 +607,31 @@ export default function ProjectsList() {
       });
     }
     return chips;
-  }, [applyUrlState, toggleMultiFilter, urlState.owner, urlState.sla, urlState.status, urlState.tag, urlState.team]);
+  }, [applyUrlState, toggleMultiFilter, urlState.coverage, urlState.owner, urlState.sla, urlState.status, urlState.tag, urlState.team]);
+
+  const filteredProjects = useMemo(
+    () =>
+      projects.filter((project) => {
+        if (urlState.coverage.length === 0) return true;
+        const hasSast = project.scanners.sast === "ok";
+        const hasDast = project.scanners.dast === "ok";
+        const hasSca = project.scanners.sca === "ok";
+        const hasSecrets = project.scanners.secrets === "ok";
+        return urlState.coverage.some((coverage) => {
+          if (coverage === "no-sast") return !hasSast;
+          if (coverage === "no-dast") return !hasDast;
+          if (coverage === "no-sca") return !hasSca;
+          if (coverage === "no-secrets") return !hasSecrets;
+          if (coverage === "full") return hasSast && hasDast && hasSca && hasSecrets;
+          return false;
+        });
+      }),
+    [projects, urlState.coverage],
+  );
 
   const viewMode: ProjectsViewMode = urlState.view ?? (projects.length > 12 ? "list" : "grid");
   const hasActiveFilters = hasProjectsFilters(urlState);
-  const sortedProjects = useMemo(() => groupPinnedFirst(projects), [projects]);
+  const sortedProjects = useMemo(() => groupPinnedFirst(filteredProjects), [filteredProjects]);
 
   if (isLoading) {
     return (
@@ -492,7 +647,7 @@ export default function ProjectsList() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-zinc-400">
-          <span className="font-medium text-zinc-200">{projects.length}</span>{" "}
+          <span className="font-medium text-zinc-200">{filteredProjects.length}</span>{" "}
           проектов
         </span>
         <div className="flex items-center gap-2">
@@ -568,6 +723,7 @@ export default function ProjectsList() {
             onClick={() =>
               applyUrlState({
                 status: [],
+                coverage: [],
                 tag: [],
                 team: undefined,
                 sla: undefined,
@@ -652,22 +808,56 @@ export default function ProjectsList() {
           <section>
             <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">Покрытие</p>
             <div className="space-y-1 text-xs text-zinc-400">
-              <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-zinc-900">
+              <button
+                type="button"
+                onClick={() => toggleMultiFilter("coverage", "no-dast")}
+                className={`flex w-full items-center justify-between rounded px-2 py-1 text-left ${
+                  urlState.coverage.includes("no-dast") ? "bg-zinc-800 text-zinc-100" : "hover:bg-zinc-900"
+                }`}
+              >
                 <span>Без DAST</span>
                 <span>{facets.noDast}</span>
-              </div>
-              <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-zinc-900">
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleMultiFilter("coverage", "no-sca")}
+                className={`flex w-full items-center justify-between rounded px-2 py-1 text-left ${
+                  urlState.coverage.includes("no-sca") ? "bg-zinc-800 text-zinc-100" : "hover:bg-zinc-900"
+                }`}
+              >
                 <span>Без SCA</span>
                 <span>{facets.noSca}</span>
-              </div>
-              <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-zinc-900">
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleMultiFilter("coverage", "no-sast")}
+                className={`flex w-full items-center justify-between rounded px-2 py-1 text-left ${
+                  urlState.coverage.includes("no-sast") ? "bg-zinc-800 text-zinc-100" : "hover:bg-zinc-900"
+                }`}
+              >
+                <span>Без SAST</span>
+                <span>{facets.noSast}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleMultiFilter("coverage", "no-secrets")}
+                className={`flex w-full items-center justify-between rounded px-2 py-1 text-left ${
+                  urlState.coverage.includes("no-secrets") ? "bg-zinc-800 text-zinc-100" : "hover:bg-zinc-900"
+                }`}
+              >
                 <span>Без Secrets</span>
                 <span>{facets.noSecrets}</span>
-              </div>
-              <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-zinc-900">
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleMultiFilter("coverage", "full")}
+                className={`flex w-full items-center justify-between rounded px-2 py-1 text-left ${
+                  urlState.coverage.includes("full") ? "bg-zinc-800 text-zinc-100" : "hover:bg-zinc-900"
+                }`}
+              >
                 <span>Полное</span>
                 <span>{facets.fullCoverage}</span>
-              </div>
+              </button>
             </div>
           </section>
 
@@ -698,7 +888,7 @@ export default function ProjectsList() {
         </aside>
 
         <div>
-      {projects.length === 0 ? (
+      {filteredProjects.length === 0 ? (
         hasActiveFilters ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 text-zinc-400">
             <p className="text-sm">Ничего не найдено по выбранным фильтрам</p>
@@ -709,6 +899,7 @@ export default function ProjectsList() {
                 applyUrlState({
                   q: undefined,
                   status: [],
+                  coverage: [],
                   tag: [],
                   team: undefined,
                   sla: undefined,
@@ -984,13 +1175,21 @@ export default function ProjectsList() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>Переименовать</DropdownMenuItem>
-                    <DropdownMenuItem>Дублировать</DropdownMenuItem>
-                    <DropdownMenuItem>Архивировать</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => navigate(`/projects/${project.id}?tab=tokens`)}>
+                    <DropdownMenuItem onClick={() => handleRenameProject(project)}>Переименовать</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDuplicateProject(project)}>Дублировать</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleArchiveProject(project)}>Архивировать</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}?tab=tokens`)}>
                       Настройки
                     </DropdownMenuItem>
-                    <DropdownMenuItem>Экспорт</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(`/findings?project_id=${project.id}`)}>Экспорт</DropdownMenuItem>
+                    {canDeleteProject(project) && (
+                      <DropdownMenuItem
+                        onClick={() => handleDeleteProject(project)}
+                        className="text-red-400 focus:bg-red-500/10 focus:text-red-300"
+                      >
+                        Удалить проект
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
                 </div>

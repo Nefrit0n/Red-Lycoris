@@ -326,9 +326,10 @@ export function useUpdateStatus() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: number }) =>
+    mutationFn: ({ id, status, note }: { id: string; status: number; note?: string }) =>
       apiPatch<{ data: { status: string } }>(`/api/v1/findings/${id}/status`, {
         status,
+        note: note ?? "",
       }),
 
     onSuccess: async (_result, variables) => {
@@ -548,6 +549,73 @@ export function useBulkAssign() {
         user_id: userId,
       }),
     onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+// ---------- Group-level bulk mutations -----------------------------------------
+
+interface GroupBulkBase {
+  group_by: string;
+  group_key: string;
+}
+
+type GroupBulkResult = {
+  data: {
+    succeeded: string[];
+    failed: Record<string, string>;
+    group_by: string;
+    group_key: string;
+    total: number;
+  };
+};
+
+export function useBulkCloseGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupBy, groupKey, reasonCode, note }: { groupBy: string; groupKey: string; reasonCode: string; note: string }) =>
+      apiPost<GroupBulkResult>("/api/v1/findings/groups/bulk/close", {
+        group_by: groupBy,
+        group_key: groupKey,
+        reason_code: reasonCode,
+        note,
+      } satisfies GroupBulkBase & { reason_code: string; note: string }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: findingsListKeys.all });
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useBulkAssignGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupBy, groupKey, userId }: { groupBy: string; groupKey: string; userId: string }) =>
+      apiPost<GroupBulkResult>("/api/v1/findings/groups/bulk/assign", {
+        group_by: groupBy,
+        group_key: groupKey,
+        user_id: userId,
+      } satisfies GroupBulkBase & { user_id: string }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: findingsListKeys.all });
+      await qc.invalidateQueries({ queryKey: findingsKeys.all });
+    },
+  });
+}
+
+export function useBulkStatusGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupBy, groupKey, status, note }: { groupBy: string; groupKey: string; status: number; note?: string }) =>
+      apiPost<GroupBulkResult>("/api/v1/findings/groups/bulk/status", {
+        group_by: groupBy,
+        group_key: groupKey,
+        status,
+        note: note ?? "",
+      } satisfies GroupBulkBase & { status: number; note: string }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: findingsListKeys.all });
       await qc.invalidateQueries({ queryKey: findingsKeys.all });
     },
   });

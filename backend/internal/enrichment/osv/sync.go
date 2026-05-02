@@ -47,7 +47,6 @@ var defaultEcosystems = []string{
 	"Linux",
 	"Mageia",
 	"Maven",
-	"MiniOS",
 	"npm",
 	"NuGet",
 	"opam",
@@ -693,6 +692,16 @@ func (s *OSVSyncer) upsertBatch(ctx context.Context, records []osvRecord) error 
 		    published_at    = EXCLUDED.published_at,
 		    modified_at     = EXCLUDED.modified_at,
 		    synced_at       = now()
+		WHERE osv_vulnerabilities.summary IS DISTINCT FROM EXCLUDED.summary
+		   OR osv_vulnerabilities.details IS DISTINCT FROM EXCLUDED.details
+		   OR osv_vulnerabilities.aliases IS DISTINCT FROM EXCLUDED.aliases
+		   OR osv_vulnerabilities.ecosystem IS DISTINCT FROM EXCLUDED.ecosystem
+		   OR osv_vulnerabilities.package_name IS DISTINCT FROM EXCLUDED.package_name
+		   OR osv_vulnerabilities.affected_ranges IS DISTINCT FROM EXCLUDED.affected_ranges
+		   OR osv_vulnerabilities.severity IS DISTINCT FROM EXCLUDED.severity
+		   OR osv_vulnerabilities."references" IS DISTINCT FROM EXCLUDED."references"
+		   OR osv_vulnerabilities.published_at IS DISTINCT FROM EXCLUDED.published_at
+		   OR osv_vulnerabilities.modified_at IS DISTINCT FROM EXCLUDED.modified_at
 	`)
 	if err != nil {
 		return fmt.Errorf("upsert from staging: %w", err)
