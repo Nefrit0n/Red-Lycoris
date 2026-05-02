@@ -65,7 +65,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			return
 		}
 
-		if len(findings) == 0 {
+		if len(findings) == 0 && format != "grype" {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "no findings found in input")
 			return
 		}
