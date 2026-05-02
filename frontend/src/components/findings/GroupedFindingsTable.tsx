@@ -338,7 +338,13 @@ export function GroupedFindingsTable({
           const key = group.group_key || `${effectiveGroupBy}-empty`;
           const isExpanded = expanded.has(key);
           const canExpand = !!group.group_key;
-          const title = group.group_title || meta.format(group.group_key);
+          // For CVE mode the group_key IS the CVE ID — always show it as
+          // primary label. group_title holds the NVD description (secondary).
+          const isCveMode = effectiveGroupBy === "cve";
+          const primaryTitle = isCveMode
+            ? meta.format(group.group_key)
+            : (group.group_title || meta.format(group.group_key));
+          const subtitle = isCveMode ? group.group_title : undefined;
 
           return (
             <div key={key}>
@@ -386,9 +392,14 @@ export function GroupedFindingsTable({
                       : undefined
                   }
                 >
-                  <span className="truncate font-mono text-sm text-zinc-200">
-                    {title}
+                  <span className="shrink-0 font-mono text-sm font-medium text-zinc-200">
+                    {primaryTitle}
                   </span>
+                  {subtitle && (
+                    <span className="min-w-0 truncate text-xs text-zinc-500">
+                      {subtitle}
+                    </span>
+                  )}
                   <SeverityBadge severity={group.max_severity} short />
                   <GroupModeBadges group={group} groupBy={effectiveGroupBy} />
                 </div>
