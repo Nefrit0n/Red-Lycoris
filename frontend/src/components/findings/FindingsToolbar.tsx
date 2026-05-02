@@ -2,6 +2,7 @@ import {
   ArrowDownUp,
   Columns3,
   Download,
+  Layers,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -20,7 +21,7 @@ import type {
 } from "@/components/findings/findingsTableConfig";
 import type { BulkStatusOption } from "@/components/findings/BulkStatusCommentDialog";
 import { PRESET_LABEL } from "@/components/findings/findingsTableConfig";
-import type { FindingsFilter, SortField } from "@/lib/findings-filter";
+import type { FindingsFilter, GroupBy, SortField } from "@/lib/findings-filter";
 import { cn } from "@/lib/utils";
 
 interface FindingsToolbarProps {
@@ -44,6 +45,13 @@ const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: "last_seen", label: "Последний раз" },
   { value: "severity", label: "Критичность" },
   { value: "priority_score", label: "Приоритет" },
+];
+
+const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: "component", label: "Компонент" },
+  { value: "cve", label: "CVE" },
+  { value: "rule", label: "Правило" },
+  { value: "secret", label: "Секрет" },
 ];
 
 export function FindingsToolbar({
@@ -179,6 +187,56 @@ export function FindingsToolbar({
               HTML отчёт
               <span className="ml-auto text-xs text-zinc-500">для чтения/печати</span>
             </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "text-zinc-400 hover:text-zinc-200",
+                  filter.groupBy && "bg-zinc-800 text-zinc-200",
+                )}
+              >
+                <Layers className="size-4" />
+                {filter.groupBy
+                  ? (GROUP_BY_OPTIONS.find((o) => o.value === filter.groupBy)?.label ?? "Группировка")
+                  : "Группировка"}
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="border-zinc-700 bg-zinc-900">
+            {GROUP_BY_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt.value}
+                onClick={() =>
+                  onChange({ groupBy: filter.groupBy === opt.value ? "" : opt.value })
+                }
+                className={cn(
+                  "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
+                  filter.groupBy === opt.value && "bg-zinc-800/60",
+                )}
+              >
+                {opt.label}
+                {filter.groupBy === opt.value && (
+                  <span className="ml-auto text-xs text-zinc-500">✓</span>
+                )}
+              </DropdownMenuItem>
+            ))}
+            {filter.groupBy && (
+              <>
+                <DropdownMenuSeparator className="bg-zinc-800" />
+                <DropdownMenuItem
+                  onClick={() => onChange({ groupBy: "" })}
+                  className="text-zinc-400 focus:bg-zinc-800 focus:text-zinc-100"
+                >
+                  Без группировки
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
