@@ -186,15 +186,16 @@ func extractZIP(data []byte) ([]byte, error) {
 	}
 
 	for _, f := range r.File {
-		if strings.HasSuffix(strings.ToLower(f.Name), ".xml") {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, fmt.Errorf("open %s: %w", f.Name, err)
-			}
-			data, err := io.ReadAll(rc)
-			_ = rc.Close()
-			return data, err
+		if !strings.HasSuffix(strings.ToLower(f.Name), ".xml") {
+			continue
 		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, fmt.Errorf("open %s: %w", f.Name, err)
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		return data, err
 	}
 	return nil, fmt.Errorf("no XML file found in ZIP")
 }
