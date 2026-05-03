@@ -138,6 +138,9 @@ func (r *AuditLogRepo) Create(ctx context.Context, rec *AuditRecord) error {
 	if rec.CreatedAt.IsZero() {
 		rec.CreatedAt = time.Now().UTC()
 	}
+	if rec.RiskSignals == nil {
+		rec.RiskSignals = []string{}
+	}
 
 	var uaBrowser, uaOS, uaCountry string
 	var uaIsTor, uaIsVPN, uaIsDatacenter bool
@@ -586,8 +589,18 @@ func (r *AuditLogRepo) Stats(ctx context.Context, from, to time.Time) (AuditStat
 	}
 
 	const histogramQ = `
-		WITH series AS (
-			SELECT generate_series(date_trunc('hour', $1), date_trunc('hour', $2), interval '1 hour') AS bucket
+		WITH bounds AS (
+			SELECT
+				$1::timestamptz AS from_ts,
+				$2::timestamptz AS to_ts
+		),
+		series AS (
+			SELECT generate_series(
+				date_trunc('hour', b.from_ts),
+				date_trunc('hour', b.to_ts),
+				interval '1 hour'
+			) AS bucket
+			FROM bounds b
 		)
 		SELECT
 			s.bucket,
@@ -599,9 +612,10 @@ func (r *AuditLogRepo) Stats(ctx context.Context, from, to time.Time) (AuditStat
 			COUNT(*) FILTER (WHERE a.status_code >= 400 AND a.status_code < 500)::int AS client_4xx,
 			COUNT(*) FILTER (WHERE a.status_code >= 500)::int AS server_5xx
 		FROM series s
+		CROSS JOIN bounds b
 		LEFT JOIN audit_log a
 			ON date_trunc('hour', a.created_at) = s.bucket
-		   AND a.created_at >= $1 AND a.created_at <= $2
+		   AND a.created_at >= b.from_ts AND a.created_at <= b.to_ts
 		GROUP BY s.bucket
 		ORDER BY s.bucket`
 	rows, err := r.pool.Query(ctx, histogramQ, from, to)

@@ -1,7 +1,9 @@
 # ── Stage: Development (Vite dev server) ──
-FROM node:20-alpine3.21 AS development
+FROM node:20-bookworm-slim AS development
 
 WORKDIR /app
+RUN chown -R node:node /app
+USER node
 
 COPY package.json package-lock.json* ./
 ENV NPM_CONFIG_INCLUDE=optional
@@ -14,9 +16,11 @@ EXPOSE 3000
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 
 # ── Stage: Production Build ──
-FROM node:20-alpine3.21 AS build
+FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
+RUN chown -R node:node /app
+USER node
 
 COPY package.json package-lock.json* ./
 ENV NPM_CONFIG_INCLUDE=optional
@@ -26,14 +30,14 @@ COPY . .
 RUN npm run build
 
 # ── Stage: Production (nginx) ──
-FROM nginx:stable-alpine3.21 AS production
+FROM nginx:stable AS production
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # Keep nginx writable paths away from /var/cache to support hardened/non-root runs.
 RUN mkdir -p /tmp/nginx/client_temp /tmp/nginx/proxy_temp /tmp/nginx/fastcgi_temp /tmp/nginx/uwsgi_temp /tmp/nginx/scgi_temp \
-           /var/cache/nginx/client_temp /var/cache/nginx/proxy_temp /var/cache/nginx/fastcgi_temp /var/cache/nginx/uwsgi_temp /var/cache/nginx/scgi_temp \
-           /var/run /var/log/nginx \
+    /var/cache/nginx/client_temp /var/cache/nginx/proxy_temp /var/cache/nginx/fastcgi_temp /var/cache/nginx/uwsgi_temp /var/cache/nginx/scgi_temp \
+    /var/run /var/log/nginx \
     && chown -R nginx:nginx /tmp/nginx /var/cache/nginx /var/run /var/log/nginx /usr/share/nginx/html
 
 RUN cat > /etc/nginx/nginx.conf <<'NGINXCONF'
@@ -71,7 +75,7 @@ server {
     index index.html;
 
     resolver 127.0.0.11 ipv6=off;
-    set $backend_upstream redlycoris-loadtest-backend:8080;
+    set $backend_upstream backend:8080;
 
     location /api/ {
         proxy_pass http://$backend_upstream;

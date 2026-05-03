@@ -169,6 +169,11 @@ func (r *DashboardRepo) GetStats(ctx context.Context, filter DashboardFilter) (*
 		FROM finding_enrichments fe
 		JOIN findings f ON f.id = fe.finding_id` + scopeWhere + `
 		GROUP BY fe.source`
+	if filter.AccessibleProjectIDs == nil {
+		enrichQ = `
+			SELECT source, enriched_count
+			FROM enrichment_coverage`
+	}
 	enrichRows, err := r.pool.Query(ctx, enrichQ, scopeArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("storage.DashboardRepo.GetStats: enrichment_coverage: %w", err)

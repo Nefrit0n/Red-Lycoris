@@ -2,39 +2,8 @@
 
 ## Поток данных
 
-```mermaid
-flowchart TD
-    Scanner["Сканер\n(Semgrep / Trivy / Gitleaks / ...)"]
-    Import["POST /api/v1/import"]
-    Parser["Парсер\nSARIF · Trivy · TruffleHog · Checkov · Gitleaks · Generic"]
-    Dedup{"Дедупликация\nfingerprint = SHA256(\n  cve_id + file_path +\n  cwe_id + component + version\n)"}
-    Insert["INSERT findings"]
-    Update["UPDATE last_seen\ntimes_seen++"]
-    Stream["Redis Streams\nfindings:enrich"]
-    Workers["Enrichment Workers ×3\n(consumer group)"]
-    NVD["NVD API 2.0"]
-    EPSS["EPSS CSV"]
-    KEV["CISA KEV"]
-    BDU["БДУ ФСТЭК"]
-    OSV["OSV"]
-    CWE["CWE MITRE"]
-    Score["Priority Score\n(materialized view)"]
-    API["REST API\nGo · chi"]
-    UI["React UI\nTanStack Table/Query/Virtual"]
+<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/f1427bfe-d7f3-4ba3-8a5a-1d4326d54bd7" />
 
-    Scanner -->|multipart/form-data| Import
-    Import --> Parser
-    Parser --> Dedup
-    Dedup -->|новый| Insert
-    Dedup -->|дубль| Update
-    Insert --> Stream
-    Stream --> Workers
-    Workers --> NVD & EPSS & KEV & BDU & OSV & CWE
-    Workers -->|XACK| Stream
-    Insert & Update --> Score
-    Score --> API
-    API --> UI
-```
 
 ## Компоненты
 

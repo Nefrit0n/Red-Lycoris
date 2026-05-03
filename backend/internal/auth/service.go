@@ -103,6 +103,30 @@ func (s *Service) Refresh(ctx context.Context, rawToken string) (*User, *Session
 	return user, session, nil
 }
 
+// CreateSessionForUser creates a new session for an already-authenticated user.
+// Used after password change to issue a fresh session without re-verifying password.
+func (s *Service) CreateSessionForUser(ctx context.Context, userID uuid.UUID, userAgent, ip string) (string, error) {
+	rawToken, err := GenerateToken()
+	if err != nil {
+		return "", fmt.Errorf("auth.Service.CreateSessionForUser: generate token: %w", err)
+	}
+	now := time.Now()
+	sess := &domain.Session{
+		ID:         uuid.New(),
+		UserID:     userID,
+		TokenHash:  HashToken(rawToken),
+		ExpiresAt:  now.Add(s.sessionDuration),
+		UserAgent:  userAgent,
+		IP:         net.ParseIP(ip),
+		CreatedAt:  now,
+		LastUsedAt: now,
+	}
+	if err := s.sessions.Create(ctx, sess); err != nil {
+		return "", fmt.Errorf("auth.Service.CreateSessionForUser: create session: %w", err)
+	}
+	return rawToken, nil
+}
+
 func (s *Service) ValidateToken(ctx context.Context, rawToken string) (*User, *Session, error) {
 	session, user, err := s.sessions.GetByTokenHashWithUser(ctx, HashToken(rawToken))
 	if err != nil {

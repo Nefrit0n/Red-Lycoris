@@ -120,7 +120,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "/app/admin", "--help"]
       interval: 10s
       timeout: 5s
       retries: 5

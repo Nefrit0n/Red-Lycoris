@@ -115,6 +115,13 @@ func (p *TruffleHogParser) Parse(ctx context.Context, data []byte) ([]domain.Fin
 			secretKind = emptyToNil(detectorName)
 		}
 
+		// Use Raw/RawV2 for the fingerprint hash — the value itself is not stored.
+		var secretFP *string
+		if rawVal := firstNonEmpty(strings.TrimSpace(item.Raw), strings.TrimSpace(item.RawV2)); rawVal != "" {
+			fp := domain.ComputeSecretFingerprint(item.DetectorName, rawVal)
+			secretFP = &fp
+		}
+
 		severity := domain.SeverityHigh
 		confidence := 2
 		if item.Verified {
@@ -123,23 +130,24 @@ func (p *TruffleHogParser) Parse(ctx context.Context, data []byte) ([]domain.Fin
 		}
 
 		f := domain.Finding{
-			Kind:        domain.KindSecrets,
-			Title:       detectorName,
-			Description: description,
-			Severity:    severity,
-			Confidence:  confidence,
-			Status:      domain.StatusOpen,
-			FilePath:    strings.TrimSpace(filePath),
-			LineStart:   line,
-			LineEnd:     line,
-			SecretKind:  secretKind,
-			CommitSHA:   emptyToNil(commit),
-			RuleID:      emptyToNil(ruleID),
-			RuleName:    emptyToNil(item.DetectorName),
-			URL:         emptyToNil(url),
-			SourceType:  "trufflehog",
-			CVEIDs:      []string{},
-			CWEIDs:      []int{},
+			Kind:              domain.KindSecrets,
+			Title:             detectorName,
+			Description:       description,
+			Severity:          severity,
+			Confidence:        confidence,
+			Status:            domain.StatusOpen,
+			FilePath:          strings.TrimSpace(filePath),
+			LineStart:         line,
+			LineEnd:           line,
+			SecretKind:        secretKind,
+			CommitSHA:         emptyToNil(commit),
+			RuleID:            emptyToNil(ruleID),
+			RuleName:          emptyToNil(item.DetectorName),
+			URL:               emptyToNil(url),
+			SecretFingerprint: secretFP,
+			SourceType:        "trufflehog",
+			CVEIDs:            []string{},
+			CWEIDs:            []int{},
 		}
 		f.Fingerprint = domain.CalculateFingerprint(&f)
 		findings = append(findings, f)

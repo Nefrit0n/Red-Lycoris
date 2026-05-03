@@ -69,7 +69,7 @@ func MatchCPE(component, componentVersion string, cpeMatchesRaw json.RawMessage)
 		if !ok {
 			continue
 		}
-		if normalize(product) != normComponent {
+		if !productsMatch(normComponent, normalize(product)) {
 			continue
 		}
 		productMatched = true
@@ -134,7 +134,72 @@ func flattenCPEMatches(raw json.RawMessage) []nvdCPEMatch {
 }
 
 func normalize(s string) string {
-	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), "_", "-")
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.ReplaceAll(s, "\\", "")
+	s = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		return '-'
+	}, s)
+	s = strings.Trim(s, "-")
+	for strings.Contains(s, "--") {
+		s = strings.ReplaceAll(s, "--", "-")
+	}
+	return s
+}
+
+func productsMatch(component, product string) bool {
+	if component == product {
+		return true
+	}
+
+	componentVariants := productAliases(component)
+	productVariants := productAliases(product)
+	for _, cv := range componentVariants {
+		for _, pv := range productVariants {
+			if cv == pv {
+				return true
+			}
+			if tokenEqualsWhole(cv, pv) || tokenEqualsWhole(pv, cv) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func productAliases(product string) []string {
+	base := product
+	suffixes := []string{
+		"-firmware", "-software", "-hardware",
+		"_firmware", "_software", "_hardware",
+	}
+
+	out := []string{base}
+	for _, sfx := range suffixes {
+		if strings.HasSuffix(base, sfx) {
+			trimmed := strings.TrimSuffix(base, sfx)
+			if trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+	}
+
+	return out
+}
+
+func tokenEqualsWhole(compound, whole string) bool {
+	if whole == "" || compound == "" || !strings.Contains(compound, "-") {
+		return false
+	}
+	for _, token := range strings.Split(compound, "-") {
+		if token == whole && len(token) >= 4 {
+			return true
+		}
+	}
+	return false
 }
 
 func extractProduct(criteria string) (string, bool) {
