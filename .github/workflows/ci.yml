@@ -14,7 +14,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: nefrit0n/red-lycoris
   COSIGN_VERSION: 'v2.4.0'
 
 jobs:
