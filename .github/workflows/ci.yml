@@ -5,20 +5,27 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Permissions выдаём на уровне каждого job — это безопаснее.
+# На workflow level оставляем минимум.
 permissions:
-  contents: write      # создать tag и release
-  packages: write      # запушить images в ghcr.io
-  deployments: write   # создать deployment
+  contents: read
+  packages: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  COSIGN_VERSION: 'v2.4.0'
 
 jobs:
+  # ───────────────────────────────────────────────────────────────
   # 1. Автоматический bump тега по SemVer (0.1.1 -> 0.1.2 -> ...)
+  # ───────────────────────────────────────────────────────────────
   tag:
     name: 🏷️  Version
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # для пуша нового тега
     outputs:
       new_tag: ${{ steps.tag.outputs.new_tag }}
     steps:
@@ -52,14 +59,16 @@ jobs:
           git tag "$NEW_TAG"
           git push origin "$NEW_TAG"
 
-  # 2. Параллельная сборка backend и frontend
-  #    backend → ghcr.io/.../red-lycoris/backend:X.Y.Z
-  #    frontend → ghcr.io/.../red-lycoris/frontend:X.Y.Z
   build:
-    name: 🐳 Build & Push — ${{ matrix.service }}
+    name: 🐳 Build, Sign & SBOM — ${{ matrix.service }}
     needs: tag
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # пушим образы в GHCR
+      id-token: write   # ВАЖНО: для cosign keyless через GitHub OIDC
     strategy:
+      fail-fast: false
       matrix:
         include:
           - service: backend
@@ -94,6 +103,7 @@ jobs:
             type=sha,prefix=sha-
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -103,22 +113,108 @@ jobs:
           # Раздельный GHA-кэш для backend и frontend
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          # provenance: false исключает hidden manifest, который ломает cosign
+          # на некоторых конфигурациях. Если хочется build provenance —
+          # лучше использовать SLSA generator отдельно.
+          provenance: false
           # Build args из docker-compose.yml (только backend их использует, frontend проигнорирует)
           build-args: |
             VERSION=${{ needs.tag.outputs.new_tag }}
             COMMIT=${{ github.sha }}
             BUILD_DATE=${{ steps.ts.outputs.date }}
 
-  # 3. GitHub Release с автоматически сгенерированным changelog
-  #    Ждёт оба matrix-job'а из build
+      # ────────────────────────────────────────────────
+      # Установка инструментов supply chain
+      # ────────────────────────────────────────────────
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      # ────────────────────────────────────────────────
+      # Подпись образа по digest (а не по тегу!).
+      # Тег — это указатель, может сместиться.
+      # Digest sha256:... — это содержимое, оно неизменно.
+      # ────────────────────────────────────────────────
+
+      - name: 🔐 Sign image with cosign (keyless)
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}@${{ steps.build.outputs.digest }}
+        run: |
+          echo "Signing $IMAGE"
+          cosign sign --yes "$IMAGE"
+
+      # ────────────────────────────────────────────────
+      # SBOM: список всех зависимостей образа.
+      # Генерируем в двух форматах для совместимости:
+      #   - CycloneDX (популярнее в коммерческих SCA)
+      #   - SPDX      (стандарт ISO, любят аудиторы)
+      # ────────────────────────────────────────────────
+
+      - name: 📋 Generate SBOM (CycloneDX + SPDX)
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}@${{ steps.build.outputs.digest }}
+        run: |
+          syft "$IMAGE" -o cyclonedx-json=sbom-${{ matrix.service }}.cdx.json
+          syft "$IMAGE" -o spdx-json=sbom-${{ matrix.service }}.spdx.json
+          echo "SBOM size:"
+          ls -lh sbom-${{ matrix.service }}.*
+
+      - name: 📎 Attach SBOM to image as cosign attestation
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}@${{ steps.build.outputs.digest }}
+        run: |
+          cosign attest --yes \
+            --predicate sbom-${{ matrix.service }}.cdx.json \
+            --type cyclonedx \
+            "$IMAGE"
+
+      - name: ✍️  Sign SBOM file as standalone blob
+        run: |
+          cosign sign-blob --yes \
+            --output-signature sbom-${{ matrix.service }}.cdx.json.sig \
+            --output-certificate sbom-${{ matrix.service }}.cdx.json.pem \
+            sbom-${{ matrix.service }}.cdx.json
+
+      - name: Upload SBOM artifacts for release job
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.service }}
+          path: |
+            sbom-${{ matrix.service }}.cdx.json
+            sbom-${{ matrix.service }}.cdx.json.sig
+            sbom-${{ matrix.service }}.cdx.json.pem
+            sbom-${{ matrix.service }}.spdx.json
+          retention-days: 90
+
+  # ───────────────────────────────────────────────────────────────
+  # 3. GitHub Release с автоматически сгенерированным changelog.
+  #    SBOM-файлы и их подписи прикрепляются как assets.
+  # ───────────────────────────────────────────────────────────────
   release:
     name: 📦 Release
     needs: [tag, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # создаём GitHub Release
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Download all SBOM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sbom-*
+          path: sboms
+          merge-multiple: true
+
+      - name: List SBOM files for release
+        run: ls -la sboms/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -126,12 +222,26 @@ jobs:
           tag_name: ${{ needs.tag.outputs.new_tag }}
           name: RedLycoris ${{ needs.tag.outputs.new_tag }}
           generate_release_notes: true
+          files: |
+            sboms/sbom-backend.cdx.json
+            sboms/sbom-backend.cdx.json.sig
+            sboms/sbom-backend.cdx.json.pem
+            sboms/sbom-backend.spdx.json
+            sboms/sbom-frontend.cdx.json
+            sboms/sbom-frontend.cdx.json.sig
+            sboms/sbom-frontend.cdx.json.pem
+            sboms/sbom-frontend.spdx.json
 
-  # 4. Deployment в production environment
+  # ───────────────────────────────────────────────────────────────
+  # 4. Deployment в production environment.
+  # ───────────────────────────────────────────────────────────────
   deploy:
     name: 🌺 Deploy RedLycoris
     needs: [tag, build, release]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
     environment:
       name: production
       url: https://github.com/${{ github.repository }}/releases/tag/${{ needs.tag.outputs.new_tag }}
@@ -148,4 +258,6 @@ jobs:
             echo "| **Frontend image**   | \`ghcr.io/${{ github.repository }}/frontend:${{ needs.tag.outputs.new_tag }}\` |"
             echo "| **Release**          | [View on GitHub](https://github.com/${{ github.repository }}/releases/tag/${{ needs.tag.outputs.new_tag }}) |"
             echo "| **Commit**           | \`${{ github.sha }}\` |"
+            echo "| **Signed**           | ✅ via Sigstore cosign (keyless OIDC) |"
+            echo "| **SBOM**             | ✅ CycloneDX + SPDX attached to release |"
           } >> $GITHUB_STEP_SUMMARY

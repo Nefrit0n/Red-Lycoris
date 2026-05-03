@@ -1,0 +1,73 @@
+# CodeQL static analysis for Red Lycoris.
+#
+# Запускается:
+# - на push в main (быстрая проверка после merge)
+# - по расписанию раз в неделю (ловит новые правила CodeQL и regressions)
+#
+# Не запускается на каждый PR, чтобы не съедать минуты CI.
+# Если хочется CodeQL и на PR — добавь pull_request: branches: [main].
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Каждый понедельник в 04:23 UTC (07:23 МСК).
+    # Произвольное время, чтобы не совпадать с пиковой нагрузкой GitHub Actions.
+    - cron: '23 4 * * 1'
+  # Для ручного запуска из UI.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  # Нужно для actions: read у matrix
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Node.js
+        if: matrix.language == 'javascript-typescript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # security-and-quality — расширенный набор: security + maintainability.
+          # Если хочется только security — поставь security-extended.
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
