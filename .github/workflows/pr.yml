@@ -1,0 +1,374 @@
+# PR-only checks for Red Lycoris.
+#
+# Этот workflow ничего не пушит, не тегирует и не публикует.
+# Только проверки качества и безопасности на каждый PR.
+#
+# Триггеры:
+# - pull_request: автоматически на каждый PR в main (нормальный режим работы).
+# - workflow_dispatch: ручной запуск из Actions UI (для проверки, отладки,
+#   тестирования новых правил без необходимости открывать PR).
+#
+# Архитектура:
+# - Job `changes` определяет, что именно поменялось (backend/frontend/docker/workflows).
+#   При workflow_dispatch фильтр игнорируется и гонятся ВСЕ проверки.
+# - Остальные job-ы запускаются параллельно, если изменения их касаются.
+
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Отменяет старые запуски при пуше нового коммита в тот же PR.
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+# Минимальные права. По умолчанию у workflow contents: read, остальное надо запросить.
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write  # для загрузки SARIF в Security tab
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────
+  # Шаг 1. Определяем, что именно поменялось в PR.
+  # При ручном запуске (workflow_dispatch) гоним все проверки.
+  # ────────────────────────────────────────────────────────────────────
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.set.outputs.backend }}
+      frontend: ${{ steps.set.outputs.frontend }}
+      docker: ${{ steps.set.outputs.docker }}
+      workflows: ${{ steps.set.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # paths-filter работает только в режиме pull_request — там есть base/head для сравнения.
+      # При workflow_dispatch его пропускаем.
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.golangci.yml'
+            frontend:
+              - 'frontend/**'
+            docker:
+              - '**/Dockerfile'
+              - '**/Dockerfile.*'
+              - 'docker-compose*.yml'
+              - 'deployments/**'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/actions/**'
+
+      - name: Resolve change flags
+        id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Ручной запуск — гоним все проверки независимо от того, что менялось.
+            echo "Manual run: forcing all checks"
+
+            {
+              echo "backend=true"
+              echo "frontend=true"
+              echo "docker=true"
+              echo "workflows=true"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "PR run: using paths-filter results"
+
+            {
+              echo "backend=${{ steps.filter.outputs.backend }}"
+              echo "frontend=${{ steps.filter.outputs.frontend }}"
+              echo "docker=${{ steps.filter.outputs.docker }}"
+              echo "workflows=${{ steps.filter.outputs.workflows }}"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+  # ────────────────────────────────────────────────────────────────────
+  # BACKEND: lint + test
+  # ────────────────────────────────────────────────────────────────────
+
+  backend-lint:
+    name: Backend / golangci-lint
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59
+          working-directory: backend
+          # Конфиг лежит в корне репозитория — относительный путь.
+          args: --config=../.golangci.yml --timeout=5m
+
+  backend-test:
+    name: Backend / tests
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Run tests with race detector and coverage
+        working-directory: backend
+        run: |
+          go test ./... \
+            -race \
+            -coverprofile=coverage.out \
+            -covermode=atomic \
+            -timeout 5m
+
+      - name: Show coverage summary
+        working-directory: backend
+        run: go tool cover -func=coverage.out | tail -n 1
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.out
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────────────
+  # FRONTEND: lint + typecheck + test
+  # ────────────────────────────────────────────────────────────────────
+
+  frontend-lint:
+    name: Frontend / eslint
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+
+  frontend-typecheck:
+    name: Frontend / typecheck
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  frontend-test:
+    name: Frontend / vitest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      # В package.json уже "test": "vitest run", поэтому никаких --run не нужно.
+      - run: npm test
+
+  # ────────────────────────────────────────────────────────────────────
+  # SECURITY: secrets, dockerfile, GitHub Actions
+  # ────────────────────────────────────────────────────────────────────
+
+  secrets-scan:
+    name: Security / gitleaks
+    # Gitleaks-action бесплатен только для public-репозиториев.
+    # Для приватного репо нужен лицензионный ключ, поэтому пропускаем.
+    # После переключения репо в public job запустится автоматически.
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Полная история нужна, чтобы gitleaks видел весь diff PR.
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  dockerfile-lint:
+    name: Security / hadolint
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+          - backend/Dockerfile
+          - frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+          config: .hadolint.yaml
+          format: sarif
+          output-file: hadolint-${{ strategy.job-index }}.sarif
+          no-fail: true
+
+      - name: Upload hadolint SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: hadolint-${{ strategy.job-index }}.sarif
+          category: hadolint-${{ matrix.dockerfile }}
+
+  actions-lint:
+    name: Security / actionlint
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -version
+
+      - name: Run actionlint
+        run: ./actionlint -color
+
+  # ────────────────────────────────────────────────────────────────────
+  # IMAGE SCAN: собираем свои же образы и сканируем их Trivy.
+  # «Мы себя самих сканируем» — для ASOC-платформы это уместно.
+  # ────────────────────────────────────────────────────────────────────
+
+  image-scan:
+    name: Security / image scan (${{ matrix.component }})
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: ./backend
+          - component: frontend
+            context: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          load: true
+          push: false
+          tags: red-lycoris-${{ matrix.component }}:pr-scan
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: red-lycoris-${{ matrix.component }}:pr-scan
+          format: sarif
+          output: trivy-${{ matrix.component }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          # Не падаем на CVE без фикса — это шум, исправить мы их не можем.
+          ignore-unfixed: true
+          # Сканируем только OS-пакеты и зависимости приложения.
+          scanners: vuln,secret
+
+      - name: Upload Trivy SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.component }}.sarif
+          category: trivy-${{ matrix.component }}
+
+  # ────────────────────────────────────────────────────────────────────
+  # FINAL: aggregator, на который удобно вешать branch protection.
+  # ────────────────────────────────────────────────────────────────────
+
+  pr-checks-passed:
+    name: PR checks passed
+    if: always()
+    needs:
+      - backend-lint
+      - backend-test
+      - frontend-lint
+      - frontend-typecheck
+      - frontend-test
+      - secrets-scan
+      - dockerfile-lint
+      - actions-lint
+      - image-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs passed
+        run: |
+          # Падаем, если хотя бы один из needs закончился failure.
+          # skipped (из-за path filter или visibility-условия) считается успехом.
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "::error::One or more required checks failed."
+            exit 1
+          fi
+          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "::error::One or more required checks were cancelled."
+            exit 1
+          fi
+          echo "All required checks passed."
