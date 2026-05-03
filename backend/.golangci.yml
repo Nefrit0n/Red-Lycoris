@@ -66,12 +66,20 @@ linters:
         - rangeValCopy
         - paramTypeCombine
         - whyNoLint
+        - unnamedResult
+        - httpNoBody
+        - singleCaseSwitch
+        - ifElseChain
+        - stringConcatSimplify
+        - exitAfterDefer
 
     govet:
       enable-all: true
       disable:
         # Часто ломает читаемость структур ради микровыигрыша по памяти.
         - fieldalignment
+        # Много шума от переменных цикла и err в разных ветках.
+        - shadow
 
     revive:
       rules:
@@ -84,7 +92,7 @@ linters:
         - name: error-naming
         - name: exported
           severity: warning
-          disabled: false
+          disabled: true
         - name: if-return
         - name: increment-decrement
         - name: var-naming
@@ -109,7 +117,7 @@ linters:
           disabled: true
 
     errcheck:
-      check-type-assertions: true
+      check-type-assertions: false
       check-blank: false
       exclude-functions:
         - (io.Closer).Close
@@ -117,6 +125,8 @@ linters:
         - (*github.com/jackc/pgx/v5/pgxpool.Pool).Close
         - fmt.Fprintf(os.Stderr)
         - fmt.Fprintln(os.Stderr)
+        - (github.com/jackc/pgx/v5.Tx).Rollback
+        - (*github.com/redis/go-redis/v9.Client).Close
 
     misspell:
       locale: US

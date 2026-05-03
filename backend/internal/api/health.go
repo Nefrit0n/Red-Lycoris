@@ -41,14 +41,14 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client, version string, startT
 			database.LatencyMS = time.Since(dbStart).Milliseconds()
 		}
 
-		redis := healthComponent{Status: "ok"}
+		redisHealth := healthComponent{Status: "ok"}
 		redisStart := time.Now()
 		if err := rdb.Ping(r.Context()).Err(); err != nil {
-			redis.Status = "error"
-			redis.Error = err.Error()
+			redisHealth.Status = "error"
+			redisHealth.Error = err.Error()
 			healthStatus = "error"
 		} else {
-			redis.LatencyMS = time.Since(redisStart).Milliseconds()
+			redisHealth.LatencyMS = time.Since(redisStart).Milliseconds()
 		}
 
 		enrichmentStatuses := make([]enrichmentSyncStatus, 0)
@@ -89,7 +89,7 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client, version string, startT
 			"uptime_seconds": int(time.Since(startTime).Seconds()),
 			"components": healthComponents{
 				Database:   database,
-				Redis:      redis,
+				Redis:      redisHealth,
 				Enrichment: enrichmentStatuses,
 			},
 		})

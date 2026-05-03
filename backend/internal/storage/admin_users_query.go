@@ -408,7 +408,7 @@ func (r *UsersRepo) AssignUserGroups(ctx context.Context, userID uuid.UUID, grou
 		)
 	}
 	br := r.pool.SendBatch(ctx, batch)
-	defer br.Close()
+	defer func() { _ = br.Close() }()
 	for range groupIDs {
 		if _, err := br.Exec(); err != nil {
 			return fmt.Errorf("storage.UsersRepo.AssignUserGroups: %w", err)

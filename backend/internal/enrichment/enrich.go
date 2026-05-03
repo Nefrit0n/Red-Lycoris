@@ -3,6 +3,7 @@ package enrichment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -146,6 +147,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				nvdEntries = append(nvdEntries, entry)
 			}
 			rows.Close()
+			if err := rows.Err(); err != nil {
+				slog.Warn("enrichment: nvd rows error", "finding_id", findingID, "error", err)
+			}
 			if len(nvdEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "nvd", nvdEntries)
 			}
@@ -157,6 +161,7 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 			FROM epss_scores WHERE cve_id = ANY($1)
 		`, f.CVEIDs)
 		if err == nil {
+			defer currentRows.Close()
 			var epssEntries []map[string]any
 			var maxCurrentScore float64
 
@@ -192,6 +197,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 						}
 					}
 					histRows.Close()
+					if err := histRows.Err(); err != nil {
+						slog.Warn("enrichment: epss history rows error", "finding_id", findingID, "error", err)
+					}
 				}
 
 				trend := epss.ComputeTrend(history)
@@ -222,6 +230,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				}
 			}
 			currentRows.Close()
+			if err := currentRows.Err(); err != nil {
+				slog.Warn("enrichment: epss current rows error", "finding_id", findingID, "error", err)
+			}
 			if len(epssEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "epss", epssEntries)
 			}
@@ -294,6 +305,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				}
 			}
 			rows.Close()
+			if err := rows.Err(); err != nil {
+				slog.Warn("enrichment: kev rows error", "finding_id", findingID, "error", err)
+			}
 			if len(kevEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "kev", kevEntries)
 			}
@@ -429,6 +443,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				isBDU = true
 			}
 			rows.Close()
+			if err := rows.Err(); err != nil {
+				slog.Warn("enrichment: bdu rows error", "finding_id", findingID, "error", err)
+			}
 		}
 		if len(bduEntries) > 0 {
 			saveEnrichment(ctx, pool, findingID, "bdu", bduEntries)
@@ -488,6 +505,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 			if err == nil {
 				entries := buildOSVEntries(rows)
 				rows.Close()
+				if err := rows.Err(); err != nil {
+					slog.Warn("enrichment: osv rows error", "finding_id", findingID, "error", err)
+				}
 				if len(entries) > 0 {
 					// Пометим что это fallback-матч, UI покажет предупреждение.
 					for i := range entries {
@@ -598,6 +618,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				cweEntries = append(cweEntries, entry)
 			}
 			rows.Close()
+			if err := rows.Err(); err != nil {
+				slog.Warn("enrichment: cwe rows error", "finding_id", findingID, "error", err)
+			}
 
 			if len(cweEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "cwe", cweEntries)
@@ -804,8 +827,8 @@ func GetFindingScore(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUI
 		FROM finding_scores WHERE finding_id = $1
 	`, findingID).Scan(&s.FindingID, &s.BaseScore, &s.EPSSScore, &s.EPSSPercentile,
 		&s.IsKEV, &s.IsBDU, &s.PriorityScore, &s.CalculatedAt)
-	if err == pgx.ErrNoRows {
-		return nil, nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("enrichment: finding not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("enrichment.GetFindingScore: %w", err)

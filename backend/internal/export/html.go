@@ -153,10 +153,7 @@ func ExecuteHTMLReport(w io.Writer, data ReportData, opts ReportOptions) error {
 		BDUByCVE:          opts.BDUByCVE,
 	}
 
-	if err := tpl.Execute(w, view); err != nil {
-		return err
-	}
-	return nil
+	return tpl.Execute(w, view)
 }
 
 func BuildSummary(findings []domain.Finding) Summary {

@@ -317,7 +317,7 @@ func generateFinding(projectIDs []uuid.UUID, weights []float64) []any {
 		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint,
 		f.FirstSeen, f.LastSeen, f.TimesSeen, f.ProjectID, f.SourceType, kind,
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
-		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
+		f.URL, f.HTTPMethod, f.HTTPParam, f.HTTPEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
 	}
 }
@@ -410,8 +410,8 @@ func fillDASTFinding(f *domain.Finding) {
 	f.Description = "Potentially exploitable behavior detected during runtime scan"
 	f.Severity = pickWeighted([]int{1, 2, 3}, []float64{0.20, 0.50, 0.30})
 	f.URL = &url
-	f.HttpMethod = &method
-	f.HttpParam = &param
+	f.HTTPMethod = &method
+	f.HTTPParam = &param
 	f.CWEIDs = []int{79, 89}
 	f.CVEIDs = []string{}
 	f.SourceType = "zap"
@@ -571,6 +571,9 @@ func seedFindingScores(ctx context.Context, pool *pgxpool.Pool, batchSize int) (
 			}
 		}
 		rows.Close()
+		if err := rows.Err(); err != nil {
+			return total, fmt.Errorf("seedFindingScores: rows: %w", err)
+		}
 
 		if len(batch) == 0 {
 			break

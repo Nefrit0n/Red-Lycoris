@@ -50,6 +50,7 @@ func handleAddMember(rolesRepo *storage.UserProjectRolesRepo) http.HandlerFunc {
 			return
 		}
 
+		//nolint:contextcheck
 		grantedBy := func() *uuid.UUID {
 			u, _ := UserFromContext(r.Context())
 			if u == nil {

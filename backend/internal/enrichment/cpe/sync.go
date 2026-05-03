@@ -3,6 +3,7 @@ package cpe
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -103,7 +104,7 @@ func (s *CPESyncer) buildIncrementalParams(ctx context.Context) (*timeParams, er
 		if start.After(now) {
 			start = now.Add(-1 * time.Hour)
 		}
-	} else if err != nil && err != pgx.ErrNoRows {
+	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
 

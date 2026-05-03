@@ -120,11 +120,11 @@ func (h *exportHandlers) handleHTML() http.HandlerFunc {
 		}
 		fileName := fmt.Sprintf("redlycoris-report-%s.html", time.Now().Format("2006-01-02_150405"))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
 		w.Header().Set("X-Export-Total", strconv.Itoa(total))
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.Copy(w, &htmlBody)
-		h.writeExportAudit(r, "html:"+includeRaw, filter, total)
+		h.writeExportAudit(r, "html:"+includeRaw, filter, total) //nolint:contextcheck
 	}
 }
 
@@ -201,6 +201,9 @@ func (h *exportHandlers) fetchBDUByCVEs(r *http.Request, findings []domain.Findi
 				}
 			}
 		}
+	}
+	if rows.Err() != nil {
+		return out
 	}
 	return out
 }

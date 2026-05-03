@@ -163,7 +163,7 @@ func (r *UsersRepo) Update(ctx context.Context, id uuid.UUID, fields map[string]
 		setParts = append(setParts, fmt.Sprintf("%s = $%d", allowed[k], i+1))
 		args = append(args, fields[k])
 	}
-	setParts = append(setParts, fmt.Sprintf("updated_at = now()"))
+	setParts = append(setParts, "updated_at = now()")
 	args = append(args, id)
 
 	q := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d", strings.Join(setParts, ", "), len(args))

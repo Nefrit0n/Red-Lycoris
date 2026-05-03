@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -231,7 +232,7 @@ func (s *BDUSyncer) parseAndUpsert(ctx context.Context, r io.Reader) (imported i
 		}
 
 		tok, err := decoder.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

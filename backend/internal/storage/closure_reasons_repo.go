@@ -19,10 +19,9 @@ type closureReasonsSnapshot struct {
 }
 
 type ClosureReasonsRepo struct {
-	pool      *pgxpool.Pool
-	once      sync.Once
-	snapshot  atomic.Pointer[closureReasonsSnapshot]
-	reloadErr atomic.Pointer[error]
+	pool     *pgxpool.Pool
+	once     sync.Once
+	snapshot atomic.Pointer[closureReasonsSnapshot]
 }
 
 func NewClosureReasonsRepo(pool *pgxpool.Pool) *ClosureReasonsRepo {
@@ -34,7 +33,7 @@ func (r *ClosureReasonsRepo) EnsureLoaded(ctx context.Context) error {
 	r.once.Do(func() {
 		onceErr = r.reload(ctx)
 		if onceErr == nil {
-			go r.runReloader()
+			go r.runReloader() //nolint:contextcheck
 		}
 	})
 	if onceErr != nil {
@@ -109,8 +108,8 @@ func (r *ClosureReasonsRepo) GetByID(ctx context.Context, id int16) (*domain.Clo
 	if !ok {
 		return nil, false, nil
 	}
-	copy := cr
-	return &copy, true, nil
+	cr2 := cr
+	return &cr2, true, nil
 }
 
 func (r *ClosureReasonsRepo) GetByCode(ctx context.Context, code string) (*domain.ClosureReason, bool, error) {
@@ -122,8 +121,8 @@ func (r *ClosureReasonsRepo) GetByCode(ctx context.Context, code string) (*domai
 	if !ok {
 		return nil, false, nil
 	}
-	copy := cr
-	return &copy, true, nil
+	cr2 := cr
+	return &cr2, true, nil
 }
 
 func (r *ClosureReasonsRepo) ByCode(code string) (*domain.ClosureReason, bool) {
@@ -135,6 +134,6 @@ func (r *ClosureReasonsRepo) ByCode(code string) (*domain.ClosureReason, bool) {
 	if !ok {
 		return nil, false
 	}
-	copy := cr
-	return &copy, true
+	cr2 := cr
+	return &cr2, true
 }

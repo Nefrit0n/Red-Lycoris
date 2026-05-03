@@ -459,7 +459,6 @@ func (r *AuditLogRepo) ListAfter(ctx context.Context, filter AuditListFilter, af
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
-	filter.Limit = limit
 	args := make([]any, 0, 20)
 	where := []string{"1=1"}
 

@@ -113,12 +113,14 @@ func handleLogin(svc *authsvc.Service, rdb *redis.Client) http.HandlerFunc {
 			return
 		}
 
+		//nolint:gosec // Secure is environment-dependent: false for local HTTP, true for HTTPS/proxied HTTPS.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    rawToken,
 			HttpOnly: true,
 			Secure:   shouldUseSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
+			Domain:   "",
 			Path:     "/",
 			MaxAge:   int(authSessionMaxAge.Seconds()),
 		})
@@ -142,12 +144,14 @@ func handleLogout(svc *authsvc.Service) http.HandlerFunc {
 			}
 		}
 
+		//nolint:gosec // Secure is environment-dependent: false for local HTTP, true for HTTPS/proxied HTTPS.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    "",
 			HttpOnly: true,
 			Secure:   shouldUseSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
+			Domain:   "",
 			Path:     "/",
 			MaxAge:   -1,
 		})
@@ -265,12 +269,14 @@ func handleChangePassword(svc *authsvc.Service, usersRepo interface {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create session")
 			return
 		}
+		//nolint:gosec // Secure is environment-dependent: false for local HTTP, true for HTTPS/proxied HTTPS.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    rawToken,
 			HttpOnly: true,
 			Secure:   shouldUseSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
+			Domain:   "",
 			Path:     "/",
 			MaxAge:   int(authSessionMaxAge.Seconds()),
 		})

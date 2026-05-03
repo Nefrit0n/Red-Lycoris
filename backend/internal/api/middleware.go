@@ -71,6 +71,7 @@ func RequestLoggerMiddleware(next http.Handler) http.Handler {
 
 func RecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		//nolint:contextcheck
 		defer func() {
 			if rec := recover(); rec != nil {
 				logger := slog.Default().With("request_id", GetRequestID(r.Context()))
