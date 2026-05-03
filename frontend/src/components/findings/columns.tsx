@@ -13,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { severityMeta } from "@/lib/severity";
+import { severityMeta, statusMeta } from "@/lib/severity";
 import type {
   ColumnKey,
   FindingsTabKey,
@@ -397,7 +397,7 @@ const CELL_BY_KEY: Record<ColumnKey, FindingColumn> = {
     widthClass: COLUMN_WIDTH.status,
     widthPx: COLUMN_WIDTH_PX.status,
     Cell: ({ finding }) => (
-      <span className="text-xs text-zinc-400">{finding.status === 0 ? "Открыта" : "Изменена"}</span>
+      <span className="text-xs text-zinc-400">{statusMeta(finding.status).label}</span>
     ),
   },
   first_seen: {

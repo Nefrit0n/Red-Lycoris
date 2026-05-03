@@ -29,6 +29,32 @@ interface CvssBlock {
   metrics?: Record<string, string>;
 }
 
+function metricsFromVector(vector: string | undefined, order: string[]): Record<string, string> | undefined {
+  if (!vector) return undefined;
+  const metrics: Record<string, string> = {};
+  const parts = vector.split("/");
+
+  for (const part of parts) {
+    const [key, value] = part.split(":");
+    if (!key || !value) continue;
+    if (key === "CVSS") continue;
+    if (!order.includes(key)) continue;
+    metrics[key] = value;
+  }
+
+  return Object.keys(metrics).length > 0 ? metrics : undefined;
+}
+
+function withFallbackMetrics(block: CvssBlock, order: string[]): CvssBlock {
+  if (block.metrics && Object.keys(block.metrics).length > 0) {
+    return block;
+  }
+  return {
+    ...block,
+    metrics: metricsFromVector(block.vector, order),
+  };
+}
+
 export interface BduEntry {
   bdu_id: string;
   name: string;
@@ -178,12 +204,11 @@ function BduEntryCard({ entry }: { entry: BduEntry }) {
           {entry.exploitation_way && <StatusPill label="Эксплуатация" value={entry.exploitation_way} tone="neutral" />}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <div className="space-y-3">
           {entry.cvss_v4 && (
             <CvssBreakdown
               label="CVSS 4.0"
-              compact
-              block={entry.cvss_v4}
+              block={withFallbackMetrics(entry.cvss_v4, ["AV", "AC", "AT", "PR", "UI", "VC", "VI", "VA", "SC", "SI", "SA"])}
               dictionary={CVSS40_METRICS}
               order={["AV", "AC", "AT", "PR", "UI", "VC", "VI", "VA", "SC", "SI", "SA"]}
             />
@@ -191,8 +216,7 @@ function BduEntryCard({ entry }: { entry: BduEntry }) {
           {entry.cvss_v3 && (
             <CvssBreakdown
               label="CVSS 3.1"
-              compact
-              block={entry.cvss_v3}
+              block={withFallbackMetrics(entry.cvss_v3, ["AV", "AC", "PR", "UI", "S", "C", "I", "A"])}
               dictionary={CVSS31_METRICS}
               order={["AV", "AC", "PR", "UI", "S", "C", "I", "A"]}
             />
@@ -200,8 +224,7 @@ function BduEntryCard({ entry }: { entry: BduEntry }) {
           {entry.cvss_v2 && (
             <CvssBreakdown
               label="CVSS 2.0"
-              compact
-              block={entry.cvss_v2}
+              block={withFallbackMetrics(entry.cvss_v2, ["AV", "AC", "Au", "C", "I", "A"])}
               dictionary={CVSS_V2_METRICS}
               order={["AV", "AC", "Au", "C", "I", "A"]}
             />

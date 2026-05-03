@@ -40,9 +40,11 @@ func (r *SessionsRepo) GetByTokenHashWithUser(ctx context.Context, tokenHash []b
 			s.id, s.user_id, s.token_hash, s.expires_at, s.revoked_at, s.user_agent, s.ip, s.created_at, s.last_used_at,
 			u.id, u.email, u.password_hash, u.full_name, u.is_active, u.global_role,
 			u.status, u.is_system_account, u.created_by_user_id, u.last_login_ip,
-			u.created_at, u.updated_at, u.last_login_at
+			u.created_at, u.updated_at, u.last_login_at,
+			COALESCE(uc.must_change, false)
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
+		LEFT JOIN user_credentials uc ON uc.user_id = u.id
 		WHERE s.token_hash = $1
 		  AND s.revoked_at IS NULL
 		  AND s.expires_at > now()
@@ -59,6 +61,7 @@ func (r *SessionsRepo) GetByTokenHashWithUser(ctx context.Context, tokenHash []b
 		&user.ID, &user.Email, &user.PasswordHash, &user.FullName, &user.IsActive, &role,
 		&status, &user.IsSystemAccount, &user.CreatedByUserID, &lastIP,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
+		&user.MustChangePassword,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("storage.SessionsRepo.GetByTokenHashWithUser: %w", err)

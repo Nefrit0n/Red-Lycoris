@@ -574,9 +574,17 @@ export function PreviewPanel({
     if (!finding || updateStatus.isPending || finding.status === status) {
       return;
     }
+    const targetStatus = STATUS_OPTIONS.find((option) => option.value === status);
+    const note = window.prompt(
+      `Укажите комментарий для статуса «${targetStatus?.label ?? "Выбранный статус"}»`,
+      "",
+    )?.trim() ?? "";
+    if (!note) {
+      return;
+    }
     setStatusError(null);
     updateStatus.mutate(
-      { id: finding.id, status },
+      { id: finding.id, status, note },
       {
         onError: (e) => {
           setStatusError(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { formatDistanceToNow, isValid } from "date-fns";
 import { ru } from "date-fns/locale";
 import {
@@ -12,13 +12,15 @@ import {
 } from "lucide-react";
 
 import EnrichmentBadges from "@/components/findings/EnrichmentBadges";
+import GroupActionsMenu from "@/components/findings/GroupActionsMenu";
 import SeverityBadge from "@/components/findings/SeverityBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFindingsGroups, useFindingsList } from "@/api/findings";
+import { useExpandedGroups } from "@/hooks/use-expanded-groups";
 import { severityMeta } from "@/lib/severity";
 import { getColumnsForKeys } from "@/components/findings/columns";
 import type { FindingsFilter, GroupBy } from "@/lib/findings-filter";
-import type { Finding, FindingKind } from "@/types";
+import type { Finding, FindingGroup, FindingKind } from "@/types";
 import { cn } from "@/lib/utils";
 import type { ColumnKey } from "@/components/findings/findingsTableConfig";
 
@@ -33,10 +35,6 @@ interface GroupedFindingsTableProps {
   hasActiveFilters?: boolean;
 }
 
-// Group-mode metadata: what icon to render, how to label the group title,
-// what placeholder to show for empty keys. The backend sends the same
-// `group_key` field regardless of mode, so the page knows it came from
-// cve/component/rule only via `filter.groupBy`.
 const GROUP_META: Record<
   Exclude<GroupBy, "">,
   {
@@ -64,6 +62,12 @@ const GROUP_META: Record<
     empty: "Без правила",
     format: (k) => k || "Без правила",
   },
+  cwe: {
+    icon: Bug,
+    label: "CWE",
+    empty: "Без CWE",
+    format: (k) => (k ? `CWE-${k}` : "Без CWE"),
+  },
 };
 
 function formatRelative(value: string | null | undefined): string {
@@ -73,10 +77,6 @@ function formatRelative(value: string | null | undefined): string {
   return formatDistanceToNow(date, { addSuffix: true, locale: ru });
 }
 
-// Build an overlay filter for fetching the children of a single group. The
-// approach is: strip groupBy and narrow the filter to just the group key.
-// CVE has a first-class server-side filter; component/rule fall back to the
-// free-text search which the backend indexes on both fields.
 function buildOverlayFilter(
   base: FindingsFilter,
   groupBy: Exclude<GroupBy, "">,
@@ -89,6 +89,7 @@ function buildOverlayFilter(
     component: "",
     componentVersion: "",
     ruleId: "",
+    secretFingerprint: "",
     query: "",
   };
   switch (groupBy) {
@@ -107,13 +108,13 @@ function buildOverlayFilter(
       overlay.ruleId = i >= 0 ? groupKey.slice(0, i) : groupKey;
       break;
     }
+    case "cwe":
+      overlay.cwe = parseInt(groupKey, 10) || null;
+      break;
   }
   return overlay;
 }
 
-// GroupChildren owns its own query so hooks are not called inside the parent
-// map. It renders up to 100 findings inline, reusing the same column catalog
-// the flat table uses so column alignment matches visually.
 function GroupChildren({
   filter,
   rowHeight,
@@ -219,6 +220,32 @@ function GroupChildren({
   );
 }
 
+function GroupModeBadges({
+  group,
+  groupBy,
+}: {
+  group: FindingGroup;
+  groupBy: Exclude<GroupBy, "">;
+}) {
+  if (groupBy === "component") {
+    return (
+      <>
+        {group.ecosystem && (
+          <span className="inline-flex h-4 items-center rounded border border-zinc-600 px-1.5 text-[10px] text-zinc-400">
+            {group.ecosystem}
+          </span>
+        )}
+        {group.fixed_version && (
+          <span className="inline-flex h-4 items-center rounded border border-emerald-600/60 px-1.5 text-[10px] text-emerald-400">
+            fix: {group.fixed_version}
+          </span>
+        )}
+      </>
+    );
+  }
+  return null;
+}
+
 export function GroupedFindingsTable({
   filter,
   rowHeight,
@@ -235,31 +262,15 @@ export function GroupedFindingsTable({
   const groups = useMemo(() => data?.data ?? [], [data]);
   const total = data?.meta?.total ?? groups.length;
 
-  // Expanded group keys: Set makes toggling O(1) and the memo keeps hover
-  // handlers stable. Expansion state is local — nothing about it lives in the
-  // URL, so changing groupBy naturally resets expansions via unmount.
-  const [expandedByMode, setExpandedByMode] = useState<
-    Partial<Record<Exclude<GroupBy, "">, Set<string>>>
-  >({});
+  const effectiveGroupBy: Exclude<GroupBy, ""> =
+    filter.groupBy === "" ? "cve" : filter.groupBy;
+
+  const { expanded, toggle } = useExpandedGroups(effectiveGroupBy);
 
   useEffect(() => {
     onCountChange?.(total, isFetching);
   }, [total, isFetching, onCountChange]);
 
-  const toggle = (mode: Exclude<GroupBy, "">, key: string) => {
-    setExpandedByMode((prev) => {
-      const modeSet = new Set(prev[mode] ?? []);
-      if (modeSet.has(key)) modeSet.delete(key);
-      else modeSet.add(key);
-      return { ...prev, [mode]: modeSet };
-    });
-  };
-
-  // groupBy === "" is handled by the flat table — but defend anyway so this
-  // component can be dropped in without guessing the caller's state.
-  const effectiveGroupBy: Exclude<GroupBy, ""> =
-    filter.groupBy === "" ? "cve" : filter.groupBy;
-  const expanded = expandedByMode[effectiveGroupBy] ?? new Set<string>();
   const meta = GROUP_META[effectiveGroupBy];
   const Icon = meta.icon;
 
@@ -305,34 +316,37 @@ export function GroupedFindingsTable({
       <div className="divide-y divide-zinc-900">
         {groups.map((group) => {
           const sev = severityMeta(group.max_severity);
-          // Click jumps to the first sample finding — the preview panel opens
-          // on that row and the user can use the carousel to step through the
-          // rest of the sample set.
           const firstSample = group.sample_ids?.[0];
           const interactive = !!firstSample;
           const key = group.group_key || `${effectiveGroupBy}-empty`;
           const isExpanded = expanded.has(key);
-          // Empty-key groups cannot be expanded — there's no server-side way
-          // to filter "findings where cve IS NULL" through our current API.
           const canExpand = !!group.group_key;
+          // For CVE and CWE mode the group_key is the identifier — always show
+          // it as primary. group_title holds the description (secondary).
+          const isKeyedMode = effectiveGroupBy === "cve" || effectiveGroupBy === "cwe";
+          const primaryTitle = isKeyedMode
+            ? meta.format(group.group_key)
+            : (group.group_title || meta.format(group.group_key));
+          const subtitle = isKeyedMode ? group.group_title : undefined;
 
           return (
             <div key={key}>
               <div
                 className={cn(
-                  "flex items-start gap-2 border-l-4 px-3 py-3 transition-colors",
+                  "flex items-center gap-2 border-l-4 px-3 py-2 transition-colors hover:bg-zinc-900/30",
                   sev.borderClass,
                 )}
               >
+                {/* Expand toggle */}
                 <button
                   type="button"
                   disabled={!canExpand}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (canExpand) toggle(effectiveGroupBy, key);
+                    if (canExpand) toggle(key);
                   }}
                   className={cn(
-                    "mt-0.5 shrink-0 rounded p-0.5 text-zinc-500 transition-colors",
+                    "shrink-0 rounded p-0.5 text-zinc-500 transition-colors",
                     canExpand
                       ? "hover:bg-zinc-800 hover:text-zinc-200"
                       : "cursor-default opacity-30",
@@ -347,47 +361,62 @@ export function GroupedFindingsTable({
                   )}
                 </button>
 
-                <Icon className="mt-0.5 size-4 shrink-0 text-zinc-500" />
+                <Icon className="size-4 shrink-0 text-zinc-500" />
 
+                {/* Title + severity + mode badges — takes remaining space, truncates */}
                 <div
                   className={cn(
-                    "min-w-0 flex-1",
+                    "flex min-w-0 flex-1 items-center gap-2 overflow-hidden",
                     interactive && "cursor-pointer",
                   )}
                   onClick={
-                    interactive ? (e) => onRowClick(firstSample, e.currentTarget) : undefined
+                    interactive
+                      ? (e) => onRowClick(firstSample, e.currentTarget)
+                      : undefined
                   }
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-mono text-sm text-zinc-200">
-                      {meta.format(group.group_key)}
+                  <span className="shrink-0 font-mono text-sm font-medium text-zinc-200">
+                    {primaryTitle}
+                  </span>
+                  {subtitle && (
+                    <span className="min-w-0 truncate text-xs text-zinc-500">
+                      {subtitle}
                     </span>
-                    <SeverityBadge severity={group.max_severity} short />
-                  </div>
+                  )}
+                  <SeverityBadge severity={group.max_severity} short />
+                  <GroupModeBadges group={group} groupBy={effectiveGroupBy} />
+                </div>
 
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                    <span className="flex items-center gap-1">
-                      <Bug className="size-3" />
-                      {group.findings_count.toLocaleString("ru-RU")} находок
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Package className="size-3" />
-                      {group.projects_count.toLocaleString("ru-RU")} проектов
-                    </span>
-                    <span>Впервые {formatRelative(group.first_seen)}</span>
-                  </div>
+                {/* Stats — right-aligned, hidden on narrow viewports */}
+                <div className="hidden shrink-0 items-center gap-3 text-xs text-zinc-500 lg:flex">
+                  <span className="flex items-center gap-1">
+                    <Bug className="size-3" />
+                    {group.findings_count.toLocaleString("ru-RU")} находок
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Package className="size-3" />
+                    {group.projects_count.toLocaleString("ru-RU")} проектов
+                  </span>
+                  <span>{formatRelative(group.last_seen)}</span>
                 </div>
 
                 <EnrichmentBadges
                   inKev={group.in_kev}
+                  inBdu={group.in_bdu}
                   maxEpss={group.max_epss}
                   maxCvss={group.max_cvss}
-                  className="hidden shrink-0 md:flex"
+                  className="w-[180px] shrink-0"
+                />
+
+                <GroupActionsMenu
+                  group={group}
+                  groupBy={effectiveGroupBy}
+                  onCollapse={() => { if (isExpanded) toggle(key); }}
                 />
               </div>
 
               {isExpanded && canExpand && (
-                <div className="bg-zinc-950/40 pl-10 pr-3 py-1">
+                <div className="bg-zinc-950/40 py-1 pl-10 pr-3">
                   <GroupChildren
                     filter={buildOverlayFilter(
                       filter,
