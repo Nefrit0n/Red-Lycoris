@@ -230,6 +230,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				}
 			}
 			currentRows.Close()
+			if err := currentRows.Err(); err != nil {
+				slog.Warn("enrichment: epss current rows error", "finding_id", findingID, "error", err)
+			}
 			if len(epssEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "epss", epssEntries)
 			}
