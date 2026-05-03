@@ -75,9 +75,9 @@ func (p *GitleaksParser) Parse(ctx context.Context, data []byte) ([]domain.Findi
 		}
 
 		f := domain.Finding{
-			Kind:  domain.KindSecrets,
-			Title: description,
-			Description: buildGitleaksDescription(shortCommit, strings.TrimSpace(item.Author), item.Match, item.Secret),
+			Kind:              domain.KindSecrets,
+			Title:             description,
+			Description:       buildGitleaksDescription(shortCommit, strings.TrimSpace(item.Author), item.Match, item.Secret),
 			Severity:          domain.SeverityHigh,
 			Confidence:        2,
 			Status:            domain.StatusOpen,
@@ -137,7 +137,6 @@ func maskSecret(value string) string {
 	}
 	return value[:4] + "..." + value[len(value)-4:]
 }
-
 
 func buildGitleaksDescription(shortCommit, author, match, secret string) string {
 	secretValue := strings.TrimSpace(match)

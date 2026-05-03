@@ -27,8 +27,6 @@ func maxScanSizeBytes() int64 {
 	return int64(mb) << 20
 }
 
-
-
 func maxScanFormMemoryBytes() int64 {
 	// Keep in-memory multipart form usage bounded to avoid memory exhaustion.
 	const defaultFormMemory = int64(8 << 20)
