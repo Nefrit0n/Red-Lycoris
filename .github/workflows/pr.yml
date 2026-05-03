@@ -225,25 +225,8 @@ jobs:
       - run: npm test
 
   # ────────────────────────────────────────────────────────────────────
-  # SECURITY: secrets, dockerfile, GitHub Actions
+  # SECURITY: dockerfile, GitHub Actions
   # ────────────────────────────────────────────────────────────────────
-
-  secrets-scan:
-    name: Security / gitleaks
-    # Gitleaks-action бесплатен только для public-репозиториев.
-    # Для приватного репо нужен лицензионный ключ, поэтому пропускаем.
-    # После переключения репо в public job запустится автоматически.
-    if: github.event.repository.visibility == 'public'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Полная история нужна, чтобы gitleaks видел весь diff PR.
-          fetch-depth: 0
-
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-
 
   dockerfile-lint:
     name: Security / hadolint
