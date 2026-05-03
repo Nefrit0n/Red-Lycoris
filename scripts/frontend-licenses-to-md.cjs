@@ -6,33 +6,40 @@ const outputPath = path.join(__dirname, "..", "licenses", "frontend-licenses.md"
 
 const data = JSON.parse(fs.readFileSync(inputPath, "utf8"));
 
+function escapeMd(value) {
+    return String(value || "")
+        .replace(/\|/g, "\\|")
+        .replace(/\r?\n/g, " ")
+        .trim();
+}
+
 const rows = Object.entries(data)
+    .filter(([pkg, info]) => {
+        // Убираем собственный package проекта, если license-checker его подхватил.
+        if (pkg.startsWith("frontend-tmp@")) return false;
+        if (info.private === true) return false;
+        return true;
+    })
     .map(([pkg, info]) => {
         const licenses = Array.isArray(info.licenses)
             ? info.licenses.join(", ")
-            : (info.licenses || "UNKNOWN");
+            : info.licenses || "UNKNOWN";
 
         return {
             package: pkg,
             licenses,
             repository: info.repository || "",
-            licenseFile: info.licenseFile || "",
         };
     })
     .sort((a, b) => a.package.localeCompare(b.package));
 
-let md = `## Frontend dependencies
-
-| Package | License | Repository |
+let md = `| Package | License | Repository |
 |---|---|---|
 `;
 
 for (const row of rows) {
-    const repo = row.repository ? row.repository.replace(/\|/g, "\\|") : "";
-    md += `| \`${row.package}\` | ${String(row.licenses).replace(/\|/g, "\\|")} | ${repo} |\n`;
+    md += `| \`${escapeMd(row.package)}\` | ${escapeMd(row.licenses)} | ${escapeMd(row.repository)} |\n`;
 }
-
-md += `\n`;
 
 fs.writeFileSync(outputPath, md, "utf8");
 

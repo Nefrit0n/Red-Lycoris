@@ -8,7 +8,7 @@ $header = @"
 
 This file lists third-party dependencies used by Red Lycoris.
 
-Generated automatically from:
+Generated from:
 - Go backend dependencies
 - Frontend npm production dependencies
 
@@ -16,14 +16,24 @@ Generated automatically from:
 
 ---
 
+## Backend Go dependencies
+
 "@
 
 Set-Content -Path $out -Value $header -Encoding UTF8
 
-Add-Content -Path $out -Value "`n# Backend Go dependencies`n" -Encoding UTF8
-Get-Content (Join-Path $root "licenses\backend-licenses.md") | Add-Content -Path $out -Encoding UTF8
+Get-Content (Join-Path $root "licenses\backend-licenses.md") -Encoding UTF8 |
+  Add-Content -Path $out -Encoding UTF8
 
-Add-Content -Path $out -Value "`n---`n# Frontend npm dependencies`n" -Encoding UTF8
-Get-Content (Join-Path $root "licenses\frontend-licenses.md") | Add-Content -Path $out -Encoding UTF8
+Add-Content -Path $out -Value @"
+
+---
+
+## Frontend npm dependencies
+
+"@ -Encoding UTF8
+
+Get-Content (Join-Path $root "licenses\frontend-licenses.md") -Encoding UTF8 |
+  Add-Content -Path $out -Encoding UTF8
 
 Write-Host "Generated THIRD_PARTY_LICENSES.md"

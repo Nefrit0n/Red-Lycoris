@@ -1514,12 +1514,6 @@
     "path": "/src/frontend/node_modules/fresh",
     "licenseFile": "/src/frontend/node_modules/fresh/LICENSE"
   },
-  "frontend-tmp@0.0.0": {
-    "licenses": "UNLICENSED",
-    "private": true,
-    "path": "/src/frontend",
-    "licenseFile": "/src/frontend/README.md"
-  },
   "fs-extra@11.3.4": {
     "licenses": "MIT",
     "repository": "https://github.com/jprichardson/node-fs-extra",
