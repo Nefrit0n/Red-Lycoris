@@ -114,9 +114,9 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.59
+          version: v2.12.0
           working-directory: backend
           # Конфиг лежит в корне репозитория — относительный путь.
           args: --timeout=10m
