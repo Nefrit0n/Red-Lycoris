@@ -76,16 +76,22 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             # Ручной запуск — гоним все проверки независимо от того, что менялось.
             echo "Manual run: forcing all checks"
-            echo "backend=true"   >> "$GITHUB_OUTPUT"
-            echo "frontend=true"  >> "$GITHUB_OUTPUT"
-            echo "docker=true"    >> "$GITHUB_OUTPUT"
-            echo "workflows=true" >> "$GITHUB_OUTPUT"
+
+            {
+              echo "backend=true"
+              echo "frontend=true"
+              echo "docker=true"
+              echo "workflows=true"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "PR run: using paths-filter results"
-            echo "backend=${{ steps.filter.outputs.backend }}"     >> "$GITHUB_OUTPUT"
-            echo "frontend=${{ steps.filter.outputs.frontend }}"   >> "$GITHUB_OUTPUT"
-            echo "docker=${{ steps.filter.outputs.docker }}"       >> "$GITHUB_OUTPUT"
-            echo "workflows=${{ steps.filter.outputs.workflows }}" >> "$GITHUB_OUTPUT"
+
+            {
+              echo "backend=${{ steps.filter.outputs.backend }}"
+              echo "frontend=${{ steps.filter.outputs.frontend }}"
+              echo "docker=${{ steps.filter.outputs.docker }}"
+              echo "workflows=${{ steps.filter.outputs.workflows }}"
+            } >> "$GITHUB_OUTPUT"
           fi
 
   # ────────────────────────────────────────────────────────────────────
