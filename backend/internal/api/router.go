@@ -141,11 +141,13 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		r.Post("/logout", handleLogout(authService))
 		r.Post("/refresh", handleRefresh(authService))
 		r.Get("/me", handleMe())
+		r.Post("/change-password", handleChangePassword(authService, usersRepo, sessionsRepo))
 	})
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(RequireAuth)
+		r.Use(RequirePasswordChangeCompleted)
 
 		r.Route("/api/v1/findings", func(r chi.Router) {
 			r.Get("/", handleListFindings(findingsRepo, userProjectRolesRepo))
@@ -186,6 +188,11 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Post("/bulk/close", handleBulkClose(findingsRepo, userProjectRolesRepo))
 			r.Post("/bulk/assign", handleBulkAssign(findingsRepo, usersRepo, userProjectRolesRepo))
 			r.Post("/bulk/unassign", handleBulkUnassign(findingsRepo, userProjectRolesRepo))
+
+			// Group-level bulk operations: resolve IDs by group key, then apply action.
+			r.Post("/groups/bulk/close", handleGroupBulkClose(findingsRepo, userProjectRolesRepo))
+			r.Post("/groups/bulk/assign", handleGroupBulkAssign(findingsRepo, usersRepo, userProjectRolesRepo))
+			r.Post("/groups/bulk/status", handleGroupBulkStatus(findingsRepo, userProjectRolesRepo))
 		})
 		r.Route("/api/v1/finding-comments/{event_id}", func(r chi.Router) {
 			r.Use(RequireAuth)
@@ -224,7 +231,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 					Put("/", handleUpdateProject(projectsRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Patch("/pinned", handlePatchProjectPinned(projectsRepo))
-				r.With(RequireGlobalAdmin).Delete("/", handleDeleteProject(projectsRepo))
+				r.With(RequireProjectOwnerOrGlobalAdmin(projectsRepo, ProjectIDFromURL("id"))).
+					Delete("/", handleDeleteProject(projectsRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Post("/ingest-token", handleGetIngestToken())
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
@@ -272,15 +280,26 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 		r.Route("/api/v1/admin", func(r chi.Router) {
 			r.Use(RequireGlobalAdmin)
+
+			// Exact paths before /{id} wildcard
 			r.Get("/users", handleListUsers(usersRepo))
-			r.Post("/users", handleCreateUser(usersRepo))
-			r.Patch("/users/{id}", handleUpdateUser(usersRepo))
-			r.Patch("/users/{id}/role", handleChangeUserRole(usersRepo, sessionsRepo))
-			r.Post("/users/{id}/reset-password", handleResetUserPassword(usersRepo, sessionsRepo))
-			r.Post("/users/{id}/deactivate", handleDeactivateUser(usersRepo, sessionsRepo))
-			r.Post("/users/{id}/activate", handleActivateUser(usersRepo))
-			r.Delete("/users/{id}", handleDeleteUser(usersRepo, sessionsRepo))
+			r.Post("/users", handleCreateUser(usersRepo, auditWriter))
+			r.Get("/users/check-email", handleCheckEmailAvailable(usersRepo))
+			r.Get("/users/export.csv", handleExportUsersCSV(usersRepo))
+			r.Post("/users/bulk-deactivate", handleBulkDeactivateUsers(usersRepo, sessionsRepo, auditWriter))
+			r.Post("/users/bulk-reset-password", handleBulkResetPassword(usersRepo, sessionsRepo, auditWriter))
+
+			r.Patch("/users/{id}", handleUpdateUser(usersRepo, auditWriter))
+			r.Patch("/users/{id}/role", handleChangeUserRole(usersRepo, sessionsRepo, auditWriter))
+			r.Post("/users/{id}/reset-password", handleResetUserPassword(usersRepo, sessionsRepo, auditWriter))
+			r.Post("/users/{id}/deactivate", handleDeactivateUser(usersRepo, sessionsRepo, auditWriter))
+			r.Post("/users/{id}/activate", handleActivateUser(usersRepo, auditWriter))
+			r.Delete("/users/{id}", handleDeleteUser(usersRepo, sessionsRepo, auditWriter))
 			r.Get("/users/{id}/roles", handleGetUserRoles(userProjectRolesRepo))
+
+			r.Get("/groups", handleListGroups(usersRepo))
+			r.Get("/access/counts", handleGetAccessCounts(usersRepo))
+
 			r.Get("/audit", handleListAuditLog(auditLogRepo))
 			r.Get("/audit/stats", handleAuditStats(auditLogRepo))
 			r.Get("/audit/stream", handleAuditStream(auditLogRepo))

@@ -260,11 +260,16 @@ export function FlatFindingsTable({
 
   useEffect(() => {
     const last = virtualItems[virtualItems.length - 1];
-    if (!last) return;
-    if (last.index >= findings.length - 5 && hasNextPage && !isFetchingNextPage) {
+    const scroller = scrollRef.current;
+    if (!last || !scroller) return;
+
+    const remainingPx = scroller.scrollHeight - (scroller.scrollTop + scroller.clientHeight);
+    const nearBottom = remainingPx <= rowHeight * 6;
+
+    if (nearBottom && last.index >= findings.length - 5 && hasNextPage && !isFetchingNextPage) {
       void fetchNextPage();
     }
-  }, [virtualItems, findings.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [virtualItems, findings.length, hasNextPage, isFetchingNextPage, fetchNextPage, rowHeight]);
 
   const syncScrollState = () => {
     const el = scrollRef.current;
