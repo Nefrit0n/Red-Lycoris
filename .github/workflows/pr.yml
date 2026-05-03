@@ -243,9 +243,7 @@ jobs:
 
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .github/workflows/.gitleaks.toml
+
 
   dockerfile-lint:
     name: Security / hadolint
