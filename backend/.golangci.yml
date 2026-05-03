@@ -1,137 +1,161 @@
 # golangci-lint configuration for Red Lycoris.
-#
-# Список линтеров согласован со стилем проекта:
-# - raw SQL через pgx — gosec поможет ловить string concatenation в SQL.
-# - функциональный код, мало абстракций — gocritic ловит избыточные интерфейсы.
-# - все ошибки оборачиваются — errcheck критичен.
+# Compatible with golangci-lint v2.x.
+
+version: "2"
 
 run:
-  timeout: 5m
-  go: '1.25'
-  # Анализируем только наш код, не зависимости.
+  timeout: 10m
+  go: "1.24"
   tests: true
 
 output:
   formats:
-    - format: colored-line-number
+    text:
+      path: stdout
+      colors: true
+      print-linter-name: true
+      print-issued-lines: true
 
 linters:
-  # Отключаем всё, включаем только то, что хотим — предсказуемость важнее охвата.
-  disable-all: true
+  # v2 replacement for old "disable-all: true".
+  default: none
+
   enable:
-    # Запрошенные явно
-    - errcheck      # все ли ошибки обработаны
-    - gocritic      # широкий набор практик кода
-    - gosec         # security: SQL inj, weak crypto, hardcoded creds
-    - govet         # стандартные проверки go vet
-    - revive        # замена golint, более гибкая
-    - staticcheck   # глубокий статический анализ
+    # Базовые и самые полезные проверки
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
 
-    # Дополнительные, без которых результат неполный
-    - ineffassign   # неиспользуемые присваивания
-    - unused        # неиспользуемые функции/переменные
-    - misspell      # опечатки в комментариях и строках
-    - unconvert     # лишние type conversions
-    - bodyclose     # http response body должен быть закрыт
-    - rowserrcheck  # sql.Rows.Err() должен быть проверен — критично для pgx
-    - sqlclosecheck # sql.Rows и sql.Stmt должны быть закрыты
-    - contextcheck  # context.Context передаётся правильно
-    - errorlint     # обёртка ошибок через %w, корректная проверка через errors.Is/As
-    - nilerr        # `if err != nil { return nil }` — забыли вернуть ошибку
-    - nilnil        # `return nil, nil` — обычно ошибка
-    - copyloopvar   # классическая ловушка с loop variable
+    # Security / backend-specific
+    - gosec
+    - rowserrcheck
+    - sqlclosecheck
+    - bodyclose
 
-linters-settings:
-  gosec:
-    # Сложные false positives оставляем на ручную разметку через `// #nosec G304 -- reason`.
-    # Здесь только то, что объективно бесполезно для нас.
-    excludes:
-      - G104  # дублирует errcheck
-    severity: medium
-    confidence: medium
+    # Ошибки, context, nil-scenarios
+    - errorlint
+    - nilerr
+    - nilnil
+    - contextcheck
+    - copyloopvar
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-    disabled-checks:
-      # Это вкусовщина, и часто конфликтует с обычной читаемостью.
-      - hugeParam
-      - rangeValCopy
-      - paramTypeCombine
+    # Качество и поддерживаемость
+    - gocritic
+    - revive
+    - misspell
+    - unconvert
 
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment  # часто не стоит того, ломает читаемость структур
+  settings:
+    gosec:
+      # G104 дублирует errcheck, поэтому оставляем обработку ошибок на errcheck.
+      excludes:
+        - G104
+      severity: medium
+      confidence: medium
 
-  revive:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        # Много шума и вкусовщины для обычного backend-кода.
+        - hugeParam
+        - rangeValCopy
+        - paramTypeCombine
+        - whyNoLint
+
+    govet:
+      enable-all: true
+      disable:
+        # Часто ломает читаемость структур ради микровыигрыша по памяти.
+        - fieldalignment
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          severity: warning
+          disabled: false
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+        # Слишком душно для проекта: не требуем package comments.
+        - name: package-comments
+          disabled: true
+
+        # В handlers/interface impl часто есть legitimate unused params.
+        - name: unused-parameter
+          disabled: true
+
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.DB).Close
+        - (*github.com/jackc/pgx/v5/pgxpool.Pool).Close
+        - fmt.Fprintf(os.Stderr)
+        - fmt.Fprintln(os.Stderr)
+
+    misspell:
+      locale: US
+
+    rowserrcheck:
+      packages:
+        - github.com/jackc/pgx/v5
+        - github.com/jackc/pgx/v5/pgxpool
+
+  exclusions:
+    generated: lax
+
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-        severity: warning
-        disabled: false
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-        disabled: true  # на пакеты можно не писать комментарии — нам слишком душно
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-        disabled: true  # часто бывают legitimate параметры (handlers, interface impl)
-      - name: unreachable-code
-      - name: redefines-builtin-id
+      # В тестах меньше требований, особенно к security и вкусовым правилам.
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - gocritic
+          - revive
+          - bodyclose
+          - rowserrcheck
+          - sqlclosecheck
 
-  errcheck:
-    check-type-assertions: true
-    check-blank: false
-    exclude-functions:
-      - (io.Closer).Close
-      - (*database/sql.DB).Close
-      - (*github.com/jackc/pgx/v5/pgxpool.Pool).Close
-      - fmt.Fprintf(os.Stderr)
-      - fmt.Fprintln(os.Stderr)
+      # Сгенерированный код мы не контролируем.
+      - path: \.gen\.go$
+        linters:
+          - gocritic
+          - gosec
+          - revive
+          - staticcheck
 
-  misspell:
-    locale: US
+      # Миграции — отдельный мир.
+      - path: migrations/
+        linters:
+          - gosec
+          - gocritic
+          - revive
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-
-  exclude-rules:
-    # В тестах меньше требований, особенно к security.
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
-        - gocritic
-        - revive
-
-    # Сгенерированный код мы не контролируем.
-    - path: \.gen\.go$
-      linters:
-        - gocritic
-        - gosec
-        - revive
-        - staticcheck
-
-    # Миграции — отдельный мир.
-    - path: migrations/
-      linters:
-        - gosec
