@@ -3,6 +3,7 @@ package enrichment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -146,6 +147,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				nvdEntries = append(nvdEntries, entry)
 			}
 			rows.Close()
+			if err := rows.Err(); err != nil {
+				slog.Warn("enrichment: nvd rows error", "finding_id", findingID, "error", err)
+			}
 			if len(nvdEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "nvd", nvdEntries)
 			}
@@ -192,6 +196,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 						}
 					}
 					histRows.Close()
+					if err := histRows.Err(); err != nil {
+						slog.Warn("enrichment: epss history rows error", "finding_id", findingID, "error", err)
+					}
 				}
 
 				trend := epss.ComputeTrend(history)
@@ -294,6 +301,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				}
 			}
 			rows.Close()
+			if err := rows.Err(); err != nil {
+				slog.Warn("enrichment: kev rows error", "finding_id", findingID, "error", err)
+			}
 			if len(kevEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "kev", kevEntries)
 			}
@@ -429,6 +439,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				isBDU = true
 			}
 			rows.Close()
+			if err := rows.Err(); err != nil {
+				slog.Warn("enrichment: bdu rows error", "finding_id", findingID, "error", err)
+			}
 		}
 		if len(bduEntries) > 0 {
 			saveEnrichment(ctx, pool, findingID, "bdu", bduEntries)
@@ -804,8 +817,8 @@ func GetFindingScore(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUI
 		FROM finding_scores WHERE finding_id = $1
 	`, findingID).Scan(&s.FindingID, &s.BaseScore, &s.EPSSScore, &s.EPSSPercentile,
 		&s.IsKEV, &s.IsBDU, &s.PriorityScore, &s.CalculatedAt)
-	if err == pgx.ErrNoRows {
-		return nil, nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("enrichment: finding not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("enrichment.GetFindingScore: %w", err)

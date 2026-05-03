@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -115,7 +116,7 @@ func (s *EPSSSyncer) Sync(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("epss.Sync: gzip reader: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	records, scoreDate, err := parseCSV(gz)
 	if err != nil {
@@ -221,7 +222,7 @@ func parseCSV(r io.Reader) ([]epssRecord, time.Time, error) {
 
 	for {
 		row, err := reader.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

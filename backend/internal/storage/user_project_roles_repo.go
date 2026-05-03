@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -92,7 +93,7 @@ func (r *UserProjectRolesRepo) GetRole(ctx context.Context, userID, projectID uu
 	var role int16
 	err := r.pool.QueryRow(ctx, q, userID, projectID).Scan(&role)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, false, nil
 		}
 		return 0, false, fmt.Errorf("storage.UserProjectRolesRepo.GetRole: %w", err)

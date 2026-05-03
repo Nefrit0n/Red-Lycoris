@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -190,8 +191,9 @@ func extractZIP(data []byte) ([]byte, error) {
 			if err != nil {
 				return nil, fmt.Errorf("open %s: %w", f.Name, err)
 			}
-			defer rc.Close()
-			return io.ReadAll(rc)
+			data, err := io.ReadAll(rc)
+			_ = rc.Close()
+			return data, err
 		}
 	}
 	return nil, fmt.Errorf("no XML file found in ZIP")
@@ -375,7 +377,7 @@ func extractXMLText(s string) string {
 
 	for {
 		tok, err := decoder.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

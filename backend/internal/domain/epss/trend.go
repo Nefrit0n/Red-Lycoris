@@ -64,7 +64,6 @@ func ComputeTrend(points []HistoryPoint) TrendStats {
 	cutoff7 := current.Date.AddDate(0, 0, -7)
 	cutoff30 := current.Date.AddDate(0, 0, -30)
 	found7 := false
-	found30 := false
 
 	for i := len(points) - 1; i >= 0; i-- {
 		p := points[i]
@@ -72,9 +71,8 @@ func ComputeTrend(points []HistoryPoint) TrendStats {
 			stats.Trend7d = current.Score - p.Score
 			found7 = true
 		}
-		if !found30 && !p.Date.After(cutoff30) {
+		if !p.Date.After(cutoff30) {
 			stats.Trend30d = current.Score - p.Score
-			found30 = true
 			break
 		}
 	}

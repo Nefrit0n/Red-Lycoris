@@ -95,6 +95,7 @@ func handleManualSync(pool *pgxpool.Pool, scheduler *enrichment.Scheduler) http.
 			return
 		}
 
+		//nolint:contextcheck
 		go func(source string) {
 			if err := scheduler.TriggerSync(context.Background(), source); err != nil {
 				slog.Error("manual sync failed", "source", source, "error", err)
@@ -154,6 +155,7 @@ func handleEnrichFinding(pool *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc
 func handleEnrichAll(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Запускаем в фоне чтобы не блокировать ответ
+		//nolint:contextcheck
 		go func() {
 			ctx := context.Background()
 			var totalEnriched, totalFailed int
@@ -181,6 +183,10 @@ func handleEnrichAll(pool *pgxpool.Pool) http.HandlerFunc {
 					ids = append(ids, id)
 				}
 				rows.Close()
+				if err := rows.Err(); err != nil {
+					slog.Error("enrich-all: rows error", "error", err)
+					return
+				}
 
 				if len(ids) == 0 {
 					break
@@ -253,6 +259,10 @@ func handleGetEPSSHistory(pool *pgxpool.Pool) http.HandlerFunc {
 				p.Percentile = float64(pct)
 				points = append(points, p)
 			}
+		}
+		if err := rows.Err(); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
 		}
 
 		respondJSON(w, http.StatusOK, map[string]any{

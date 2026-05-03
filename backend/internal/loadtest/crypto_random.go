@@ -5,15 +5,15 @@ import (
 	"math/big"
 )
 
-// cryptoIntn returns a uniform random integer in [0, max).
+// cryptoIntn returns a uniform random integer in [0, n).
 // It uses crypto/rand to avoid predictable sequences in load generation.
-func cryptoIntn(max int) (int, error) {
-	if max <= 0 {
+func cryptoIntn(n int) (int, error) {
+	if n <= 0 {
 		return 0, nil
 	}
-	n, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(max)))
+	r, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(n)))
 	if err != nil {
 		return 0, err
 	}
-	return int(n.Int64()), nil
+	return int(r.Int64()), nil
 }

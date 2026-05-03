@@ -43,20 +43,21 @@ var date = "unknown"
 
 func waitForDependency(ctx context.Context, name string, attempts int, delay time.Duration, check func(context.Context) error) error {
 	for i := 1; i <= attempts; i++ {
-		if err := check(ctx); err == nil {
+		err := check(ctx)
+		if err == nil {
 			return nil
-		} else if i == attempts {
-			return fmt.Errorf("%s check failed after %d attempts: %w", name, attempts, err)
-		} else {
-			slog.Warn(
-				"dependency not ready, retrying",
-				"name", name,
-				"attempt", i,
-				"remaining_attempts", attempts-i,
-				"retry_in", delay.String(),
-				"error", err,
-			)
 		}
+		if i == attempts {
+			return fmt.Errorf("%s check failed after %d attempts: %w", name, attempts, err)
+		}
+		slog.Warn(
+			"dependency not ready, retrying",
+			"name", name,
+			"attempt", i,
+			"remaining_attempts", attempts-i,
+			"retry_in", delay.String(),
+			"error", err,
+		)
 
 		select {
 		case <-ctx.Done():
@@ -197,7 +198,7 @@ func main() {
 		os.Exit(1)
 	}
 	rdb := redis.NewClient(redisOpts)
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	if err := waitForDependency(ctx, "redis", 30, 2*time.Second, func(ctx context.Context) error {
 		return rdb.Ping(ctx).Err()

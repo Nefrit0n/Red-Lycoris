@@ -36,7 +36,7 @@ type commentState struct {
 
 func sanitizeCommentText(raw string) (string, string) {
 	trimmed := strings.TrimSpace(raw)
-	if len(trimmed) == 0 {
+	if trimmed == "" {
 		return "", "empty comment"
 	}
 	if len(trimmed) > 4096 {

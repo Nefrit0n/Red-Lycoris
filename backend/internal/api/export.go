@@ -113,7 +113,7 @@ func (h *exportHandlers) handleCSV() http.HandlerFunc {
 					strconv.Itoa(f.LineStart),
 					strconv.Itoa(f.LineEnd),
 					ptrString(f.URL),
-					ptrString(f.HttpMethod),
+					ptrString(f.HTTPMethod),
 					formatFloatPtr(f.PriorityScore),
 					formatFloatPtr(f.MaxEPSS),
 					boolRU(f.InKEV),
@@ -319,7 +319,7 @@ func (h *exportHandlers) handleXLSX() http.HandlerFunc {
 				if len(desc) > 500 {
 					desc = desc[:500]
 				}
-				row := []any{item.ID.String(), item.ProjectName, sev, status, item.Confidence, item.Title, strings.Join(item.CVEIDs, ";"), joinInt(item.CWEIDs, ";"), item.Component, item.ComponentVersion, ptrString(item.FixedVersion), item.FilePath, item.LineStart, item.LineEnd, ptrString(item.URL), ptrString(item.HttpMethod), formatFloatPtr(item.PriorityScore), formatFloatPtr(item.MaxEPSS), boolRU(item.InKEV), boolRU(item.InBDU), item.FirstSeen.UTC().Format(time.RFC3339), item.LastSeen.UTC().Format(time.RFC3339), item.TimesSeen, item.SourceType, ptrString(item.RuleID), item.AssigneeEmail, desc, ""}
+				row := []any{item.ID.String(), item.ProjectName, sev, status, item.Confidence, item.Title, strings.Join(item.CVEIDs, ";"), joinInt(item.CWEIDs, ";"), item.Component, item.ComponentVersion, ptrString(item.FixedVersion), item.FilePath, item.LineStart, item.LineEnd, ptrString(item.URL), ptrString(item.HTTPMethod), formatFloatPtr(item.PriorityScore), formatFloatPtr(item.MaxEPSS), boolRU(item.InKEV), boolRU(item.InBDU), item.FirstSeen.UTC().Format(time.RFC3339), item.LastSeen.UTC().Format(time.RFC3339), item.TimesSeen, item.SourceType, ptrString(item.RuleID), item.AssigneeEmail, desc, ""}
 				cell, _ := excelize.CoordinatesToCellName(1, rowNum)
 				if err := stream.SetRow(cell, row); err != nil {
 					respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to stream xlsx")
@@ -572,17 +572,6 @@ func sanitizeSlug(v string) string {
 		return "project"
 	}
 	return b.String()
-}
-
-func setBasicSheetStyle(f *excelize.File, sheet string, headers []string) error {
-	style, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}, Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"#E5E7EB"}}})
-	end, _ := excelize.CoordinatesToCellName(len(headers), 1)
-	_ = f.SetCellStyle(sheet, "A1", end, style)
-	for i := range headers {
-		col, _ := excelize.ColumnNumberToName(i + 1)
-		_ = f.SetColWidth(sheet, col, col, 18)
-	}
-	return nil
 }
 
 func writeSummarySheet(f *excelize.File, filters map[string]any, total int, sevCounts, statusCounts map[string]int, comp map[string]*compAgg, userName string) {

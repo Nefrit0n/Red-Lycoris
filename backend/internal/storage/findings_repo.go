@@ -153,7 +153,7 @@ func (r *FindingsRepo) Create(ctx context.Context, f *domain.Finding) (inserted 
 		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint, f.FirstSeen, f.LastSeen,
 		f.TimesSeen, f.ProjectID, f.SourceType, kind,
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
-		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
+		f.URL, f.HTTPMethod, f.HTTPParam, f.HTTPEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
 		f.SecretFingerprint,
 	).Scan(&f.ID, &inserted)
@@ -215,7 +215,7 @@ func (r *FindingsRepo) CreateTx(ctx context.Context, tx pgx.Tx, f *domain.Findin
 		f.CVEIDs, f.CWEIDs, f.CPEURI, f.Fingerprint, f.FirstSeen, f.LastSeen,
 		f.TimesSeen, f.ProjectID, f.SourceType, kind,
 		f.FixedVersion, f.PackageEcosystem, f.Purl, f.CodeSnippet, f.CodeFlow,
-		f.URL, f.HttpMethod, f.HttpParam, f.HttpEvidence, f.IacResource,
+		f.URL, f.HTTPMethod, f.HTTPParam, f.HTTPEvidence, f.IacResource,
 		f.IacProvider, f.SecretKind, f.CommitSHA, f.RuleID, f.RuleName,
 		f.SecretFingerprint,
 	).Scan(&f.ID, &inserted)
@@ -267,8 +267,8 @@ func scanFinding(row pgx.Row) (*domain.Finding, error) {
 		&f.FilePath, &f.LineStart, &f.LineEnd, &f.Component, &f.ComponentVersion,
 		&f.CVEIDs, &f.CWEIDs, &f.CPEURI, &f.Fingerprint, &f.FirstSeen, &f.LastSeen,
 		&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
-		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
-		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
+		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HTTPMethod, &f.HTTPParam,
+		&f.HTTPEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
 		&f.RuleID, &f.RuleName, &f.SecretFingerprint, &f.PriorityScore,
 		&f.ClosureReasonID, &f.ClosureNote, &f.ClosedAt, &f.ClosedBy, &f.AssignedTo,
 	)
@@ -294,8 +294,8 @@ func scanFindingListItem(row pgx.Row) (*domain.Finding, error) {
 		&f.FilePath, &f.LineStart, &f.LineEnd, &f.Component, &f.ComponentVersion,
 		&f.CVEIDs, &f.CWEIDs, &f.CPEURI, &f.Fingerprint, &f.FirstSeen, &f.LastSeen,
 		&f.TimesSeen, &f.ProjectID, &f.SourceType, &f.FixedVersion, &f.PackageEcosystem,
-		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HttpMethod, &f.HttpParam,
-		&f.HttpEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
+		&f.Purl, &f.CodeSnippet, &f.CodeFlow, &f.URL, &f.HTTPMethod, &f.HTTPParam,
+		&f.HTTPEvidence, &f.IacResource, &f.IacProvider, &f.SecretKind, &f.CommitSHA,
 		&f.RuleID, &f.RuleName, &f.SecretFingerprint, &f.PriorityScore,
 		&f.ClosureReasonID, &f.ClosureNote, &f.ClosedAt, &f.ClosedBy, &f.AssignedTo,
 		&f.InKEV, &f.MaxEPSS, &f.MaxCVSS, &f.InBDU, &projectName, &f.AssigneeEmail,
@@ -768,8 +768,7 @@ func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*Find
 
 	g.Go(func() error {
 		conds, args, _ := buildBaseWhere(&filter, FacetEcosystem, 1)
-		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindSCA)))
-		conds = append(conds, "f.package_ecosystem IS NOT NULL")
+		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindSCA)), "f.package_ecosystem IS NOT NULL")
 		q := `SELECT f.package_ecosystem, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.package_ecosystem ORDER BY count(*) DESC`
 		rows, err := r.pool.Query(gctx, q, args...)
 		if err != nil {
@@ -788,8 +787,7 @@ func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*Find
 
 	g.Go(func() error {
 		conds, args, _ := buildBaseWhere(&filter, FacetIacProvider, 1)
-		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindIaC)))
-		conds = append(conds, "f.iac_provider IS NOT NULL")
+		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindIaC)), "f.iac_provider IS NOT NULL")
 		q := `SELECT f.iac_provider, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.iac_provider ORDER BY count(*) DESC`
 		rows, err := r.pool.Query(gctx, q, args...)
 		if err != nil {
@@ -808,8 +806,7 @@ func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*Find
 
 	g.Go(func() error {
 		conds, args, _ := buildBaseWhere(&filter, FacetSecretKind, 1)
-		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindSecrets)))
-		conds = append(conds, "f.secret_kind IS NOT NULL")
+		conds = append(conds, fmt.Sprintf("f.finding_kind = %d", int(domain.KindSecrets)), "f.secret_kind IS NOT NULL")
 		q := `SELECT f.secret_kind, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.secret_kind ORDER BY count(*) DESC`
 		rows, err := r.pool.Query(gctx, q, args...)
 		if err != nil {
@@ -1075,7 +1072,7 @@ func (e *BulkLimitExceededError) Error() string {
 }
 
 // ListIDsByGroup resolves the set of finding IDs belonging to a specific group
-// key. It honours the base FindingsFilter (RBAC/project scoping) and refuses to
+// key. It honors the base FindingsFilter (RBAC/project scoping) and refuses to
 // return more than 5000 IDs in one call.
 func (r *FindingsRepo) ListIDsByGroup(ctx context.Context, filter FindingsFilter, groupBy, groupKey string) ([]uuid.UUID, int, error) {
 	const hardLimit = 5000

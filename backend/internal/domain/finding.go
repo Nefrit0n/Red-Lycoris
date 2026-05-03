@@ -52,9 +52,9 @@ type Finding struct {
 	CodeSnippet       *string         `json:"code_snippet,omitempty"`
 	CodeFlow          json.RawMessage `json:"code_flow,omitempty"`
 	URL               *string         `json:"url,omitempty"`
-	HttpMethod        *string         `json:"http_method,omitempty"`
-	HttpParam         *string         `json:"http_param,omitempty"`
-	HttpEvidence      json.RawMessage `json:"http_evidence,omitempty"`
+	HTTPMethod        *string         `json:"http_method,omitempty"`
+	HTTPParam         *string         `json:"http_param,omitempty"`
+	HTTPEvidence      json.RawMessage `json:"http_evidence,omitempty"`
 	IacResource       *string         `json:"iac_resource,omitempty"`
 	IacProvider       *string         `json:"iac_provider,omitempty"`
 	SecretKind        *string         `json:"secret_kind,omitempty"`
