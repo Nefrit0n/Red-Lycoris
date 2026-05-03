@@ -260,4 +260,4 @@ jobs:
             echo "| **Commit**           | \`${{ github.sha }}\` |"
             echo "| **Signed**           | ✅ via Sigstore cosign (keyless OIDC) |"
             echo "| **SBOM**             | ✅ CycloneDX + SPDX attached to release |"
-          } >> $GITHUB_STEP_SUMMARY
+          } >> "$GITHUB_STEP_SUMMARY"
