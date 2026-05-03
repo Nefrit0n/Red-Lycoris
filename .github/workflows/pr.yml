@@ -3,16 +3,22 @@
 # Этот workflow ничего не пушит, не тегирует и не публикует.
 # Только проверки качества и безопасности на каждый PR.
 #
+# Триггеры:
+# - pull_request: автоматически на каждый PR в main (нормальный режим работы).
+# - workflow_dispatch: ручной запуск из Actions UI (для проверки, отладки,
+#   тестирования новых правил без необходимости открывать PR).
+#
 # Архитектура:
 # - Job `changes` определяет, что именно поменялось (backend/frontend/docker/workflows).
-# - Остальные job-ы запускаются только если изменения их касаются.
-# - Job-ы выполняются параллельно, чтобы не ждать долго.
+#   При workflow_dispatch фильтр игнорируется и гонятся ВСЕ проверки.
+# - Остальные job-ы запускаются параллельно, если изменения их касаются.
 
 name: PR checks
 
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 # Отменяет старые запуски при пуше нового коммита в тот же PR.
 concurrency:
@@ -28,21 +34,24 @@ permissions:
 jobs:
   # ────────────────────────────────────────────────────────────────────
   # Шаг 1. Определяем, что именно поменялось в PR.
-  # Это позволяет не гонять фронтенд-тесты, если поменяли только бэк.
+  # При ручном запуске (workflow_dispatch) гоним все проверки.
   # ────────────────────────────────────────────────────────────────────
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      docker: ${{ steps.filter.outputs.docker }}
-      workflows: ${{ steps.filter.outputs.workflows }}
+      backend: ${{ steps.set.outputs.backend }}
+      frontend: ${{ steps.set.outputs.frontend }}
+      docker: ${{ steps.set.outputs.docker }}
+      workflows: ${{ steps.set.outputs.workflows }}
     steps:
       - uses: actions/checkout@v4
 
+      # paths-filter работает только в режиме pull_request — там есть base/head для сравнения.
+      # При workflow_dispatch его пропускаем.
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name == 'pull_request'
         with:
           filters: |
             backend:
@@ -60,6 +69,24 @@ jobs:
             workflows:
               - '.github/workflows/**'
               - '.github/actions/**'
+
+      - name: Resolve change flags
+        id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Ручной запуск — гоним все проверки независимо от того, что менялось.
+            echo "Manual run: forcing all checks"
+            echo "backend=true"   >> "$GITHUB_OUTPUT"
+            echo "frontend=true"  >> "$GITHUB_OUTPUT"
+            echo "docker=true"    >> "$GITHUB_OUTPUT"
+            echo "workflows=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "PR run: using paths-filter results"
+            echo "backend=${{ steps.filter.outputs.backend }}"     >> "$GITHUB_OUTPUT"
+            echo "frontend=${{ steps.filter.outputs.frontend }}"   >> "$GITHUB_OUTPUT"
+            echo "docker=${{ steps.filter.outputs.docker }}"       >> "$GITHUB_OUTPUT"
+            echo "workflows=${{ steps.filter.outputs.workflows }}" >> "$GITHUB_OUTPUT"
+          fi
 
   # ────────────────────────────────────────────────────────────────────
   # BACKEND: lint + test
@@ -297,6 +324,8 @@ jobs:
           exit-code: '1'
           # Не падаем на CVE без фикса — это шум, исправить мы их не можем.
           ignore-unfixed: true
+          # Сканируем только OS-пакеты и зависимости приложения.
+          scanners: vuln,secret
 
       - name: Upload Trivy SARIF to GitHub Security
         if: always()
