@@ -119,7 +119,7 @@ jobs:
           version: v1.59
           working-directory: backend
           # Конфиг лежит в корне репозитория — относительный путь.
-          args: --config=../.golangci.yml --timeout=5m
+          args: --config=${{ github.workspace }}/.github/workflows/.golangci.yml --timeout=10m
 
   backend-test:
     name: Backend / tests
@@ -241,7 +241,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_CONFIG: .github/workflows/.gitleaks.toml
 
   dockerfile-lint:
     name: Security / hadolint
@@ -260,7 +260,7 @@ jobs:
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ${{ matrix.dockerfile }}
-          config: .hadolint.yaml
+          config: .github/workflows/.hadolint.yaml
           format: sarif
           output-file: hadolint-${{ strategy.job-index }}.sarif
           no-fail: true
