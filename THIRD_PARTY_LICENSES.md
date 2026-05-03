@@ -1,12 +1,10 @@
 ﻿# Third-party licenses
 
-This file lists third-party dependencies used by Red Lycoris.
+В этом файле перечислены сторонние зависимости, используемые Red Lycoris.
 
-Generated from:
-- Go backend dependencies
-- Frontend npm production dependencies
-
-> This report is provided for convenience and should be reviewed before release.
+Сформировано на основе:
+- Зависимостей бэкэнда на Go
+- Производственных зависимостей фронтэнда npm
 
 ---
 
