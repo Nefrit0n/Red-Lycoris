@@ -493,7 +493,7 @@ func splitIDsByTriagerAccess(
 
 // groupBulkRequest is the shared body for all group-level bulk endpoints.
 type groupBulkRequest struct {
-	GroupBy string `json:"group_by"`
+	GroupBy  string `json:"group_by"`
 	GroupKey string `json:"group_key"`
 }
 

@@ -16,12 +16,12 @@ import (
 
 // listUsersCursor is the opaque pagination cursor for ListV2.
 type listUsersCursor struct {
-	Sort        string  `json:"s"`
-	LastLoginMS *int64  `json:"ll,omitempty"` // unix millis, omitted when null
-	CreatedMS   int64   `json:"ct"`
-	Email       string  `json:"em"`
-	FullName    string  `json:"fn"`
-	ID          string  `json:"id"`
+	Sort        string `json:"s"`
+	LastLoginMS *int64 `json:"ll,omitempty"` // unix millis, omitted when null
+	CreatedMS   int64  `json:"ct"`
+	Email       string `json:"em"`
+	FullName    string `json:"fn"`
+	ID          string `json:"id"`
 }
 
 func encodeListCursor(u domain.AdminUserResponse, sort string) string {
