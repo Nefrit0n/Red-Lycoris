@@ -79,7 +79,7 @@ func AuditMiddleware(writer *audit.Writer) func(http.Handler) http.Handler {
 			}
 			rec.Changes = inferAuditChanges(rec)
 
-			writer.Submit(rec)
+			writer.Submit(rec) //nolint:contextcheck
 		})
 	}
 }

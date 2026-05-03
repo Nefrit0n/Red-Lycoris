@@ -161,6 +161,7 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 			FROM epss_scores WHERE cve_id = ANY($1)
 		`, f.CVEIDs)
 		if err == nil {
+			defer currentRows.Close()
 			var epssEntries []map[string]any
 			var maxCurrentScore float64
 
@@ -229,6 +230,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				}
 			}
 			currentRows.Close()
+			if err := currentRows.Err(); err != nil {
+				slog.Warn("enrichment: epss current rows error", "finding_id", findingID, "error", err)
+			}
 			if len(epssEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "epss", epssEntries)
 			}
@@ -501,6 +505,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 			if err == nil {
 				entries := buildOSVEntries(rows)
 				rows.Close()
+				if err := rows.Err(); err != nil {
+					slog.Warn("enrichment: osv rows error", "finding_id", findingID, "error", err)
+				}
 				if len(entries) > 0 {
 					// Пометим что это fallback-матч, UI покажет предупреждение.
 					for i := range entries {
@@ -611,6 +618,9 @@ func EnrichFinding(ctx context.Context, pool *pgxpool.Pool, findingID uuid.UUID)
 				cweEntries = append(cweEntries, entry)
 			}
 			rows.Close()
+			if err := rows.Err(); err != nil {
+				slog.Warn("enrichment: cwe rows error", "finding_id", findingID, "error", err)
+			}
 
 			if len(cweEntries) > 0 {
 				saveEnrichment(ctx, pool, findingID, "cwe", cweEntries)

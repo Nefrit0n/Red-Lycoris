@@ -104,7 +104,7 @@ func (s *CPESyncer) buildIncrementalParams(ctx context.Context) (*timeParams, er
 		if start.After(now) {
 			start = now.Add(-1 * time.Hour)
 		}
-	} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
 
