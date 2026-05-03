@@ -10,6 +10,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  cacheDir: process.env.VITE_CACHE_DIR || "/tmp/.vite",
   server: {
     host: "0.0.0.0",
     allowedHosts: ["red-lycoris.cloudpub.ru"],
