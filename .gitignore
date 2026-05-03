@@ -39,3 +39,4 @@ zap-full.json
 zap.json
 semgrep.sarif
 gosec.json
+.security-audit/
