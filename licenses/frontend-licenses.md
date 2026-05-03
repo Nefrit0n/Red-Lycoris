@@ -1,5 +1,3 @@
-## Frontend dependencies
-
 | Package | License | Repository |
 |---|---|---|
 | `@babel/code-frame@7.29.0` | MIT | https://github.com/babel/babel |
@@ -200,7 +198,6 @@
 | `formdata-polyfill@4.0.10` | MIT | git+https://jimmywarting@github.com/jimmywarting/FormData |
 | `forwarded@0.2.0` | MIT | https://github.com/jshttp/forwarded |
 | `fresh@2.0.0` | MIT | https://github.com/jshttp/fresh |
-| `frontend-tmp@0.0.0` | UNLICENSED |  |
 | `fs-extra@11.3.4` | MIT | https://github.com/jprichardson/node-fs-extra |
 | `function-bind@1.1.2` | MIT | https://github.com/Raynos/function-bind |
 | `fuzzysort@3.1.0` | MIT | https://github.com/farzher/fuzzysort |
@@ -497,4 +494,3 @@
 | `zod@4.3.6` | MIT | https://github.com/colinhacks/zod |
 | `zustand@5.0.12` | MIT | https://github.com/pmndrs/zustand |
 | `zwitch@2.0.4` | MIT | https://github.com/wooorm/zwitch |
-

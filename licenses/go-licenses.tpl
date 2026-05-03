@@ -1,16 +1,5 @@
-{{ range . }}
-### {{ .Name }}
-
-- Version: `{{ .Version }}`
-- License: {{ .LicenseName }}
-- License URL: {{ .LicenseURL }}
-
-{{ if .LicenseText }}
-<details>
-<summary>License text</summary>
-
-```text
-{{ .LicenseText }}
-</details> {{ end }}
-
-{{ end }}
+| Package | Version | License | License URL |
+|---|---:|---|---|
+{{- range . }}
+| `{{ .Name }}` | `{{ .Version }}` | {{ .LicenseName }} | {{ .LicenseURL }} |
+{{- end }}
