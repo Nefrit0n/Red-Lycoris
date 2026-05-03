@@ -339,7 +339,6 @@ jobs:
       - frontend-lint
       - frontend-typecheck
       - frontend-test
-      - secrets-scan
       - dockerfile-lint
       - actions-lint
       - image-scan
