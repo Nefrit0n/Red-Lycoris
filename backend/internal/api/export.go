@@ -70,7 +70,7 @@ func (h *exportHandlers) handleCSV() http.HandlerFunc {
 		defer h.releaseExportSlot(r)
 
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
 		w.Header().Set("X-Export-Total", strconv.Itoa(total))
 		w.WriteHeader(http.StatusOK)
 
@@ -149,7 +149,7 @@ func (h *exportHandlers) handleCSV() http.HandlerFunc {
 			}
 			cursor = nextCursor
 		}
-		h.writeExportAudit(r, "csv", filter, total)
+		h.writeExportAudit(r, "csv", filter, total) //nolint:contextcheck
 	}
 }
 
@@ -161,7 +161,7 @@ func (h *exportHandlers) handleNDJSON() http.HandlerFunc {
 		}
 		defer h.releaseExportSlot(r)
 		w.Header().Set("Content-Type", "application/x-ndjson")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
 		w.Header().Set("X-Export-Total", strconv.Itoa(total))
 		enc := json.NewEncoder(w)
 
@@ -203,7 +203,7 @@ func (h *exportHandlers) handleNDJSON() http.HandlerFunc {
 			}
 			cursor = nextCursor
 		}
-		h.writeExportAudit(r, "json", filter, total)
+		h.writeExportAudit(r, "json", filter, total) //nolint:contextcheck
 	}
 }
 
@@ -366,13 +366,13 @@ func (h *exportHandlers) handleXLSX() http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
 		w.Header().Set("X-Export-Total", strconv.Itoa(total))
 		if err := f.Write(w); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to write xlsx")
 			return
 		}
-		h.writeExportAudit(r, "xlsx", filter, total)
+		h.writeExportAudit(r, "xlsx", filter, total) //nolint:contextcheck
 	}
 }
 

@@ -79,7 +79,7 @@ func formatLabels(names []string, set labelSet) string {
 		if i < len(set.values) {
 			v = set.values[i]
 		}
-		pairs = append(pairs, fmt.Sprintf("%s=\"%s\"", names[i], escapeLabel(v)))
+		pairs = append(pairs, fmt.Sprintf("%s=%q", names[i], escapeLabel(v)))
 	}
 	return "{" + strings.Join(pairs, ",") + "}"
 }

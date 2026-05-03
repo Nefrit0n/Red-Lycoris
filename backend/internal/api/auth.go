@@ -119,6 +119,7 @@ func handleLogin(svc *authsvc.Service, rdb *redis.Client) http.HandlerFunc {
 			HttpOnly: true,
 			Secure:   shouldUseSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
+			Domain:   "",
 			Path:     "/",
 			MaxAge:   int(authSessionMaxAge.Seconds()),
 		})
@@ -148,6 +149,7 @@ func handleLogout(svc *authsvc.Service) http.HandlerFunc {
 			HttpOnly: true,
 			Secure:   shouldUseSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
+			Domain:   "",
 			Path:     "/",
 			MaxAge:   -1,
 		})
@@ -271,6 +273,7 @@ func handleChangePassword(svc *authsvc.Service, usersRepo interface {
 			HttpOnly: true,
 			Secure:   shouldUseSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
+			Domain:   "",
 			Path:     "/",
 			MaxAge:   int(authSessionMaxAge.Seconds()),
 		})
