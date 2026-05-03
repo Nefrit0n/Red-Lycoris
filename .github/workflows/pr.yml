@@ -119,7 +119,7 @@ jobs:
           version: v1.59
           working-directory: backend
           # Конфиг лежит в корне репозитория — относительный путь.
-          args: --config=${{ github.workspace }}/.github/workflows/.golangci.yml --timeout=10m
+          args: --timeout=10m
 
   backend-test:
     name: Backend / tests
