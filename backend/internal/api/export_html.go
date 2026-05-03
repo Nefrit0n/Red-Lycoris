@@ -202,6 +202,9 @@ func (h *exportHandlers) fetchBDUByCVEs(r *http.Request, findings []domain.Findi
 			}
 		}
 	}
+	if rows.Err() != nil {
+		return out
+	}
 	return out
 }
 

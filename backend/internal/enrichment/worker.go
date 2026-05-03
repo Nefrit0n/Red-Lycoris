@@ -2,6 +2,7 @@ package enrichment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
@@ -101,7 +102,7 @@ func (w *Worker) run(ctx context.Context) {
 		}).Result()
 
 		if err != nil {
-			if err == redis.Nil || ctx.Err() != nil {
+			if errors.Is(err, redis.Nil) || ctx.Err() != nil {
 				continue
 			}
 			slog.Error("enrichment worker: xreadgroup error", "consumer", w.consumerName, "error", err)

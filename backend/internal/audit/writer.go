@@ -19,6 +19,7 @@ type Writer struct {
 func NewWriter(repo *storage.AuditLogRepo) *Writer {
 	w := &Writer{repo: repo, ch: make(chan storage.AuditRecord, 1024)}
 	w.wg.Add(1)
+	//nolint:contextcheck
 	go func() {
 		defer w.wg.Done()
 		for rec := range w.ch {
@@ -42,6 +43,7 @@ func (w *Writer) Submit(record storage.AuditRecord) {
 	select {
 	case w.ch <- record:
 	default:
+		//nolint:contextcheck
 		go func() {
 			_ = w.repo.Create(context.Background(), &record)
 		}()

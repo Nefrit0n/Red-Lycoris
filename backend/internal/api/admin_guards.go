@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -111,7 +112,8 @@ func canModifyUser(
 
 // respondGuardError пишет ответ 403/500 по типу ошибки от canModifyUser.
 func respondGuardError(w http.ResponseWriter, r *http.Request, err error) {
-	if ge, ok := err.(*guardError); ok {
+	var ge *guardError
+	if errors.As(err, &ge) {
 		respondError(w, r, ge.httpStatus, ge.code, ge.message)
 		return
 	}

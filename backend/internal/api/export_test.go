@@ -353,7 +353,7 @@ func TestExportLimitResponse(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCVEAggMaxPriority(t *testing.T) {
-	agg := &cveAgg{Projects: map[string]struct{}{}, MaxSev: -1}
+	agg := &cveAgg{MaxSev: -1}
 
 	p1 := 7.5
 	p2 := 9.2

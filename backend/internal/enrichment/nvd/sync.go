@@ -548,11 +548,11 @@ func minTime(a, b time.Time) time.Time {
 	return b
 }
 
-func truncateError(s string, max int) string {
-	if len(s) <= max {
+func truncateError(s string, limit int) string {
+	if len(s) <= limit {
 		return s
 	}
-	return s[:max]
+	return s[:limit]
 }
 
 // --- NVD API 2.0 response structures ---

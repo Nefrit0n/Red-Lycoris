@@ -86,7 +86,7 @@ func doExportWithTTFB(ctx context.Context, c *HTTPClient, method, path string) (
 			ttfb = time.Since(started)
 		},
 	}
-	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+	req = req.WithContext(httptrace.WithClientTrace(ctx, trace))
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, started, time.Since(started), 0, err
