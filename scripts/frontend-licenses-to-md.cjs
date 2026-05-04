@@ -8,7 +8,9 @@ const data = JSON.parse(fs.readFileSync(inputPath, "utf8"));
 
 function escapeMd(value) {
     return String(value || "")
+        .replace(/\\/g, "\\\\")
         .replace(/\|/g, "\\|")
+        .replace(/`/g, "\\`")
         .replace(/\r?\n/g, " ")
         .trim();
 }
