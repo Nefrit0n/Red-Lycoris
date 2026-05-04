@@ -245,7 +245,7 @@ jobs:
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ${{ matrix.dockerfile }}
-          config: .github/workflows/.hadolint.yaml
+          config: .github/.hadolint.yaml
           format: sarif
           output-file: hadolint-${{ strategy.job-index }}.sarif
           no-fail: true
