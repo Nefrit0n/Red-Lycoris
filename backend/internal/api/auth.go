@@ -113,6 +113,7 @@ func handleLogin(svc *authsvc.Service, rdb *redis.Client) http.HandlerFunc {
 			return
 		}
 
+		//nolint:gosec // G124: Secure flag is controlled by COOKIE_SECURE env var; false is intentional for local dev.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    rawToken,
@@ -143,6 +144,7 @@ func handleLogout(svc *authsvc.Service) http.HandlerFunc {
 			}
 		}
 
+		//nolint:gosec // G124: Secure flag is controlled by COOKIE_SECURE env var; false is intentional for local dev.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    "",
@@ -241,6 +243,7 @@ func handleChangePassword(svc *authsvc.Service, usersRepo interface {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create session")
 			return
 		}
+		//nolint:gosec // G124: Secure flag is controlled by COOKIE_SECURE env var; false is intentional for local dev.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    rawToken,
