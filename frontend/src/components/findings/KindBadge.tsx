@@ -36,7 +36,7 @@ export function KindBadge({ kind, className, iconOnly }: KindBadgeProps) {
       className={cn("gap-1", meta.chipClass, className)}
     >
       <Icon className="size-3" />
-      {!iconOnly && <span>{meta.short}</span>}
+      <span>{meta.short}</span>
     </Badge>
   );
   return body;

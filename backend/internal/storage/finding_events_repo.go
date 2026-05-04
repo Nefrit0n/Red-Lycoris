@@ -110,7 +110,7 @@ func (r *FindingEventsRepo) ListForFinding(
 	}
 	defer rows.Close()
 
-	items := make([]FindingEventListItem, 0, limit)
+	items := make([]FindingEventListItem, 0, min(limit, 200))
 	for rows.Next() {
 		var item FindingEventListItem
 		if err := rows.Scan(

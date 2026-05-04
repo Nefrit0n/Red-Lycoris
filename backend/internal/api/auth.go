@@ -113,12 +113,11 @@ func handleLogin(svc *authsvc.Service, rdb *redis.Client) http.HandlerFunc {
 			return
 		}
 
-		//nolint:gosec // Secure is environment-dependent: false for local HTTP, true for HTTPS/proxied HTTPS.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    rawToken,
 			HttpOnly: true,
-			Secure:   shouldUseSecureCookie(r),
+			Secure:   authCookieSecure,
 			SameSite: http.SameSiteLaxMode,
 			Domain:   "",
 			Path:     "/",
@@ -144,12 +143,11 @@ func handleLogout(svc *authsvc.Service) http.HandlerFunc {
 			}
 		}
 
-		//nolint:gosec // Secure is environment-dependent: false for local HTTP, true for HTTPS/proxied HTTPS.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    "",
 			HttpOnly: true,
-			Secure:   shouldUseSecureCookie(r),
+			Secure:   authCookieSecure,
 			SameSite: http.SameSiteLaxMode,
 			Domain:   "",
 			Path:     "/",
@@ -162,32 +160,6 @@ func handleLogout(svc *authsvc.Service) http.HandlerFunc {
 	}
 }
 
-func shouldUseSecureCookie(r *http.Request) bool {
-	if !authCookieSecure {
-		return false
-	}
-
-	// Preserve local HTTP development flows even if ENV/COOKIE_SECURE is misconfigured.
-	host := r.Host
-	if parsedHost, _, err := net.SplitHostPort(r.Host); err == nil {
-		host = parsedHost
-	}
-	host = strings.Trim(strings.TrimSpace(host), "[]")
-	if strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1" {
-		return false
-	}
-
-	if r.TLS != nil {
-		return true
-	}
-	if authTrustProxy {
-		xfp := strings.TrimSpace(strings.ToLower(r.Header.Get("X-Forwarded-Proto")))
-		if xfp == "https" {
-			return true
-		}
-	}
-	return false
-}
 
 func handleRefresh(svc *authsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -269,12 +241,11 @@ func handleChangePassword(svc *authsvc.Service, usersRepo interface {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create session")
 			return
 		}
-		//nolint:gosec // Secure is environment-dependent: false for local HTTP, true for HTTPS/proxied HTTPS.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rl_session",
 			Value:    rawToken,
 			HttpOnly: true,
-			Secure:   shouldUseSecureCookie(r),
+			Secure:   authCookieSecure,
 			SameSite: http.SameSiteLaxMode,
 			Domain:   "",
 			Path:     "/",
