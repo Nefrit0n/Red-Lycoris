@@ -5,11 +5,11 @@ WORKDIR /app
 RUN chown -R node:node /app
 USER node
 
-COPY package.json package-lock.json* ./
+COPY --chown=node:node package.json package-lock.json* ./
 ENV NPM_CONFIG_INCLUDE=optional
 RUN npm ci --include=optional
 
-COPY . .
+COPY --chown=node:node . .
 
 EXPOSE 3000
 
@@ -22,11 +22,11 @@ WORKDIR /app
 RUN chown -R node:node /app
 USER node
 
-COPY package.json package-lock.json* ./
+COPY --chown=node:node package.json package-lock.json* ./
 ENV NPM_CONFIG_INCLUDE=optional
 RUN npm ci --include=optional
 
-COPY . .
+COPY --chown=node:node . .
 RUN npm run build
 
 # ── Stage: Production (nginx) ──
