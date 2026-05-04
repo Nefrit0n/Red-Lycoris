@@ -113,7 +113,7 @@ func (r *WorkspaceRepo) ListMembers(ctx context.Context, q string, limit int) ([
 	}
 	defer rows.Close()
 
-	members := make([]WorkspaceMember, 0, min(limit, 100))
+	members := make([]WorkspaceMember, 0, 16)
 	for rows.Next() {
 		var m WorkspaceMember
 		if err := rows.Scan(&m.ID, &m.Email, &m.DisplayName); err != nil {
@@ -162,7 +162,7 @@ func (r *WorkspaceRepo) ListTags(ctx context.Context, prefix string, limit int) 
 	}
 	defer rows.Close()
 
-	tags := make([]string, 0, min(limit, 50))
+	tags := make([]string, 0, 16)
 	for rows.Next() {
 		var tag string
 		if err := rows.Scan(&tag); err != nil {

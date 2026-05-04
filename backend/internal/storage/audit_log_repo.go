@@ -301,7 +301,7 @@ func (r *AuditLogRepo) List(ctx context.Context, filter AuditListFilter) ([]Audi
 	}
 	defer rows.Close()
 
-	out := make([]AuditRecord, 0, min(filter.Limit, 500))
+	out := make([]AuditRecord, 0, 32)
 	for rows.Next() {
 		var rec AuditRecord
 		var uaBrowser, uaOS, uaCountry string
@@ -441,7 +441,7 @@ func (r *AuditLogRepo) ListRelated(ctx context.Context, id uuid.UUID, limit int)
 		return nil, fmt.Errorf("storage.AuditLogRepo.ListRelated: %w", err)
 	}
 	defer rows.Close()
-	out := make([]AuditRecord, 0, min(limit, 20))
+	out := make([]AuditRecord, 0, 16)
 	for rows.Next() {
 		rec, scanErr := scanAuditRecord(rows)
 		if scanErr != nil {
@@ -540,7 +540,7 @@ func (r *AuditLogRepo) ListAfter(ctx context.Context, filter AuditListFilter, af
 	}
 	defer rows.Close()
 
-	out := make([]AuditRecord, 0, min(limit, 200))
+	out := make([]AuditRecord, 0, 32)
 	for rows.Next() {
 		rec, scanErr := scanAuditRecord(rows)
 		if scanErr != nil {

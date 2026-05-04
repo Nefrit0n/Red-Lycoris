@@ -423,7 +423,7 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 	}
 	defer rows.Close()
 
-	projects := make([]domain.Project, 0, min(limit, 200))
+	projects := make([]domain.Project, 0, 32)
 	hasMore := false
 	for rows.Next() {
 		var p domain.Project
@@ -620,7 +620,7 @@ func (r *ProjectsRepo) GetTrend(ctx context.Context, projectID uuid.UUID, days i
 	}
 	defer rows.Close()
 
-	points := make([]ProjectTrendPoint, 0, min(days, 365))
+	points := make([]ProjectTrendPoint, 0, 32)
 	for rows.Next() {
 		var p ProjectTrendPoint
 		if err := rows.Scan(&p.Date, &p.Count); err != nil {
