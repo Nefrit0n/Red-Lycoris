@@ -113,7 +113,7 @@ FROM scans WHERE ` + strings.Join(conds, " AND ") + ` ORDER BY started_at DESC, 
 		return nil, "", err
 	}
 	defer rows.Close()
-	out := make([]domain.Scan, 0, min(f.Limit, 200))
+	out := make([]domain.Scan, 0, 32)
 	for rows.Next() {
 		var s domain.Scan
 		if err := rows.Scan(&s.ID, &s.ProjectID, &s.CommitSHA, &s.Branch, &s.Scanner, &s.ScannerVersion, &s.CIJobURL, &s.StartedAt, &s.FinishedAt, &s.FindingsImported, &s.FindingsUpdated, &s.Status, &s.TokenID, &s.TriggeredByUser, &s.AssetHint, &s.RawReportSize); err != nil {
