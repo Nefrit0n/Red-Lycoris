@@ -21,6 +21,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   -o /build/redlycoris ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -ldflags="-s -w" -o /build/admin ./cmd/admin
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -ldflags="-s -w" -o /build/certinit ./cmd/certinit
 
 # Build a tiny healthcheck binary for distroless runtime images.
 RUN cat > /tmp/healthcheck.go <<'EOF'
@@ -62,3 +64,10 @@ EXPOSE 8080
 USER nonroot:nonroot
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 CMD ["/app/healthcheck"]
 ENTRYPOINT ["/app/redlycoris"]
+
+# ── Stage 3: certinit (one-shot TLS bootstrap) ──
+# Runs before nginx, writes TLS files to a shared named volume.
+# Must run as root (uid 0) to chown tls.key to nginx uid 101.
+FROM scratch AS certinit
+COPY --from=builder /build/certinit /certinit
+ENTRYPOINT ["/certinit"]
