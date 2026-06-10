@@ -8,6 +8,8 @@
 #   - увеличены ресурсные лимиты
 #   - frontend собирается из production-stage (nginx)
 #   - нет bind-mount исходников
+#   - certinit генерирует TLS-сертификат перед стартом nginx
+#   - nginx слушает :80 (редирект) и :443 (HTTPS)
 
 services:
   postgres:
@@ -34,7 +36,8 @@ services:
     environment:
       ENV: production
       LOG_LEVEL: warn
-      CORS_ORIGINS: "http://localhost:${FRONTEND_PORT:-3000}"
+      # В HTTPS-деплое задай явно: CORS_ORIGINS=https://your-domain.example.com
+      CORS_ORIGINS: "${CORS_ORIGINS:-https://localhost}"
     deploy:
       resources:
         limits:
@@ -43,13 +46,56 @@ services:
         reservations:
           memory: 256M
 
+  # ──────────────────────────────────────────────
+  # certinit — one-shot TLS bootstrap
+  # Запускается до nginx, пишет сертификат в shared volume.
+  # Режим определяется наличием файлов в RL_TLS_CUSTOM_DIR:
+  #   - файлы есть → user-cert (валидирует пару, собирает fullchain)
+  #   - файлов нет → self-signed (ECDSA P-256, 825 дней)
+  # ──────────────────────────────────────────────
+  certinit:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: certinit
+    restart: "no"
+    environment:
+      RL_TLS_DIR: /etc/redlycoris/tls
+      RL_TLS_CUSTOM_DIR: /etc/redlycoris/tls-custom
+      RL_HOSTNAME: "${RL_HOSTNAME:-}"
+      RL_TLS_SANS: "${RL_TLS_SANS:-}"
+    volumes:
+      - redlycoris-tls:/etc/redlycoris/tls
+      - "${RL_TLS_CUSTOM_DIR:-./tls-custom}:/etc/redlycoris/tls-custom:ro"
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "3"
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       target: production
-    volumes: !reset []
-    ports:
-      - "${FRONTEND_PORT:-3000}:8080"
+    volumes: !reset
+      - redlycoris-tls:/etc/redlycoris/tls:ro
+    ports: !reset
+      - "80:80"
+      - "443:443"
+    depends_on:
+      certinit:
+        condition: service_completed_successfully
     environment:
       VITE_API_URL: ""
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 64M
+
+volumes:
+  redlycoris-tls:
+    driver: local
