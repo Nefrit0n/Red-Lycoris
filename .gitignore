@@ -1,6 +1,7 @@
 # Compiled binaries
 backend/server
 backend/seed
+backend/certinit
 
 # Environment
 .env
