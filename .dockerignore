@@ -1,0 +1,25 @@
+.git
+.github
+.claude
+
+# Backend — нужны только go.mod/go.sum и cmd/certinit для frontend build.
+# Остальное не попадает в контекст.
+backend/internal/
+backend/cmd/server/
+backend/cmd/admin/
+backend/cmd/seed/
+backend/cmd/loadtest/
+backend/api/
+backend/migrations/
+
+# Frontend артефакты сборки
+frontend/node_modules/
+frontend/dist/
+
+# Документация и ops-скрипты
+docs/
+ops/
+scripts/
+deployments/
+vuln_seeder_ru.py
+CHANGELOG.md
