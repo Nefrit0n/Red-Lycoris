@@ -1,6 +1,5 @@
 # Production overrides
 # Использование:
-#   ./scripts/build.sh
 #   docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml up -d
 #
 # Отличия от dev:
@@ -8,7 +7,7 @@
 #   - увеличены ресурсные лимиты
 #   - frontend собирается из production-stage (nginx)
 #   - нет bind-mount исходников
-#   - certinit генерирует TLS-сертификат перед стартом nginx
+#   - certinit встроен в frontend-контейнер, запускается через entrypoint
 #   - nginx слушает :80 (редирект) и :443 (HTTPS)
 
 services:
@@ -81,22 +80,25 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
       target: production
-    # !override (не !reset): полная замена значения из базового compose.
-    # !reset удаляет атрибут, игнорируя новое значение — frontend остался бы
-    # с dev-портами 3000:3000 и без TLS-volume.
-    volumes: !override
-      - redlycoris-tls:/etc/redlycoris/tls:ro
-    ports: !override
+    # !reset заменяет базовый список целиком, не конкатенирует с ним.
+    volumes: !reset
+      - redlycoris-tls:/etc/redlycoris/tls
+      - "${RL_TLS_CUSTOM_DIR:-./tls-custom}:/etc/redlycoris/tls-custom:ro"
+    ports: !reset
       - "80:80"
       - "443:443"
+    # certinit теперь часть entrypoint — отдельного depends_on не нужно.
     depends_on:
-      certinit:
-        condition: service_completed_successfully
+      - backend
     environment:
       VITE_API_URL: ""
+      RL_TLS_DIR: /etc/redlycoris/tls
+      RL_TLS_CUSTOM_DIR: /etc/redlycoris/tls-custom
+      RL_HOSTNAME: "${RL_HOSTNAME:-}"
+      RL_TLS_SANS: "${RL_TLS_SANS:-}"
     deploy:
       resources:
         limits:
