@@ -1,5 +1,15 @@
-# Production overrides — используй с:
+# Production overrides
+# Использование:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Отличия от dev:
+#   - postgres/redis не выставляют порты наружу
+#   - увеличены ресурсные лимиты
+#   - frontend собирается из production-stage (nginx + certinit)
+#   - нет bind-mount исходников
+#   - certinit встроен в frontend-контейнер, запускается через entrypoint
+#   - nginx слушает :80 (редирект) и :443 (HTTPS)
+
 services:
   postgres:
     ports: !reset []
@@ -16,28 +26,54 @@ services:
     deploy:
       resources:
         limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+
+  backend:
+    environment:
+      ENV: production
+      LOG_LEVEL: warn
+      # В HTTPS-деплое задай явно: CORS_ORIGINS=https://your-domain.example.com
+      CORS_ORIGINS: "${CORS_ORIGINS:-https://localhost}"
+    deploy:
+      resources:
+        limits:
           memory: 512M
           cpus: "1.0"
         reservations:
           memory: 256M
 
-  backend:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: production
+    # !reset заменяет базовый список целиком, не конкатенирует с ним.
+    volumes: !reset
+      - redlycoris-tls:/etc/redlycoris/tls
+      - "${RL_TLS_CUSTOM_DIR:-./tls-custom}:/etc/redlycoris/tls-custom:ro"
+    ports: !reset
+      - "80:80"
+      - "443:443"
+    # certinit теперь часть entrypoint — отдельного depends_on не нужно.
+    depends_on:
+      - backend
     environment:
-      LOG_LEVEL: warn
-      CORS_ORIGINS: "http://localhost:${FRONTEND_PORT:-3000}"
+      VITE_API_URL: ""
+      RL_TLS_DIR: /etc/redlycoris/tls
+      RL_TLS_CUSTOM_DIR: /etc/redlycoris/tls-custom
+      RL_HOSTNAME: "${RL_HOSTNAME:-}"
+      RL_TLS_SANS: "${RL_TLS_SANS:-}"
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: "2.0"
-        reservations:
           memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 64M
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: production
-    volumes: !reset []
-    environment:
-      VITE_API_URL: ""
+volumes:
+  redlycoris-tls:
+    driver: local

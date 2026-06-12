@@ -20,7 +20,7 @@
 
 ## TLS (certinit)
 
-Переменные ниже читаются сервисом `certinit` при запуске через prod-overlay (`deployments/docker-compose.prod.yml`).
+Переменные ниже читаются сервисом `certinit` при запуске через prod-overlay (`docker-compose.prod.yml`).
 В dev-режиме (`docker-compose.yml` без overlay) они не используются.
 
 | Переменная | Дефолт | Описание |

@@ -44,7 +44,7 @@ curl -s http://localhost:8080/health
 При запуске через prod-overlay сервис `certinit` стартует раньше nginx и автоматически генерирует самоподписанный сертификат ECDSA P-256 (825 дней), если в каталоге пользовательских сертификатов нет файлов:
 
 ```bash
-docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 После старта:
@@ -79,7 +79,7 @@ mkdir -p ./tls-custom
 cp /path/to/server.key ./tls-custom/tls.key
 cp /path/to/server.crt ./tls-custom/tls.crt
 cp /path/to/ca-bundle.crt ./tls-custom/ca.crt   # опционально
-docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 `certinit` проверяет:
@@ -89,7 +89,7 @@ docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml up -
 Если проверка не пройдена — **старт падает с ненулевым кодом и явным сообщением**; откат на самоподписанный не происходит. Проверьте логи:
 
 ```bash
-docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml logs certinit
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs frontend
 ```
 
 ### HSTS
@@ -107,9 +107,9 @@ docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml logs
 # Замените файлы в tls-custom/
 cp /new/server.key ./tls-custom/tls.key
 cp /new/server.crt ./tls-custom/tls.crt
-# Перезапустите certinit и frontend (postgres/redis/backend трогать не нужно)
-docker compose -f docker-compose.yml -f deployments/docker-compose.prod.yml \
-  up -d --no-deps certinit frontend
+# Перезапустите frontend — certinit запустится автоматически как часть entrypoint
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  up -d --no-deps frontend
 ```
 
 ## Резервное копирование (PostgreSQL)
