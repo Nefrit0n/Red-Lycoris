@@ -59,6 +59,12 @@ services:
       dockerfile: Dockerfile
       target: certinit
     restart: "no"
+    # Дублируем условие в deploy: некоторые версии compose/оркестраторы
+    # читают restart_policy отсюда — без него one-shot контейнер уходит
+    # в бесконечный restart-loop с минутным backoff.
+    deploy:
+      restart_policy:
+        condition: none
     environment:
       RL_TLS_DIR: /etc/redlycoris/tls
       RL_TLS_CUSTOM_DIR: /etc/redlycoris/tls-custom
@@ -78,9 +84,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: production
-    volumes: !reset
+    # !override (не !reset): полная замена значения из базового compose.
+    # !reset удаляет атрибут, игнорируя новое значение — frontend остался бы
+    # с dev-портами 3000:3000 и без TLS-volume.
+    volumes: !override
       - redlycoris-tls:/etc/redlycoris/tls:ro
-    ports: !reset
+    ports: !override
       - "80:80"
       - "443:443"
     depends_on:

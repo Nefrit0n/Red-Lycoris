@@ -94,28 +94,22 @@ func run(log *slog.Logger, tlsDir, customDir, hostname, sansEnv string) error {
 			fullchain = append(fullchain, caData...)
 		}
 
-		if err := writeFile(runtimeCertPath, fullchain, 0644); err != nil {
+		if err := writeFileAtomic(runtimeCertPath, fullchain, 0644, -1); err != nil {
 			return err
 		}
-		if err := writeFile(runtimeKeyPath, keyPEM, 0600); err != nil {
+		if err := writeFileAtomic(runtimeKeyPath, keyPEM, 0600, nginxUID); err != nil {
 			return err
-		}
-		if err := os.Chown(runtimeKeyPath, nginxUID, nginxUID); err != nil {
-			return fmt.Errorf("chown tls.key to uid %d (certinit must run as root): %w", nginxUID, err)
 		}
 
 		userCertMode = true
 	} else {
 		log.Info("no custom certificates found, entering self-signed mode", "custom_dir", customDir)
 
-		if needsRegeneration(runtimeCertPath, runtimeKeyPath, log) {
-			sans := buildSANs(hostname, sansEnv)
+		sans := buildSANs(hostname, sansEnv)
+		if needsRegeneration(runtimeCertPath, runtimeKeyPath, sans, log) {
 			log.Info("generating self-signed ECDSA P-256 certificate", "sans", sans)
 			if err := generateSelfSigned(runtimeKeyPath, runtimeCertPath, sans); err != nil {
 				return fmt.Errorf("generate self-signed certificate: %w", err)
-			}
-			if err := os.Chown(runtimeKeyPath, nginxUID, nginxUID); err != nil {
-				return fmt.Errorf("chown tls.key to uid %d (certinit must run as root): %w", nginxUID, err)
 			}
 			log.Info("self-signed certificate written", "cert", runtimeCertPath)
 		} else {
@@ -124,7 +118,7 @@ func run(log *slog.Logger, tlsDir, customDir, hostname, sansEnv string) error {
 	}
 
 	snippet := buildNginxSnippet(runtimeCertPath, runtimeKeyPath, userCertMode)
-	if err := writeFile(snippetPath, []byte(snippet), 0644); err != nil {
+	if err := writeFileAtomic(snippetPath, []byte(snippet), 0644, -1); err != nil {
 		return err
 	}
 
@@ -136,7 +130,7 @@ func run(log *slog.Logger, tlsDir, customDir, hostname, sansEnv string) error {
 		return fmt.Errorf("create tls conf.d: %w", err)
 	}
 	serverConf := buildNginxServerConf(snippetPath)
-	if err := writeFile(filepath.Join(serverConfDir, "tls-server.conf"), []byte(serverConf), 0644); err != nil {
+	if err := writeFileAtomic(filepath.Join(serverConfDir, "tls-server.conf"), []byte(serverConf), 0644, -1); err != nil {
 		return err
 	}
 
@@ -239,7 +233,7 @@ func publicKeysMatch(a, b interface{}) bool {
 	}
 }
 
-func needsRegeneration(certPath, keyPath string, log *slog.Logger) bool {
+func needsRegeneration(certPath, keyPath string, sans []string, log *slog.Logger) bool {
 	if !fileExists(certPath) || !fileExists(keyPath) {
 		return true
 	}
@@ -262,7 +256,44 @@ func needsRegeneration(certPath, keyPath string, log *slog.Logger) bool {
 		log.Info("existing self-signed certificate has expired, regenerating", "expired_at", cert.NotAfter.UTC().Format(time.RFC3339))
 		return true
 	}
+	if missing := missingSANs(cert, sans); len(missing) > 0 {
+		log.Info("requested SANs are not covered by the existing certificate, regenerating", "missing", missing)
+		return true
+	}
 	return false
+}
+
+// missingSANs returns the requested SANs absent from the certificate.
+// Lets the operator add RL_HOSTNAME/RL_TLS_SANS after the first deploy
+// without manually wiping the runtime volume.
+func missingSANs(cert *x509.Certificate, sans []string) []string {
+	var missing []string
+	for _, san := range sans {
+		if ip := net.ParseIP(san); ip != nil {
+			found := false
+			for _, certIP := range cert.IPAddresses {
+				if certIP.Equal(ip) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				missing = append(missing, san)
+			}
+		} else {
+			found := false
+			for _, dns := range cert.DNSNames {
+				if strings.EqualFold(dns, san) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				missing = append(missing, san)
+			}
+		}
+	}
+	return missing
 }
 
 func generateSelfSigned(keyPath, certPath string, sans []string) error {
@@ -304,17 +335,18 @@ func generateSelfSigned(keyPath, certPath string, sans []string) error {
 		return fmt.Errorf("create certificate: %w", err)
 	}
 
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	if err := writeFile(certPath, certPEM, 0644); err != nil {
-		return err
-	}
-
 	keyBytes, err := x509.MarshalECPrivateKey(privKey)
 	if err != nil {
 		return fmt.Errorf("marshal EC private key: %w", err)
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
-	if err := writeFile(keyPath, keyPEM, 0600); err != nil {
+	if err := writeFileAtomic(keyPath, keyPEM, 0600, nginxUID); err != nil {
+		return err
+	}
+
+	// Key first, cert second: if the cert exists, the key it references must too.
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	if err := writeFileAtomic(certPath, certPEM, 0644, -1); err != nil {
 		return err
 	}
 
@@ -365,7 +397,7 @@ server {
     include %s;
 
     ssl_protocols         TLSv1.2 TLSv1.3;
-    ssl_ciphers           ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256;
+    ssl_ciphers           ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
     ssl_prefer_server_ciphers off;
     ssl_session_timeout   1d;
     ssl_session_cache     shared:MozSSL:10m;
@@ -408,9 +440,28 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func writeFile(path string, data []byte, mode os.FileMode) error {
-	if err := os.WriteFile(path, data, mode); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+// writeFileAtomic writes via tmp-file + rename so a concurrently starting nginx
+// never observes a partially written certificate or config.
+// uid >= 0 additionally chowns the file (requires root) before the rename.
+func writeFileAtomic(path string, data []byte, mode os.FileMode, uid int) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, mode); err != nil {
+		return fmt.Errorf("write %s: %w", tmp, err)
+	}
+	// os.WriteFile mode is subject to umask — enforce it explicitly.
+	if err := os.Chmod(tmp, mode); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("chmod %s: %w", tmp, err)
+	}
+	if uid >= 0 {
+		if err := os.Chown(tmp, uid, uid); err != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("chown %s to uid %d (certinit must run as root): %w", path, uid, err)
+		}
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("rename %s -> %s: %w", tmp, path, err)
 	}
 	return nil
 }
