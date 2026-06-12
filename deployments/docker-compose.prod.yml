@@ -45,6 +45,39 @@ services:
         reservations:
           memory: 256M
 
+  # ──────────────────────────────────────────────
+  # certinit — one-shot TLS bootstrap
+  # Запускается до nginx, пишет сертификат в shared volume.
+  # Режим определяется наличием файлов в RL_TLS_CUSTOM_DIR:
+  #   - файлы есть → user-cert (валидирует пару, собирает fullchain)
+  #   - файлов нет → self-signed (ECDSA P-256, 825 дней)
+  # ──────────────────────────────────────────────
+  certinit:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: certinit
+    restart: "no"
+    # Дублируем условие в deploy: некоторые версии compose/оркестраторы
+    # читают restart_policy отсюда — без него one-shot контейнер уходит
+    # в бесконечный restart-loop с минутным backoff.
+    deploy:
+      restart_policy:
+        condition: none
+    environment:
+      RL_TLS_DIR: /etc/redlycoris/tls
+      RL_TLS_CUSTOM_DIR: /etc/redlycoris/tls-custom
+      RL_HOSTNAME: "${RL_HOSTNAME:-}"
+      RL_TLS_SANS: "${RL_TLS_SANS:-}"
+    volumes:
+      - redlycoris-tls:/etc/redlycoris/tls
+      - "${RL_TLS_CUSTOM_DIR:-./tls-custom}:/etc/redlycoris/tls-custom:ro"
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "3"
+
   frontend:
     build:
       context: .
