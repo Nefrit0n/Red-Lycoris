@@ -314,8 +314,6 @@ Red-Lycoris/
 │       ├── backup.sh
 │       ├── restore.sh
 │       └── verify.sh
-├── deployments/
-│   └── docker-compose.prod.yml    # Production compose конфиг
 └── scripts/
     ├── build.sh                   # Сборка образов
     ├── seed.sh                    # Генерация тестовых данных
@@ -566,7 +564,7 @@ fingerprint = SHA256(
 ## Docker
 
 - `docker-compose.yml` — для разработки
-- `docker-compose.prod.yml` / `deployments/docker-compose.prod.yml` — для production
+- `docker-compose.prod.yml` — production overlay
 - Backend: multi-stage build (Go build → scratch/alpine)
 - Frontend: multi-stage build (npm build → nginx)
 - PostgreSQL 16 с volume для данных

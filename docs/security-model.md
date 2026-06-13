@@ -72,7 +72,7 @@ Internet → [Firewall] → nginx (TLS, 443) → frontend (3000/8080)
                                                              └── redis (6379, internal only)
 ```
 
-Postgres и Redis **не должны** быть доступны извне контейнерной сети. Production compose (`deployments/docker-compose.prod.yml`) убирает их ports-маппинг.
+Postgres и Redis **не должны** быть доступны извне контейнерной сети. Production overlay (`docker-compose.prod.yml`) убирает их ports-маппинг.
 
 ### Рекомендуемые дополнительные меры
 

@@ -171,10 +171,14 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 - Порты PostgreSQL и Redis не выставляются наружу
 - Frontend собирается в production-stage (nginx вместо Vite)
 - Нет bind-mount исходников
+- `certinit` подготавливает пользовательский или self-signed сертификат
+- Nginx принимает HTTPS на порту 443, а HTTP перенаправляет на HTTPS
 - Увеличенные лимиты ресурсов
 - `ENV=production` (включает `Secure`-cookie по умолчанию)
 
-Перед публикацией наружу обязательно настройте: `COOKIE_SECURE=true`, явный список `CORS_ORIGINS`, `TRUST_PROXY=true` (если за reverse proxy), уникальные пароли. Чек-лист — [docs/security-model.md](docs/security-model.md).
+Инструкция по TLS и замене сертификата приведена в
+[docs/deployment.md](docs/deployment.md). Перед публикацией наружу обязательно
+настройте уникальные пароли. Чек-лист — [docs/security-model.md](docs/security-model.md).
 
 ---
 
@@ -360,7 +364,6 @@ cd frontend && npm install && npm run dev
 ├── frontend/                 # React 18 + TS + Vite
 │   └── src/{api,pages,components,store,hooks,types}/
 ├── docs/                     # архитектура, deployment, ops, релиз-ноты
-├── deployments/              # альтернативный prod-overlay
 ├── ops/backup/               # скрипты бэкапа
 ├── scripts/                  # build.sh, seed.sh
 ├── docker-compose.yml

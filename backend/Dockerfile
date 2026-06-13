@@ -21,6 +21,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   -o /build/redlycoris ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -ldflags="-s -w" -o /build/admin ./cmd/admin
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -ldflags="-s -w" -o /build/certinit ./cmd/certinit
 
 # Build a tiny healthcheck binary for distroless runtime images.
 RUN cat > /tmp/healthcheck.go <<'EOF'
@@ -62,3 +64,12 @@ EXPOSE 8080
 USER nonroot:nonroot
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 CMD ["/app/healthcheck"]
 ENTRYPOINT ["/app/redlycoris"]
+
+
+# ── Stage: TLS certificate bootstrap ──
+FROM gcr.io/distroless/static-debian12 AS certinit
+
+COPY --from=builder /build/certinit /certinit
+
+USER 0:0
+ENTRYPOINT ["/certinit"]

@@ -23,8 +23,10 @@ services:
 
   backend:
     environment:
+      ENV: production
       LOG_LEVEL: warn
-      CORS_ORIGINS: "http://localhost:${FRONTEND_PORT:-3000}"
+      CORS_ORIGINS: "https://${RL_HOSTNAME:-localhost}"
+      COOKIE_SECURE: "true"
     deploy:
       resources:
         limits:
@@ -33,11 +35,46 @@ services:
         reservations:
           memory: 256M
 
+  certinit:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: certinit
+    container_name: redlycoris-certinit
+    restart: "no"
+    environment:
+      RL_TLS_CUSTOM_DIR: /etc/redlycoris/tls-custom
+      RL_TLS_DIR: /etc/redlycoris/tls
+      RL_TLS_SANS: "${RL_TLS_SANS:-}"
+      RL_HOSTNAME: "${RL_HOSTNAME:-}"
+    volumes:
+      - type: bind
+        source: ${RL_TLS_CUSTOM_PATH:-./tls-custom}
+        target: /etc/redlycoris/tls-custom
+        read_only: true
+        bind:
+          create_host_path: true
+      - redlycoris-tls:/etc/redlycoris/tls
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       target: production
-    volumes: !reset []
+    volumes: !override
+      - redlycoris-tls:/etc/redlycoris/tls:ro
+      - ./frontend/nginx/tls.conf:/etc/nginx/conf.d/default.conf:ro
+    ports: !override
+      - "${HTTP_PORT:-80}:8080"
+      - "${HTTPS_PORT:-443}:8443"
     environment:
       VITE_API_URL: ""
+    depends_on:
+      backend:
+        condition: service_started
+      certinit:
+        condition: service_completed_successfully
+
+volumes:
+  redlycoris-tls:
+    driver: local

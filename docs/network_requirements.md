@@ -38,7 +38,9 @@
 
 | Компонент | Порт | Откуда должен быть доступ |
 |---|---:|---|
-| Frontend | `3000/tcp` | Рабочие места пользователей (или reverse-proxy) |
+| Frontend (development HTTP) | `3000/tcp` | Рабочие места разработчиков |
+| Frontend (production HTTPS) | `443/tcp` | Рабочие места пользователей |
+| Frontend (production redirect) | `80/tcp` | Рабочие места пользователей; только перенаправление на HTTPS |
 | Backend API | `8080/tcp` | Frontend, администраторы/интеграции |
 | PostgreSQL | `5432/tcp` | Только backend (внутрисетевой доступ) |
 | Redis | `6379/tcp` | Только backend (внутрисетевой доступ) |
