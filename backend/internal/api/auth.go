@@ -190,6 +190,7 @@ func handleRefresh(svc *authsvc.Service) http.HandlerFunc {
 func handleChangePassword(svc *authsvc.Service, usersRepo interface {
 	Update(ctx context.Context, id uuid.UUID, fields map[string]any) error
 	SetMustChangePassword(ctx context.Context, userID uuid.UUID, mustChange bool, reason string) error
+	ActivateIfPending(ctx context.Context, id uuid.UUID) error
 }, sessionsRepo interface {
 	RevokeAllForUserWithReason(ctx context.Context, userID uuid.UUID, reason string) error
 }) http.HandlerFunc {
@@ -232,6 +233,11 @@ func handleChangePassword(svc *authsvc.Service, usersRepo interface {
 		}
 		if err := usersRepo.SetMustChangePassword(r.Context(), user.ID, false, ""); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to clear password change requirement")
+			return
+		}
+		// Transition pending → active after forced password change is completed.
+		if err := usersRepo.ActivateIfPending(r.Context(), user.ID); err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to activate user")
 			return
 		}
 		if err := sessionsRepo.RevokeAllForUserWithReason(r.Context(), user.ID, "password_changed"); err != nil {

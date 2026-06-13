@@ -75,6 +75,14 @@ func (s *Service) Login(ctx context.Context, email, password, userAgent, ip stri
 	}
 	user.LastLoginAt = &now
 
+	// Transition pending → active on first successful login when no forced password change.
+	if user.Status == domain.UserStatusPending && !user.MustChangePassword {
+		if err := s.users.ActivateIfPending(ctx, user.ID); err != nil {
+			return nil, "", fmt.Errorf("auth.Service.Login: activate pending user: %w", err)
+		}
+		user.Status = domain.UserStatusActive
+	}
+
 	return user, rawToken, nil
 }
 
