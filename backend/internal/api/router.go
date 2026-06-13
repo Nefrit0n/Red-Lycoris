@@ -202,8 +202,12 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
 			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb, cfg.obs))
+
+		// Scan routes — /scans/complete must be registered before /scans/{id} to avoid routing conflict.
 		r.With(RequireScope("scans:write")).
-			Post("/api/v1/scans", handleCreateScan(scansRepo, findingsRepo))
+			Post("/api/v1/scans", handleSubmitToolRun(scansRepo, findingsRepo))
+		r.With(RequireScope("scans:write")).
+			Post("/api/v1/scans/complete", handleCompleteScan(scansRepo))
 		r.Get("/api/v1/scans/{id}", handleGetScan(scansRepo, userProjectRolesRepo))
 
 		r.Route("/api/v1/workspace", func(r chi.Router) {

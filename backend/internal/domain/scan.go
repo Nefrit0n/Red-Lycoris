@@ -9,31 +9,52 @@ import (
 type ScanStatus string
 
 const (
-	ScanStatusRunning   ScanStatus = "running"
+	ScanStatusOpen      ScanStatus = "open"
 	ScanStatusCompleted ScanStatus = "completed"
-	ScanStatusFailed    ScanStatus = "failed"
+	ScanStatusTimedOut  ScanStatus = "timed_out"
 )
 
+// ScanToolRunSummary — компактное представление tool-run для встраивания в список сканов.
+type ScanToolRunSummary struct {
+	Scanner        string  `json:"scanner"`
+	ScannerVersion *string `json:"scanner_version,omitempty"`
+	Status         string  `json:"status"` // success | failed
+}
+
 type Scan struct {
-	ID               uuid.UUID  `json:"id"`
-	ProjectID        uuid.UUID  `json:"project_id"`
-	CommitSHA        string     `json:"commit_sha"`
-	Branch           string     `json:"branch"`
-	Scanner          string     `json:"scanner"`
-	ScannerVersion   *string    `json:"scanner_version,omitempty"`
-	CIJobURL         *string    `json:"ci_job_url,omitempty"`
-	StartedAt        time.Time  `json:"started_at"`
-	FinishedAt       *time.Time `json:"finished_at,omitempty"`
-	FindingsImported int        `json:"findings_imported"`
-	FindingsUpdated  int        `json:"findings_updated"`
-	Status           ScanStatus `json:"status"`
-	TokenID          *uuid.UUID `json:"token_id,omitempty"`
-	TriggeredByUser  *uuid.UUID `json:"triggered_by_user_id,omitempty"`
-	AssetHint        *string    `json:"asset_hint,omitempty"`
-	RawReportSize    *int       `json:"raw_report_size,omitempty"`
+	ID               uuid.UUID            `json:"id"`
+	ProjectID        uuid.UUID            `json:"project_id"`
+	CIPipelineID     *string              `json:"ci_pipeline_id,omitempty"`
+	CommitSHA        *string              `json:"commit_sha,omitempty"`
+	Branch           *string              `json:"branch,omitempty"`
+	CIJobURL         *string              `json:"ci_job_url,omitempty"`
+	Status           ScanStatus           `json:"status"`
+	Completion       *string              `json:"completion,omitempty"`
+	StartedAt        time.Time            `json:"started_at"`
+	CompletedAt      *time.Time           `json:"completed_at,omitempty"`
+	FindingsImported int                  `json:"findings_imported"`
+	FindingsUpdated  int                  `json:"findings_updated"`
+	TokenID          *uuid.UUID           `json:"token_id,omitempty"`
+	AssetHint        *string              `json:"asset_hint,omitempty"`
+	ToolRuns         []ScanToolRunSummary `json:"tool_runs,omitempty"`
+}
+
+type ScanToolRun struct {
+	ID               uuid.UUID `json:"id"`
+	ScanID           uuid.UUID `json:"scan_id"`
+	Scanner          string    `json:"scanner"`
+	ScannerVersion   *string   `json:"scanner_version,omitempty"`
+	ReportFormat     string    `json:"report_format"`
+	Status           string    `json:"status"`
+	Error            *string   `json:"error,omitempty"`
+	FindingsImported int       `json:"findings_imported"`
+	FindingsUpdated  int       `json:"findings_updated"`
+	StartedAt        time.Time `json:"started_at"`
+	FinishedAt       time.Time `json:"finished_at"`
 }
 
 type ScanFinding struct {
 	Finding
-	IsNew bool `json:"is_new"`
+	ToolRunID *uuid.UUID `json:"tool_run_id,omitempty"`
+	IsNew     bool       `json:"is_new"`
 }

@@ -13,19 +13,42 @@ export interface APITokenItem {
   created_by: { id: string; email: string };
 }
 
+export type ScanStatus = "open" | "completed" | "timed_out";
+
+export interface ScanToolRunSummary {
+  scanner: string;
+  scanner_version?: string | null;
+  status: "success" | "failed";
+}
+
+export interface ScanToolRun {
+  id: string;
+  scan_id: string;
+  scanner: string;
+  scanner_version?: string | null;
+  report_format: string;
+  status: "success" | "failed";
+  error?: string | null;
+  findings_imported: number;
+  findings_updated: number;
+  started_at: string;
+  finished_at: string;
+}
+
 export interface ScanItem {
   id: string;
   project_id: string;
-  commit_sha: string;
-  branch: string;
-  scanner: string;
-  scanner_version?: string | null;
+  ci_pipeline_id?: string | null;
+  commit_sha?: string | null;
+  branch?: string | null;
   ci_job_url?: string | null;
+  status: ScanStatus;
+  completion?: string | null;
   started_at: string;
-  finished_at?: string | null;
+  completed_at?: string | null;
   findings_imported: number;
   findings_updated: number;
-  status: "running" | "completed" | "failed";
+  tool_runs?: ScanToolRunSummary[];
 }
 
 export interface ScanFindingItem {
@@ -35,6 +58,7 @@ export interface ScanFindingItem {
   file_path?: string | null;
   line_start?: number | null;
   cve_ids?: string[];
+  tool_run_id?: string | null;
   is_new: boolean;
 }
 
@@ -89,7 +113,7 @@ export function useScan(scanId?: string) {
   return useQuery({
     queryKey: ["scan", scanId],
     queryFn: async () =>
-      apiGet<{ data: { scan: ScanItem; findings: ScanFindingItem[] } }>(
+      apiGet<{ data: { scan: ScanItem; tool_runs: ScanToolRun[]; findings: ScanFindingItem[] } }>(
         `/api/v1/scans/${scanId}`,
       ),
     enabled: Boolean(scanId),

@@ -1,9 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -28,7 +28,6 @@ func maxScanSizeBytes() int64 {
 }
 
 func maxScanFormMemoryBytes() int64 {
-	// Keep in-memory multipart form usage bounded to avoid memory exhaustion.
 	const defaultFormMemory = int64(8 << 20)
 	mb, err := strconv.Atoi(strings.TrimSpace(os.Getenv("RL_MAX_SCAN_FORM_MEMORY_MB")))
 	if err != nil || mb <= 0 {
@@ -36,7 +35,11 @@ func maxScanFormMemoryBytes() int64 {
 	}
 	return int64(mb) << 20
 }
-func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.FindingsRepo) http.HandlerFunc {
+
+// handleSubmitToolRun принимает отчёт сканера и добавляет его как tool-run к скану.
+// Первый вызов с новым pipeline_id создаёт скан; последующие — добавляют tool-run.
+// Если pipeline_id не передан — создаёт одноинструментный скан и сразу закрывает его.
+func handleSubmitToolRun(scansRepo *storage.ScansRepo, findingsRepo *storage.FindingsRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tok, ok := APITokenFromContext(r.Context())
 		if !ok {
@@ -48,6 +51,7 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			respondError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "invalid api token")
 			return
 		}
+
 		r.Body = http.MaxBytesReader(w, r.Body, maxScanSizeBytes())
 		mr, err := r.MultipartReader()
 		if err != nil {
@@ -61,19 +65,14 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 		}
 		defer func() { _ = form.RemoveAll() }()
 		r.MultipartForm = form
-		if r.URL.Query().Get("project_id") != "" {
-			slog.Warn("scans: project_id query ignored for PAT request", "request_id", GetRequestID(r.Context()))
-		}
+
+		pipelineID := strings.TrimSpace(r.FormValue("pipeline_id"))
 		commitSHA := strings.TrimSpace(r.FormValue("commit_sha"))
 		branch := strings.TrimSpace(r.FormValue("branch"))
 		scanner := strings.TrimSpace(r.FormValue("scanner"))
 		scannerVersion := strings.TrimSpace(r.FormValue("scanner_version"))
 		ciJobURL := strings.TrimSpace(r.FormValue("ci_job_url"))
 		assetHint := strings.TrimSpace(r.FormValue("asset_hint"))
-		if commitSHA == "" || branch == "" {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "commit_sha and branch are required")
-			return
-		}
 
 		files := r.MultipartForm.File["report"]
 		if len(files) == 0 {
@@ -93,19 +92,23 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			return
 		}
 
-		if scanner == "" {
-			scanner = "unknown"
+		// Синтетический pipeline_id для ручной/UI-загрузки — скан сразу закрывается.
+		isManual := pipelineID == ""
+		if isManual {
+			pipelineID = uuid.New().String()
 		}
 
 		tokenID, _ := uuid.Parse(tok.TokenID)
-		rawSize := int(hdr.Size)
 		scan := &domain.Scan{
-			ProjectID: projectID, CommitSHA: commitSHA, Branch: branch,
-			Scanner: scanner, Status: domain.ScanStatusRunning,
-			TokenID: &tokenID, RawReportSize: &rawSize,
+			ProjectID:    projectID,
+			CIPipelineID: &pipelineID,
+			TokenID:      &tokenID,
 		}
-		if scannerVersion != "" {
-			scan.ScannerVersion = &scannerVersion
+		if commitSHA != "" {
+			scan.CommitSHA = &commitSHA
+		}
+		if branch != "" {
+			scan.Branch = &branch
 		}
 		if ciJobURL != "" {
 			scan.CIJobURL = &ciJobURL
@@ -120,29 +123,84 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to begin transaction")
 			return
 		}
-		if err := scansRepo.Create(r.Context(), tx, scan); err != nil {
+
+		// Апсерт скана: первая отправка создаёт (status=open), последующие — находят существующий.
+		if _, err = scansRepo.UpsertByPipeline(r.Context(), tx, scan); err != nil {
 			_ = tx.Rollback(r.Context())
-			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create scan")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to upsert scan")
 			return
 		}
 
-		detected, findings, err := parser.DetectAndParse(r.Context(), data)
-		if err != nil {
-			_ = tx.Rollback(r.Context())
-			_ = scansRepo.Fail(r.Context(), scan.ID)
-			respondError(w, r, http.StatusBadRequest, "PARSE_ERROR", err.Error())
-			return
+		detected, findings, parseErr := parser.DetectAndParse(r.Context(), data)
+		if scanner == "" {
+			if detected != "" {
+				scanner = detected
+			} else {
+				scanner = "unknown"
+			}
 		}
-		if detected != "" && scan.Scanner == "unknown" {
-			scan.Scanner = detected
+		reportFormat := detected
+		if reportFormat == "" {
+			reportFormat = scanner
 		}
 
+		toolRun := &domain.ScanToolRun{
+			ScanID:       scan.ID,
+			Scanner:      scanner,
+			ReportFormat: reportFormat,
+			StartedAt:    start,
+		}
+		if scannerVersion != "" {
+			toolRun.ScannerVersion = &scannerVersion
+		}
+
+		// Битый отчёт: tool-run failed, скан остаётся живым (если не isManual).
+		if parseErr != nil {
+			errMsg := parseErr.Error()
+			toolRun.Status = "failed"
+			toolRun.Error = &errMsg
+			toolRun.FinishedAt = time.Now()
+			if err := scansRepo.CreateToolRun(r.Context(), tx, toolRun); err != nil {
+				_ = tx.Rollback(r.Context())
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to record tool run")
+				return
+			}
+			if isManual {
+				if err := scansRepo.CompleteScan(r.Context(), tx, scan.ID, "auto"); err != nil {
+					_ = tx.Rollback(r.Context())
+					respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to close scan")
+					return
+				}
+			}
+			if err := tx.Commit(r.Context()); err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to commit")
+				return
+			}
+			respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+				"scan_id":     scan.ID,
+				"tool_run_id": toolRun.ID,
+				"pipeline_id": pipelineID,
+				"status":      "failed",
+				"error":       errMsg,
+			}})
+			return
+		}
+
+		// Один проход: дедуп + запоминание флагов isNew для привязки к tool_run.
+		type findingResult struct {
+			id    uuid.UUID
+			isNew bool
+		}
+		results := make([]findingResult, 0, len(findings))
 		imported, updated := 0, 0
 		now := time.Now()
+
 		for i := range findings {
 			f := &findings[i]
 			f.ProjectID = projectID
-			f.CommitSHA = &commitSHA
+			if commitSHA != "" {
+				f.CommitSHA = &commitSHA
+			}
 			if f.FirstSeen.IsZero() {
 				f.FirstSeen = now
 			}
@@ -155,44 +213,119 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			if f.Fingerprint == "" {
 				f.Fingerprint = domain.CalculateFingerprint(f)
 			}
-			// CreateTx runs inside the same transaction so findings+links are atomic
 			isNew, err := findingsRepo.CreateTx(r.Context(), tx, f)
 			if err != nil {
 				_ = tx.Rollback(r.Context())
-				_ = scansRepo.Fail(r.Context(), scan.ID)
 				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to upsert finding")
 				return
 			}
-			if err := scansRepo.LinkFinding(r.Context(), tx, f.ID, scan.ID, isNew); err != nil {
-				_ = tx.Rollback(r.Context())
-				_ = scansRepo.Fail(r.Context(), scan.ID)
-				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to link finding to scan")
-				return
-			}
+			results = append(results, findingResult{id: f.ID, isNew: isNew})
 			if isNew {
 				imported++
 			} else {
 				updated++
 			}
 		}
-		if err := scansRepo.Complete(r.Context(), tx, scan.ID, domain.ScanStatusCompleted, scan.Scanner, imported, updated); err != nil {
+
+		toolRun.Status = "success"
+		toolRun.FindingsImported = imported
+		toolRun.FindingsUpdated = updated
+		toolRun.FinishedAt = time.Now()
+		if err := scansRepo.CreateToolRun(r.Context(), tx, toolRun); err != nil {
 			_ = tx.Rollback(r.Context())
-			_ = scansRepo.Fail(r.Context(), scan.ID)
-			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to finalize scan")
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to record tool run")
 			return
 		}
+
+		for _, res := range results {
+			if err := scansRepo.LinkFinding(r.Context(), tx, res.id, scan.ID, toolRun.ID, res.isNew); err != nil {
+				_ = tx.Rollback(r.Context())
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to link finding")
+				return
+			}
+		}
+
+		if err := scansRepo.IncrScanCounts(r.Context(), tx, scan.ID, imported, updated); err != nil {
+			_ = tx.Rollback(r.Context())
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update scan counts")
+			return
+		}
+
+		if isManual {
+			if err := scansRepo.CompleteScan(r.Context(), tx, scan.ID, "auto"); err != nil {
+				_ = tx.Rollback(r.Context())
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to close scan")
+				return
+			}
+		}
+
 		if err := tx.Commit(r.Context()); err != nil {
-			_ = scansRepo.Fail(r.Context(), scan.ID)
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to commit scan")
 			return
 		}
+
 		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
-			"scan_id":     scan.ID,
-			"scanner":     scan.Scanner,
-			"imported":    imported,
-			"updated":     updated,
-			"skipped":     0,
-			"duration_ms": time.Since(start).Milliseconds(),
+			"scan_id":       scan.ID,
+			"tool_run_id":   toolRun.ID,
+			"pipeline_id":   pipelineID,
+			"scanner":       scanner,
+			"report_format": reportFormat,
+			"status":        "success",
+			"imported":      imported,
+			"updated":       updated,
+			"duration_ms":   time.Since(start).Milliseconds(),
+		}})
+	}
+}
+
+// handleCompleteScan закрывает скан явно по pipeline_id.
+// Идемпотентен: повторный вызов на уже закрытый скан возвращает его текущее состояние.
+func handleCompleteScan(scansRepo *storage.ScansRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tok, ok := APITokenFromContext(r.Context())
+		if !ok {
+			respondError(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "api token required")
+			return
+		}
+		projectID, err := uuid.Parse(tok.ProjectID)
+		if err != nil {
+			respondError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "invalid api token")
+			return
+		}
+
+		var body struct {
+			PipelineID string `json:"pipeline_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.PipelineID) == "" {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "pipeline_id is required")
+			return
+		}
+
+		// UPDATE ... WHERE status='open' RETURNING: если скан уже закрыт — RowsAffected=0, pgx вернёт ErrNoRows.
+		scan, err := scansRepo.CompletePipeline(r.Context(), projectID, body.PipelineID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Идемпотентность: скан уже закрыт или не найден — вернуть текущее состояние.
+				scan, err = scansRepo.GetByPipeline(r.Context(), projectID, body.PipelineID)
+				if err != nil {
+					if errors.Is(err, pgx.ErrNoRows) {
+						respondError(w, r, http.StatusNotFound, "NOT_FOUND", "scan not found")
+					} else {
+						respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get scan")
+					}
+					return
+				}
+			} else {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to complete scan")
+				return
+			}
+		}
+
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+			"scan_id":      scan.ID,
+			"status":       scan.Status,
+			"completion":   scan.Completion,
+			"completed_at": scan.CompletedAt,
 		}})
 	}
 }
@@ -213,7 +346,6 @@ func handleListScans(scansRepo *storage.ScansRepo) http.HandlerFunc {
 		scans, cursor, err := scansRepo.ListByProject(r.Context(), storage.ScanListFilter{
 			ProjectID: projectID,
 			Branch:    r.URL.Query().Get("branch"),
-			Scanner:   r.URL.Query().Get("scanner"),
 			Status:    r.URL.Query().Get("status"),
 			Cursor:    r.URL.Query().Get("cursor"),
 			Limit:     limit,
@@ -243,7 +375,6 @@ func handleGetScan(scansRepo *storage.ScansRepo, rolesRepo *storage.UserProjectR
 			return
 		}
 
-		// Verify the caller has at least viewer access to the scan's project.
 		user, hasUser := UserFromContext(r.Context())
 		patTok, hasPAT := APITokenFromContext(r.Context())
 		switch {
@@ -265,11 +396,20 @@ func handleGetScan(scansRepo *storage.ScansRepo, rolesRepo *storage.UserProjectR
 			return
 		}
 
+		toolRuns, err := scansRepo.ListToolRuns(r.Context(), scanID)
+		if err != nil {
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list tool runs")
+			return
+		}
 		findings, err := scansRepo.ListFindings(r.Context(), scanID, 200)
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list scan findings")
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"scan": scan, "findings": findings}})
+		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+			"scan":      scan,
+			"tool_runs": toolRuns,
+			"findings":  findings,
+		}})
 	}
 }

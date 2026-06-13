@@ -241,6 +241,28 @@ func main() {
 	// Materialized view refresher (every 5 minutes)
 	storage.StartMatViewRefresher(ctx, pool, 5*time.Minute)
 
+	// Scan janitor: закрывает open-сканы старше RL_SCAN_OPEN_TIMEOUT как timed_out.
+	// Интервал = timeout/12, минимум 5 минут.
+	scansRepo := storage.NewScansRepo(pool)
+	scanJanitorInterval := cfg.ScanOpenTimeout / 12
+	if scanJanitorInterval < 5*time.Minute {
+		scanJanitorInterval = 5 * time.Minute
+	}
+	go func() {
+		ticker := time.NewTicker(scanJanitorInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := scansRepo.CloseTimedOut(ctx, cfg.ScanOpenTimeout); err != nil {
+					slog.Error("scan janitor: failed to close timed-out scans", "error", err)
+				}
+			}
+		}
+	}()
+
 	// Router
 	handler := api.NewRouter(pool, rdb, cfg.CORSOrigins, routerOpts...)
 
