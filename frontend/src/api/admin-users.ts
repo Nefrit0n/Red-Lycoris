@@ -120,15 +120,25 @@ export async function createAdminUser(
   return apiPost<{ data: AdminUser }>("/api/v1/admin/users", payload);
 }
 
-export async function resetUserPassword(
+export interface ResetPasswordPayload {
+  mode: "generate" | "set";
+  password?: string;
+  reason: string;
+}
+
+export interface ResetPasswordResult {
+  status: string;
+  temporary_password?: string;
+}
+
+export async function resetPassword(
   id: string,
-  newPassword: string,
-  reason: string
-): Promise<void> {
-  await apiPost(`/api/v1/admin/users/${id}/reset-password`, {
-    new_password: newPassword,
-    reason,
-  });
+  payload: ResetPasswordPayload
+): Promise<{ data: ResetPasswordResult }> {
+  return apiPost<{ data: ResetPasswordResult }>(
+    `/api/v1/admin/users/${id}/reset-password`,
+    payload
+  );
 }
 
 export async function deactivateUser(

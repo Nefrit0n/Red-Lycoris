@@ -10,18 +10,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ConfirmDestructiveActionModal } from "@/components/admin/ConfirmDestructiveActionModal";
+import { ResetPasswordDialog } from "@/components/admin/access/ResetPasswordDialog";
 import {
   deactivateUser,
   activateUser,
   deleteUser,
-  resetUserPassword,
 } from "@/api/admin-users";
 import type { AdminUser } from "@/api/admin-users";
 import type { CurrentUser } from "@/api/auth";
 import { useUserActionsAvailability } from "@/hooks/admin/useUserActionsAvailability";
 import { cn } from "@/lib/utils";
 
-type ActionType = "deactivate" | "delete" | "resetPassword" | "terminateSessions";
+type ActionType = "deactivate" | "delete" | "terminateSessions";
 
 interface Props {
   user: AdminUser;
@@ -35,6 +35,7 @@ export function UserKebabMenu({ user, currentUser, activeAdminCount }: Props) {
   const availability = useUserActionsAvailability(user, currentUser, activeAdminCount);
 
   const [confirmAction, setConfirmAction] = useState<ActionType | null>(null);
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   const mutation = useMutation({
     mutationFn: async ({ action, reason }: { action: ActionType; reason: string }) => {
@@ -43,11 +44,8 @@ export function UserKebabMenu({ user, currentUser, activeAdminCount }: Props) {
           return deactivateUser(user.id, reason);
         case "delete":
           return deleteUser(user.id, reason);
-        case "resetPassword":
-          // For kebab menu, generate a temp password
-          return resetUserPassword(user.id, generateTempPassword(), reason);
         case "terminateSessions":
-          return deactivateUser(user.id, reason); // sessions are revoked on deactivate
+          return deactivateUser(user.id, reason);
       }
     },
     onSuccess: () => {
@@ -69,14 +67,12 @@ export function UserKebabMenu({ user, currentUser, activeAdminCount }: Props) {
   const confirmTitles: Record<ActionType, string> = {
     deactivate: "Деактивировать пользователя",
     delete: "Удалить пользователя",
-    resetPassword: "Сбросить пароль",
     terminateSessions: "Завершить все сессии",
   };
 
   const confirmDescriptions: Record<ActionType, string> = {
     deactivate: `Пользователь ${user.email} будет деактивирован. Все активные сессии завершатся.`,
     delete: `Пользователь ${user.email} будет удалён (soft delete). Действие необратимо.`,
-    resetPassword: `Пароль пользователя ${user.email} будет сброшен. Пользователь будет вынужден сменить его при следующем входе.`,
     terminateSessions: `Все сессии пользователя ${user.email} будут завершены принудительно.`,
   };
 
@@ -100,7 +96,7 @@ export function UserKebabMenu({ user, currentUser, activeAdminCount }: Props) {
             label="Сбросить пароль"
             disabled={!availability.canResetPassword}
             disabledReason={availability.disabledReasons["resetPassword"]}
-            onClick={() => setConfirmAction("resetPassword")}
+            onClick={() => setShowResetPassword(true)}
           />
 
           <MenuAction
@@ -157,6 +153,12 @@ export function UserKebabMenu({ user, currentUser, activeAdminCount }: Props) {
           loading={mutation.isPending}
         />
       )}
+
+      <ResetPasswordDialog
+        open={showResetPassword}
+        onClose={() => setShowResetPassword(false)}
+        user={user}
+      />
     </>
   );
 }
@@ -190,9 +192,4 @@ function MenuAction({
   return item;
 }
 
-function generateTempPassword(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_=+";
-  const arr = new Uint8Array(16);
-  crypto.getRandomValues(arr);
-  return Array.from(arr, (b) => chars[b % chars.length]).join("");
-}
+
