@@ -9,28 +9,40 @@ import (
 type ScanStatus string
 
 const (
-	ScanStatusRunning   ScanStatus = "running"
+	ScanStatusOpen      ScanStatus = "open"
 	ScanStatusCompleted ScanStatus = "completed"
-	ScanStatusFailed    ScanStatus = "failed"
+	ScanStatusTimedOut  ScanStatus = "timed_out"
 )
 
 type Scan struct {
 	ID               uuid.UUID  `json:"id"`
 	ProjectID        uuid.UUID  `json:"project_id"`
-	CommitSHA        string     `json:"commit_sha"`
-	Branch           string     `json:"branch"`
-	Scanner          string     `json:"scanner"`
-	ScannerVersion   *string    `json:"scanner_version,omitempty"`
+	CIPipelineID     *string    `json:"ci_pipeline_id,omitempty"`
+	CommitSHA        *string    `json:"commit_sha,omitempty"`
+	Branch           *string    `json:"branch,omitempty"`
 	CIJobURL         *string    `json:"ci_job_url,omitempty"`
+	Status           ScanStatus `json:"status"`
+	Completion       *string    `json:"completion,omitempty"`
 	StartedAt        time.Time  `json:"started_at"`
-	FinishedAt       *time.Time `json:"finished_at,omitempty"`
+	CompletedAt      *time.Time `json:"completed_at,omitempty"`
 	FindingsImported int        `json:"findings_imported"`
 	FindingsUpdated  int        `json:"findings_updated"`
-	Status           ScanStatus `json:"status"`
 	TokenID          *uuid.UUID `json:"token_id,omitempty"`
-	TriggeredByUser  *uuid.UUID `json:"triggered_by_user_id,omitempty"`
 	AssetHint        *string    `json:"asset_hint,omitempty"`
-	RawReportSize    *int       `json:"raw_report_size,omitempty"`
+}
+
+type ScanToolRun struct {
+	ID               uuid.UUID `json:"id"`
+	ScanID           uuid.UUID `json:"scan_id"`
+	Scanner          string    `json:"scanner"`
+	ScannerVersion   *string   `json:"scanner_version,omitempty"`
+	ReportFormat     string    `json:"report_format"`
+	Status           string    `json:"status"`
+	Error            *string   `json:"error,omitempty"`
+	FindingsImported int       `json:"findings_imported"`
+	FindingsUpdated  int       `json:"findings_updated"`
+	StartedAt        time.Time `json:"started_at"`
+	FinishedAt       time.Time `json:"finished_at"`
 }
 
 type ScanFinding struct {

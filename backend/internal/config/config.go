@@ -23,6 +23,7 @@ type Config struct {
 	BootstrapAdminPassword            string
 	BootstrapAdminFullName            string
 	BootstrapAdminForcePasswordChange bool
+	ScanOpenTimeout                   time.Duration
 }
 
 func Load() *Config {
@@ -46,6 +47,7 @@ func Load() *Config {
 		BootstrapAdminPassword:            getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin"),
 		BootstrapAdminFullName:            getEnv("BOOTSTRAP_ADMIN_FULL_NAME", "Administrator"),
 		BootstrapAdminForcePasswordChange: getEnvBool("BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE", true),
+		ScanOpenTimeout:                   getEnvDuration("RL_SCAN_OPEN_TIMEOUT", time.Hour),
 	}
 }
 
