@@ -14,7 +14,7 @@ import AdminUsers from "@/pages/AdminUsers";
 import AdminAudit from "@/pages/AdminAudit";
 import { AccessPageShell } from "@/pages/admin/access/AccessPageShell";
 import UsersListView from "@/pages/admin/access/UsersListView";
-import UserDetailPlaceholder from "@/pages/admin/access/UserDetailPlaceholder";
+import UserDetailPage from "@/pages/admin/access/UserDetailPage";
 import GroupsPlaceholder from "@/pages/admin/access/GroupsPlaceholder";
 import RolesPlaceholder from "@/pages/admin/access/RolesPlaceholder";
 
@@ -54,7 +54,7 @@ export default function App() {
             />
             <Route
               path="/admin/access/users/:id"
-              element={<UserDetailPlaceholder />}
+              element={<UserDetailPage />}
             />
             <Route
               path="/admin/access/groups"

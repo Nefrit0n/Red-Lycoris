@@ -9,7 +9,6 @@ interface Props {
 
 const TABS = [
   { label: "Пользователи", path: "/admin/access/users", key: "users" as const },
-  { label: "Группы", path: "/admin/access/groups", key: "groups" as const },
   { label: "Роли", path: "/admin/access/roles", key: "roles" as const },
 ];
 
@@ -43,11 +42,7 @@ export function AccessPageShell({ children }: Props) {
           {TABS.map((tab) => {
             const isActive = activeKey === tab.key;
             const count =
-              tab.key === "users"
-                ? counts?.users
-                : tab.key === "groups"
-                ? counts?.groups
-                : counts?.roles;
+              tab.key === "users" ? counts?.users : counts?.roles;
             return (
               <Link
                 key={tab.key}
