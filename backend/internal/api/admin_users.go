@@ -106,6 +106,27 @@ func handleListUsers(usersRepo *storage.UsersRepo) http.HandlerFunc {
 	}
 }
 
+// handleGetAdminUser — GET /api/v1/admin/users/{id}
+func handleGetAdminUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid user id")
+			return
+		}
+		u, err := usersRepo.GetAdminUserByID(r.Context(), userID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				respondError(w, r, http.StatusNotFound, "NOT_FOUND", "user not found")
+				return
+			}
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch user")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": u})
+	}
+}
+
 // validRoleKeys is the set of allowed role keys for user creation.
 var validRoleKeys = map[string]bool{
 	"admin": true, "auditor": true, "member": true, "viewer": true,
