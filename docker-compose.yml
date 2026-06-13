@@ -90,6 +90,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: backend-runtime
       args:
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
