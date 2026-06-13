@@ -232,6 +232,33 @@ WHERE status = 'open' AND started_at < now() - ($1 || ' seconds')::interval`
 	return nil
 }
 
+// listToolRunSummaries загружает краткие данные tool-runs для набора сканов одним запросом.
+func (r *ScansRepo) listToolRunSummaries(ctx context.Context, scanIDs []uuid.UUID) (map[uuid.UUID][]domain.ScanToolRunSummary, error) {
+	if len(scanIDs) == 0 {
+		return nil, nil
+	}
+	const q = `
+SELECT scan_id, scanner, scanner_version, status
+FROM scan_tool_runs
+WHERE scan_id = ANY($1)
+ORDER BY started_at ASC`
+	rows, err := r.pool.Query(ctx, q, scanIDs)
+	if err != nil {
+		return nil, fmt.Errorf("storage.listToolRunSummaries: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[uuid.UUID][]domain.ScanToolRunSummary, len(scanIDs))
+	for rows.Next() {
+		var scanID uuid.UUID
+		var s domain.ScanToolRunSummary
+		if err := rows.Scan(&scanID, &s.Scanner, &s.ScannerVersion, &s.Status); err != nil {
+			return nil, err
+		}
+		out[scanID] = append(out[scanID], s)
+	}
+	return out, rows.Err()
+}
+
 func (r *ScansRepo) ListByProject(ctx context.Context, f ScanListFilter) ([]domain.Scan, string, error) {
 	if f.Limit <= 0 || f.Limit > 200 {
 		f.Limit = 50
@@ -283,6 +310,24 @@ func (r *ScansRepo) ListByProject(ctx context.Context, f ScanListFilter) ([]doma
 		next = encodeScanCursor(scanCursor{StartedAt: last.StartedAt, ID: last.ID})
 		out = out[:f.Limit]
 	}
+
+	// Вложить краткие данные tool-runs в каждый скан одним batch-запросом.
+	if len(out) > 0 {
+		ids := make([]uuid.UUID, len(out))
+		for i := range out {
+			ids[i] = out[i].ID
+		}
+		summaries, err := r.listToolRunSummaries(ctx, ids)
+		if err != nil {
+			return nil, "", err
+		}
+		for i := range out {
+			if s, ok := summaries[out[i].ID]; ok {
+				out[i].ToolRuns = s
+			}
+		}
+	}
+
 	return out, next, nil
 }
 
@@ -326,7 +371,7 @@ func (r *ScansRepo) ListFindings(ctx context.Context, scanID uuid.UUID, limit in
 	if limit <= 0 || limit > 200 {
 		limit = 200
 	}
-	q := `SELECT ` + findingColumns + `, l.is_new
+	q := `SELECT ` + findingColumns + `, l.tool_run_id, l.is_new
 FROM finding_scan_links l
 JOIN findings f ON f.id = l.finding_id
 LEFT JOIN finding_scores fs ON fs.finding_id = f.id
@@ -351,7 +396,7 @@ LIMIT $2`
 			&sf.HTTPEvidence, &sf.IacResource, &sf.IacProvider, &sf.SecretKind, &sf.CommitSHA,
 			&sf.RuleID, &sf.RuleName, &sf.PriorityScore,
 			&sf.ClosureReasonID, &sf.ClosureNote, &sf.ClosedAt, &sf.ClosedBy, &sf.AssignedTo,
-			&sf.IsNew,
+			&sf.ToolRunID, &sf.IsNew,
 		); err != nil {
 			return nil, err
 		}
