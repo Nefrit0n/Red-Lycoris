@@ -137,7 +137,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 
 	// Auth routes
 	r.Route("/api/v1/auth", func(r chi.Router) {
-		r.With(LoginRateLimit(rdb)).Post("/login", handleLogin(authService, rdb))
+		r.With(LoginRateLimit(rdb, usersRepo)).Post("/login", handleLogin(authService, rdb))
 		r.Post("/logout", handleLogout(authService))
 		r.Post("/refresh", handleRefresh(authService))
 		r.Get("/me", handleMe())

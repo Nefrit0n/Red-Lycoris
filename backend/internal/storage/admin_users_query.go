@@ -14,6 +14,15 @@ import (
 	"redlycoris/internal/domain"
 )
 
+// computeDisplayStatus returns the UI-facing status:
+// "locked" when user_credentials.locked_until is in the future, otherwise the stored status.
+func computeDisplayStatus(status string, lockedUntil *time.Time) string {
+	if lockedUntil != nil && lockedUntil.After(time.Now()) {
+		return "locked"
+	}
+	return status
+}
+
 // listUsersCursor is the opaque pagination cursor for ListV2.
 type listUsersCursor struct {
 	Sort        string `json:"s"`
@@ -105,8 +114,7 @@ func (r *UsersRepo) ListV2(ctx context.Context, f domain.UserListFilter) ([]doma
 	}
 	if f.MFA != nil {
 		ma := add(*f.MFA)
-		baseWheres = append(baseWheres, fmt.Sprintf(
-			"EXISTS(SELECT 1 FROM mfa_factors mf WHERE mf.user_id = u.id) = %s", ma))
+		baseWheres = append(baseWheres, fmt.Sprintf("u.mfa_enabled = %s", ma))
 	}
 	if f.Source != "" {
 		sa := add(f.Source)
@@ -214,8 +222,9 @@ func (r *UsersRepo) ListV2(ctx context.Context, f domain.UserListFilter) ([]doma
 		COALESCE(r.key, 'member') AS role_key,
 		COALESCE(r.name, 'Участник') AS role_name,
 		COALESCE(ui_sub.kind, 'local') AS identity_kind,
-		EXISTS(SELECT 1 FROM mfa_factors mf WHERE mf.user_id = u.id) AS mfa_enabled,
-		COALESCE(uc.must_change, false) AS must_change_password`
+		u.mfa_enabled,
+		COALESCE(uc.must_change, false) AS must_change_password,
+		uc.locked_until`
 
 	dataQ := fmt.Sprintf("SELECT %s %s %s %s LIMIT %s",
 		selectCols, fromClause, cursorWhere, orderBy, limitArg)
@@ -231,11 +240,12 @@ func (r *UsersRepo) ListV2(ctx context.Context, f domain.UserListFilter) ([]doma
 		var u domain.AdminUserResponse
 		var ipStr *string
 		var roleKey, roleName, identityKind string
+		var lockedUntil *time.Time
 		if err := rows.Scan(
 			&u.ID, &u.Email, &u.DisplayName, &u.Status, &u.IsSystemAccount,
 			&u.LastLoginAt, &ipStr, &u.CreatedAt,
 			&roleKey, &roleName, &identityKind,
-			&u.MFAEnabled, &u.MustChangePassword,
+			&u.MFAEnabled, &u.MustChangePassword, &lockedUntil,
 		); err != nil {
 			return nil, 0, false, "", fmt.Errorf("storage.UsersRepo.ListV2: scan: %w", err)
 		}
@@ -243,6 +253,7 @@ func (r *UsersRepo) ListV2(ctx context.Context, f domain.UserListFilter) ([]doma
 		u.Role = domain.RoleRef{Key: roleKey, Name: roleName}
 		u.IdentityKind = identityKind
 		u.Groups = []domain.GroupRef{}
+		u.DisplayStatus = computeDisplayStatus(u.Status, lockedUntil)
 		users = append(users, u)
 	}
 	if err := rows.Err(); err != nil {
@@ -460,8 +471,9 @@ func (r *UsersRepo) GetAdminUserByID(ctx context.Context, id uuid.UUID) (*domain
 			COALESCE(r.key, 'member') AS role_key,
 			COALESCE(r.name, 'Участник') AS role_name,
 			COALESCE(ui_sub.kind, 'local') AS identity_kind,
-			EXISTS(SELECT 1 FROM mfa_factors mf WHERE mf.user_id = u.id) AS mfa_enabled,
-			COALESCE(uc.must_change, false) AS must_change_password
+			u.mfa_enabled,
+			COALESCE(uc.must_change, false) AS must_change_password,
+			uc.locked_until
 		FROM users u
 		LEFT JOIN user_roles ur ON ur.user_id = u.id
 		LEFT JOIN roles r ON r.id = ur.role_id
@@ -475,11 +487,12 @@ func (r *UsersRepo) GetAdminUserByID(ctx context.Context, id uuid.UUID) (*domain
 	var u domain.AdminUserResponse
 	var ipStr *string
 	var roleKey, roleName, identityKind string
+	var lockedUntil *time.Time
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&u.ID, &u.Email, &u.DisplayName, &u.Status, &u.IsSystemAccount,
 		&u.LastLoginAt, &ipStr, &u.CreatedAt,
 		&roleKey, &roleName, &identityKind,
-		&u.MFAEnabled, &u.MustChangePassword,
+		&u.MFAEnabled, &u.MustChangePassword, &lockedUntil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("storage.UsersRepo.GetAdminUserByID: %w", err)
@@ -488,6 +501,7 @@ func (r *UsersRepo) GetAdminUserByID(ctx context.Context, id uuid.UUID) (*domain
 	u.Role = domain.RoleRef{Key: roleKey, Name: roleName}
 	u.IdentityKind = identityKind
 	u.Groups = []domain.GroupRef{}
+	u.DisplayStatus = computeDisplayStatus(u.Status, lockedUntil)
 
 	users := []domain.AdminUserResponse{u}
 	if err := r.attachGroups(ctx, users); err != nil {

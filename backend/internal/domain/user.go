@@ -34,6 +34,7 @@ type User struct {
 	GlobalRole         GlobalRole `json:"global_role"`
 	Status             UserStatus `json:"status"`
 	IsSystemAccount    bool       `json:"is_system_account"`
+	MFAEnabled         bool       `json:"mfa_enabled"`
 	CreatedByUserID    *uuid.UUID `json:"created_by_user_id,omitempty"`
 	LastLoginIP        net.IP     `json:"last_login_ip,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`
