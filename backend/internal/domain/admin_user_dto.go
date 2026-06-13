@@ -11,7 +11,11 @@ type AdminUserResponse struct {
 	ID                 uuid.UUID  `json:"id"`
 	Email              string     `json:"email"`
 	DisplayName        string     `json:"display_name"`
+	// Status is the stored value (active|pending|disabled).
 	Status             string     `json:"status"`
+	// DisplayStatus is the computed value shown to the UI: same as Status, or "locked"
+	// when user_credentials.locked_until > now().
+	DisplayStatus      string     `json:"display_status"`
 	IsSystemAccount    bool       `json:"is_system_account"`
 	Role               RoleRef    `json:"role"`
 	Groups             []GroupRef `json:"groups"`

@@ -1,9 +1,12 @@
 package api
 
 import (
+	crand "crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -100,6 +103,27 @@ func handleListUsers(usersRepo *storage.UsersRepo) http.HandlerFunc {
 				"next_cursor": nextCursor,
 			},
 		})
+	}
+}
+
+// handleGetAdminUser — GET /api/v1/admin/users/{id}
+func handleGetAdminUser(usersRepo *storage.UsersRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid user id")
+			return
+		}
+		u, err := usersRepo.GetAdminUserByID(r.Context(), userID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				respondError(w, r, http.StatusNotFound, "NOT_FOUND", "user not found")
+				return
+			}
+			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch user")
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": u})
 	}
 }
 
@@ -585,10 +609,46 @@ func handleDeleteUser(usersRepo *storage.UsersRepo, sessionsRepo *storage.Sessio
 	}
 }
 
+// generateTempPassword creates a cryptographically random password of exactly
+// tempPasswordLen characters drawn from a printable ASCII charset that satisfies
+// the strength policy. The caller is responsible for showing it once and
+// discarding it — it is never logged or stored in plaintext.
+const tempPasswordLen = 24
+
+var tempPasswordCharset = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*")
+
+func generateTempPassword() (string, error) {
+	b := make([]byte, tempPasswordLen)
+	csLen := byte(len(tempPasswordCharset))
+	for i := range b {
+		n, err := crand.Int(crand.Reader, big.NewInt(int64(csLen)))
+		if err != nil {
+			return "", fmt.Errorf("generateTempPassword: %w", err)
+		}
+		b[i] = tempPasswordCharset[n.Int64()]
+	}
+	return string(b), nil
+}
+
+func validatePasswordStrength(password, targetEmail string) (code, msg string, ok bool) {
+	if len([]rune(strings.TrimSpace(password))) < 12 {
+		return "VALIDATION_ERROR", "password must be at least 12 characters", false
+	}
+	if strings.EqualFold(password, targetEmail) {
+		return "VALIDATION_ERROR", "password must not match user email", false
+	}
+	if commonPasswords[strings.ToLower(password)] {
+		return "VALIDATION_ERROR", "password is too common", false
+	}
+	return "", "", true
+}
+
 func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage.SessionsRepo, auditWriter interface{ Submit(storage.AuditRecord) }) http.HandlerFunc {
 	type request struct {
-		NewPassword string `json:"new_password"`
-		Reason      string `json:"reason"`
+		// Mode is required: "generate" (server creates password) or "set" (admin supplies password).
+		Mode     string `json:"mode"`
+		Password string `json:"password"` // required for mode="set"
+		Reason   string `json:"reason"`   // required, min 10 chars
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -605,8 +665,9 @@ func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body")
 			return
 		}
-		if strings.TrimSpace(req.NewPassword) == "" {
-			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "new_password is required")
+
+		if req.Mode != "generate" && req.Mode != "set" {
+			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", `mode must be "generate" or "set"`)
 			return
 		}
 		if len([]rune(strings.TrimSpace(req.Reason))) < 10 {
@@ -629,37 +690,69 @@ func handleResetUserPassword(usersRepo *storage.UsersRepo, sessionsRepo *storage
 			return
 		}
 
-		hash, err := auth.Hash(req.NewPassword)
+		var plainPassword string // only populated for mode=generate, returned once in response
+
+		switch req.Mode {
+		case "generate":
+			p, err := generateTempPassword()
+			if err != nil {
+				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to generate password")
+				return
+			}
+			plainPassword = p
+
+		case "set":
+			if strings.TrimSpace(req.Password) == "" {
+				respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "password is required for mode=set")
+				return
+			}
+			if code, msg, ok := validatePasswordStrength(req.Password, target.Email); !ok {
+				respondError(w, r, http.StatusBadRequest, code, msg)
+				return
+			}
+			plainPassword = req.Password
+		}
+
+		hash, err := auth.Hash(plainPassword)
 		if err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to hash password")
 			return
 		}
+		// Discard plainPassword for mode=set — caller gets no echo back.
+		// For mode=generate it is returned below exactly once.
+		returnedPassword := ""
+		if req.Mode == "generate" {
+			returnedPassword = plainPassword
+		}
+		plainPassword = "" // clear local reference
 
 		if err := usersRepo.Update(r.Context(), userID, map[string]any{"password_hash": hash}); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update password")
 			return
 		}
-
-		// Mark user as must change password on next login.
 		if err := usersRepo.SetMustChangePassword(r.Context(), userID, true, "admin_reset"); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to set password change requirement")
 			return
 		}
-
+		// Invalidate all active sessions of the target user.
 		if err := sessionsRepo.RevokeAllForUserWithReason(r.Context(), userID, "password_changed"); err != nil {
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to revoke sessions")
 			return
 		}
+
 		writeAdminUserAudit(
 			r, auditWriter, actor.ID, target.ID, "password_reset",
-			map[string]any{"password_changed": false},
-			map[string]any{"password_changed": true, "must_change": true},
+			map[string]any{"must_change": target.MustChangePassword},
+			map[string]any{"must_change": true, "mode": req.Mode},
 			req.Reason,
 		)
 
-		respondJSON(w, http.StatusOK, map[string]any{
-			"data": map[string]string{"status": "password reset", "temp_password": req.NewPassword},
-		})
+		resp := map[string]any{"status": "password reset"}
+		if returnedPassword != "" {
+			// Returned exactly once for mode=generate; never stored or logged.
+			resp["temporary_password"] = returnedPassword
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"data": resp})
 	}
 }
 

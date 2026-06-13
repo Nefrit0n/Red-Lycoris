@@ -72,7 +72,7 @@ func globalRoleToDB(role domain.GlobalRole) (int16, error) {
 // selectUserCols — полный набор колонок для SELECT запросов по users.
 const selectUserCols = `
 	id, email, password_hash, full_name, is_active, global_role,
-	status, is_system_account, created_by_user_id, last_login_ip,
+	status, is_system_account, mfa_enabled, created_by_user_id, last_login_ip,
 	created_at, updated_at, last_login_at`
 
 func scanUser(row interface {
@@ -84,7 +84,7 @@ func scanUser(row interface {
 	var lastIP *net.IP
 	err := row.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.IsActive, &role,
-		&status, &u.IsSystemAccount, &u.CreatedByUserID, &lastIP,
+		&status, &u.IsSystemAccount, &u.MFAEnabled, &u.CreatedByUserID, &lastIP,
 		&u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt,
 	)
 	if err != nil {
@@ -144,6 +144,7 @@ func (r *UsersRepo) Update(ctx context.Context, id uuid.UUID, fields map[string]
 		"is_active":     "is_active",
 		"global_role":   "global_role",
 		"status":        "status",
+		"mfa_enabled":   "mfa_enabled",
 		"last_login_at": "last_login_at",
 		"last_login_ip": "last_login_ip",
 	}
@@ -302,4 +303,33 @@ func (r *UsersRepo) SearchActive(ctx context.Context, q string, limit int) ([]do
 	}
 
 	return users, nil
+}
+
+// ActivateIfPending transitions a user from pending to active.
+// No-op if the user is already active or disabled.
+func (r *UsersRepo) ActivateIfPending(ctx context.Context, id uuid.UUID) error {
+	const q = `
+		UPDATE users
+		SET status = 'active', updated_at = now()
+		WHERE id = $1 AND status = 'pending'`
+	if _, err := r.pool.Exec(ctx, q, id); err != nil {
+		return fmt.Errorf("storage.UsersRepo.ActivateIfPending: %w", err)
+	}
+	return nil
+}
+
+// SetLockedUntilByEmail writes locked_until to user_credentials for the user
+// with the given email. Used by the rate limiter to reflect lockout in the DB.
+// Silently succeeds if no matching user exists (timing-safe).
+func (r *UsersRepo) SetLockedUntilByEmail(ctx context.Context, email string, until time.Time) error {
+	const q = `
+		UPDATE user_credentials uc
+		SET locked_until = $2
+		FROM users u
+		WHERE u.email = $1
+		  AND uc.user_id = u.id`
+	if _, err := r.pool.Exec(ctx, q, email, until); err != nil {
+		return fmt.Errorf("storage.UsersRepo.SetLockedUntilByEmail: %w", err)
+	}
+	return nil
 }
