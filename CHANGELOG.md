@@ -65,7 +65,7 @@
 **Docker**
 - Multi-stage build: Go builder → alpine:3.19 (non-root user `app`, uid 1000)
 - Frontend: nginx:stable-alpine (USER 101)
-- `deployments/docker-compose.prod.yml` — production overlay с resource limits
+- `docker-compose.prod.yml` — production overlay с resource limits
 
 **Документация**
 - `docs/architecture.md` — Mermaid-диаграмма потока данных
