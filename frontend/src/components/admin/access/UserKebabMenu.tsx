@@ -89,7 +89,7 @@ export function UserKebabMenu({ user, currentUser, activeAdminCount }: Props) {
         >
           <span className="text-base leading-none">⋯</span>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/admin/access/users/${user.id}`); }}>
             Перейти к профилю
           </DropdownMenuItem>
