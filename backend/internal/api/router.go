@@ -289,6 +289,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Post("/users/bulk-deactivate", handleBulkDeactivateUsers(usersRepo, sessionsRepo, auditWriter))
 			r.Post("/users/bulk-reset-password", handleBulkResetPassword(usersRepo, sessionsRepo, auditWriter))
 
+			r.Get("/users/{id}", handleGetAdminUser(usersRepo))
 			r.Patch("/users/{id}", handleUpdateUser(usersRepo, auditWriter))
 			r.Patch("/users/{id}/role", handleChangeUserRole(usersRepo, sessionsRepo, auditWriter))
 			r.Post("/users/{id}/reset-password", handleResetUserPassword(usersRepo, sessionsRepo, auditWriter))
