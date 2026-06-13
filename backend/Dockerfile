@@ -21,6 +21,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   -o /build/redlycoris ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -ldflags="-s -w" -o /build/admin ./cmd/admin
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -ldflags="-s -w" -o /build/certinit ./cmd/certinit
 
 # Build a tiny healthcheck binary for distroless runtime images.
 RUN cat > /tmp/healthcheck.go <<'EOF'
@@ -47,9 +49,17 @@ EOF
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -ldflags="-s -w" -o /build/healthcheck /tmp/healthcheck.go
 
-# ── Stage 2: Run ──
-# Distroless runtime avoids package-manager RUN steps and keeps the image minimal.
-FROM gcr.io/distroless/static-debian12:nonroot
+# ── Stage: TLS certificate bootstrap ──
+FROM gcr.io/distroless/static-debian12 AS certinit
+
+COPY --from=builder /build/certinit /certinit
+
+USER 0:0
+ENTRYPOINT ["/certinit"]
+
+# ── Stage: Backend runtime ──
+# Keep this as the final stage so direct `docker build` still produces the API image.
+FROM gcr.io/distroless/static-debian12:nonroot AS backend-runtime
 
 WORKDIR /app
 
