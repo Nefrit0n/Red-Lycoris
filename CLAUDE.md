@@ -39,7 +39,8 @@ Red-Lycoris/
 │   │   ├── server/main.go         # Точка входа HTTP-сервера
 │   │   ├── admin/main.go          # CLI для управления пользователями
 │   │   ├── seed/main.go           # Seed данных для разработки
-│   │   └── loadtest/main.go       # Нагрузочное тестирование
+│   │   ├── loadtest/main.go       # Нагрузочное тестирование
+│   │   └── certinit/main.go       # Генерация self-signed TLS-сертификатов
 │   ├── internal/
 │   │   ├── config/
 │   │   │   └── config.go          # Env-based конфиг
@@ -203,7 +204,9 @@ Red-Lycoris/
 │       ├── 027_api_tokens_and_scans.{up,down}.sql
 │       ├── 028_access_schema_hardening.{up,down}.sql
 │       ├── 029_findings_perf_indexes.{up,down}.sql
-│       └── 030_secret_fingerprint.{up,down}.sql
+│       ├── 030_secret_fingerprint.{up,down}.sql
+│       ├── 031_user_mfa_enabled.{up,down}.sql
+│       └── 032_pipeline_scan_model.{up,down}.sql
 ├── frontend/
 │   ├── Dockerfile
 │   ├── package.json
@@ -451,6 +454,7 @@ type User struct {
     GlobalRole         GlobalRole `json:"global_role"` // 0=user, 1=admin
     Status             UserStatus `json:"status"`      // active, pending, disabled
     IsSystemAccount    bool       `json:"is_system_account"`
+    MFAEnabled         bool       `json:"mfa_enabled"`
     MustChangePassword bool       `json:"must_change_password,omitempty"`
     LastLoginAt        *time.Time `json:"last_login_at,omitempty"`
     CreatedAt          time.Time  `json:"created_at"`
@@ -462,19 +466,50 @@ type ProjectRole int
 ```
 
 ### Scan
+
+Двухуровневая модель: **Scan** = один прогон CI-пайплайна, внутри которого
+несколько **ScanToolRun** (запусков отдельных инструментов). Линки
+finding → tool_run хранятся в `finding_scan_links.tool_run_id`.
+
 ```go
+type ScanStatus string
+
+const (
+    ScanStatusOpen      ScanStatus = "open"
+    ScanStatusCompleted ScanStatus = "completed"
+    ScanStatusTimedOut  ScanStatus = "timed_out"
+)
+
 type Scan struct {
-    ID               uuid.UUID  `json:"id"`
-    ProjectID        uuid.UUID  `json:"project_id"`
-    Scanner          string     `json:"scanner"`
-    Status           ScanStatus `json:"status"` // running, completed, failed
-    FindingsImported int        `json:"findings_imported"`
-    FindingsUpdated  int        `json:"findings_updated"`
-    StartedAt        time.Time  `json:"started_at"`
-    FinishedAt       *time.Time `json:"finished_at,omitempty"`
-    CommitSHA        string     `json:"commit_sha"`
-    Branch           string     `json:"branch"`
-    TokenID          *uuid.UUID `json:"token_id,omitempty"`
+    ID               uuid.UUID            `json:"id"`
+    ProjectID        uuid.UUID            `json:"project_id"`
+    CIPipelineID     *string              `json:"ci_pipeline_id,omitempty"`
+    CommitSHA        *string              `json:"commit_sha,omitempty"`
+    Branch           *string              `json:"branch,omitempty"`
+    CIJobURL         *string              `json:"ci_job_url,omitempty"`
+    Status           ScanStatus           `json:"status"`
+    Completion       *string              `json:"completion,omitempty"` // auto | manual
+    StartedAt        time.Time            `json:"started_at"`
+    CompletedAt      *time.Time           `json:"completed_at,omitempty"`
+    FindingsImported int                  `json:"findings_imported"`
+    FindingsUpdated  int                  `json:"findings_updated"`
+    TokenID          *uuid.UUID           `json:"token_id,omitempty"`
+    AssetHint        *string              `json:"asset_hint,omitempty"`
+    ToolRuns         []ScanToolRunSummary `json:"tool_runs,omitempty"`
+}
+
+type ScanToolRun struct {
+    ID               uuid.UUID `json:"id"`
+    ScanID           uuid.UUID `json:"scan_id"`
+    Scanner          string    `json:"scanner"`
+    ScannerVersion   *string   `json:"scanner_version,omitempty"`
+    ReportFormat     string    `json:"report_format"`
+    Status           string    `json:"status"` // success | failed
+    Error            *string   `json:"error,omitempty"`
+    FindingsImported int       `json:"findings_imported"`
+    FindingsUpdated  int       `json:"findings_updated"`
+    StartedAt        time.Time `json:"started_at"`
+    FinishedAt       time.Time `json:"finished_at"`
 }
 ```
 
