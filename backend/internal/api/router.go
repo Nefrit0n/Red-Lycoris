@@ -235,7 +235,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
 					Get("/quick-peek", handleGetProjectQuickPeek(projectsRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
-					Put("/", handleUpdateProject(projectsRepo))
+					Put("/", handleUpdateProject(pool, projectsRepo, userProjectRolesRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Patch("/pinned", handlePatchProjectPinned(projectsRepo))
 				r.With(RequireProjectOwnerOrGlobalAdmin(projectsRepo, ProjectIDFromURL("id"))).

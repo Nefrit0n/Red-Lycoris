@@ -117,27 +117,6 @@ function buildSparkline(points: TrendPoint[], width = 58, height = 24): string {
     .join(" ");
 }
 
-function projectUpdatePayload(project: Project): Record<string, unknown> {
-  return {
-    name: project.name,
-    slug: project.slug,
-    description: project.description ?? "",
-    icon_color: project.icon_color,
-    repo_url: project.repo_url ?? "",
-    repo_provider: project.repo_provider ?? "",
-    tags: project.tags,
-    status: project.status,
-    setup_completed: project.setup_completed,
-    visibility: "workspace",
-    team: project.team ?? null,
-    sla_critical_days: null,
-    sla_high_days: null,
-    sla_medium_days: null,
-    sla_low_days: null,
-    sla_notify_before_days: 3,
-  };
-}
-
 export default function ProjectsList() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -400,11 +379,9 @@ export default function ProjectsList() {
     (project: Project) => {
       const nextName = window.prompt("Новое имя проекта", project.name)?.trim();
       if (!nextName || nextName === project.name) return;
-      const body = projectUpdatePayload(project);
       updateProject.mutate({
         id: project.id,
         body: {
-          ...body,
           name: nextName,
         },
       }, {
@@ -453,11 +430,9 @@ export default function ProjectsList() {
   const handleArchiveProject = useCallback(
     (project: Project) => {
       if (project.status === "archived") return;
-      const body = projectUpdatePayload(project);
       updateProject.mutate({
         id: project.id,
         body: {
-          ...body,
           status: "archived",
         },
       }, {
@@ -1178,7 +1153,7 @@ export default function ProjectsList() {
                     <DropdownMenuItem onClick={() => handleRenameProject(project)}>Переименовать</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleDuplicateProject(project)}>Дублировать</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleArchiveProject(project)}>Архивировать</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}?tab=tokens`)}>
+                    <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}?tab=settings`)}>
                       Настройки
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate(`/findings?project_id=${project.id}`)}>Экспорт</DropdownMenuItem>
@@ -1250,7 +1225,7 @@ export default function ProjectsList() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => navigate(`/projects/${project.id}?tab=tokens`)}
+                              onClick={() => navigate(`/projects/${project.id}?tab=settings`)}
                             >
                               Настройки
                             </Button>

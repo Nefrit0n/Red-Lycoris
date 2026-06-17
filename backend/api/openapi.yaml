@@ -449,6 +449,7 @@ paths:
     put:
       tags: [Projects]
       summary: Обновить проект
+      description: Частичное обновление существующего проекта in-place. `id` в теле игнорируется; canonical UUID берётся из URL. Связанные findings и API токены остаются привязаны к прежнему project_id.
       parameters:
         - $ref: '#/components/parameters/ProjectID'
       requestBody:
@@ -985,11 +986,17 @@ components:
         name: { type: string, description: Название проекта. }
         description: { type: string, description: Описание проекта. }
         icon_color: { type: string, description: HEX-цвет иконки проекта. }
+        source_kind:
+          type: string
+          enum: [manual, git, sarif, webhook]
+          description: Тип источника результатов проекта.
         repo_url: { type: string, description: URL репозитория. }
         repo_provider:
           type: string
           enum: [github, gitlab, bitbucket, other]
           description: Провайдер репозитория.
+        default_branch: { type: string, description: Основная ветка репозитория. }
+        autoscan_on_push: { type: boolean, description: Автосканирование при push для git-источника. }
         tags:
           type: array
           description: Теги проекта.
@@ -998,6 +1005,9 @@ components:
           type: string
           enum: [active, paused, archived]
         setup_completed: { type: boolean }
+        visibility:
+          type: string
+          enum: [private, team, workspace]
         owner:
           type: object
           properties:
@@ -1023,6 +1033,11 @@ components:
             info: { type: integer }
           required: [critical, high, medium, low, info]
         sla_breached_count: { type: integer }
+        sla_critical_days: { type: integer, nullable: true }
+        sla_high_days: { type: integer, nullable: true }
+        sla_medium_days: { type: integer, nullable: true }
+        sla_low_days: { type: integer, nullable: true }
+        sla_notify_before_days: { type: integer }
         scanners:
           type: object
           properties:
@@ -1049,13 +1064,17 @@ components:
         - slug
         - name
         - icon_color
+        - source_kind
+        - autoscan_on_push
         - tags
         - status
         - setup_completed
+        - visibility
         - owner
         - pinned
         - findings_by_severity
         - sla_breached_count
+        - sla_notify_before_days
         - scanners
         - health
         - created_at
