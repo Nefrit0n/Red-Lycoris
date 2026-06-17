@@ -348,7 +348,7 @@ func New(version, commit, date string) *Observability {
 		HTTPRequestDurationSeconds: NewHistogramVec("redlycoris_http_request_duration_seconds", "HTTP request duration in seconds.", defaultHistogramBuckets, "route", "method"),
 		EnrichmentStreamLag:        NewGaugeVec("redlycoris_enrichment_stream_lag", "Redis enrichment stream lag by source.", "source"),
 		EnrichmentLastSyncAge:      NewGaugeVec("redlycoris_enrichment_last_sync_age_seconds", "Age in seconds since last successful enrichment sync.", "source"),
-		ImportFindingsTotal:        NewCounterVec("redlycoris_import_findings_total", "Total processed imported findings by format/outcome.", "format", "outcome"),
+		ImportFindingsTotal:        NewCounterVec("redlycoris_import_findings_total", "Total processed imported findings by format/outcome/kind.", "format", "outcome", "kind"),
 		DBPoolConnections:          NewGaugeVec("redlycoris_db_pool_connections", "Database pool connections by state.", "state"),
 		BuildInfo:                  NewGaugeVec("redlycoris_build_info", "Build metadata info metric with constant value 1.", "version", "commit", "date"),
 	}
