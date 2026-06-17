@@ -36,7 +36,7 @@ func maxScanFormMemoryBytes() int64 {
 	}
 	return int64(mb) << 20
 }
-func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.FindingsRepo) http.HandlerFunc {
+func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.FindingsRepo, detector *parser.Detector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tok, ok := APITokenFromContext(r.Context())
 		if !ok {
@@ -126,7 +126,7 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			return
 		}
 
-		detected, findings, err := parser.DetectAndParse(r.Context(), data)
+		detected, findings, err := detector.DetectAndParse(r.Context(), data)
 		if err != nil {
 			_ = tx.Rollback(r.Context())
 			_ = scansRepo.Fail(r.Context(), scan.ID)

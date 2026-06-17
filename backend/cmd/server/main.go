@@ -223,6 +223,7 @@ func main() {
 		api.WithCookieSecure(cfg.CookieSecure),
 		api.WithSessionDuration(cfg.SessionDuration),
 		api.WithObservability(obs),
+		api.WithScannerKindOverrides(cfg.ScannerKindOverrides),
 	}
 	if cfg.EnrichmentEnabled {
 		scheduler := enrichment.NewScheduler(pool)

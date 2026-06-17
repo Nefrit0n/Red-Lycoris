@@ -24,7 +24,7 @@ type importError struct {
 	Message string `json:"message"`
 }
 
-func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client, obs *observability.Observability) http.HandlerFunc {
+func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client, obs *observability.Observability, detector *parser.Detector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID := r.URL.Query().Get("project_id")
 		var overrideProjectID uuid.UUID
@@ -59,7 +59,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			return
 		}
 
-		format, findings, err := parser.DetectAndParse(r.Context(), data)
+		format, findings, err := detector.DetectAndParse(r.Context(), data)
 		if err != nil {
 			respondError(w, r, http.StatusBadRequest, "PARSE_ERROR", err.Error())
 			return
