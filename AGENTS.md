@@ -9,7 +9,7 @@
 
 ## Стек
 
-- **Backend:** Go 1.22+ (stdlib net/http + chi router)
+- **Backend:** Go 1.25+ (stdlib net/http + chi router)
 - **Database:** PostgreSQL 16 (главное хранилище)
 - **Cache/Queue:** Redis 7 (кэш + Redis Streams для async pipeline)
 - **Frontend:** React 18 + TypeScript + Vite + TanStack (Table, Query, Virtual)
