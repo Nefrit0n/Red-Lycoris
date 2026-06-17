@@ -70,7 +70,7 @@ NGINXCONF
 
 RUN cat > /etc/nginx/conf.d/default.conf <<'SERVERCONF'
 server {
-    listen 8080;
+    listen 3000;
     root /usr/share/nginx/html;
     index index.html;
 
