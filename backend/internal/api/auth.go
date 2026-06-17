@@ -162,7 +162,6 @@ func handleLogout(svc *authsvc.Service) http.HandlerFunc {
 	}
 }
 
-
 func handleRefresh(svc *authsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rawToken, ok := readAuthToken(r)
