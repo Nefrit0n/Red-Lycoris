@@ -54,13 +54,29 @@ type sarifRuleConfig struct {
 }
 
 type sarifProperties struct {
-	Tags             []string            `json:"tags"`
-	SecuritySeverity any                 `json:"security-severity"`
-	References       []string            `json:"references"`
-	Solution         sarifMessage        `json:"solution"`
-	Confidence       string              `json:"confidence"`
-	Precision        string              `json:"precision"`
-	Problem          sarifProblemDetails `json:"problem"`
+	Tags             []string                   `json:"tags"`
+	SecuritySeverity any                        `json:"security-severity"`
+	References       []string                   `json:"references"`
+	Solution         sarifMessage               `json:"solution"`
+	Confidence       string                     `json:"confidence"`
+	Precision        string                     `json:"precision"`
+	Problem          sarifProblemDetails        `json:"problem"`
+	Raw              map[string]json.RawMessage `json:"-"`
+}
+
+func (p *sarifProperties) UnmarshalJSON(data []byte) error {
+	type sarifPropertiesAlias sarifProperties
+	var parsed sarifPropertiesAlias
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	*p = sarifProperties(parsed)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err == nil {
+		p.Raw = raw
+	}
+	return nil
 }
 
 type sarifProblemDetails struct {
@@ -80,6 +96,7 @@ type sarifResult struct {
 	Message             sarifMessage                 `json:"message"`
 	Locations           []sarifLocation              `json:"locations"`
 	PartialFingerprints map[string]string            `json:"partialFingerprints"`
+	Properties          sarifProperties              `json:"properties"`
 	WebRequest          *sarifWebRequest             `json:"webRequest"`
 	WebResponse         *sarifWebResponse            `json:"webResponse"`
 }
@@ -208,7 +225,6 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 
 		cweTaxonomyGUIDs := buildCWETaxonomyGUIDSet(run)
 		sourceName := strings.TrimSpace(run.Tool.Driver.Name)
-		kind := kindFromSARIFTool(sourceName)
 
 		for _, result := range run.Results {
 			rule := resolveSARIFRule(result, ruleByID, ruleByIndex)
@@ -242,7 +258,7 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 			description := buildSARIFDescription(rule, result, loc, title)
 
 			f := domain.Finding{
-				Kind:        kind,
+				Kind:        domain.KindOther,
 				Title:       title,
 				Description: description,
 				Severity:    severity,
@@ -265,11 +281,16 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 			if snippet := extractBestSnippet(loc); snippet != "" {
 				f.CodeSnippet = &snippet
 			}
+			applySARIFPackageMetadata(&f, rule.Properties)
+			applySARIFPackageMetadata(&f, result.Properties)
+			applySARIFWebMetadata(&f, result, loc)
+
+			f.Kind = domain.ResolveKind(&f, nil)
 
 			// For secrets-kind findings: derive a stable fingerprint from the
 			// partialFingerprints map if available, otherwise fall back to
 			// sha256(rule_id + commit_sha + file_path).
-			if kind == domain.KindSecrets {
+			if f.Kind == domain.KindSecrets {
 				ruleIDStr := ""
 				if f.RuleID != nil {
 					ruleIDStr = *f.RuleID
@@ -300,6 +321,188 @@ func (p *SARIFParser) Parse(ctx context.Context, data []byte) ([]domain.Finding,
 	}
 
 	return findings, nil
+}
+
+func applySARIFPackageMetadata(f *domain.Finding, props sarifProperties) {
+	if f == nil || len(props.Raw) == 0 {
+		return
+	}
+
+	if v := sarifStringProperty(props, "purl", "packageURL", "packageUrl", "package_url", "packagePurl", "pkgPurl"); v != "" {
+		f.Purl = &v
+	}
+	if v := sarifStringProperty(props, "packageName", "package_name", "package", "pkgName", "pkg_name", "component", "componentName", "dependencyName"); v != "" {
+		f.Component = v
+	}
+	if v := sarifStringProperty(props, "version", "installedVersion", "installed_version", "packageVersion", "package_version", "currentVersion", "pkgVersion"); v != "" {
+		f.ComponentVersion = v
+	}
+	if v := sarifStringProperty(props, "fixedVersion", "fixed_version", "fixVersion", "patchedVersion", "patched_version"); v != "" {
+		f.FixedVersion = &v
+	}
+	if v := sarifStringProperty(props, "ecosystem", "packageEcosystem", "package_ecosystem", "type", "packageType", "package_type", "language"); v != "" {
+		f.PackageEcosystem = &v
+	}
+
+	applyPURLMetadata(f)
+}
+
+func applyPURLMetadata(f *domain.Finding) {
+	if f == nil || !hasParserString(f.Purl) {
+		return
+	}
+
+	ecosystem, component, version := parsePURLMetadata(*f.Purl)
+	if strings.TrimSpace(f.Component) == "" && component != "" {
+		f.Component = component
+	}
+	if strings.TrimSpace(f.ComponentVersion) == "" && version != "" {
+		f.ComponentVersion = version
+	}
+	if !hasParserString(f.PackageEcosystem) && ecosystem != "" {
+		f.PackageEcosystem = &ecosystem
+	}
+}
+
+func parsePURLMetadata(raw string) (ecosystem, component, version string) {
+	trimmed := strings.TrimSpace(raw)
+	purl := strings.TrimPrefix(trimmed, "pkg:")
+	if purl == trimmed {
+		return "", "", ""
+	}
+	if idx := strings.IndexAny(purl, "?#"); idx >= 0 {
+		purl = purl[:idx]
+	}
+	if at := strings.LastIndex(purl, "@"); at >= 0 {
+		version = strings.TrimSpace(purl[at+1:])
+		purl = purl[:at]
+	}
+	if slash := strings.IndexByte(purl, '/'); slash >= 0 {
+		ecosystem = strings.TrimSpace(purl[:slash])
+		componentPath := strings.TrimSpace(purl[slash+1:])
+		if lastSlash := strings.LastIndex(componentPath, "/"); lastSlash >= 0 {
+			component = strings.TrimSpace(componentPath[lastSlash+1:])
+		} else {
+			component = componentPath
+		}
+		return ecosystem, component, version
+	}
+	return strings.TrimSpace(purl), "", version
+}
+
+func applySARIFWebMetadata(f *domain.Finding, result sarifResult, loc *sarifLocation) {
+	if f == nil {
+		return
+	}
+	if result.WebRequest != nil {
+		if target := strings.TrimSpace(result.WebRequest.Target); target != "" {
+			f.URL = &target
+		}
+		if method := strings.TrimSpace(result.WebRequest.Method); method != "" {
+			f.HTTPMethod = &method
+		}
+	}
+	if loc != nil {
+		if param := strings.TrimSpace(loc.Properties.Parameter); param != "" {
+			f.HTTPParam = &param
+		}
+	}
+	if evidence := sarifWebEvidence(result, loc); len(evidence) > 0 {
+		f.HTTPEvidence = evidence
+	}
+}
+
+func sarifWebEvidence(result sarifResult, loc *sarifLocation) json.RawMessage {
+	payload := make(map[string]any)
+	if result.WebRequest != nil {
+		if method := strings.TrimSpace(result.WebRequest.Method); method != "" {
+			payload["method"] = method
+		}
+		if target := strings.TrimSpace(result.WebRequest.Target); target != "" {
+			payload["target"] = target
+		}
+		if len(result.WebRequest.Headers) > 0 {
+			payload["request_headers"] = result.WebRequest.Headers
+		}
+	}
+	if result.WebResponse != nil {
+		if result.WebResponse.StatusCode > 0 {
+			payload["status_code"] = result.WebResponse.StatusCode
+		}
+		if len(result.WebResponse.Headers) > 0 {
+			payload["response_headers"] = result.WebResponse.Headers
+		}
+		if result.WebResponse.NoResponseReceived {
+			payload["no_response_received"] = true
+		}
+	}
+	if loc != nil {
+		if attack := strings.TrimSpace(loc.Properties.Attack); attack != "" {
+			payload["attack"] = attack
+		}
+		if evidence := strings.TrimSpace(loc.Properties.Evidence); evidence != "" {
+			payload["evidence"] = evidence
+		}
+		if param := strings.TrimSpace(loc.Properties.Parameter); param != "" {
+			payload["parameter"] = param
+		}
+	}
+	if len(payload) == 0 {
+		return nil
+	}
+	raw, _ := json.Marshal(payload)
+	return raw
+}
+
+func sarifStringProperty(props sarifProperties, keys ...string) string {
+	if len(props.Raw) == 0 {
+		return ""
+	}
+
+	wanted := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		wanted[normalizeSARIFPropertyKey(key)] = struct{}{}
+	}
+	for key, raw := range props.Raw {
+		if _, ok := wanted[normalizeSARIFPropertyKey(key)]; !ok {
+			continue
+		}
+		if value := sarifRawString(raw); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func normalizeSARIFPropertyKey(key string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		case r >= '0' && r <= '9':
+			return r
+		default:
+			return -1
+		}
+	}, key)
+}
+
+func sarifRawString(raw json.RawMessage) string {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return strings.TrimSpace(s)
+	}
+	var n json.Number
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return strings.TrimSpace(n.String())
+	}
+	return ""
+}
+
+func hasParserString(v *string) bool {
+	return v != nil && strings.TrimSpace(*v) != ""
 }
 
 // extractCVEs собирает CVE-идентификаторы из всех вероятных мест
@@ -471,22 +674,6 @@ func appendUniqueText(dst *[]string, value string) {
 
 func sameText(a, b string) bool {
 	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
-}
-
-func kindFromSARIFTool(toolName string) domain.FindingKind {
-	name := strings.ToLower(strings.TrimSpace(toolName))
-	switch {
-	case strings.Contains(name, "semgrep"), strings.Contains(name, "gosec"), strings.Contains(name, "codeql"):
-		return domain.KindSAST
-	case strings.Contains(name, "zap"), strings.Contains(name, "burp"):
-		return domain.KindDAST
-	case strings.Contains(name, "tfsec"), strings.Contains(name, "checkov"), strings.Contains(name, "trivy-config"), strings.Contains(name, "kics"):
-		return domain.KindIaC
-	case strings.Contains(name, "gitleaks"), strings.Contains(name, "trufflehog"):
-		return domain.KindSecrets
-	default:
-		return domain.KindOther
-	}
 }
 
 func mapSARIFSeverity(level string, securitySeverity *float64) int {
