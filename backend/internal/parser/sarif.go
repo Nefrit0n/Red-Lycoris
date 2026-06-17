@@ -30,6 +30,9 @@ type sarifTool struct {
 
 type sarifDriver struct {
 	Name                string                  `json:"name"`
+	FullName            string                  `json:"fullName"`
+	Organization        string                  `json:"organization"`
+	Product             string                  `json:"product"`
 	Version             string                  `json:"version"`
 	SemanticVersion     string                  `json:"semanticVersion"`
 	InformationURI      string                  `json:"informationUri"`
@@ -107,15 +110,37 @@ type sarifReportingDescriptorRef struct {
 }
 
 type sarifLocation struct {
-	PhysicalLocation sarifPhysicalLocation `json:"physicalLocation"`
-	Message          sarifMessage          `json:"message"`
-	Properties       sarifLocationProps    `json:"properties"`
+	PhysicalLocation sarifPhysicalLocation  `json:"physicalLocation"`
+	LogicalLocations []sarifLogicalLocation `json:"logicalLocations"`
+	Message          sarifMessage           `json:"message"`
+	Properties       sarifLocationProps     `json:"properties"`
 }
 
 type sarifLocationProps struct {
-	Attack    string `json:"attack"`
-	Evidence  string `json:"evidence"`
-	Parameter string `json:"parameter"`
+	Attack    string                     `json:"attack"`
+	Evidence  string                     `json:"evidence"`
+	Parameter string                     `json:"parameter"`
+	Raw       map[string]json.RawMessage `json:"-"`
+}
+
+func (p *sarifLocationProps) UnmarshalJSON(data []byte) error {
+	type sarifLocationPropsAlias sarifLocationProps
+	var parsed sarifLocationPropsAlias
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	*p = sarifLocationProps(parsed)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err == nil {
+		p.Raw = raw
+	}
+	return nil
+}
+
+type sarifLogicalLocation struct {
+	Name       string          `json:"name"`
+	Properties sarifProperties `json:"properties"`
 }
 
 type sarifPhysicalLocation struct {

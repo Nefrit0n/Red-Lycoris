@@ -11,6 +11,7 @@ var parsers = []struct {
 	name   string
 	parser Parser
 }{
+	{"appscreener", &AppScreenerParser{}},
 	{"sarif", &SARIFParser{}},
 	{"trivy", &TrivyParser{}},
 	{"semgrep", &SemgrepParser{}},
