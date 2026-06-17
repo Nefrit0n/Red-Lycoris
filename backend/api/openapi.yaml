@@ -118,6 +118,8 @@ paths:
         Эквивалент `/api/v1/import`. Формат входного файла определяется автоматически.
         Поддерживаются: SARIF 2.1.0, Trivy, Semgrep, gosec, TruffleHog, Gitleaks,
         Checkov, OWASP ZAP, Grype и **Generic Universal** (`source_type` + `findings[]`).
+        `kind` для Generic и content-poor SARIF определяется per-finding по содержимому,
+        затем по слабым hints/`RL_SCANNER_KIND_OVERRIDES`.
         Подробнее: `docs/import-formats.md`.
       parameters:
         - in: query
@@ -593,7 +595,10 @@ paths:
 
         **Generic Universal** (`$ref: GenericImport`) активируется при наличии полей
         `source_type` и `findings[]` в корне объекта. Поле `kind` в каждом finding
-        можно не задавать — категория выведется автоматически по набору полей.
+        можно не задавать — категория выводится per-finding по содержимому: сначала
+        package/web/IaC/secrets/code-сигналы, затем слабая подсказка по `source_type`.
+        Env override `RL_SCANNER_KIND_OVERRIDES` дополняет слабые подсказки по имени
+        сканера, но не сильнее content-сигналов.
         Полная документация: `docs/import-formats.md`.
 
         `project_id` в query-параметре имеет приоритет над `project_id` в теле.
@@ -1210,6 +1215,8 @@ components:
       description: |
         Универсальный Generic-формат импорта для любого сканера.
         Активируется автоматически при наличии полей `source_type` и `findings[]`.
+        `kind` определяется per-finding: валидный явный kind сохраняется, иначе
+        используется content-based resolver и слабые hints по `source_type`.
         Подробная документация: `docs/import-formats.md`.
       properties:
         project_id:
@@ -1250,8 +1257,13 @@ components:
           type: string
           enum: [sca, sast, dast, iac, secrets, other]
           description: |
-            Категория finding. Если не задан — выводится автоматически по набору полей.
-            Рекомендуется проставлять явно.
+            Категория finding. Валидное значение сохраняется как авторитетное.
+            Если поле отсутствует или неизвестно, тип выводится по content-сигналам:
+            `purl`/`package_ecosystem`/`fixed_version` → `sca`,
+            `url`/`http_method`/`http_param`/`http_evidence` → `dast`,
+            `iac_resource`/`iac_provider` → `iac`,
+            `secret_kind`/`commit_sha` → `secrets`,
+            `file_path` + (`line_start` или `rule_id`) → `sast`.
         description:
           type: string
           description: Развёрнутое описание уязвимости.
@@ -1317,7 +1329,7 @@ components:
           description: Экосистема пакета (npm, pypi, maven, cargo, …).
         purl:
           type: string
-          description: Package URL (RFC 3337).
+          description: Package URL.
           example: pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
         code_snippet:
           type: string
