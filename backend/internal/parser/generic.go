@@ -202,33 +202,6 @@ func (p *GenericParser) CanParse(data []byte) bool {
 	return probe.SourceType != "" && probe.Findings != nil
 }
 
-// inferGenericKind deduces FindingKind from contextual fields when kind is not
-// explicitly provided. First match wins; explicit kind always takes precedence.
-func inferGenericKind(item genericFinding) domain.FindingKind {
-	if item.SecretKind != nil || item.CommitSHA != nil {
-		return domain.KindSecrets
-	}
-	if item.IacResource != nil || item.IacProvider != nil {
-		return domain.KindIaC
-	}
-	if item.URL != nil || item.HTTPMethod != nil || item.HTTPParam != nil {
-		return domain.KindDAST
-	}
-	hasCVE := len(item.CVEIDs) > 0
-	hasComponent := item.Component != ""
-	hasPkgMeta := item.Purl != nil || item.PackageEcosystem != nil
-	if hasCVE && (hasComponent || hasPkgMeta) {
-		return domain.KindSCA
-	}
-	if hasComponent && (hasPkgMeta || item.FixedVersion != nil) {
-		return domain.KindSCA
-	}
-	if item.FilePath != "" && (item.RuleID != nil || item.LineStart > 0) {
-		return domain.KindSAST
-	}
-	return domain.KindOther
-}
-
 func (p *GenericParser) Parse(ctx context.Context, data []byte) ([]domain.Finding, error) {
 	var report genericReport
 	if err := json.Unmarshal(data, &report); err != nil {
@@ -242,11 +215,7 @@ func (p *GenericParser) Parse(ctx context.Context, data []byte) ([]domain.Findin
 		if strings.TrimSpace(item.Kind) != "" {
 			if parsed, ok := domain.ParseFindingKind(item.Kind); ok {
 				kind = parsed
-			} else {
-				kind = inferGenericKind(item)
 			}
-		} else {
-			kind = inferGenericKind(item)
 		}
 
 		sourceType := report.SourceType

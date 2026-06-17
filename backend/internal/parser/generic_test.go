@@ -286,58 +286,8 @@ func TestGenericParser_Parse_PerFindingSourceType(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — inferGenericKind
+// Detector fallback kind resolution
 // ---------------------------------------------------------------------------
-
-func TestInferGenericKind_Secrets(t *testing.T) {
-	sk := "github-token"
-	item := genericFinding{Title: "Leaked token", SecretKind: &sk}
-	if got := inferGenericKind(item); got != domain.KindSecrets {
-		t.Errorf("expected secrets, got %v", got)
-	}
-}
-
-func TestInferGenericKind_IaC(t *testing.T) {
-	res := "aws_s3_bucket"
-	item := genericFinding{Title: "Open bucket", IacResource: &res}
-	if got := inferGenericKind(item); got != domain.KindIaC {
-		t.Errorf("expected iac, got %v", got)
-	}
-}
-
-func TestInferGenericKind_DAST(t *testing.T) {
-	u := "https://example.com/login"
-	item := genericFinding{Title: "XSS", URL: &u}
-	if got := inferGenericKind(item); got != domain.KindDAST {
-		t.Errorf("expected dast, got %v", got)
-	}
-}
-
-func TestInferGenericKind_SCA_CVE(t *testing.T) {
-	item := genericFinding{
-		Title:     "Log4Shell",
-		CVEIDs:    []string{"CVE-2021-44228"},
-		Component: "log4j",
-	}
-	if got := inferGenericKind(item); got != domain.KindSCA {
-		t.Errorf("expected sca, got %v", got)
-	}
-}
-
-func TestInferGenericKind_SAST(t *testing.T) {
-	rule := "G101"
-	item := genericFinding{Title: "Hardcoded creds", FilePath: "main.go", RuleID: &rule}
-	if got := inferGenericKind(item); got != domain.KindSAST {
-		t.Errorf("expected sast, got %v", got)
-	}
-}
-
-func TestInferGenericKind_Other(t *testing.T) {
-	item := genericFinding{Title: "Bare minimum", Severity: 2}
-	if got := inferGenericKind(item); got != domain.KindOther {
-		t.Errorf("expected other, got %v", got)
-	}
-}
 
 func TestGenericParser_Parse_ExplicitKindBeatsInference(t *testing.T) {
 	// Finding has SCA signals but explicit kind=sast — explicit must win.
@@ -351,8 +301,8 @@ func TestGenericParser_Parse_ExplicitKindBeatsInference(t *testing.T) {
 			"component": "log4j"
 		}]
 	}`
-	p := &GenericParser{}
-	findings, err := p.Parse(context.Background(), []byte(payload))
+	detector := NewDetector(nil)
+	_, findings, err := detector.DetectAndParse(context.Background(), []byte(payload))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -361,8 +311,7 @@ func TestGenericParser_Parse_ExplicitKindBeatsInference(t *testing.T) {
 	}
 }
 
-func TestGenericParser_Parse_KindInferredWhenAbsent(t *testing.T) {
-	sk := "aws-key"
+func TestGenericParser_DetectorResolvesKindWhenAbsent(t *testing.T) {
 	payload := `{
 		"source_type": "trufflehog-custom",
 		"findings": [{
@@ -372,13 +321,130 @@ func TestGenericParser_Parse_KindInferredWhenAbsent(t *testing.T) {
 			"commit_sha": "abc123"
 		}]
 	}`
-	p := &GenericParser{}
-	findings, err := p.Parse(context.Background(), []byte(payload))
+	detector := NewDetector(nil)
+	_, findings, err := detector.DetectAndParse(context.Background(), []byte(payload))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_ = sk
 	if findings[0].Kind != domain.KindSecrets {
-		t.Errorf("expected secrets from inference, got %v", findings[0].Kind)
+		t.Errorf("expected secrets from resolver, got %v", findings[0].Kind)
+	}
+}
+
+func TestGenericParser_DetectorResolvesSCAAndDAST(t *testing.T) {
+	payload := `{
+		"source_type": "custom",
+		"findings": [
+			{
+				"title": "Vulnerable lodash",
+				"severity": "high",
+				"purl": "pkg:npm/lodash@4.17.4"
+			},
+			{
+				"title": "Reflected XSS",
+				"severity": "high",
+				"url": "https://example.test/search?q=xss"
+			}
+		]
+	}`
+	detector := NewDetector(nil)
+	format, findings, err := detector.DetectAndParse(context.Background(), []byte(payload))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if format != "generic" {
+		t.Fatalf("expected generic format, got %q", format)
+	}
+	if findings[0].Kind != domain.KindSCA {
+		t.Errorf("expected first finding SCA, got %v", findings[0].Kind)
+	}
+	if findings[1].Kind != domain.KindDAST {
+		t.Errorf("expected second finding DAST, got %v", findings[1].Kind)
+	}
+}
+
+func TestGenericParser_DetectorUsesOverrideOnlyWhenContentSilent(t *testing.T) {
+	payload := `{
+		"source_type": "weirdtool",
+		"findings": [
+			{"title": "Bare", "severity": 1},
+			{"title": "DAST", "severity": 1, "url": "https://example.test"}
+		]
+	}`
+	detector := NewDetector(map[string]domain.FindingKind{"weirdtool": domain.KindSCA})
+	_, findings, err := detector.DetectAndParse(context.Background(), []byte(payload))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findings[0].Kind != domain.KindSCA {
+		t.Errorf("expected override SCA for silent content, got %v", findings[0].Kind)
+	}
+	if findings[1].Kind != domain.KindDAST {
+		t.Errorf("expected content DAST to beat override, got %v", findings[1].Kind)
+	}
+}
+
+func TestGenericParser_DocsReferenceJSON(t *testing.T) {
+	payload := `{
+		"project_id": "550e8400-e29b-41d4-a716-446655440000",
+		"source_type": "my-custom-scanner",
+		"findings": [
+			{
+				"kind": "sca",
+				"title": "Удалённое выполнение кода в log4j",
+				"description": "Log4Shell (CVE-2021-44228): JNDI lookup позволяет выполнить произвольный код.",
+				"severity": "critical",
+				"confidence": "confirmed",
+				"status": "open",
+				"file_path": "pom.xml",
+				"line_start": 42,
+				"line_end": 44,
+				"component": "log4j-core",
+				"component_version": "2.14.1",
+				"cve_ids": ["CVE-2021-44228"],
+				"cwe_ids": ["CWE-917", 400],
+				"cpe_uri": "cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*",
+				"fixed_version": "2.17.1",
+				"package_ecosystem": "maven",
+				"purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+				"code_snippet": "<version>2.14.1</version>",
+				"code_flow": null,
+				"url": null,
+				"http_method": null,
+				"http_param": null,
+				"http_evidence": null,
+				"iac_resource": null,
+				"iac_provider": null,
+				"secret_kind": null,
+				"commit_sha": null,
+				"rule_id": "log4j-vulnerable-version",
+				"rule_name": "Уязвимая версия Log4j",
+				"source_type": "dependency-audit"
+			}
+		]
+	}`
+	detector := NewDetector(nil)
+	format, findings, err := detector.DetectAndParse(context.Background(), []byte(payload))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if format != "generic" {
+		t.Fatalf("expected generic format, got %q", format)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	f := findings[0]
+	if f.Kind != domain.KindSCA {
+		t.Fatalf("expected sca kind, got %v", f.Kind)
+	}
+	if f.SourceType != "dependency-audit" {
+		t.Fatalf("expected per-finding source type, got %q", f.SourceType)
+	}
+	if len(f.CWEIDs) != 2 || f.CWEIDs[0] != 917 || f.CWEIDs[1] != 400 {
+		t.Fatalf("unexpected cwe ids: %v", f.CWEIDs)
+	}
+	if f.FixedVersion == nil || *f.FixedVersion != "2.17.1" {
+		t.Fatalf("unexpected fixed version: %v", f.FixedVersion)
 	}
 }
