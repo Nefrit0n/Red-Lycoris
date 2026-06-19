@@ -33,6 +33,7 @@ interface SourceMeta {
   description: string;
   icon: ComponentType<{ className?: string }>;
   color: string;
+  supportsFullSync?: boolean;
 }
 
 type SyncStatus = EnrichmentSyncStatus;
@@ -44,6 +45,7 @@ const SOURCE_META: SourceMeta[] = [
     description: "NIST National Vulnerability Database",
     icon: Shield,
     color: "text-blue-400",
+    supportsFullSync: true,
   },
   {
     key: "epss",
@@ -86,6 +88,7 @@ const SOURCE_META: SourceMeta[] = [
     description: "Common Platform Enumeration",
     icon: Cpu,
     color: "text-pink-400",
+    supportsFullSync: true,
   },
 ];
 
@@ -141,12 +144,16 @@ function SourceCard({
   meta,
   status,
   isSyncing,
+  syncMode,
   onSync,
+  onFullSync,
 }: {
   meta: SourceMeta;
   status?: SyncStatus;
   isSyncing: boolean;
+  syncMode?: "incremental" | "full";
   onSync: () => void;
+  onFullSync: () => void;
 }) {
   const Icon = meta.icon;
   const syncStatus = status?.status ?? "pending";
@@ -224,20 +231,41 @@ function SourceCard({
           </div>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSync}
-          disabled={disabled}
-          className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          {disabled ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
+        <div className={cn("grid gap-2", meta.supportsFullSync && "grid-cols-2")}>
+          {meta.supportsFullSync && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onFullSync}
+              disabled={disabled}
+              title="Полная синхронизация"
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              {disabled && syncMode === "full" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Database className="size-4" />
+              )}
+              {disabled && syncMode === "full" ? "Запуск..." : "Полная"}
+            </Button>
           )}
-          {disabled ? "Синхронизация..." : "Синхронизировать"}
-        </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSync}
+            disabled={disabled}
+            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            {disabled && syncMode === "incremental" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+            {disabled && syncMode === "incremental"
+              ? "Синхронизация..."
+              : "Синхронизировать"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -500,9 +528,20 @@ export default function EnrichmentStatus() {
               meta={meta}
               status={sourceMap.get(meta.key)}
               isSyncing={
-                triggerSync.isPending && triggerSync.variables === meta.key
+                triggerSync.isPending &&
+                triggerSync.variables?.source === meta.key
               }
-              onSync={() => triggerSync.mutate(meta.key)}
+              syncMode={
+                triggerSync.variables?.source === meta.key
+                  ? triggerSync.variables.full
+                    ? "full"
+                    : "incremental"
+                  : undefined
+              }
+              onSync={() => triggerSync.mutate({ source: meta.key })}
+              onFullSync={() =>
+                triggerSync.mutate({ source: meta.key, full: true })
+              }
             />
           ))}
         </div>

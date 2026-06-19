@@ -761,6 +761,40 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /api/v1/enrichment/sync/{source}/full:
+    post:
+      tags: [Enrichment]
+      summary: Запустить полную синхронизацию источника
+      description: Принудительно загружает полный набор данных. Поддерживается для NVD и CPE.
+      parameters:
+        - in: path
+          name: source
+          required: true
+          schema:
+            type: string
+            enum: [nvd, cpe]
+      responses:
+        '202':
+          description: Полная синхронизация запущена.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                      message:
+                        type: string
+                    required: [source, message]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /api/v1/auth/login:
     post:
       tags: [Auth]

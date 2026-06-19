@@ -27,6 +27,11 @@ export interface EPSSHistoryResponse {
   points: EPSSHistoryPoint[];
 }
 
+export interface TriggerSyncInput {
+  source: string;
+  full?: boolean;
+}
+
 export function useFindingEnrichments(findingId: string) {
   return useQuery({
     queryKey: ["finding-enrichments", findingId],
@@ -59,8 +64,11 @@ export function useTriggerSync() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (source: string) =>
-      apiPost<void>(`/api/v1/enrichment/sync/${source}`, {}),
+    mutationFn: ({ source, full = false }: TriggerSyncInput) =>
+      apiPost<void>(
+        `/api/v1/enrichment/sync/${source}${full ? "/full" : ""}`,
+        {},
+      ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["enrichment-status"] });
       await queryClient.refetchQueries({ queryKey: ["enrichment-status"] });

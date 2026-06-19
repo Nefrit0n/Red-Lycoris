@@ -18,6 +18,15 @@ type Syncer interface {
 	Name() string
 }
 
+type FullSyncer interface {
+	Syncer
+	FullSync(ctx context.Context) error
+}
+
+type syncWatermarkOwner interface {
+	PreserveSyncWatermark() bool
+}
+
 // SyncStatus отражает строку из таблицы sync_status.
 type SyncStatus struct {
 	Source          string     `json:"source"`
@@ -63,13 +72,19 @@ func RunSync(ctx context.Context, syncer Syncer, pool *pgxpool.Pool) error {
 
 	// Подсчитаем records_count из соответствующей таблицы
 	count := countRecords(ctx, pool, name)
+	preserveWatermark := false
+	if owner, ok := syncer.(syncWatermarkOwner); ok {
+		preserveWatermark = owner.PreserveSyncWatermark()
+	}
 
 	_, err = pool.Exec(ctx, `
 		UPDATE sync_status
-		SET status = 'success', last_sync_at = now(), records_count = $2,
+		SET status = 'success',
+		    last_sync_at = CASE WHEN $4 THEN last_sync_at ELSE now() END,
+		    records_count = $2,
 		    duration_seconds = $3, error_message = NULL, updated_at = now()
 		WHERE source = $1
-	`, name, count, duration)
+	`, name, count, duration, preserveWatermark)
 	if err != nil {
 		slog.Error("failed to update sync_status after success", "source", name, "error", err)
 	}

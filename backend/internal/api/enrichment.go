@@ -81,7 +81,15 @@ func handleGetFindingScore(pool *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
-func handleManualSync(pool *pgxpool.Pool, scheduler *enrichment.Scheduler) http.HandlerFunc {
+func handleManualSync(scheduler *enrichment.Scheduler) http.HandlerFunc {
+	return handleManualSyncMode(scheduler, false)
+}
+
+func handleManualFullSync(scheduler *enrichment.Scheduler) http.HandlerFunc {
+	return handleManualSyncMode(scheduler, true)
+}
+
+func handleManualSyncMode(scheduler *enrichment.Scheduler, full bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		source := chi.URLParam(r, "source")
 		if source == "" {
@@ -95,17 +103,35 @@ func handleManualSync(pool *pgxpool.Pool, scheduler *enrichment.Scheduler) http.
 			return
 		}
 
+		if full {
+			if _, ok := syncer.(enrichment.FullSyncer); !ok {
+				respondError(w, r, http.StatusBadRequest, "FULL_SYNC_NOT_SUPPORTED", "full sync is not supported for source: "+source)
+				return
+			}
+		}
+
 		//nolint:contextcheck
-		go func(source string) {
-			if err := scheduler.TriggerSync(context.Background(), source); err != nil {
+		go func(source string, full bool) {
+			var err error
+			if full {
+				err = scheduler.TriggerFullSync(context.Background(), source)
+			} else {
+				err = scheduler.TriggerSync(context.Background(), source)
+			}
+			if err != nil {
 				slog.Error("manual sync failed", "source", source, "error", err)
 			}
-		}(source)
+		}(source, full)
+
+		message := "sync started"
+		if full {
+			message = "full sync started"
+		}
 
 		respondJSON(w, http.StatusAccepted, map[string]any{
 			"data": map[string]string{
 				"source":  source,
-				"message": "sync started",
+				"message": message,
 			},
 		})
 	}

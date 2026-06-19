@@ -75,41 +75,33 @@ func NewSyncer(pool *pgxpool.Pool, apiKey string) *NVDSyncer {
 
 func (s *NVDSyncer) Name() string { return "nvd" }
 
+func (s *NVDSyncer) PreserveSyncWatermark() bool { return true }
+
 func (s *NVDSyncer) Sync(ctx context.Context) error {
+	return s.runSync(ctx, false)
+}
+
+func (s *NVDSyncer) FullSync(ctx context.Context) error {
+	return s.runSync(ctx, true)
+}
+
+func (s *NVDSyncer) runSync(ctx context.Context, forceFull bool) error {
 	runStartedAt := time.Now().UTC()
 
 	if err := s.markSyncRunning(ctx); err != nil {
 		return fmt.Errorf("nvd.Sync: mark running: %w", err)
 	}
 
-	hasData, err := s.hasAnyData(ctx)
-	if err != nil {
-		_ = s.markSyncFailed(ctx, err.Error(), secondsSince(runStartedAt))
-		return fmt.Errorf("nvd.Sync: check existing data: %w", err)
-	}
-
-	state, err := s.loadSyncState(ctx)
-	if err != nil {
-		_ = s.markSyncFailed(ctx, err.Error(), secondsSince(runStartedAt))
-		return fmt.Errorf("nvd.Sync: load sync state: %w", err)
-	}
-
 	var result syncResult
+	var err error
 
 	switch {
-	case !hasData:
-		slog.Info("NVD sync: no local data, forcing full sync")
-		result, err = s.fullSync(ctx)
-
-	case state.LastSuccessAt == nil:
-		// Есть данные, но нет watermark.
-		// Это грязное состояние: safest choice — full sync с upsert.
-		slog.Warn("NVD sync: local data exists but watermark is missing, forcing full sync")
+	case forceFull:
+		slog.Info("NVD sync: forced full sync started")
 		result, err = s.fullSync(ctx)
 
 	default:
-		slog.Info("NVD sync: incremental sync started", "last_success_at", *state.LastSuccessAt)
-		result, err = s.incrementalSync(ctx, *state.LastSuccessAt, runStartedAt)
+		result, err = s.syncFromState(ctx, runStartedAt)
 	}
 
 	if err != nil {
@@ -128,6 +120,32 @@ func (s *NVDSyncer) Sync(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+func (s *NVDSyncer) syncFromState(ctx context.Context, runStartedAt time.Time) (syncResult, error) {
+	hasData, err := s.hasAnyData(ctx)
+	if err != nil {
+		return syncResult{}, fmt.Errorf("nvd.Sync: check existing data: %w", err)
+	}
+
+	state, err := s.loadSyncState(ctx)
+	if err != nil {
+		return syncResult{}, fmt.Errorf("nvd.Sync: load sync state: %w", err)
+	}
+
+	if !hasData {
+		slog.Info("NVD sync: no local data, forcing full sync")
+		return s.fullSync(ctx)
+	}
+
+	if state.LastSuccessAt == nil {
+		// Без watermark нельзя безопасно определить начало incremental-окна.
+		slog.Warn("NVD sync: local data exists but watermark is missing, forcing full sync")
+		return s.fullSync(ctx)
+	}
+
+	slog.Info("NVD sync: incremental sync started", "last_success_at", *state.LastSuccessAt)
+	return s.incrementalSync(ctx, *state.LastSuccessAt, runStartedAt)
 }
 
 func (s *NVDSyncer) fullSync(ctx context.Context) (syncResult, error) {
