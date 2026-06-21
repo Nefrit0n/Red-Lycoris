@@ -7,6 +7,8 @@ failure-threshold: warning
 trustedRegistries:
   - ghcr.io
   - docker.io
+  # Distroless runtime-образы публикуются только здесь.
+  - gcr.io
 
 # Отключаем правила, которые либо неприменимы, либо слишком душные.
 ignored:

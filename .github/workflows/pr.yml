@@ -306,19 +306,27 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: red-lycoris-${{ matrix.component }}:pr-scan
-          format: sarif
-          output: trivy-${{ matrix.component }}.sarif
-          severity: CRITICAL,HIGH
-          exit-code: '1'
-          # Не падаем на CVE без фикса — это шум, исправить мы их не можем.
-          ignore-unfixed: true
-          # Сканируем только OS-пакеты и зависимости приложения.
-          scanners: vuln,secret
-          trivy-args: "--skip-version-check"          
+      # Ставим «голый» Trivy фиксированной версии вместо trivy-action —
+      # меньше магии, полный контроль над флагами, предсказуемая версия.
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.71.2
+          trivy --version
+
+      # Шаг 1 — отчёт. Всегда exit 0, чтобы SARIF гарантированно сгенерировался
+      # и загрузился в Security tab, даже когда найдены уязвимости.
+      - name: Generate Trivy SARIF report
+        run: |
+          trivy image \
+            --format sarif \
+            --output trivy-${{ matrix.component }}.sarif \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --scanners vuln,secret \
+            --skip-version-check \
+            --exit-code 0 \
+            red-lycoris-${{ matrix.component }}:pr-scan
 
       - name: Upload Trivy SARIF to GitHub Security
         if: always()
@@ -326,6 +334,19 @@ jobs:
         with:
           sarif_file: trivy-${{ matrix.component }}.sarif
           category: trivy-${{ matrix.component }}
+
+      # Шаг 2 — гейт. Отдельный прогон валит билд на CRITICAL/HIGH с фиксом.
+      # БД уже скачана на шаге 1, поэтому повтор почти бесплатный.
+      - name: Fail on CRITICAL/HIGH vulnerabilities
+        run: |
+          trivy image \
+            --format table \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --scanners vuln,secret \
+            --skip-version-check \
+            --exit-code 1 \
+            red-lycoris-${{ matrix.component }}:pr-scan
 
   # ────────────────────────────────────────────────────────────────────
   # FINAL: aggregator, на который удобно вешать branch protection.

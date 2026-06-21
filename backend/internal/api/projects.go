@@ -123,10 +123,7 @@ func (s *optionalProjectSource) UnmarshalJSON(raw []byte) error {
 		s.Null = true
 		return nil
 	}
-	if err := json.Unmarshal(raw, &s.Value); err != nil {
-		return err
-	}
-	return nil
+	return json.Unmarshal(raw, &s.Value)
 }
 
 type nullableIntField struct {

@@ -145,7 +145,7 @@ func TestFlexCWEIDs(t *testing.T) {
 			continue
 		}
 		for i := range ids {
-			if int(ids[i]) != tc.want[i] {
+			if ids[i] != tc.want[i] {
 				t.Errorf("input %s [%d]: got %d, want %d", tc.input, i, ids[i], tc.want[i])
 			}
 		}
