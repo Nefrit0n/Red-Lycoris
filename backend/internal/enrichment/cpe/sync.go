@@ -48,6 +48,15 @@ func NewSyncer(pool *pgxpool.Pool, apiKey string) *CPESyncer {
 
 func (s *CPESyncer) Name() string { return "cpe" }
 
+func (s *CPESyncer) FullSync(ctx context.Context) error {
+	slog.Info("CPE sync: forced full sync started",
+		"has_api_key", s.apiKey != "",
+		"request_interval_ms", s.requestInterval.Milliseconds(),
+		"results_per_page", resultsPerPage,
+	)
+	return s.fetchAndStore(ctx, nil)
+}
+
 func (s *CPESyncer) Sync(ctx context.Context) error {
 	slog.Info("CPE sync: starting",
 		"has_api_key", s.apiKey != "",

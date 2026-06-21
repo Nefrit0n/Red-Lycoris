@@ -24,7 +24,7 @@ type importError struct {
 	Message string `json:"message"`
 }
 
-func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client, obs *observability.Observability) http.HandlerFunc {
+func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsRepo, rolesRepo *storage.UserProjectRolesRepo, rdb *redis.Client, obs *observability.Observability, detector *parser.Detector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID := r.URL.Query().Get("project_id")
 		var overrideProjectID uuid.UUID
@@ -59,7 +59,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			return
 		}
 
-		format, findings, err := parser.DetectAndParse(r.Context(), data)
+		format, findings, err := detector.DetectAndParse(r.Context(), data)
 		if err != nil {
 			respondError(w, r, http.StatusBadRequest, "PARSE_ERROR", err.Error())
 			return
@@ -73,10 +73,13 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 		var imported, updated int
 		var errs []importError
 		var importedIDs []uuid.UUID
+		kindCounts := make(map[string]int)
 		now := time.Now()
 
 		for i := range findings {
 			f := &findings[i]
+			kind := f.Kind.String()
+			kindCounts[kind]++
 
 			// Override project_id from query param if provided
 			if overrideProjectID != uuid.Nil {
@@ -86,7 +89,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			if f.ProjectID == uuid.Nil {
 				errs = append(errs, importError{Index: i, Message: "project_id is required"})
 				if obs != nil {
-					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected"})
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected", "kind": kind})
 				}
 				continue
 			}
@@ -107,7 +110,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			if err := f.Validate(); err != nil {
 				errs = append(errs, importError{Index: i, Message: err.Error()})
 				if obs != nil {
-					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected"})
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected", "kind": kind})
 				}
 				continue
 			}
@@ -117,7 +120,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 				slog.Error("import: failed to create finding", "index", i, "error", err)
 				errs = append(errs, importError{Index: i, Message: "failed to save finding"})
 				if obs != nil {
-					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected"})
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "rejected", "kind": kind})
 				}
 				continue
 			}
@@ -125,7 +128,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			if isNew {
 				imported++
 				if obs != nil {
-					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "inserted"})
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "inserted", "kind": kind})
 				}
 				importedIDs = append(importedIDs, f.ID)
 				payload, _ := json.Marshal(domain.CreatedPayload{
@@ -144,7 +147,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			} else {
 				updated++
 				if obs != nil {
-					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "updated"})
+					obs.ImportFindingsTotal.Inc(map[string]string{"format": format, "outcome": "updated", "kind": kind})
 				}
 				evt := domain.FindingEvent{
 					ID:        uuid.New(),
@@ -163,12 +166,7 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			}
 		}
 
-		slog.Info("import completed",
-			"format", format,
-			"imported", imported,
-			"updated", updated,
-			"errors", len(errs),
-		)
+		logImportSummary(format, len(findings), imported, updated, len(errs), kindCounts)
 
 		// Публикуем импортированные findings в Redis Stream для обогащения
 		if len(importedIDs) > 0 {
@@ -184,4 +182,26 @@ func handleImport(repo *storage.FindingsRepo, eventsRepo *storage.FindingEventsR
 			"errors":   errs,
 		})
 	}
+}
+
+func logImportSummary(format string, total, imported, updated, errorsCount int, kindCounts map[string]int) {
+	otherRatio := 0.0
+	if total > 0 {
+		otherRatio = float64(kindCounts[domain.KindOther.String()]) / float64(total)
+	}
+
+	attrs := []any{
+		"format", format,
+		"total_findings", total,
+		"imported", imported,
+		"updated", updated,
+		"errors", errorsCount,
+		"kind_counts", kindCounts,
+		"other_ratio", otherRatio,
+	}
+	if otherRatio > 0.5 {
+		slog.Warn("import completed with high other kind ratio", attrs...)
+		return
+	}
+	slog.Info("import completed", attrs...)
 }

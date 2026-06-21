@@ -187,6 +187,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ![SARIF](https://img.shields.io/badge/SARIF-2.1.0-930000?style=flat-square)
 | Сканер | Формат | Парсер |
 |--------|--------|--------|
+| Solar appScreener | SARIF 2.1.0 (SAST + SCA) | `AppScreenerParser` |
 | Semgrep / OpenGrep | SARIF 2.1.0 / native JSON | `SARIFParser`, `SemgrepParser` |
 | Trivy | JSON | `TrivyParser` |
 | gosec | JSON / SARIF | `GosecParser` |

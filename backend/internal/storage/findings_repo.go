@@ -77,6 +77,7 @@ type FindingsFilter struct {
 	PackageEcosystems    []string
 	IacProviders         []string
 	SecretKinds          []string
+	SourceTypes          []string
 	Components           []string
 	ComponentVersion     string
 	RuleID               string
@@ -340,6 +341,7 @@ const (
 	FacetEcosystem   = "ecosystem"
 	FacetIacProvider = "iac_provider"
 	FacetSecretKind  = "secret_kind"
+	FacetSource      = "source"
 	FacetHasCVE      = "has_cve"
 	FacetHasFix      = "has_fix"
 	FacetInKEV       = "in_kev"
@@ -454,6 +456,11 @@ func buildBaseWhere(filter *FindingsFilter, excludeField string, startArg int) (
 	if len(filter.SecretKinds) > 0 && excludeField != FacetSecretKind {
 		conditions = append(conditions, fmt.Sprintf("f.secret_kind = ANY($%d)", argN))
 		args = append(args, filter.SecretKinds)
+		argN++
+	}
+	if len(filter.SourceTypes) > 0 && excludeField != FacetSource {
+		conditions = append(conditions, fmt.Sprintf("f.source_type = ANY($%d)", argN))
+		args = append(args, filter.SourceTypes)
 		argN++
 	}
 	if len(filter.Components) > 0 {
@@ -725,7 +732,7 @@ func (r *FindingsRepo) Facets(ctx context.Context, filter FindingsFilter) (*Find
 	})
 
 	g.Go(func() error {
-		conds, args, _ := buildBaseWhere(&filter, "", 1)
+		conds, args, _ := buildBaseWhere(&filter, FacetSource, 1)
 		q := `SELECT f.source_type, count(*) FROM findings f ` + whereClause(conds) + ` GROUP BY f.source_type ORDER BY count(*) DESC`
 		rows, err := r.pool.Query(gctx, q, args...)
 		if err != nil {

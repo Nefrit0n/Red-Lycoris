@@ -111,21 +111,39 @@ func (s *Scheduler) runLoop(ctx context.Context, sc syncerConfig) {
 // TriggerSync запускает sync вручную по имени источника.
 // Если sync уже выполняется, возвращает ErrAlreadyRunning.
 func (s *Scheduler) TriggerSync(ctx context.Context, name string) error {
-	s.mu.Lock()
-	var syncer Syncer
-	for _, sc := range s.syncers {
-		if sc.syncer.Name() == name {
-			syncer = sc.syncer
-			break
-		}
-	}
-	s.mu.Unlock()
-
+	syncer := s.GetSyncer(name)
 	if syncer == nil {
 		return fmt.Errorf("unknown sync source: %s", name)
 	}
 
 	return s.runIfNotRunning(ctx, syncer)
+}
+
+func (s *Scheduler) TriggerFullSync(ctx context.Context, name string) error {
+	syncer := s.GetSyncer(name)
+	if syncer == nil {
+		return fmt.Errorf("unknown sync source: %s", name)
+	}
+
+	fullSyncer, ok := syncer.(FullSyncer)
+	if !ok {
+		return fmt.Errorf("full sync is not supported for source: %s", name)
+	}
+
+	return s.runIfNotRunning(ctx, fullSyncAdapter{FullSyncer: fullSyncer})
+}
+
+type fullSyncAdapter struct {
+	FullSyncer
+}
+
+func (a fullSyncAdapter) Sync(ctx context.Context) error {
+	return a.FullSync(ctx)
+}
+
+func (a fullSyncAdapter) PreserveSyncWatermark() bool {
+	owner, ok := a.FullSyncer.(syncWatermarkOwner)
+	return ok && owner.PreserveSyncWatermark()
 }
 
 func (s *Scheduler) runIfNotRunning(ctx context.Context, syncer Syncer) (err error) {

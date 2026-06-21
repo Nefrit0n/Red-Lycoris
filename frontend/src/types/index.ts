@@ -153,11 +153,15 @@ export interface Project {
   name: string;
   description?: string;
   icon_color: string;
+  source_kind: "manual" | "git" | "sarif" | "webhook";
   repo_url?: string;
   repo_provider?: "github" | "gitlab" | "bitbucket" | "other";
+  default_branch?: string;
+  autoscan_on_push: boolean;
   tags: string[];
   status: "active" | "paused" | "archived";
   setup_completed: boolean;
+  visibility: "private" | "team" | "workspace";
   owner: {
     id: string;
     email: string;
@@ -176,6 +180,11 @@ export interface Project {
     info: number;
   };
   sla_breached_count: number;
+  sla_critical_days?: number;
+  sla_high_days?: number;
+  sla_medium_days?: number;
+  sla_low_days?: number;
+  sla_notify_before_days: number;
   scanners: {
     sast: "ok" | "missing" | "off";
     dast: "ok" | "missing" | "off";

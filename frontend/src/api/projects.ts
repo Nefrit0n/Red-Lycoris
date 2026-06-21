@@ -76,8 +76,9 @@ export function useUpdateProject() {
   return useMutation({
     mutationFn: (payload: { id: string; body: Record<string, unknown> }) =>
       apiPut<{ data: Project }>(`/api/v1/projects/${payload.id}`, payload.body),
-    onSuccess: () => {
+    onSuccess: (_data, payload) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["project", payload.id] });
     },
   });
 }

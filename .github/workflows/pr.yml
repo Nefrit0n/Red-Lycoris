@@ -318,6 +318,7 @@ jobs:
           ignore-unfixed: true
           # Сканируем только OS-пакеты и зависимости приложения.
           scanners: vuln,secret
+          trivy-args: "--skip-version-check"          
 
       - name: Upload Trivy SARIF to GitHub Security
         if: always()

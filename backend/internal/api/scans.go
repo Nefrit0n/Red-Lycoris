@@ -13,8 +13,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 
 	"redlycoris/internal/domain"
+	"redlycoris/internal/enrichment"
 	"redlycoris/internal/parser"
 	"redlycoris/internal/storage"
 )
@@ -36,7 +38,8 @@ func maxScanFormMemoryBytes() int64 {
 	}
 	return int64(mb) << 20
 }
-func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.FindingsRepo) http.HandlerFunc {
+
+func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.FindingsRepo, detector *parser.Detector, rdb *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tok, ok := APITokenFromContext(r.Context())
 		if !ok {
@@ -64,12 +67,25 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 		if r.URL.Query().Get("project_id") != "" {
 			slog.Warn("scans: project_id query ignored for PAT request", "request_id", GetRequestID(r.Context()))
 		}
-		commitSHA := strings.TrimSpace(r.FormValue("commit_sha"))
-		branch := strings.TrimSpace(r.FormValue("branch"))
-		scanner := strings.TrimSpace(r.FormValue("scanner"))
-		scannerVersion := strings.TrimSpace(r.FormValue("scanner_version"))
-		ciJobURL := strings.TrimSpace(r.FormValue("ci_job_url"))
-		assetHint := strings.TrimSpace(r.FormValue("asset_hint"))
+
+		// ВАЖНО: после r.MultipartReader() нельзя использовать r.FormValue — он
+		// внутри вызывает ParseMultipartForm, который видит уже непустой
+		// r.MultipartForm и делает ранний return, не перенося значения в r.Form.
+		// В результате все текстовые поля возвращали "". Читаем напрямую из
+		// form.Value — единственного источника, который реально заполнен.
+		formVal := func(key string) string {
+			if vs := form.Value[key]; len(vs) > 0 {
+				return strings.TrimSpace(vs[0])
+			}
+			return ""
+		}
+
+		commitSHA := formVal("commit_sha")
+		branch := formVal("branch")
+		scanner := formVal("scanner")
+		scannerVersion := formVal("scanner_version")
+		ciJobURL := formVal("ci_job_url")
+		assetHint := formVal("asset_hint")
 		if commitSHA == "" || branch == "" {
 			respondError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "commit_sha and branch are required")
 			return
@@ -126,7 +142,7 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			return
 		}
 
-		detected, findings, err := parser.DetectAndParse(r.Context(), data)
+		detected, findings, err := detector.DetectAndParse(r.Context(), data)
 		if err != nil {
 			_ = tx.Rollback(r.Context())
 			_ = scansRepo.Fail(r.Context(), scan.ID)
@@ -138,6 +154,11 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 		}
 
 		imported, updated := 0, 0
+		// Собираем ID всех findings скана (и новых, и дедуплицированных).
+		// Публикуем потом весь набор: повторно встреченный finding на новом
+		// коммите мог так и не обогатиться, плюс с прошлого прогона могли
+		// обновиться NVD/EPSS/KEV — переобогащение по свежему скану желаемо.
+		scanFindingIDs := make([]uuid.UUID, 0, len(findings))
 		now := time.Now()
 		for i := range findings {
 			f := &findings[i]
@@ -169,6 +190,7 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 				respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to link finding to scan")
 				return
 			}
+			scanFindingIDs = append(scanFindingIDs, f.ID)
 			if isNew {
 				imported++
 			} else {
@@ -186,6 +208,19 @@ func handleCreateScan(scansRepo *storage.ScansRepo, findingsRepo *storage.Findin
 			respondError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to commit scan")
 			return
 		}
+
+		// Публикуем в Redis Stream ТОЛЬКО после успешного коммита: иначе
+		// воркер может прочитать сообщение раньше, чем finding виден в БД,
+		// и упасть на загрузке. Ошибку публикации не возвращаем клиенту —
+		// скан уже зафиксирован; необогащённые findings подберёт периодический
+		// handleEnrichAll или ручной /enrich.
+		if rdb != nil && len(scanFindingIDs) > 0 {
+			if err := enrichment.PublishEnrichment(r.Context(), rdb, scanFindingIDs...); err != nil {
+				slog.Error("scans: failed to publish enrichment",
+					"scan_id", scan.ID, "count", len(scanFindingIDs), "error", err)
+			}
+		}
+
 		respondJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
 			"scan_id":     scan.ID,
 			"scanner":     scan.Scanner,

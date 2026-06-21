@@ -78,13 +78,14 @@ type projectExecutor interface {
 func (r *ProjectsRepo) create(ctx context.Context, exec projectExecutor, p *domain.Project) error {
 	const q = `
 		INSERT INTO projects (
-			id, slug, name, description, icon_color, repo_url, repo_provider,
+			id, slug, name, description, icon_color, source_kind, repo_url, repo_provider,
+			default_branch, autoscan_on_push,
 			tags, status, setup_completed, pinned, created_by,
 			visibility, sla_critical_days, sla_high_days, sla_medium_days, sla_low_days,
 			sla_notify_before_days, team_id,
 			created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`
 
 	if p.ID == uuid.Nil {
 		p.ID = uuid.New()
@@ -101,6 +102,16 @@ func (r *ProjectsRepo) create(ctx context.Context, exec projectExecutor, p *doma
 	}
 	if p.IconColor == "" {
 		p.IconColor = "#64748b"
+	}
+	if p.SourceKind == "" {
+		if strings.TrimSpace(p.RepoURL) != "" {
+			p.SourceKind = domain.ProjectSourceGit
+		} else {
+			p.SourceKind = domain.ProjectSourceManual
+		}
+	}
+	if p.DefaultBranch == "" {
+		p.DefaultBranch = "main"
 	}
 	if p.Status == "" {
 		p.Status = domain.ProjectStatusActive
@@ -120,7 +131,8 @@ func (r *ProjectsRepo) create(ctx context.Context, exec projectExecutor, p *doma
 	}
 
 	_, err := exec.Exec(ctx, q,
-		p.ID, p.Slug, p.Name, p.Description, p.IconColor, emptyToNil(p.RepoURL), emptyToNil(p.RepoProvider),
+		p.ID, p.Slug, p.Name, p.Description, p.IconColor, p.SourceKind, emptyToNil(p.RepoURL), emptyToNil(p.RepoProvider),
+		p.DefaultBranch, p.AutoscanOnPush,
 		p.Tags, p.Status, p.SetupCompleted, p.Pinned, uuidOrNil(p.CreatedBy),
 		p.Visibility, p.SLACriticalDays, p.SLAHighDays, p.SLAMediumDays, p.SLALowDays,
 		p.SLANotifyBeforeDays, teamID,
@@ -140,8 +152,11 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 			p.name,
 			coalesce(p.description, ''),
 			p.icon_color,
+			coalesce(p.source_kind, 'manual'),
 			coalesce(p.repo_url, ''),
 			coalesce(p.repo_provider, ''),
+			coalesce(p.default_branch, 'main'),
+			coalesce(p.autoscan_on_push, false),
 			coalesce(p.tags, '{}'::text[]),
 			p.status,
 			p.setup_completed,
@@ -200,8 +215,11 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 		&p.Name,
 		&p.Description,
 		&p.IconColor,
+		&p.SourceKind,
 		&p.RepoURL,
 		&p.RepoProvider,
+		&p.DefaultBranch,
+		&p.AutoscanOnPush,
 		&p.Tags,
 		&p.Status,
 		&p.SetupCompleted,
@@ -234,6 +252,7 @@ func (r *ProjectsRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Proje
 	}
 
 	p.Owner = domain.ProjectOwner{ID: ownerID, Email: ownerEmail, DisplayName: ownerDisplay}
+	p.CreatedBy = ownerID
 	p.Scanners = domain.ProjectScanners{
 		SAST: domain.ScannerState(sast), DAST: domain.ScannerState(dast), SCA: domain.ScannerState(sca), Secrets: domain.ScannerState(secrets),
 	}
@@ -371,8 +390,11 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 			p.name,
 			coalesce(p.description, ''),
 			p.icon_color,
+			coalesce(p.source_kind, 'manual'),
 			coalesce(p.repo_url, ''),
 			coalesce(p.repo_provider, ''),
+			coalesce(p.default_branch, 'main'),
+			coalesce(p.autoscan_on_push, false),
 			coalesce(p.tags, '{}'::text[]),
 			p.status,
 			p.setup_completed,
@@ -437,8 +459,11 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 			&p.Name,
 			&p.Description,
 			&p.IconColor,
+			&p.SourceKind,
 			&p.RepoURL,
 			&p.RepoProvider,
+			&p.DefaultBranch,
+			&p.AutoscanOnPush,
 			&p.Tags,
 			&p.Status,
 			&p.SetupCompleted,
@@ -471,6 +496,7 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 		}
 
 		p.Owner = domain.ProjectOwner{ID: ownerID, Email: ownerEmail, DisplayName: ownerDisplay}
+		p.CreatedBy = ownerID
 		p.Scanners = domain.ProjectScanners{
 			SAST: domain.ScannerState(sast), DAST: domain.ScannerState(dast), SCA: domain.ScannerState(sca), Secrets: domain.ScannerState(secrets),
 		}
@@ -501,29 +527,55 @@ func (r *ProjectsRepo) List(ctx context.Context, filter ProjectsFilter) ([]domai
 }
 
 func (r *ProjectsRepo) Update(ctx context.Context, p *domain.Project) error {
+	return r.update(ctx, r.pool, p)
+}
+
+func (r *ProjectsRepo) UpdateTx(ctx context.Context, tx pgx.Tx, p *domain.Project) error {
+	return r.update(ctx, tx, p)
+}
+
+func (r *ProjectsRepo) update(ctx context.Context, exec projectExecutor, p *domain.Project) error {
 	const q = `
 		UPDATE projects
 		SET name = $1,
 			slug = $2,
 			description = $3,
-			repo_url = $4,
-			repo_provider = $5,
-			tags = $6,
-			status = $7,
-			setup_completed = $8,
-			visibility = $9,
-			sla_critical_days = $10,
-			sla_high_days = $11,
-			sla_medium_days = $12,
-			sla_low_days = $13,
-			sla_notify_before_days = $14,
-			team_id = $15,
-			updated_at = $16
-		WHERE id = $17`
+			icon_color = $4,
+			source_kind = $5,
+			repo_url = $6,
+			repo_provider = $7,
+			default_branch = $8,
+			autoscan_on_push = $9,
+			tags = $10,
+			status = $11,
+			setup_completed = $12,
+			created_by = $13,
+			visibility = $14,
+			sla_critical_days = $15,
+			sla_high_days = $16,
+			sla_medium_days = $17,
+			sla_low_days = $18,
+			sla_notify_before_days = $19,
+			team_id = $20,
+			updated_at = $21
+		WHERE id = $22`
 
 	p.UpdatedAt = time.Now()
 	if p.Slug == "" {
 		p.Slug = slugifyProjectName(p.Name)
+	}
+	if p.IconColor == "" {
+		p.IconColor = "#64748b"
+	}
+	if p.SourceKind == "" {
+		if strings.TrimSpace(p.RepoURL) != "" {
+			p.SourceKind = domain.ProjectSourceGit
+		} else {
+			p.SourceKind = domain.ProjectSourceManual
+		}
+	}
+	if p.DefaultBranch == "" {
+		p.DefaultBranch = "main"
 	}
 	if p.Visibility == "" {
 		p.Visibility = "workspace"
@@ -536,8 +588,9 @@ func (r *ProjectsRepo) Update(ctx context.Context, p *domain.Project) error {
 		}
 	}
 
-	tag, err := r.pool.Exec(ctx, q,
-		p.Name, p.Slug, p.Description, emptyToNil(p.RepoURL), emptyToNil(p.RepoProvider), p.Tags, p.Status, p.SetupCompleted,
+	tag, err := exec.Exec(ctx, q,
+		p.Name, p.Slug, p.Description, p.IconColor, p.SourceKind, emptyToNil(p.RepoURL), emptyToNil(p.RepoProvider),
+		p.DefaultBranch, p.AutoscanOnPush, p.Tags, p.Status, p.SetupCompleted, uuidOrNil(p.CreatedBy),
 		p.Visibility, p.SLACriticalDays, p.SLAHighDays, p.SLAMediumDays, p.SLALowDays, p.SLANotifyBeforeDays,
 		teamID, p.UpdatedAt, p.ID,
 	)

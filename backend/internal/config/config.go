@@ -1,9 +1,13 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"redlycoris/internal/domain"
 )
 
 type Config struct {
@@ -23,6 +27,7 @@ type Config struct {
 	BootstrapAdminPassword            string
 	BootstrapAdminFullName            string
 	BootstrapAdminForcePasswordChange bool
+	ScannerKindOverrides              map[string]domain.FindingKind
 }
 
 func Load() *Config {
@@ -46,6 +51,7 @@ func Load() *Config {
 		BootstrapAdminPassword:            getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin"),
 		BootstrapAdminFullName:            getEnv("BOOTSTRAP_ADMIN_FULL_NAME", "Administrator"),
 		BootstrapAdminForcePasswordChange: getEnvBool("BOOTSTRAP_ADMIN_FORCE_PASSWORD_CHANGE", true),
+		ScannerKindOverrides:              parseScannerKindOverrides(getEnv("RL_SCANNER_KIND_OVERRIDES", "")),
 	}
 }
 
@@ -82,4 +88,56 @@ func getEnvDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+func parseScannerKindOverrides(raw string) map[string]domain.FindingKind {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	if strings.HasPrefix(raw, "{") {
+		var values map[string]string
+		if err := json.Unmarshal([]byte(raw), &values); err != nil {
+			return nil
+		}
+		return parseScannerKindPairs(values)
+	}
+
+	values := make(map[string]string)
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			key, value, ok = strings.Cut(item, ":")
+		}
+		if !ok {
+			continue
+		}
+		values[key] = value
+	}
+	return parseScannerKindPairs(values)
+}
+
+func parseScannerKindPairs(values map[string]string) map[string]domain.FindingKind {
+	if len(values) == 0 {
+		return nil
+	}
+
+	out := make(map[string]domain.FindingKind, len(values))
+	for scanner, rawKind := range values {
+		key := domain.NormalizeScannerName(scanner)
+		kind, ok := domain.ParseFindingKind(rawKind)
+		if key == "" || !ok {
+			continue
+		}
+		out[key] = kind
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

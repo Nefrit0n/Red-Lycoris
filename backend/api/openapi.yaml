@@ -114,12 +114,18 @@ paths:
     post:
       tags: [Import]
       summary: Импорт findings (альтернативный endpoint)
-      description: Эквивалент `/api/v1/import`.
+      description: |
+        Эквивалент `/api/v1/import`. Формат входного файла определяется автоматически.
+        Поддерживаются: SARIF 2.1.0, Trivy, Semgrep, gosec, TruffleHog, Gitleaks,
+        Checkov, OWASP ZAP, Grype и **Generic Universal** (`source_type` + `findings[]`).
+        `kind` для Generic и content-poor SARIF определяется per-finding по содержимому,
+        затем по слабым hints/`RL_SCANNER_KIND_OVERRIDES`.
+        Подробнее: `docs/import-formats.md`.
       parameters:
         - in: query
           name: project_id
           schema: { type: string, format: uuid }
-          description: Принудительный project_id для всех импортируемых findings.
+          description: Принудительный project_id для всех импортируемых findings (имеет приоритет над полем тела).
       requestBody:
         required: true
         content:
@@ -127,6 +133,7 @@ paths:
             schema:
               description: Поддерживается SARIF/Trivy/Semgrep/Gitleaks/Checkov/TruffleHog/Generic JSON (формат определяется автоматически).
               oneOf:
+                - $ref: '#/components/schemas/GenericImport'
                 - type: object
                 - type: array
                   items: { type: object }
@@ -442,6 +449,7 @@ paths:
     put:
       tags: [Projects]
       summary: Обновить проект
+      description: Частичное обновление существующего проекта in-place. `id` в теле игнорируется; canonical UUID берётся из URL. Связанные findings и API токены остаются привязаны к прежнему project_id.
       parameters:
         - $ref: '#/components/parameters/ProjectID'
       requestBody:
@@ -573,11 +581,33 @@ paths:
     post:
       tags: [Import]
       summary: Импорт findings
+      description: |
+        Принимает результаты сканирования и автоматически определяет формат.
+
+        **Поддерживаемые форматы:**
+        - SARIF 2.1.0 (Semgrep, gosec, CodeQL, …)
+        - Trivy JSON
+        - Grype (Anchore) JSON
+        - TruffleHog v3 JSON/NDJSON
+        - Gitleaks JSON
+        - Checkov JSON
+        - OWASP ZAP JSON
+        - **Generic Universal** — собственный формат для любого сканера
+
+        **Generic Universal** (`$ref: GenericImport`) активируется при наличии полей
+        `source_type` и `findings[]` в корне объекта. Поле `kind` в каждом finding
+        можно не задавать — категория выводится per-finding по содержимому: сначала
+        package/web/IaC/secrets/code-сигналы, затем слабая подсказка по `source_type`.
+        Env override `RL_SCANNER_KIND_OVERRIDES` дополняет слабые подсказки по имени
+        сканера, но не сильнее content-сигналов.
+        Полная документация: `docs/import-formats.md`.
+
+        `project_id` в query-параметре имеет приоритет над `project_id` в теле.
       parameters:
         - in: query
           name: project_id
           schema: { type: string, format: uuid }
-          description: Принудительный project_id для всех импортируемых findings.
+          description: Принудительный project_id для всех импортируемых findings (имеет приоритет над полем тела).
       requestBody:
         required: true
         content:
@@ -585,6 +615,7 @@ paths:
             schema:
               description: Поддерживается SARIF/Trivy/Semgrep/Gitleaks/Checkov/TruffleHog/Generic JSON (формат определяется автоматически).
               oneOf:
+                - $ref: '#/components/schemas/GenericImport'
                 - type: object
                 - type: array
                   items: { type: object }
@@ -723,6 +754,40 @@ paths:
                       message:
                         type: string
                         description: Сообщение о запуске.
+                    required: [source, message]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/enrichment/sync/{source}/full:
+    post:
+      tags: [Enrichment]
+      summary: Запустить полную синхронизацию источника
+      description: Принудительно загружает полный набор данных. Поддерживается для NVD и CPE.
+      parameters:
+        - in: path
+          name: source
+          required: true
+          schema:
+            type: string
+            enum: [nvd, cpe]
+      responses:
+        '202':
+          description: Полная синхронизация запущена.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                      message:
+                        type: string
                     required: [source, message]
                 required: [data]
         '400':
@@ -955,11 +1020,17 @@ components:
         name: { type: string, description: Название проекта. }
         description: { type: string, description: Описание проекта. }
         icon_color: { type: string, description: HEX-цвет иконки проекта. }
+        source_kind:
+          type: string
+          enum: [manual, git, sarif, webhook]
+          description: Тип источника результатов проекта.
         repo_url: { type: string, description: URL репозитория. }
         repo_provider:
           type: string
           enum: [github, gitlab, bitbucket, other]
           description: Провайдер репозитория.
+        default_branch: { type: string, description: Основная ветка репозитория. }
+        autoscan_on_push: { type: boolean, description: Автосканирование при push для git-источника. }
         tags:
           type: array
           description: Теги проекта.
@@ -968,6 +1039,9 @@ components:
           type: string
           enum: [active, paused, archived]
         setup_completed: { type: boolean }
+        visibility:
+          type: string
+          enum: [private, team, workspace]
         owner:
           type: object
           properties:
@@ -993,6 +1067,11 @@ components:
             info: { type: integer }
           required: [critical, high, medium, low, info]
         sla_breached_count: { type: integer }
+        sla_critical_days: { type: integer, nullable: true }
+        sla_high_days: { type: integer, nullable: true }
+        sla_medium_days: { type: integer, nullable: true }
+        sla_low_days: { type: integer, nullable: true }
+        sla_notify_before_days: { type: integer }
         scanners:
           type: object
           properties:
@@ -1019,13 +1098,17 @@ components:
         - slug
         - name
         - icon_color
+        - source_kind
+        - autoscan_on_push
         - tags
         - status
         - setup_completed
+        - visibility
         - owner
         - pinned
         - findings_by_severity
         - sla_breached_count
+        - sla_notify_before_days
         - scanners
         - health
         - created_at
@@ -1078,7 +1161,7 @@ components:
       description: Данные обогащения finding из внешнего источника.
       properties:
         finding_id: { type: string, format: uuid, description: UUID finding. }
-        source: { type: string, description: Источник данных (`nvd`, `epss`, `kev`, `bdu`, `osv`, `cwe`, `cpe`). }
+        source: { type: string, description: "Источник данных (nvd, epss, kev, bdu, osv, cwe, cpe)." }
         data: { type: object, description: Нормализованные/сырые enrichment-данные источника. }
         enriched_at: { type: string, format: date-time, description: Время обогащения finding этим источником. }
       required: [finding_id, source, data, enriched_at]
@@ -1161,7 +1244,7 @@ components:
         source: { type: string, description: Имя источника. }
         last_sync_at: { type: string, format: date-time, description: Время последней синхронизации. }
         records_count: { type: integer, description: Количество записей в локальной таблице источника. }
-        status: { type: string, description: Текущий статус (`running`, `success`, `error`). }
+        status: { type: string, description: "Текущий статус (running, success, error)." }
         error_message: { type: string, description: Текст ошибки последней синхронизации (если есть). }
         duration_seconds: { type: integer, description: Длительность последней синхронизации в секундах. }
       required: [source, records_count, status, duration_seconds]
@@ -1179,6 +1262,166 @@ components:
         priority_score: { type: number, format: double, description: Итоговый score приоритизации. }
         calculated_at: { type: string, format: date-time, description: Время расчёта score. }
       required: [finding_id, base_score, epss_score, epss_percentile, is_kev, is_bdu, priority_score, calculated_at]
+
+    GenericImport:
+      type: object
+      description: |
+        Универсальный Generic-формат импорта для любого сканера.
+        Активируется автоматически при наличии полей `source_type` и `findings[]`.
+        `kind` определяется per-finding: валидный явный kind сохраняется, иначе
+        используется content-based resolver и слабые hints по `source_type`.
+        Подробная документация: `docs/import-formats.md`.
+      properties:
+        project_id:
+          type: string
+          format: uuid
+          description: UUID проекта. Опционально, если передан query-параметром.
+        source_type:
+          type: string
+          description: Идентификатор источника (имя сканера, инструмента, CI-шага).
+          example: my-custom-scanner
+        findings:
+          type: array
+          description: Список findings для импорта.
+          items:
+            $ref: '#/components/schemas/GenericFinding'
+      required: [source_type, findings]
+
+    GenericFinding:
+      type: object
+      description: Один finding в Generic-формате.
+      properties:
+        title:
+          type: string
+          description: Краткое название уязвимости. Обязательное поле.
+          example: SQL Injection в форме авторизации
+        severity:
+          description: |
+            Критичность. Принимается числом (0–4) или строкой.
+            Строковые значения: `info`/`informational`/`none` → 0, `low` → 1,
+            `medium`/`moderate` → 2, `high` → 3, `critical`/`crit` → 4.
+          oneOf:
+            - type: integer
+              minimum: 0
+              maximum: 4
+            - type: string
+              enum: [info, informational, none, low, medium, moderate, high, critical, crit]
+        kind:
+          type: string
+          enum: [sca, sast, dast, iac, secrets, other]
+          description: |
+            Категория finding. Валидное значение сохраняется как авторитетное.
+            Если поле отсутствует или неизвестно, тип выводится по content-сигналам:
+            `purl`/`package_ecosystem`/`fixed_version` → `sca`,
+            `url`/`http_method`/`http_param`/`http_evidence` → `dast`,
+            `iac_resource`/`iac_provider` → `iac`,
+            `secret_kind`/`commit_sha` → `secrets`,
+            `file_path` + (`line_start` или `rule_id`) → `sast`.
+        description:
+          type: string
+          description: Развёрнутое описание уязвимости.
+        confidence:
+          description: |
+            Уверенность в finding. Числом (0–3) или строкой:
+            `low` → 0, `medium` → 1, `high` → 2, `confirmed` → 3.
+          oneOf:
+            - type: integer
+              minimum: 0
+              maximum: 3
+            - type: string
+              enum: [low, medium, high, confirmed]
+        status:
+          description: |
+            Статус finding. Числом (0–4) или строкой:
+            `open` → 0, `confirmed` → 1, `false_positive`/`fp` → 2,
+            `resolved`/`fixed` → 3, `risk_accepted`/`accepted` → 4.
+          oneOf:
+            - type: integer
+              minimum: 0
+              maximum: 4
+            - type: string
+              enum: [open, confirmed, false_positive, fp, resolved, fixed, risk_accepted, accepted]
+        file_path:
+          type: string
+          description: Путь к файлу с уязвимостью.
+        line_start:
+          type: integer
+          description: Начальная строка в файле.
+        line_end:
+          type: integer
+          description: Конечная строка в файле.
+        component:
+          type: string
+          description: Имя уязвимого компонента или пакета.
+        component_version:
+          type: string
+          description: Версия компонента.
+        cve_ids:
+          type: array
+          items: { type: string }
+          description: Список CVE-идентификаторов.
+          example: ["CVE-2021-44228"]
+        cwe_ids:
+          type: array
+          description: |
+            CWE-идентификаторы. Принимаются числа `[79]` или строки `["CWE-79", "79"]`
+            в любом сочетании в одном массиве.
+          items:
+            oneOf:
+              - type: integer
+              - type: string
+          example: ["CWE-79", 89]
+        cpe_uri:
+          type: string
+          description: CPE URI компонента.
+        fixed_version:
+          type: string
+          description: Версия с исправлением уязвимости.
+        package_ecosystem:
+          type: string
+          description: Экосистема пакета (npm, pypi, maven, cargo, …).
+        purl:
+          type: string
+          description: Package URL.
+          example: pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
+        code_snippet:
+          type: string
+          description: Фрагмент уязвимого кода.
+        code_flow:
+          description: Трассировка потока данных (произвольный JSON).
+        url:
+          type: string
+          description: URL, в котором обнаружена уязвимость (для DAST).
+        http_method:
+          type: string
+          description: HTTP-метод (GET, POST, …).
+        http_param:
+          type: string
+          description: Уязвимый параметр HTTP-запроса.
+        http_evidence:
+          description: Доказательство эксплуатации (заголовки, тело; произвольный JSON).
+        iac_resource:
+          type: string
+          description: Ресурс IaC (aws_s3_bucket.my_bucket).
+        iac_provider:
+          type: string
+          description: Провайдер IaC (terraform, cloudformation, …).
+        secret_kind:
+          type: string
+          description: Тип утёкшего секрета (github-pat, aws-access-key-id, …).
+        commit_sha:
+          type: string
+          description: SHA коммита, в котором обнаружен секрет.
+        rule_id:
+          type: string
+          description: Идентификатор правила сканера.
+        rule_name:
+          type: string
+          description: Читаемое название правила.
+        source_type:
+          type: string
+          description: Переопределяет source_type конверта для данного finding.
+      required: [title, severity]
 
     ImportError:
       type: object
@@ -1210,6 +1453,6 @@ components:
           type: object
           properties:
             finding_id: { type: string, format: uuid, description: UUID finding. }
-            status: { type: string, description: Статус enrichment (`queued`, `enriched_sync`). }
+            status: { type: string, description: "Статус enrichment (queued, enriched_sync)." }
           required: [finding_id, status]
       required: [data]

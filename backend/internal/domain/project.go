@@ -33,6 +33,15 @@ const (
 	ProjectHealthPaused  ProjectHealth = "paused"
 )
 
+type ProjectSourceKind string
+
+const (
+	ProjectSourceManual  ProjectSourceKind = "manual"
+	ProjectSourceGit     ProjectSourceKind = "git"
+	ProjectSourceSarif   ProjectSourceKind = "sarif"
+	ProjectSourceWebhook ProjectSourceKind = "webhook"
+)
+
 type ProjectOwner struct {
 	ID          uuid.UUID `json:"id"`
 	Email       string    `json:"email"`
@@ -71,8 +80,11 @@ type Project struct {
 	Name                string                    `json:"name"`
 	Description         string                    `json:"description,omitempty"`
 	IconColor           string                    `json:"icon_color"`
+	SourceKind          ProjectSourceKind         `json:"source_kind"`
 	RepoURL             string                    `json:"repo_url,omitempty"`
 	RepoProvider        string                    `json:"repo_provider,omitempty"`
+	DefaultBranch       string                    `json:"default_branch,omitempty"`
+	AutoscanOnPush      bool                      `json:"autoscan_on_push"`
 	Tags                []string                  `json:"tags"`
 	Status              ProjectStatus             `json:"status"`
 	SetupCompleted      bool                      `json:"setup_completed"`

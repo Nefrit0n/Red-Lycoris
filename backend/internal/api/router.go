@@ -13,20 +13,22 @@ import (
 	"redlycoris/internal/domain"
 	"redlycoris/internal/enrichment"
 	"redlycoris/internal/observability"
+	"redlycoris/internal/parser"
 	"redlycoris/internal/storage"
 )
 
 type routerConfig struct {
-	env          string
-	version      string
-	startTime    time.Time
-	scheduler    *enrichment.Scheduler
-	auditRepo    *storage.AuditLogRepo
-	auditWriter  *audit.Writer
-	trustProxy   bool
-	cookieSecure bool
-	sessionDur   time.Duration
-	obs          *observability.Observability
+	env                  string
+	version              string
+	startTime            time.Time
+	scheduler            *enrichment.Scheduler
+	auditRepo            *storage.AuditLogRepo
+	auditWriter          *audit.Writer
+	trustProxy           bool
+	cookieSecure         bool
+	sessionDur           time.Duration
+	obs                  *observability.Observability
+	scannerKindOverrides map[string]domain.FindingKind
 }
 
 type RouterOption func(*routerConfig)
@@ -71,6 +73,10 @@ func WithObservability(obs *observability.Observability) RouterOption {
 	return func(c *routerConfig) { c.obs = obs }
 }
 
+func WithScannerKindOverrides(overrides map[string]domain.FindingKind) RouterOption {
+	return func(c *routerConfig) { c.scannerKindOverrides = overrides }
+}
+
 func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts ...RouterOption) http.Handler {
 	var cfg routerConfig
 	cfg.env = "dev"
@@ -104,6 +110,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 	}
 	authService := auth.NewService(usersRepo, sessionsRepo, cfg.sessionDur)
 	setAuthRuntimeConfig(cfg.trustProxy, cfg.cookieSecure, cfg.sessionDur)
+	detector := parser.NewDetector(cfg.scannerKindOverrides)
 
 	r := chi.NewRouter()
 
@@ -201,9 +208,9 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		})
 
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
-			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb, cfg.obs))
+			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb, cfg.obs, detector))
 		r.With(RequireScope("scans:write")).
-			Post("/api/v1/scans", handleCreateScan(scansRepo, findingsRepo))
+			Post("/api/v1/scans", handleCreateScan(scansRepo, findingsRepo, detector, rdb))
 		r.Get("/api/v1/scans/{id}", handleGetScan(scansRepo, userProjectRolesRepo))
 
 		r.Route("/api/v1/workspace", func(r chi.Router) {
@@ -228,7 +235,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleViewer, ProjectIDFromURL("id"))).
 					Get("/quick-peek", handleGetProjectQuickPeek(projectsRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
-					Put("/", handleUpdateProject(projectsRepo))
+					Put("/", handleUpdateProject(pool, projectsRepo, userProjectRolesRepo))
 				r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleProjectAdmin, ProjectIDFromURL("id"))).
 					Patch("/pinned", handlePatchProjectPinned(projectsRepo))
 				r.With(RequireProjectOwnerOrGlobalAdmin(projectsRepo, ProjectIDFromURL("id"))).
@@ -265,7 +272,8 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 			r.Get("/epss/history", handleGetEPSSHistory(pool))
 			r.With(RequireGlobalAdmin).Post("/enrich-all", handleEnrichAll(pool))
 			if cfg.scheduler != nil {
-				r.With(RequireGlobalAdmin).Post("/sync/{source}", handleManualSync(pool, cfg.scheduler))
+				r.With(RequireGlobalAdmin).Post("/sync/{source}", handleManualSync(cfg.scheduler))
+				r.With(RequireGlobalAdmin).Post("/sync/{source}/full", handleManualFullSync(cfg.scheduler))
 			}
 		})
 
