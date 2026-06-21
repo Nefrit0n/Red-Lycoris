@@ -12,40 +12,17 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
 
+# Один RUN на все бинарники: server с version-метаданными, admin и
+# healthcheck (последний нужен distroless-образу без shell и curl).
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build \
   -ldflags="-s -w \
   -X redlycoris/internal/version.Version=${VERSION} \
   -X redlycoris/internal/version.Commit=${COMMIT} \
   -X redlycoris/internal/version.Date=${BUILD_DATE}" \
-  -o /build/redlycoris ./cmd/server
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build -ldflags="-s -w" -o /build/admin ./cmd/admin
-
-# Build a tiny healthcheck binary for distroless runtime images.
-RUN cat > /tmp/healthcheck.go <<'EOF'
-package main
-
-import (
-	"net/http"
-	"os"
-	"time"
-)
-
-func main() {
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:8080/healthz")
-	if err != nil {
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		os.Exit(1)
-	}
-}
-EOF
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build -ldflags="-s -w" -o /build/healthcheck /tmp/healthcheck.go
+  -o /build/redlycoris ./cmd/server \
+  && go build -ldflags="-s -w" -o /build/admin ./cmd/admin \
+  && go build -ldflags="-s -w" -o /build/healthcheck ./cmd/healthcheck
 
 # ── Stage 2: Run ──
 # Distroless runtime avoids package-manager RUN steps and keeps the image minimal.
