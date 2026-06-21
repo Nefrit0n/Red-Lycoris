@@ -210,7 +210,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, corsOrigins string, opts .
 		r.With(RequireProjectRole(userProjectRolesRepo, domain.RoleTriager, ProjectIDFromQuery("project_id"))).
 			Post("/api/v1/import", handleImport(findingsRepo, findingEventsRepo, userProjectRolesRepo, rdb, cfg.obs, detector))
 		r.With(RequireScope("scans:write")).
-			Post("/api/v1/scans", handleCreateScan(scansRepo, findingsRepo, detector))
+			Post("/api/v1/scans", handleCreateScan(scansRepo, findingsRepo, detector, rdb))
 		r.Get("/api/v1/scans/{id}", handleGetScan(scansRepo, userProjectRolesRepo))
 
 		r.Route("/api/v1/workspace", func(r chi.Router) {
