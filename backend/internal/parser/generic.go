@@ -135,12 +135,12 @@ func (f *flexCWEIDs) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func clampInt(n, min, max int) int {
-	if n < min {
-		return min
+func clampInt(n, lo, hi int) int {
+	if n < lo {
+		return lo
 	}
-	if n > max {
-		return max
+	if n > hi {
+		return hi
 	}
 	return n
 }

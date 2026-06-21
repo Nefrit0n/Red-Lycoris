@@ -40,54 +40,8 @@ RUN mkdir -p /tmp/nginx/client_temp /tmp/nginx/proxy_temp /tmp/nginx/fastcgi_tem
     /var/run /var/log/nginx \
     && chown -R nginx:nginx /tmp/nginx /var/cache/nginx /var/run /var/log/nginx /usr/share/nginx/html
 
-RUN cat > /etc/nginx/nginx.conf <<'NGINXCONF'
-pid /tmp/nginx/nginx.pid;
-worker_processes auto;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    access_log /dev/stdout;
-    error_log /dev/stderr warn;
-
-    sendfile on;
-    keepalive_timeout 65;
-
-    client_body_temp_path /tmp/nginx/client_temp;
-    proxy_temp_path /tmp/nginx/proxy_temp;
-    fastcgi_temp_path /tmp/nginx/fastcgi_temp;
-    uwsgi_temp_path /tmp/nginx/uwsgi_temp;
-    scgi_temp_path /tmp/nginx/scgi_temp;
-
-    include /etc/nginx/conf.d/*.conf;
-}
-NGINXCONF
-
-RUN cat > /etc/nginx/conf.d/default.conf <<'SERVERCONF'
-server {
-    listen 3000;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    resolver 127.0.0.11 ipv6=off;
-    set $backend_upstream backend:8080;
-
-    location /api/ {
-        proxy_pass http://$backend_upstream;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-SERVERCONF
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
 USER nginx
 
