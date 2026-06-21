@@ -5,7 +5,7 @@ import { ApiClientError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client
 import { useCurrentUser } from "@/api/auth";
 import { useUpdateProject } from "@/api/projects";
 import type { Project } from "@/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -407,237 +407,241 @@ export default function ProjectDetail() {
       </TabsContent>
 
       <TabsContent value="settings">
-        <Card className="border-zinc-800 bg-zinc-900">
-          <CardHeader>
-            <CardTitle>Настройки проекта</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!canManageSettings ? (
-              <p className="text-sm text-zinc-400">Недостаточно прав для изменения настроек проекта.</p>
-            ) : !settingsForm ? (
-              <p className="text-sm text-zinc-400">Загрузка настроек...</p>
-            ) : (
-              <form onSubmit={handleSaveSettings} className="space-y-6">
-                <section className="space-y-3">
-                  <div>
-                    <h3 className="text-sm font-medium text-zinc-100">Основные параметры</h3>
-                    <p className="text-xs text-zinc-500">ID проекта не меняется при сохранении этих полей.</p>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Название</span>
-                      <Input value={settingsForm.name} onChange={(e) => patchSettings({ name: e.target.value })} />
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Slug</span>
-                      <Input value={settingsForm.slug} onChange={(e) => patchSettings({ slug: e.target.value })} />
-                    </label>
-                    <label className="space-y-1 text-sm md:col-span-2">
-                      <span className="text-xs text-zinc-400">Описание</span>
-                      <textarea
-                        className="min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-red-700/70"
-                        value={settingsForm.description}
-                        onChange={(e) => patchSettings({ description: e.target.value })}
-                      />
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Теги через запятую</span>
-                      <Input value={settingsForm.tags} onChange={(e) => patchSettings({ tags: e.target.value })} />
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Цвет проекта</span>
-                      <div className="flex gap-2">
-                        <Input value={settingsForm.icon_color} onChange={(e) => patchSettings({ icon_color: e.target.value })} />
-                        <input
-                          type="color"
-                          value={settingsForm.icon_color}
-                          onChange={(e) => patchSettings({ icon_color: e.target.value })}
-                          className="h-9 w-12 rounded border border-zinc-700 bg-zinc-950"
-                          aria-label="Цвет проекта"
-                        />
-                      </div>
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Статус</span>
-                      <Select value={settingsForm.status} onValueChange={(value) => patchSettings({ status: (value ?? "active") as Project["status"] })}>
-                        <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="border-zinc-700 bg-zinc-900">
-                          <SelectItem value="active">Активный</SelectItem>
-                          <SelectItem value="paused">Пауза</SelectItem>
-                          <SelectItem value="archived">Архивный</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </label>
-                  </div>
-                </section>
-
-                <section className="space-y-3 border-t border-zinc-800 pt-5">
-                  <div>
-                    <h3 className="text-sm font-medium text-zinc-100">Источник</h3>
-                    <p className="text-xs text-zinc-500">Изменение источника не отзывает и не перевыпускает API токены.</p>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Тип источника</span>
-                      <Select value={settingsForm.source_kind} onValueChange={(value) => patchSettings({ source_kind: (value ?? "manual") as Project["source_kind"] })}>
-                        <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="border-zinc-700 bg-zinc-900">
-                          <SelectItem value="manual">Ручной</SelectItem>
-                          <SelectItem value="git">Git</SelectItem>
-                          <SelectItem value="sarif">SARIF / JSON</SelectItem>
-                          <SelectItem value="webhook">Webhook</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </label>
-                    {settingsForm.source_kind === "webhook" && (
-                      <div className="flex items-end">
-                        <Button type="button" variant="outline" onClick={() => navigate(`/projects/${id}?tab=tokens`)}>
-                          Перейти к токенам
-                        </Button>
-                      </div>
-                    )}
-                    {settingsForm.source_kind === "git" && (
-                      <>
-                        <label className="space-y-1 text-sm">
-                          <span className="text-xs text-zinc-400">Провайдер</span>
-                          <Select value={settingsForm.repo_provider} onValueChange={(value) => patchSettings({ repo_provider: (value ?? "other") as NonNullable<Project["repo_provider"]> })}>
-                            <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="border-zinc-700 bg-zinc-900">
-                              <SelectItem value="github">GitHub</SelectItem>
-                              <SelectItem value="gitlab">GitLab</SelectItem>
-                              <SelectItem value="bitbucket">Bitbucket</SelectItem>
-                              <SelectItem value="other">Другой</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </label>
-                        <label className="space-y-1 text-sm">
-                          <span className="text-xs text-zinc-400">URL репозитория</span>
-                          <Input value={settingsForm.repo_url} onChange={(e) => patchSettings({ repo_url: e.target.value })} />
-                        </label>
-                        <label className="space-y-1 text-sm">
-                          <span className="text-xs text-zinc-400">Основная ветка</span>
-                          <Input value={settingsForm.default_branch} onChange={(e) => patchSettings({ default_branch: e.target.value })} />
-                        </label>
-                        <label className="flex items-center gap-3 pt-6 text-sm text-zinc-300">
-                          <Switch
-                            checked={settingsForm.autoscan_on_push}
-                            onCheckedChange={(checked) => patchSettings({ autoscan_on_push: Boolean(checked) })}
-                          />
-                          Автосканирование при push
-                        </label>
-                      </>
-                    )}
-                  </div>
-                </section>
-
-                <section className="space-y-3 border-t border-zinc-800 pt-5">
-                  <div>
-                    <h3 className="text-sm font-medium text-zinc-100">Доступ и SLA</h3>
-                    <p className="text-xs text-zinc-500">Смена owner не удаляет старого owner из участников проекта.</p>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Owner</span>
-                      <Select
-                        value={settingsForm.owner_id}
-                        onValueChange={(value) => patchSettings({ owner_id: value ?? settingsForm.owner_id })}
-                        disabled={!canChangeOwner}
-                      >
-                        <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="border-zinc-700 bg-zinc-900">
-                          {ownerOptions.map((member) => (
-                            <SelectItem key={member.id} value={member.id}>
-                              {member.display_name || member.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Команда</span>
-                      <Select
-                        value={settingsForm.team_id || NO_TEAM_VALUE}
-                        onValueChange={(value) => patchSettings({ team_id: value === NO_TEAM_VALUE ? "" : value ?? "" })}
-                      >
-                        <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="border-zinc-700 bg-zinc-900">
-                          <SelectItem value={NO_TEAM_VALUE}>Без команды</SelectItem>
-                          {(workspaceTeamsQuery.data ?? []).map((team) => (
-                            <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                    <div className="space-y-1 text-sm md:col-span-2">
-                      <span className="text-xs text-zinc-400">Видимость</span>
-                      <div className="flex flex-wrap gap-2">
-                        {([
-                          ["private", "Приватный"],
-                          ["team", "Команда"],
-                          ["workspace", "Workspace"],
-                        ] as Array<[Project["visibility"], string]>).map(([value, label]) => (
-                          <Button
-                            key={value}
-                            type="button"
-                            variant={settingsForm.visibility === value ? "default" : "outline"}
-                            onClick={() => patchSettings({ visibility: value })}
-                          >
-                            {label}
-                          </Button>
-                        ))}
-                      </div>
+        <div className="mx-auto max-w-4xl">
+          <Card className="border-zinc-800 bg-zinc-900">
+            <CardHeader>
+              <CardTitle>Настройки проекта</CardTitle>
+              <CardDescription>Параметры проекта, источник данных, доступ и SLA.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!canManageSettings ? (
+                <p className="text-sm text-zinc-400">Недостаточно прав для изменения настроек проекта.</p>
+              ) : !settingsForm ? (
+                <p className="text-sm text-zinc-400">Загрузка настроек...</p>
+              ) : (
+                <form onSubmit={handleSaveSettings} className="space-y-5">
+                  <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-5">
+                    <div>
+                      <h3 className="text-sm font-semibold text-zinc-100">Основные параметры</h3>
+                      <p className="text-xs text-zinc-500">ID проекта не меняется при сохранении этих полей.</p>
                     </div>
-                    {[
-                      ["sla_critical_days", "Критичный SLA"],
-                      ["sla_high_days", "Высокий SLA"],
-                      ["sla_medium_days", "Средний SLA"],
-                      ["sla_low_days", "Низкий SLA"],
-                    ].map(([key, label]) => (
-                      <label key={key} className="space-y-1 text-sm">
-                        <span className="text-xs text-zinc-400">{label}, дней</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={settingsForm[key as keyof ProjectSettingsForm] as string}
-                          onChange={(e) => patchSettings({ [key]: e.target.value } as Partial<ProjectSettingsForm>)}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Название</span>
+                        <Input value={settingsForm.name} onChange={(e) => patchSettings({ name: e.target.value })} />
+                      </label>
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Slug</span>
+                        <Input value={settingsForm.slug} onChange={(e) => patchSettings({ slug: e.target.value })} />
+                      </label>
+                      <label className="space-y-1.5 text-sm md:col-span-2">
+                        <span className="text-xs font-medium text-zinc-300">Описание</span>
+                        <textarea
+                          className="min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-red-700/70"
+                          value={settingsForm.description}
+                          onChange={(e) => patchSettings({ description: e.target.value })}
                         />
                       </label>
-                    ))}
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs text-zinc-400">Уведомлять до нарушения SLA, дней</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={settingsForm.sla_notify_before_days}
-                        onChange={(e) => patchSettings({ sla_notify_before_days: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                </section>
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Теги через запятую</span>
+                        <Input value={settingsForm.tags} onChange={(e) => patchSettings({ tags: e.target.value })} />
+                      </label>
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Цвет проекта</span>
+                        <div className="flex gap-2">
+                          <Input value={settingsForm.icon_color} onChange={(e) => patchSettings({ icon_color: e.target.value })} />
+                          <input
+                            type="color"
+                            value={settingsForm.icon_color}
+                            onChange={(e) => patchSettings({ icon_color: e.target.value })}
+                            className="h-9 w-9 shrink-0 rounded-lg border border-zinc-700 bg-zinc-950"
+                            aria-label="Цвет проекта"
+                          />
+                        </div>
+                      </label>
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Статус</span>
+                        <Select value={settingsForm.status} onValueChange={(value) => patchSettings({ status: (value ?? "active") as Project["status"] })}>
+                          <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="border-zinc-700 bg-zinc-900">
+                            <SelectItem value="active">Активный</SelectItem>
+                            <SelectItem value="paused">Пауза</SelectItem>
+                            <SelectItem value="archived">Архивный</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </label>
+                    </div>
+                  </section>
 
-                <div className="flex items-center justify-between border-t border-zinc-800 pt-5">
-                  <div className="text-sm">
-                    {settingsError && <p className="text-red-400">{settingsError}</p>}
-                    {settingsSuccess && <p className="text-emerald-400">{settingsSuccess}</p>}
+                  <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-5">
+                    <div>
+                      <h3 className="text-sm font-semibold text-zinc-100">Источник</h3>
+                      <p className="text-xs text-zinc-500">Изменение источника не отзывает и не перевыпускает API токены.</p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Тип источника</span>
+                        <Select value={settingsForm.source_kind} onValueChange={(value) => patchSettings({ source_kind: (value ?? "manual") as Project["source_kind"] })}>
+                          <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="border-zinc-700 bg-zinc-900">
+                            <SelectItem value="manual">Ручной</SelectItem>
+                            <SelectItem value="git">Git</SelectItem>
+                            <SelectItem value="sarif">SARIF / JSON</SelectItem>
+                            <SelectItem value="webhook">Webhook</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      {settingsForm.source_kind === "webhook" && (
+                        <div className="flex items-end">
+                          <Button type="button" variant="outline" onClick={() => navigate(`/projects/${id}?tab=tokens`)}>
+                            Перейти к токенам
+                          </Button>
+                        </div>
+                      )}
+                      {settingsForm.source_kind === "git" && (
+                        <>
+                          <label className="space-y-1.5 text-sm">
+                            <span className="text-xs font-medium text-zinc-300">Провайдер</span>
+                            <Select value={settingsForm.repo_provider} onValueChange={(value) => patchSettings({ repo_provider: (value ?? "other") as NonNullable<Project["repo_provider"]> })}>
+                              <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="border-zinc-700 bg-zinc-900">
+                                <SelectItem value="github">GitHub</SelectItem>
+                                <SelectItem value="gitlab">GitLab</SelectItem>
+                                <SelectItem value="bitbucket">Bitbucket</SelectItem>
+                                <SelectItem value="other">Другой</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </label>
+                          <label className="space-y-1.5 text-sm">
+                            <span className="text-xs font-medium text-zinc-300">URL репозитория</span>
+                            <Input value={settingsForm.repo_url} onChange={(e) => patchSettings({ repo_url: e.target.value })} />
+                          </label>
+                          <label className="space-y-1.5 text-sm">
+                            <span className="text-xs font-medium text-zinc-300">Основная ветка</span>
+                            <Input value={settingsForm.default_branch} onChange={(e) => patchSettings({ default_branch: e.target.value })} />
+                          </label>
+                          <label className="flex items-center gap-3 pt-6 text-sm text-zinc-300">
+                            <Switch
+                              checked={settingsForm.autoscan_on_push}
+                              onCheckedChange={(checked) => patchSettings({ autoscan_on_push: Boolean(checked) })}
+                            />
+                            Автосканирование при push
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-5">
+                    <div>
+                      <h3 className="text-sm font-semibold text-zinc-100">Доступ и SLA</h3>
+                      <p className="text-xs text-zinc-500">Смена owner не удаляет старого owner из участников проекта.</p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Owner</span>
+                        <Select
+                          value={settingsForm.owner_id}
+                          onValueChange={(value) => patchSettings({ owner_id: value ?? settingsForm.owner_id })}
+                          disabled={!canChangeOwner}
+                        >
+                          <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="border-zinc-700 bg-zinc-900">
+                            {ownerOptions.map((member) => (
+                              <SelectItem key={member.id} value={member.id}>
+                                {member.display_name || member.email}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Команда</span>
+                        <Select
+                          value={settingsForm.team_id || NO_TEAM_VALUE}
+                          onValueChange={(value) => patchSettings({ team_id: value === NO_TEAM_VALUE ? "" : value ?? "" })}
+                        >
+                          <SelectTrigger className="w-full border-zinc-700 bg-zinc-950 text-zinc-100">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="border-zinc-700 bg-zinc-900">
+                            <SelectItem value={NO_TEAM_VALUE}>Без команды</SelectItem>
+                            {(workspaceTeamsQuery.data ?? []).map((team) => (
+                              <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <div className="space-y-1.5 text-sm md:col-span-2">
+                        <span className="text-xs font-medium text-zinc-300">Видимость</span>
+                        <div className="inline-flex flex-wrap gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+                          {([
+                            ["private", "Приватный"],
+                            ["team", "Команда"],
+                            ["workspace", "Workspace"],
+                          ] as Array<[Project["visibility"], string]>).map(([value, label]) => (
+                            <Button
+                              key={value}
+                              type="button"
+                              size="sm"
+                              variant={settingsForm.visibility === value ? "default" : "ghost"}
+                              onClick={() => patchSettings({ visibility: value })}
+                            >
+                              {label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                      {[
+                        ["sla_critical_days", "Критичный SLA"],
+                        ["sla_high_days", "Высокий SLA"],
+                        ["sla_medium_days", "Средний SLA"],
+                        ["sla_low_days", "Низкий SLA"],
+                      ].map(([key, label]) => (
+                        <label key={key} className="space-y-1.5 text-sm">
+                          <span className="text-xs font-medium text-zinc-300">{label}, дней</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={settingsForm[key as keyof ProjectSettingsForm] as string}
+                            onChange={(e) => patchSettings({ [key]: e.target.value } as Partial<ProjectSettingsForm>)}
+                          />
+                        </label>
+                      ))}
+                      <label className="space-y-1.5 text-sm">
+                        <span className="text-xs font-medium text-zinc-300">Уведомлять до нарушения SLA, дней</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={settingsForm.sla_notify_before_days}
+                          onChange={(e) => patchSettings({ sla_notify_before_days: e.target.value })}
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <div className="flex items-center justify-between gap-4 border-t border-zinc-800 pt-5">
+                    <div className="text-sm">
+                      {settingsError && <p className="text-red-400">{settingsError}</p>}
+                      {settingsSuccess && <p className="text-emerald-400">{settingsSuccess}</p>}
+                    </div>
+                    <Button type="submit" disabled={updateProject.isPending}>
+                      {updateProject.isPending ? "Сохранение..." : "Сохранить настройки"}
+                    </Button>
                   </div>
-                  <Button type="submit" disabled={updateProject.isPending}>
-                    {updateProject.isPending ? "Сохранение..." : "Сохранить настройки"}
-                  </Button>
-                </div>
-              </form>
-            )}
-          </CardContent>
-        </Card>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </TabsContent>
 
       <TabsContent value="tokens">
