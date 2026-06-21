@@ -117,6 +117,14 @@ func parseFindingsFilter(w http.ResponseWriter, r *http.Request, rolesRepo *stor
 		}
 	}
 
+	if v := q.Get("sources"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				filter.SourceTypes = append(filter.SourceTypes, s)
+			}
+		}
+	}
+
 	if v := q.Get("has_cve"); v == "true" {
 		t := true
 		filter.HasCVE = &t
