@@ -15,4 +15,6 @@ curl http://localhost:8080/readyz
 docker compose logs -f backend
 ```
 
+[Быстрый старт: от установки до первой находки](https://github.com/Nefrit0n/Red-Lycoris/wiki/Быстрый-старт-Требования).
+
 Полная документация: [GitHub Wiki](https://github.com/Nefrit0n/Red-Lycoris/wiki). Изменения Wiki вносятся в [`wiki/`](wiki/README.md), не через веб-интерфейс GitHub Wiki.
