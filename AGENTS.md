@@ -1,589 +1,165 @@
-# ASOC Platform — Red Lycoris
+# AGENTS.md — Red Lycoris
 
-## Что это
+## Назначение проекта
 
-Платформа для централизованного хранения, дедупликации, корреляции и обогащения уязвимостей.
-Замена DefectDojo с фокусом на производительность при 1M+ findings.
+Red Lycoris — on-premise ASOC-платформа для приёма, хранения, дедупликации, корреляции, обогащения и приоритизации уязвимостей. Целевой масштаб — 1M+ findings. Платформа принимает результаты сканеров; запуск сканеров не входит в её задачи.
 
-**Не ASMP.** Мы не запускаем сканеры. Мы принимаем их результаты, обогащаем и приоритизируем.
+## Как работать в репозитории
 
-## Стек
+- Перед изменениями прочитай относящийся к задаче код и проверь `git status --short`. Сохраняй чужие незакоммиченные изменения.
+- Делай только изменения, необходимые для запроса. Не добавляй зависимости и не создавай новые файлы без явной просьбы пользователя. Используй существующую структуру проекта.
+- Не вводи абстракции «на будущее». Новый интерфейс нужен при наличии двух и более реализаций.
+- Не добавляй глобальные переменные. Передавай зависимости через конструкторы.
+- Комментарии объясняют причины решений; не пересказывай в них код.
+- При описании текущего поведения сверяйся с реализацией, миграциями и манифестами. README и CLAUDE.md могут отставать от кода; обнаруженное расхождение не является поручением менять поведение приложения.
+- Один запрос с изменениями — один логический коммит с осмысленным сообщением. Добавляй в коммит только свои изменения по задаче.
+- В результате кратко сообщи, что изменено, что проверено и какие проверки не удалось выполнить.
 
-- **Backend:** Go 1.25+ (stdlib net/http + chi router)
-- **Database:** PostgreSQL 16 (главное хранилище)
-- **Cache/Queue:** Redis 7 (кэш + Redis Streams для async pipeline)
-- **Frontend:** React 18 + TypeScript + Vite + TanStack (Table, Query, Virtual)
-- **Стилизация:** Tailwind CSS + shadcn/ui
-- **API:** REST (OpenAPI 3.1), JSON
-- **Миграции:** golang-migrate
-- **Деплой:** Docker Compose
+## Стек и источники версий
 
-## Структура проекта
+| Слой | Текущий стек | Где проверять |
+| --- | --- | --- |
+| Backend | Go 1.25+, `net/http`, chi v5 | `backend/go.mod` |
+| Хранилище | PostgreSQL 16, raw SQL через pgx/v5, pgxpool | `backend/internal/storage/`, `docker-compose.yml` |
+| Кэш и очередь | Redis 7, Redis Streams | `backend/internal/enrichment/`, `docker-compose.yml` |
+| Frontend | React 19, TypeScript 5, Vite 8, React Router 7 | `frontend/package.json`, `frontend/package-lock.json` |
+| Состояние и таблицы | TanStack Query / Table / Virtual, Zustand | `frontend/src/` |
+| Интерфейс | Tailwind CSS 4, shadcn/ui, Base UI | `frontend/src/components/ui/`, `frontend/src/index.css` |
+| API | REST, JSON, OpenAPI 3.1 | `backend/api/openapi.yaml` |
+| Миграции | golang-migrate, SQL up/down | `backend/migrations/` |
+| Проверки | Go tests, golangci-lint, ESLint, TypeScript, Vitest | `.github/workflows/pr.yml`, `frontend/package.json` |
+| Развёртывание | Docker Compose, nginx для frontend | Корневые compose-файлы, Dockerfile каждого приложения |
 
-```
-Red-Lycoris/
-├── AGENTS.md
-├── CLAUDE.md
-├── CHANGELOG.md
-├── Makefile
-├── VERSION
-├── docker-compose.yml
-├── docker-compose.prod.yml
-├── env.example
-├── vuln_seeder_ru.py              # Генератор тестовых уязвимостей (Python)
-├── backend/
-│   ├── Dockerfile
-│   ├── go.mod / go.sum
-│   ├── api/
-│   │   └── openapi.yaml           # OpenAPI 3.1 спецификация
-│   ├── cmd/
-│   │   ├── server/main.go         # Точка входа HTTP-сервера
-│   │   ├── admin/main.go          # CLI для управления пользователями
-│   │   ├── seed/main.go           # Seed данных для разработки
-│   │   └── loadtest/main.go       # Нагрузочное тестирование
-│   ├── internal/
-│   │   ├── config/
-│   │   │   └── config.go          # Env-based конфиг
-│   │   ├── api/
-│   │   │   ├── router.go          # Chi router, маршруты
-│   │   │   ├── middleware.go      # Logging, CORS, recovery
-│   │   │   ├── response.go        # Хелперы JSON-ответов
-│   │   │   ├── auth.go            # Хендлеры аутентификации (login/logout)
-│   │   │   ├── auth_middleware.go # JWT + session проверка
-│   │   │   ├── session_middleware.go
-│   │   │   ├── audit_middleware.go
-│   │   │   ├── ratelimit.go       # Rate limiting
-│   │   │   ├── request_id.go
-│   │   │   ├── findings.go        # Хендлеры findings
-│   │   │   ├── findings_facets.go # Фасетная фильтрация
-│   │   │   ├── projects.go        # Хендлеры projects
-│   │   │   ├── project_members.go # Управление участниками проекта
-│   │   │   ├── scans.go           # Хендлеры сканирований
-│   │   │   ├── triage.go          # Хендлеры триажа (статус, комментарии)
-│   │   │   ├── comments.go        # Комментарии к findings
-│   │   │   ├── saved_views.go     # Сохранённые фильтры
-│   │   │   ├── enrichment.go      # Хендлеры enrichment status
-│   │   │   ├── import.go          # Хендлер импорта
-│   │   │   ├── export.go          # Экспорт (CSV, JSON)
-│   │   │   ├── export_html.go     # HTML-отчёты
-│   │   │   ├── dashboard.go       # Хендлеры дашборда
-│   │   │   ├── admin_users.go     # Управление пользователями (admin)
-│   │   │   ├── admin_users_v2.go
-│   │   │   ├── admin_guards.go    # Проверки прав администратора
-│   │   │   ├── admin_audit.go     # Audit log API
-│   │   │   ├── api_tokens.go      # API токены
-│   │   │   ├── workspace.go       # Workspace настройки
-│   │   │   ├── users_search.go    # Поиск пользователей
-│   │   │   ├── health.go          # Health check endpoint
-│   │   │   ├── version.go         # Version endpoint
-│   │   │   └── docs.go            # Swagger/ReDoc endpoint
-│   │   ├── domain/
-│   │   │   ├── finding.go         # Структуры Finding
-│   │   │   ├── finding_event.go   # История изменений finding
-│   │   │   ├── finding_kind.go    # Категории (vuln, secret, sast, iac...)
-│   │   │   ├── project.go         # Структуры Project
-│   │   │   ├── user.go            # Структуры User, UserStatus, GlobalRole
-│   │   │   ├── session.go         # Структуры Session
-│   │   │   ├── role.go            # ProjectRole (viewer/triager/project_admin)
-│   │   │   ├── team.go            # Структуры Team
-│   │   │   ├── scan.go            # Структуры Scan
-│   │   │   ├── api_token.go       # Структуры APIToken
-│   │   │   ├── triage_action.go   # Действия триажа
-│   │   │   ├── closure_reason.go  # Причины закрытия
-│   │   │   ├── admin_user_dto.go  # DTO для admin API
-│   │   │   ├── scoring.go         # Вычисление priority_score
-│   │   │   ├── dedup.go           # Логика дедупликации (fingerprint)
-│   │   │   ├── cvss/
-│   │   │   │   └── parser.go      # Парсер CVSS-строк (v2/v3/v4)
-│   │   │   ├── cwe/
-│   │   │   │   ├── hierarchy.go   # Иерархия CWE (parent/child)
-│   │   │   │   └── mapping.go     # Маппинг CWE ID → описание
-│   │   │   ├── epss/
-│   │   │   │   └── trend.go       # Тренд EPSS (delta за период)
-│   │   │   ├── kev/
-│   │   │   │   └── urgency.go     # Уровень срочности KEV
-│   │   │   └── osv/
-│   │   │       ├── ecosystem.go   # Экосистемы OSV
-│   │   │       └── ranges.go      # Диапазоны версий OSV
-│   │   ├── storage/
-│   │   │   ├── postgres.go        # Подключение, пул, хелперы
-│   │   │   ├── cache.go           # Redis кэш-хелперы
-│   │   │   ├── findings_repo.go   # SQL-запросы findings
-│   │   │   ├── projects_repo.go   # SQL-запросы projects
-│   │   │   ├── users_repo.go      # SQL-запросы users
-│   │   │   ├── sessions_repo.go   # SQL-запросы sessions
-│   │   │   ├── scans_repo.go      # SQL-запросы scans
-│   │   │   ├── api_tokens_repo.go
-│   │   │   ├── user_project_roles_repo.go
-│   │   │   ├── finding_events_repo.go
-│   │   │   ├── saved_views_repo.go
-│   │   │   ├── closure_reasons_repo.go
-│   │   │   ├── audit_log_repo.go
-│   │   │   ├── workspace_repo.go
-│   │   │   ├── matview_refresher.go
-│   │   │   ├── admin_users_query.go
-│   │   │   ├── dashboard_repo.go
-│   │   │   └── enrichment_repo.go  # (через enrich.go)
-│   │   ├── auth/
-│   │   │   ├── service.go         # Аутентификация (login, сессии)
-│   │   │   ├── token.go           # JWT / session токены
-│   │   │   ├── password.go        # Хэширование паролей (bcrypt)
-│   │   │   └── api_tokens.go      # Генерация/проверка API токенов
-│   │   ├── audit/
-│   │   │   └── writer.go          # Запись audit log событий
-│   │   ├── enrichment/
-│   │   │   ├── pipeline.go        # Оркестрация обогащения
-│   │   │   ├── enrich.go          # Применение обогащения к findings
-│   │   │   ├── worker.go          # Worker для async обогащения
-│   │   │   ├── scheduler.go       # Cron-расписание синхронизации
-│   │   │   ├── nvd/sync.go        # NVD API 2.0 syncer
-│   │   │   ├── nvd/cpe.go         # CPE matching для NVD
-│   │   │   ├── nvd/refs.go        # Ссылки NVD (advisories, patches)
-│   │   │   ├── epss/sync.go       # EPSS CSV daily sync
-│   │   │   ├── kev/sync.go        # CISA KEV JSON sync
-│   │   │   ├── bdu/sync.go        # БДУ ФСТЭК XML sync
-│   │   │   ├── osv/sync.go        # OSV GCS bucket sync
-│   │   │   ├── cwe/sync.go        # CWE XML sync
-│   │   │   └── cpe/sync.go        # CPE dictionary sync
-│   │   ├── parser/
-│   │   │   ├── parser.go          # Интерфейс парсера
-│   │   │   ├── detect.go          # Автоопределение формата
-│   │   │   ├── sarif.go           # SARIF 2.1.0
-│   │   │   ├── trivy.go           # Trivy JSON
-│   │   │   ├── grype.go           # Grype JSON (Anchore)
-│   │   │   ├── trufflehog.go      # TruffleHog v3 JSON (NDJSON + array)
-│   │   │   ├── gitleaks.go        # Gitleaks JSON
-│   │   │   ├── gosec.go           # gosec JSON (Go security)
-│   │   │   ├── semgrep.go         # Semgrep JSON
-│   │   │   ├── checkov.go         # Checkov JSON (IaC)
-│   │   │   ├── zap.go             # OWASP ZAP JSON
-│   │   │   └── generic.go         # Универсальный JSON формат
-│   │   ├── export/
-│   │   │   ├── html.go            # HTML-отчёты по findings
-│   │   │   └── templates/
-│   │   │       └── report.html.tmpl
-│   │   ├── observability/
-│   │   │   ├── health.go          # Health check логика
-│   │   │   └── metrics.go         # Prometheus-метрики
-│   │   ├── loadtest/              # Сценарии нагрузочного тестирования
-│   │   │   ├── sarif_generate.go
-│   │   │   ├── sarif_seed.go
-│   │   │   ├── scenario_browse.go
-│   │   │   ├── scenario_dashboard.go
-│   │   │   ├── scenario_export.go
-│   │   │   └── report.go
-│   │   └── version/
-│   │       └── version.go         # Версия приложения (из VERSION файла)
-│   └── migrations/
-│       ├── 001_init.{up,down}.sql
-│       ├── 002_enrichment_tables.{up,down}.sql
-│       ├── 003_materialized_views.{up,down}.sql
-│       ├── 004_findings_categories.{up,down}.sql
-│       ├── 005_users_sessions.{up,down}.sql
-│       ├── 006_user_project_roles.{up,down}.sql
-│       ├── 007_saved_views.{up,down}.sql
-│       ├── 008_closure_reasons.{up,down}.sql
-│       ├── 009_findings_triage.{up,down}.sql
-│       ├── 010_finding_events.{up,down}.sql
-│       ├── 011_audit_log.{up,down}.sql
-│       ├── 012_cvss_v2_columns.{up,down}.sql
-│       ├── 013_epss_history.{up,down}.sql
-│       ├── 014_audit_log_current_partitions.{up,down}.sql
-│       ├── 015_kev_full_fields.{up,down}.sql
-│       ├── 016_bdu_full_fields.{up,down}.sql
-│       ├── 017_audit_log_enriched_fields.{up,down}.sql
-│       ├── 018_projects_list_view_fields.{up,down}.sql
-│       ├── 019_projects_sla_visibility.{up,down}.sql
-│       ├── 020_teams.{up,down}.sql
-│       ├── 021_user_enhancements.{up,down}.sql
-│       ├── 022_user_credentials.{up,down}.sql
-│       ├── 023_user_identities.{up,down}.sql
-│       ├── 024_session_enhancements_mfa.{up,down}.sql
-│       ├── 025_roles_permissions.{up,down}.sql
-│       ├── 026_groups_project_access.{up,down}.sql
-│       ├── 027_api_tokens_and_scans.{up,down}.sql
-│       ├── 028_access_schema_hardening.{up,down}.sql
-│       ├── 029_findings_perf_indexes.{up,down}.sql
-│       └── 030_secret_fingerprint.{up,down}.sql
-├── frontend/
-│   ├── Dockerfile
-│   ├── package.json
-│   ├── tsconfig.json / tsconfig.app.json / tsconfig.node.json
-│   ├── vite.config.ts
-│   ├── components.json            # shadcn/ui конфиг
-│   ├── eslint.config.js
-│   ├── index.html
-│   └── src/
-│       ├── main.tsx
-│       ├── App.tsx
-│       ├── index.css
-│       ├── api/
-│       │   ├── client.ts          # Fetch wrapper с типами
-│       │   ├── auth.ts            # API аутентификации
-│       │   ├── findings.ts        # API findings
-│       │   ├── projects.ts        # API projects
-│       │   ├── enrichment.ts      # API enrichment
-│       │   ├── dashboard.ts       # API дашборда
-│       │   ├── comments.ts        # API комментариев
-│       │   ├── saved-views.ts     # API сохранённых фильтров
-│       │   ├── project-security.ts # API членов проекта / токенов
-│       │   ├── admin-users.ts     # API администрирования пользователей
-│       │   ├── audit.ts           # API audit log
-│       │   └── version.ts         # API версии
-│       ├── store/
-│       │   ├── filters.ts         # Zustand store для фильтров findings
-│       │   └── findings-selection.ts # Zustand store для выделения строк
-│       ├── pages/
-│       │   ├── Login.tsx
-│       │   ├── ChangePassword.tsx
-│       │   ├── Dashboard.tsx
-│       │   ├── FindingsList.tsx
-│       │   ├── FindingDetail.tsx
-│       │   ├── ProjectsList.tsx
-│       │   ├── ProjectDetail.tsx
-│       │   ├── ProjectScans.tsx
-│       │   ├── ProjectSettingsTokens.tsx
-│       │   ├── Import.tsx
-│       │   ├── EnrichmentStatus.tsx
-│       │   ├── AdminUsers.tsx
-│       │   ├── AdminAudit.tsx
-│       │   └── admin/access/      # Вложенные страницы RBAC-управления
-│       ├── components/
-│       │   ├── Layout.tsx
-│       │   ├── Sidebar.tsx
-│       │   ├── RequireAuth.tsx    # Guard для аутентифицированных роутов
-│       │   ├── ErrorBoundary.tsx
-│       │   ├── CodeSnippet.tsx
-│       │   ├── FindingsTable.tsx  # TanStack Table + Virtual
-│       │   ├── ImportUpload.tsx
-│       │   ├── DashboardWidgets.tsx
-│       │   ├── EnrichmentTabs.tsx
-│       │   ├── PriorityScore.tsx
-│       │   ├── StatusBadge.tsx
-│       │   ├── findings/          # Компоненты таблицы findings
-│       │   │   ├── FlatFindingsTable.tsx
-│       │   │   ├── GroupedFindingsTable.tsx
-│       │   │   ├── FiltersPanel.tsx
-│       │   │   ├── FindingsToolbar.tsx
-│       │   │   ├── BulkActionsBar.tsx
-│       │   │   ├── PreviewPanel.tsx
-│       │   │   ├── SeverityBadge.tsx
-│       │   │   ├── KindBadge.tsx
-│       │   │   ├── EnrichmentBadges.tsx
-│       │   │   ├── SavedViewsBar.tsx
-│       │   │   ├── ColumnChooser.tsx
-│       │   │   └── columns.tsx
-│       │   ├── enrichment/        # Секции вкладок обогащения
-│       │   │   ├── NvdSection.tsx
-│       │   │   ├── EpssSection.tsx
-│       │   │   ├── KevSection.tsx
-│       │   │   ├── BduSection.tsx
-│       │   │   ├── OsvSection.tsx
-│       │   │   ├── CweSection.tsx
-│       │   │   └── CvssBreakdown.tsx
-│       │   ├── admin/access/      # Компоненты управления пользователями
-│       │   │   ├── UsersTable.tsx
-│       │   │   ├── CreateUserModal.tsx
-│       │   │   └── ...
-│       │   ├── projects/
-│       │   │   └── CreateProjectWizardDialog.tsx
-│       │   └── ui/                # shadcn/ui компоненты
-│       ├── lib/
-│       │   ├── severity.ts
-│       │   ├── finding-kind.ts
-│       │   ├── findings-filter.ts
-│       │   ├── project-wizard.ts
-│       │   ├── projects-query.ts
-│       │   └── utils.ts
-│       ├── hooks/
-│       │   ├── use-hotkey.ts
-│       │   ├── use-expanded-groups.ts
-│       │   └── admin/             # Хуки для admin-страниц
-│       └── types/
-│           └── index.ts           # TypeScript типы
-├── docs/
-│   ├── architecture.md
-│   ├── configuration.md
-│   ├── deployment.md
-│   ├── security-model.md
-│   ├── network_requirements.md
-│   ├── KNOWN_ISSUES.md
-│   ├── ops/                       # Операционная документация
-│   └── release-notes/
-├── ops/
-│   └── backup/                    # Скрипты резервного копирования
-│       ├── backup.sh
-│       ├── restore.sh
-│       └── verify.sh
-├── deployments/
-│   └── docker-compose.prod.yml    # Production compose конфиг
-└── scripts/
-    ├── build.sh                   # Сборка образов
-    ├── seed.sh                    # Генерация тестовых данных
-    └── sync-all.sh                # Ручной запуск всех синхронизаций
-```
+Точные версии зависимостей бери из манифестов и lock-файлов. Не обновляй их попутно с другой задачей.
 
-## Соглашения по коду
+## Карта кода
 
-### Go Backend
+Вместо полного дерева используй эту карту и поиск по реальным файлам:
 
-- **Нет ORM.** Только raw SQL через `pgx/v5`. Запросы пишем руками, никакого GORM/Ent.
-- **Нет генерации кода** типа sqlc на первом этапе. Проще руками — меньше магии.
-- **Chi router** — минимальный, совместим с stdlib.
-- **Структура хендлера:** принимает `http.ResponseWriter, *http.Request`, парсит input, вызывает domain/storage, возвращает JSON.
-- **Ошибки** возвращаются как `error`, не паникуем. В хендлерах — `respondError(w, status, msg)`.
-- **Конфиг** — только через env-переменные. Структура `Config` заполняется из `os.Getenv` с дефолтами.
-- **Логирование** — `slog` (stdlib). Structured JSON в production.
-- **Контекст** — `context.Context` пробрасывается через все слои для отмены и таймаутов.
-- **Пул соединений** — `pgxpool.Pool`, один на приложение, передаётся через DI.
-- **Миграции** — SQL файлы в `migrations/`, применяются при старте через golang-migrate.
-- **Тесты** — `_test.go` рядом с файлом. Интеграционные тесты используют testcontainers.
+| Путь | Ответственность |
+| --- | --- |
+| `backend/cmd/server/main.go` | Сборка зависимостей, миграции, HTTP-сервер, фоновые процессы и завершение |
+| `backend/cmd/` | Точки входа серверных и служебных команд |
+| `backend/internal/api/` | Маршруты, middleware, авторизация, валидация, HTTP-ответы |
+| `backend/internal/domain/` | Модели, категории findings, fingerprint, scoring, правила предметной области |
+| `backend/internal/storage/` | SQL-репозитории, пулы, кэш, materialized views |
+| `backend/internal/auth/`, `backend/internal/audit/` | Пароли, сессии, API-токены, аудит |
+| `backend/internal/parser/` | Определение формата и нормализация отчётов сканеров |
+| `backend/internal/enrichment/` | Синхронизация справочников, очередь, воркеры и обогащение findings |
+| `backend/internal/export/` | Формирование HTML-отчётов и шаблоны |
+| `backend/internal/config/`, `backend/internal/observability/` | Env-конфигурация, health checks и метрики |
+| `backend/internal/loadtest/` | Сценарии нагрузочного тестирования |
+| `backend/api/openapi.yaml`, `backend/migrations/` | API-контракт и история схемы БД |
+| `frontend/src/api/`, `frontend/src/types/` | Клиент API и TypeScript-контракты |
+| `frontend/src/pages/`, `frontend/src/App.tsx` | Страницы и маршрутизация |
+| `frontend/src/components/` | Общие и предметные компоненты, включая findings, enrichment и admin/access |
+| `frontend/src/components/ui/` | Базовые UI-компоненты |
+| `frontend/src/store/`, `frontend/src/hooks/`, `frontend/src/lib/` | Клиентское состояние, хуки и вспомогательная логика |
+| `ops/backup/`, `scripts/` | Резервное копирование и служебные скрипты |
+| `.github/workflows/` | CI, проверки PR и публикация |
 
-### SQL
+Описание проекта и запуска — в `README.md`, правила участия — в `CONTRIBUTING.md`, история — в `CHANGELOG.md`, версия приложения — в `VERSION`. Не копируй сюда полные модели, список миграций и настройки внешних источников: они должны оставаться в соответствующих исходных файлах.
 
-- Все таблицы — `snake_case`.
-- Primary key — `UUID` (gen_random_uuid()).
-- Timestamp — всегда `TIMESTAMPTZ`.
-- Массивы — `TEXT[]` или `INT[]` для CVE/CWE ID.
-- JSONB — только для сырых данных и полуструктурированных полей.
-- Индексы именуются: `idx_{table}_{columns}`.
-- Партиционирование `raw_findings` по `imported_at` (RANGE, помесячно).
-- **Cursor-based пагинация** везде. Никаких OFFSET.
+## Backend: Go
 
-### React Frontend
+- Используй stdlib там, где она решает задачу. ORM и генерацию SQL-кода (GORM, Ent, sqlc) не добавляй.
+- Хендлер имеет сигнатуру `func(http.ResponseWriter, *http.Request)`: разбирает и проверяет input, проверяет права, вызывает domain/storage, возвращает ответ через существующие хелперы.
+- Передавай `context.Context` через все слои для отмены и таймаутов. У фоновых задач должны быть ограниченное время выполнения и корректное завершение.
+- Возвращай ошибки через `error`, не используй panic для штатных ошибок. Оборачивай ошибки с контекстом операции и `%w`, например `fmt.Errorf("storage.FindByID: %w", err)`.
+- Текущая сигнатура HTTP-ошибки: `respondError(w, r, status, code, message)`. Не раскрывай клиенту внутренние SQL-ошибки и секреты.
+- Логирование — `slog`, в production структурированный JSON.
+- Конфигурация — env-переменные через `backend/internal/config/config.go`. При изменении настройки согласуй конфиг, `env.example` и её передачу через Compose.
+- Один `pgxpool.Pool` на приложение, передаваемый через DI. Не создавай пулы на каждый запрос.
 
-- **Функциональные компоненты** + хуки. Никаких классов.
-- **TanStack Query** для серверного стейта. Никаких useEffect + fetch.
-- **TanStack Table** для таблиц с сортировкой и фильтрацией.
-- **TanStack Virtual** для виртуализации списков (рендерить только видимые строки).
-- **Zustand** для клиентского стейта (фильтры, UI state).
-- **Tailwind CSS** — утилитарные классы, никакого CSS-in-JS.
-- **shadcn/ui** — компоненты (Button, Dialog, Select, Badge, Tabs, Card).
-- **Язык** - Весь текст который визуально отображается в интерфейсе должен быть на русском языке.
-- **React Router v6** — маршрутизация.
-- **Форматы:** даты через `date-fns`, числа — `Intl.NumberFormat`.
-- **TypeScript strict mode** — никаких `any`.
+## PostgreSQL и производительность
 
-### Cookie соглашение
+- Только raw SQL через pgx/v5. Значения передавай параметрами (`$1`, `$2`, …), используя механизм подготовленных запросов pgx. Динамические имена столбцов и направления сортировки выбирай из разрешённого списка.
+- Явно перечисляй столбцы: никаких `SELECT *`. Для списков используй cursor-based пагинацию, никаких `OFFSET`.
+- Порядок сортировки должен быть стабильным, с однозначным дополнительным ключом; курсор должен соответствовать этому порядку и направлению сортировки.
+- Учитывай масштаб 1M+ findings: избегай N+1, неограниченной загрузки строк и обработки всей таблицы в памяти. Используй существующие пакетные операции и индексы.
+- Таблицы и столбцы — `snake_case`; индексы — `idx_{table}_{columns}`. Для новых сущностей следуй соглашениям схемы: UUID с `gen_random_uuid()`, время — `TIMESTAMPTZ`, массивы — `TEXT[]` / `INT[]`, полуструктурированные и сырые данные — JSONB.
+- Сохраняй помесячное RANGE-партиционирование `raw_findings` по `imported_at` и учитывай партиции при изменении запросов.
+- Изменения связанных записей выполняй транзакционно. При изменении записей проверь последствия для кэша и materialized views.
+- Схему меняй через миграции `NNN_name.up.sql` / `NNN_name.down.sql`. Номер выбирай по фактическому содержимому каталога. Не переписывай уже применённые миграции.
+- Миграции применяются сервером при старте; относительный путь — `file://migrations`. Запуск сервера выполняй из `backend/` или штатного контейнера.
 
-- Имя cookie для сессии: `rl_session`.
+## API и права доступа
 
-### API Контракт
+- Базовый путь — `/api/v1`. При изменении контракта согласуй обработчик, `backend/api/openapi.yaml`, клиент в `frontend/src/api/` и соответствующие типы.
+- Используй существующие `respondJSON`, `respondList`, `respondError` из `backend/internal/api/response.go`.
+- Обычные ресурсные ответы используют `data`; списки дополнительно содержат `meta`. `meta` не обязателен для одиночного объекта. Экспорт и служебные endpoints имеют собственный формат.
 
-Все ответы в формате:
+Пример ответа списка:
+
 ```json
-{
-  "data": { ... },
-  "meta": {
-    "total": 15000,
-    "next_cursor": "eyJpZCI6...",
-    "has_more": true
-  }
-}
+{"data": [], "meta": {"total": 0, "has_more": false}}
 ```
 
-Ошибки:
+`next_cursor` опускается, когда следующей страницы нет. Формат ошибки:
+
 ```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "severity must be between 0 and 4",
-    "details": { ... }
-  }
-}
+{"error": {"code": "VALIDATION_ERROR", "message": "Некорректное значение фильтра", "request_id": "..."}}
 ```
 
-Cursor-based пагинация:
-```
-GET /api/v1/findings?limit=50&cursor=eyJpZCI6...&sort=-priority_score
-```
+Фактический синтаксис фильтров findings использует числовые severity/status и отдельное направление сортировки:
 
-Фильтрация:
-```
-GET /api/v1/findings?severity=high,critical&status=open&project_id=xxx&q=sql+injection
+```text
+GET /api/v1/findings?limit=50&severity=3,4&status=0&sort=priority_score&dir=desc
 ```
 
-## Модель данных (ключевые сущности)
+- Проверяй права на backend для каждого действия. Фильтрация по доступным проектам должна сохраняться в списках, фасетах, группах, экспорте и массовых операциях.
+- Используй существующие global/project roles и middleware. Видимость кнопки на frontend не заменяет проверку полномочий.
+- Имя cookie сессии — `rl_session`. Текущая аутентификация использует серверные сессии со случайными токенами; пароли хэшируются Argon2id. Реализацию смотри в `backend/internal/auth/`.
+- Сохраняй ограничения API-токенов, принудительную смену пароля, отзыв сессий и аудит затронутых операций.
+- Не помещай пароли, session/API-токены и найденные сырые секреты в логи или ответы. При работе с secrets сохраняй предусмотренное парсерами маскирование и fingerprint.
 
-### Finding
-```go
-type Finding struct {
-    ID               uuid.UUID   `json:"id"`
-    Title            string      `json:"title"`
-    Description      string      `json:"description,omitempty"`
-    Severity         int         `json:"severity"`         // 0=info,1=low,2=med,3=high,4=crit
-    Confidence       int         `json:"confidence"`       // 0=low,1=med,2=high,3=confirmed
-    Status           int         `json:"status"`           // 0=open,1=confirmed,2=fp,3=resolved,4=risk_accepted
-    FilePath         string      `json:"file_path,omitempty"`
-    LineStart        int         `json:"line_start,omitempty"`
-    LineEnd          int         `json:"line_end,omitempty"`
-    Component        string      `json:"component,omitempty"`
-    ComponentVersion string      `json:"component_version,omitempty"`
-    CVEIDs           []string    `json:"cve_ids"`
-    CWEIDs           []int       `json:"cwe_ids"`
-    CPEURI           string      `json:"cpe_uri,omitempty"`
-    Fingerprint      string      `json:"fingerprint"`
-    FirstSeen        time.Time   `json:"first_seen"`
-    LastSeen         time.Time   `json:"last_seen"`
-    TimesSeen        int         `json:"times_seen"`
-    ProjectID        uuid.UUID   `json:"project_id"`
-    SourceType       string      `json:"source_type"`
-    PriorityScore    *float64    `json:"priority_score,omitempty"`
-}
-```
+## Findings, импорт и обогащение
 
-### Project
-```go
-type Project struct {
-    ID          uuid.UUID `json:"id"`
-    Name        string    `json:"name"`
-    Description string    `json:"description,omitempty"`
-    Tags        []string  `json:"tags"`
-    CreatedAt   time.Time `json:"created_at"`
-    UpdatedAt   time.Time `json:"updated_at"`
-}
-```
+- Модели и enum-значения бери из `backend/internal/domain/`, отображение — из `frontend/src/types/` и `frontend/src/lib/`. Не заводи независимые копии правил.
+- Источник алгоритма дедупликации — `domain.CalculateFingerprint` в `dedup.go`. Он учитывает kind, rule ID, первый CVE, путь, диапазон строк, первый CWE, компонент и его версию. Порядок полей и нормализация значимы.
+- `ComputeSecretFingerprint` — отдельный алгоритм группировки секретов. Не подменяй им fingerprint finding.
+- Повторный импорт по конфликтующему fingerprint обновляет `last_seen` и увеличивает `times_seen`. Изменение алгоритма влияет на существующие данные: учитывай совместимость и проверяй повторный импорт.
+- Правила определения категории находятся в `domain/kind_resolver.go` и detector. Учитывай настройки источников проекта и пересчёт fingerprint при изменении kind.
+- Приоритизация реализована в `domain.CalculatePriorityScore` (`scoring.go`): результат нормализуется в диапазон 0–10 и учитывает CVSS, EPSS и его тренд, KEV и срочность, ransomware, БДУ, давность и наличие исправления OSV. Не восстанавливай формулу по старым примерам из документации.
+- Реестр парсеров — `backend/internal/parser/detect.go`: AppScreener, SARIF, Trivy, Semgrep, gosec, TruffleHog, Gitleaks, Checkov, ZAP, Grype, Generic. Порядок распознавания важен; проверяй, что формат не перехватывается другим парсером.
+- Источники обогащения: NVD, EPSS, CISA KEV, БДУ ФСТЭК, OSV, CWE и CPE. URL, интервалы, параметры и зеркала проверяй в конфиге, регистрации syncer-ов и коде источника.
+- Для Redis Streams сохраняй повторную обработку сообщений после сбоев и подтверждение после успешной обработки. Учитывай повторные доставки.
+- Планировщик запускает синхронизацию по интервалу или вручную; немедленного sync при старте нет. Сохраняй защиту от одновременного запуска одного источника.
 
-### User & RBAC
-```go
-type User struct {
-    ID                 uuid.UUID  `json:"id"`
-    Email              string     `json:"email"`
-    PasswordHash       string     `json:"-"`
-    FullName           string     `json:"full_name"`
-    GlobalRole         GlobalRole `json:"global_role"` // 0=user, 1=admin
-    Status             UserStatus `json:"status"`      // active, pending, disabled
-    IsSystemAccount    bool       `json:"is_system_account"`
-    MustChangePassword bool       `json:"must_change_password,omitempty"`
-    LastLoginAt        *time.Time `json:"last_login_at,omitempty"`
-    CreatedAt          time.Time  `json:"created_at"`
-}
+## Frontend: React и TypeScript
 
-// ProjectRole — роль пользователя в конкретном проекте
-// 0=viewer, 1=triager, 2=project_admin
-type ProjectRole int
-```
+- Пиши функциональные компоненты и хуки, не добавляй классовые компоненты.
+- Серверное состояние — TanStack Query. Не загружай данные через `useEffect` + fetch. Используй общий API-клиент, согласованные query keys и инвалидирование после мутаций.
+- Клиентское состояние и фильтры — Zustand. Переиспользуй существующие stores и хуки.
+- Таблицы — TanStack Table; большие списки виртуализируй через TanStack Virtual. Не рендери весь набор findings одновременно.
+- TypeScript strict, без `any`. Проверяй неизвестные данные на границе API, не скрывай ошибки типизации приведениями.
+- Стили — Tailwind CSS, без CSS-in-JS. Переиспользуй компоненты `frontend/src/components/ui/` и существующие стили проекта.
+- Весь текст интерфейса — на русском, включая ошибки, подсказки, пустые состояния и доступные названия элементов управления.
+- Даты форматируй через `date-fns`, числа — через `Intl.NumberFormat`.
+- Для изменений UI учитывай загрузку, ошибку, отсутствие данных, недоступность действия по правам и управление с клавиатуры.
 
-### Scan
-```go
-type Scan struct {
-    ID               uuid.UUID  `json:"id"`
-    ProjectID        uuid.UUID  `json:"project_id"`
-    Scanner          string     `json:"scanner"`
-    Status           ScanStatus `json:"status"` // running, completed, failed
-    FindingsImported int        `json:"findings_imported"`
-    FindingsUpdated  int        `json:"findings_updated"`
-    StartedAt        time.Time  `json:"started_at"`
-    FinishedAt       *time.Time `json:"finished_at,omitempty"`
-    CommitSHA        string     `json:"commit_sha"`
-    Branch           string     `json:"branch"`
-    TokenID          *uuid.UUID `json:"token_id,omitempty"`
-}
-```
+## Запуск и проверки
 
-### Enrichment
-```go
-type FindingEnrichment struct {
-    FindingID  uuid.UUID       `json:"finding_id"`
-    Source     string          `json:"source"`     // "nvd","epss","kev","bdu","osv","cwe"
-    Data       json.RawMessage `json:"data"`
-    EnrichedAt time.Time       `json:"enriched_at"`
-}
-```
+Команды выполняй из указанного каталога. Для установки frontend-зависимостей используй `npm ci` с существующим lock-файлом.
 
-### Scoring
-```go
-type FindingScore struct {
-    FindingID      uuid.UUID `json:"finding_id"`
-    BaseScore      float64   `json:"base_score"`
-    EPSSScore      float64   `json:"epss_score"`
-    EPSSPercentile float64   `json:"epss_percentile"`
-    IsKEV          bool      `json:"is_kev"`
-    IsBDU          bool      `json:"is_bdu"`
-    PriorityScore  float64   `json:"priority_score"`
-    CalculatedAt   time.Time `json:"calculated_at"`
-}
-```
+| Задача | Каталог | Команда |
+| --- | --- | --- |
+| Backend unit tests | `backend/` | `go test ./...` |
+| Backend race-проверка, как в CI | `backend/` | `go test ./... -race -coverprofile=coverage.out -covermode=atomic -timeout 5m` |
+| Backend lint, если установлен | `backend/` | `golangci-lint run --timeout=10m` |
+| Frontend lint | `frontend/` | `npm run lint` |
+| Frontend тесты | `frontend/` | `npm test` |
+| Frontend проверка типов и сборка | `frontend/` | `npm run build` |
+| Frontend dev-сервер | `frontend/` | `npm run dev` |
+| Сборка и запуск Compose | Корень | `docker compose up --build -d` |
+| Production с override | Корень | `docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d` |
 
-## Формула приоритизации
-
-```
-priority_score = (
-    cvss_base * 0.30 +
-    epss * 100 * 0.25 +
-    (10 if kev else 0) * 0.20 +
-    (5 if bdu else 0) * 0.10 +
-    recency * 0.10 +
-    exposure * 0.05
-)
-```
-
-Где `recency` = 10 * exp(-days_since_published / 365), `exposure` = конфигурируемый.
-
-## Дедупликация
-
-```
-fingerprint = SHA256(
-    lower(cve_id || "") +
-    lower(file_path || "") +
-    str(cwe_id || 0) +
-    lower(component || "") +
-    lower(component_version || "")
-)
-```
-
-Если finding с таким fingerprint уже есть:
-- Обновить `last_seen = now()`
-- Инкрементировать `times_seen`
-- НЕ создавать новую запись
-
-## Поддерживаемые парсеры
-
-| Парсер | Формат | Тип уязвимостей |
-|--------|--------|-----------------|
-| SARIF 2.1.0 | JSON | SAST (универсальный) |
-| Trivy | JSON | Container/OS CVE |
-| Grype (Anchore) | JSON | Container/OS CVE |
-| TruffleHog v3 | NDJSON / JSON array | Secrets |
-| Gitleaks | JSON | Secrets |
-| gosec | JSON | Go SAST |
-| Semgrep | JSON | SAST |
-| Checkov | JSON | IaC |
-| OWASP ZAP | JSON | DAST |
-| Generic | JSON | Универсальный |
-
-## Обогащение — источники
-
-| База | URL | Формат | Частота |
-|------|-----|--------|---------|
-| NVD | `https://services.nvd.nist.gov/rest/json/cves/2.0` | JSON API | 2 часа (инкремент) |
-| EPSS | `https://epss.cyentia.com/epss_scores-{date}.csv.gz` | CSV gzip | Ежедневно |
-| KEV | `https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json` | JSON | 6 часов |
-| БДУ | `https://bdu.fstec.ru/files/documents/vulxml.zip` | XML в ZIP | Еженедельно |
-| OSV | `https://osv-vulnerabilities.storage.googleapis.com/{ecosystem}/all.zip` | JSON в ZIP | Ежедневно |
-| CWE | `https://cwe.mitre.org/data/xml/cwec_latest.xml.zip` | XML в ZIP | Ежемесячно |
-| CPE | NVD CPE API `https://services.nvd.nist.gov/rest/json/cpes/2.0` | JSON API | Еженедельно |
-
-## Docker
-
-- `docker-compose.yml` — для разработки
-- `docker-compose.prod.yml` / `deployments/docker-compose.prod.yml` — для production
-- Backend: multi-stage build (Go build → scratch/alpine)
-- Frontend: multi-stage build (npm build → nginx)
-- PostgreSQL 16 с volume для данных
-- Redis 7 с volume для persistence
-- Nginx как reverse proxy
-- Все конфиги через `env.example` → `.env`
-
-## Правила для Codex
-
-1. **Не добавляй зависимости без явной просьбы.** Используй stdlib Go где возможно.
-2. **Не создавай файлы, которых нет в структуре выше**, без явной просьбы.
-3. **Каждый SQL-запрос** должен быть оптимизирован: никаких SELECT *, никаких OFFSET, используй подготовленные выражения.
-4. **Не пиши абстракции «на будущее».** Интерфейс появляется только когда есть 2+ реализации.
-5. **Фронтенд:** не используй useEffect для загрузки данных — только TanStack Query.
-6. **Тесты:** пиши table-driven тесты для domain-логики. Интеграционные — по запросу.
-7. **Комментарии:** только «почему», а не «что». Код должен быть самодокументируемым.
-8. **Ошибки:** всегда оборачивай с контекстом: `fmt.Errorf("storage.FindByID: %w", err)`.
-9. **Не используй глобальные переменные.** Всё через dependency injection (конструкторы).
-10. **Git:** каждый промт = один логический коммит. Пиши осмысленные commit messages.
+- Форматируй изменённые Go-файлы через `gofmt`.
+- Для изменённой domain-логики пиши table-driven unit-тесты рядом с кодом в `_test.go`. Интеграционные тесты и нагрузочные прогоны — по запросу; не добавляй тестовые зависимости самостоятельно.
+- Выбирай проверки по затронутому поведению. Для правок только документации достаточно сверки фактов, путей, команд и `git diff --check`; сборка приложения не требуется.
+- Не заявляй о прохождении тестов, если они не запускались или завершились ошибкой. Проверка race требует подходящего окружения и поддержки CGO.
+- Перед Compose создай локальный `.env` из `env.example`, если его ещё нет, и задай необходимые параметры, включая `BOOTSTRAP_ADMIN_PASSWORD`. Не перезаписывай существующий `.env` и не коммить секреты.
+- В базовом Compose frontend по умолчанию использует target `production`; для контейнерного Vite dev-сервера предусмотрен `FRONTEND_TARGET=development`.
+- `docker-compose.prod.yml` — override к основному compose-файлу, а не самостоятельная конфигурация.
+- Makefile содержит shell-команды для Unix; в PowerShell используй соответствующие команды напрямую. Перед использованием make-цели проверь её реализацию: `make migrate` запускает сервер, отдельной реализации `make test` сейчас нет.
+- Для проверки работающего окружения используй `/healthz`, `/readyz` и `docker compose ps`. Сборка и запуск контейнеров нужны только когда относятся к задаче.
