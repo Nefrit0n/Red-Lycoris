@@ -14,5 +14,6 @@
 | `ops/backup-restore.md` | [Резервное копирование](https://github.com/Nefrit0n/Red-Lycoris/wiki/Администратор-Резервное-копирование) и [восстановление](https://github.com/Nefrit0n/Red-Lycoris/wiki/Администратор-Восстановление) |
 | `ops/migrations.md` | [Миграции](https://github.com/Nefrit0n/Red-Lycoris/wiki/Разработка-Миграции) |
 | `ops/observability.md` | [Мониторинг и логи](https://github.com/Nefrit0n/Red-Lycoris/wiki/Администратор-Мониторинг-и-логи) |
-| `gitlab-ci.md`, `import-formats.md` | Страницы интеграций будут опубликованы после завершения модели CI-токенов |
+| `gitlab-ci.md` | [GitLab CI](https://github.com/Nefrit0n/Red-Lycoris/wiki/Интеграции-GitLab-CI), [GitHub Actions](https://github.com/Nefrit0n/Red-Lycoris/wiki/Интеграции-GitHub-Actions), [API-токены](https://github.com/Nefrit0n/Red-Lycoris/wiki/Интеграции-API-токены) |
+| `import-formats.md` | [Поддерживаемые сканеры](https://github.com/Nefrit0n/Red-Lycoris/wiki/Интеграции-Поддерживаемые-сканеры), [Generic JSON](https://github.com/Nefrit0n/Red-Lycoris/wiki/Интеграции-Формат-Generic-JSON) |
 | `release-notes/`, `KNOWN_ISSUES.md` | Требуют отдельного переноса и проверки фактов |
