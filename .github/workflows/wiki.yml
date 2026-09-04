@@ -1,0 +1,53 @@
+name: Publish Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'wiki/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Clone Wiki
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          git clone --depth=1 \
+            "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" \
+            "$RUNNER_TEMP/red-lycoris.wiki"
+
+      - name: Synchronize pages
+        run: |
+          set -euo pipefail
+          rsync --archive --delete --exclude='.git' \
+            "$GITHUB_WORKSPACE/wiki/" \
+            "$RUNNER_TEMP/red-lycoris.wiki/"
+
+      - name: Commit and push
+        working-directory: ${{ runner.temp }}/red-lycoris.wiki
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Wiki is already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "docs(wiki): sync from main"
+          git push origin HEAD:master

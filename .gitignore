@@ -40,3 +40,4 @@ zap.json
 semgrep.sarif
 gosec.json
 .security-audit/
+.wiki-git-history/
